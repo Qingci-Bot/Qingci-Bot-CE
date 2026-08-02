@@ -91,14 +91,36 @@ class QingciBot:
     # ============ 事件处理 ============
 
     async def _handle_event(self, event: dict):
-        """处理 OneBot 事件"""
+        """处理 OneBot 事件
+
+        调度顺序：
+        1. Dispatcher 解析事件
+        2. 新式 Matcher 调度（按 priority 排序）
+        3. 旧式 on_message 调度（若无 Matcher 匹配且事件为 message）
+        """
         ctx = await self.dispatcher.dispatch(event)
 
-        if ctx is None or ctx.post_type != "message":
+        if ctx is None:
             return
 
-        # 分发给插件
+        post_type = ctx.post_type or event.get("post_type", "")
+
+        # notice/request 事件：仅走 Matcher（无旧式 on_message 调度）
+        if post_type != "message":
+            await self.dispatcher._run_event_matchers(self, event, ctx)
+            return
+
+        # 消息事件：先走 Matcher
+        reply = await self.dispatcher.run_matchers(self, event, ctx)
+        if reply is not None:
+            await self._send_reply(ctx, reply)
+            return
+
+        # 无 Matcher 匹配，走旧式 on_message（向后兼容）
         for plugin in list(self.plugin_manager.plugins.values()):
+            # 跳过已注册 Matcher 的插件（避免重复处理）
+            if plugin.matchers:
+                continue
             try:
                 reply = await plugin.on_message(ctx)
                 if reply:

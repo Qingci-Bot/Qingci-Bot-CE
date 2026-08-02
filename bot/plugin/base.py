@@ -7,7 +7,15 @@ from ..core.dispatcher import MessageContext
 
 
 class PluginBase(ABC):
-    """插件基类"""
+    """插件基类
+
+    支持两种消息处理方式：
+    1. 旧式：重写 on_message(ctx) -> Optional[str]
+    2. 新式：在 on_load 中注册 Matcher（self.matchers.append(on_command(...)(handler))）
+       或用模块级装饰器 @on_command(...)（PluginManager 自动收集）
+
+    新旧方式可共存，Dispatcher 按优先级统一调度。
+    """
 
     # 插件元信息
     name: str = ""
@@ -21,6 +29,9 @@ class PluginBase(ABC):
     config = None    # ConfigManager 实例
     connection = None  # OneBotConnection 实例
     llm = None       # LLMManager 实例
+
+    # Matcher 列表（由 PluginManager 初始化，新式插件在 on_load 中填充）
+    matchers: list = None  # type: list  # list[Matcher]
 
     @abstractmethod
     async def on_load(self):
