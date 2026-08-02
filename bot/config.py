@@ -23,14 +23,15 @@ class LLMConfig(BaseModel):
     """LLM 大模型配置"""
     model_config = {"extra": "ignore"}
 
-    provider: str = "openai"           # openai / deepseek / ollama
+    provider: str = "openai"           # openai / deepseek / ollama / 自定义 litellm provider
     api_url: str = "https://api.openai.com/v1"
     api_key: str = ""
     model: str = "gpt-4o-mini"
-    max_tokens: int = 2048
+    max_tokens: int = 2048             # 单次回复最大 token
     temperature: float = 0.7
     system_prompt: str = "你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。"
-    max_history: int = 20               # 最大对话历史轮数
+    max_history: int = 20               # 最大对话历史轮数（每轮 = user + assistant）
+    max_context_tokens: int = 8192      # 上下文窗口 token 上限，超出后裁剪历史
 
 
 class BotConfig(BaseModel):

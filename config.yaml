@@ -20,4 +20,5 @@ llm:
   temperature: 0.7
   system_prompt: 你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。
   max_history: 20
+  max_context_tokens: 8192
 api_key: ''

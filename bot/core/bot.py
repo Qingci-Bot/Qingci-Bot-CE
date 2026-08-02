@@ -30,7 +30,7 @@ class QingciBot:
             access_token=self.config.onebot.access_token,
         )
         self.dispatcher = MessageDispatcher()
-        self.llm = LLMManager(self.config.llm)
+        self.llm = LLMManager(self.config.llm, db=self.db)
         self.plugin_manager = PluginManager()
 
         self._running = False
