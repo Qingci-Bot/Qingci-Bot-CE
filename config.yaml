@@ -1,0 +1,23 @@
+bot:
+  name: Qingci-Bot
+  admin_users: []
+  trigger_mode: at
+  trigger_keywords:
+  - /bot
+  - /ai
+  group_blacklist: []
+  user_blacklist: []
+onebot:
+  host: 127.0.0.1
+  port: 3001
+  access_token: ''
+llm:
+  provider: deepseek
+  api_url: https://api.openai.com/v1
+  api_key: ''
+  model: gpt-4o-mini
+  max_tokens: 2048
+  temperature: 0.7
+  system_prompt: 你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。
+  max_history: 20
+api_key: ''

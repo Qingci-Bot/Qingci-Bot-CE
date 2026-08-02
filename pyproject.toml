@@ -1,0 +1,24 @@
+[project]
+name = "qingci-bot"
+version = "0.1.0"
+description = "QQ Bot 框架，对接 LLBot (OneBot 11)，支持 LLM 对话、Web UI 和 Desktop UI"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "websockets>=14.0",
+    "aiosqlite>=0.20.0",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "httpx>=0.28.0",
+    "pywebview>=5.0",
+    "pystray>=0.19.0",
+    "pillow>=11.0",
+]
+
+[project.scripts]
+qingci-bot = "main:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
