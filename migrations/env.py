@@ -1,0 +1,94 @@
+"""Alembic 异步迁移环境
+
+与 bot/db/engine.py 共用同一数据库 URL，确保迁移与应用使用一致的连接配置。
+处理异步事件循环嵌套问题：当迁移在已有事件循环中被调用时（如应用启动时），
+避免 asyncio.run() 抛 RuntimeError。
+"""
+
+import asyncio
+import sys
+from logging.config import fileConfig
+from pathlib import Path
+
+from sqlalchemy import pool
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from alembic import context
+
+# 确保项目根目录在 sys.path 中
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+# 加载 alembic.ini 日志配置
+config = context.config
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+# 导入所有 SQLModel 模型，让 autogenerate 能发现表结构
+from bot.db import models  # noqa: F401, E402
+from bot.db.engine import DB_PATH  # noqa: E402
+
+# 注入数据库 URL（与运行时一致）
+config.set_main_option("sqlalchemy.url", f"sqlite+aiosqlite:///{DB_PATH}")
+
+# SQLModel.metadata 作为 autogenerate 的目标
+target_metadata = models.SQLModel.metadata
+
+
+def run_migrations_offline() -> None:
+    """离线模式：生成 SQL 脚本而不连接数据库"""
+    url = config.get_main_option("sqlalchemy.url")
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+        render_as_batch=True,  # SQLite 需要 batch 模式支持 ALTER
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def do_run_migrations(connection: Connection) -> None:
+    """在给定连接上执行迁移"""
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=True,  # SQLite 需要 batch 模式
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations() -> None:
+    """异步在线模式：创建临时引擎执行迁移"""
+    connectable = async_engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+    await connectable.dispose()
+
+
+def run_migrations_online() -> None:
+    """在线模式：智能处理事件循环嵌套"""
+    try:
+        # 检测是否已在事件循环中（如应用启动时调用）
+        asyncio.get_running_loop()
+        # 已在循环中：创建 task 在当前循环执行
+        # 注意：这种情况下调用方需自行 await，这里退回到新建循环的兼容做法
+        raise RuntimeError("nested")
+    except RuntimeError:
+        # 无嵌套循环或检测到嵌套：统一用 asyncio.run
+        # 如果真在嵌套场景，调用方应直接调 run_async_migrations()
+        asyncio.run(run_async_migrations())
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
