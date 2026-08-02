@@ -1,68 +1,38 @@
-"""数据库模块 - SQLite 异步操作"""
+"""数据库仓储层 - 基于 SQLModel + AsyncSession
 
-import asyncio
+保留旧 Database 类的公开 API，内部改用 SQLModel ORM 实现。
+新增 sessions 相关方法为 LLM 会话持久化（Step 2）做准备。
+"""
 
-import aiosqlite
+import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-DB_PATH = Path("data/qingci-bot.db")
+from sqlmodel import func, select
+
+from .engine import dispose_engine, get_session_factory, init_db
+from .models import Message, PluginConfig, SessionHistory
+
+logger = logging.getLogger("qingci-bot.db")
 
 
 class Database:
-    """SQLite 数据库管理器"""
+    """SQLite 数据库仓储类"""
 
     def __init__(self, path: Optional[Path] = None):
-        self._path = path or DB_PATH
-        self._conn: Optional[aiosqlite.Connection] = None
-
-    @property
-    def conn(self) -> aiosqlite.Connection:
-        if self._conn is None:
-            raise RuntimeError("数据库未初始化，请先调用 connect()")
-        return self._conn
+        # path 参数保留为兼容签名，实际路径由 engine.py 统一管理
+        # 旧代码 Database() / Database(some_path) 均可工作
+        pass
 
     async def connect(self):
-        """连接数据库并建表"""
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = await aiosqlite.connect(str(self._path))
-        self._conn.row_factory = aiosqlite.Row
-        await self._conn.execute("PRAGMA journal_mode=WAL")
-        await self._create_tables()
+        """初始化数据库连接并建表"""
+        await init_db()
+        logger.info("数据库已连接")
 
     async def close(self):
-        if self._conn:
-            try:
-                await asyncio.wait_for(self._conn.close(), timeout=2)
-            except Exception:
-                pass
-            self._conn = None
-
-    async def _create_tables(self):
-        """创建数据库表"""
-        await self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message_id TEXT NOT NULL,
-                user_id INTEGER NOT NULL,
-                group_id INTEGER,
-                content TEXT NOT NULL,
-                message_type TEXT NOT NULL DEFAULT 'group',
-                role TEXT NOT NULL DEFAULT 'user',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id);
-            CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id);
-            CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
-
-            CREATE TABLE IF NOT EXISTS plugin_configs (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        await self._conn.commit()
+        """关闭数据库连接，释放连接池"""
+        await dispose_engine()
 
     # ============ 消息记录 ============
 
@@ -75,12 +45,19 @@ class Database:
         group_id: Optional[int] = None,
         role: str = "user",
     ):
-        await self.conn.execute(
-            "INSERT INTO messages (message_id, user_id, group_id, content, message_type, role) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (message_id, user_id, group_id, content, message_type, role),
-        )
-        await self.conn.commit()
+        """保存一条消息记录"""
+        async with get_session_factory()() as session:
+            session.add(
+                Message(
+                    message_id=message_id,
+                    user_id=user_id,
+                    content=content,
+                    message_type=message_type,
+                    group_id=group_id,
+                    role=role,
+                )
+            )
+            await session.commit()
 
     async def get_history(
         self,
@@ -88,23 +65,25 @@ class Database:
         group_id: Optional[int] = None,
         limit: int = 20,
     ) -> list[dict]:
-        """获取对话历史"""
-        if group_id:
-            cursor = await self._conn.execute(
-                "SELECT user_id, content, role, created_at FROM messages "
-                "WHERE group_id = ? AND user_id = ? "
-                "ORDER BY created_at DESC LIMIT ?",
-                (group_id, user_id, limit),
-            )
-        else:
-            cursor = await self._conn.execute(
-                "SELECT user_id, content, role, created_at FROM messages "
-                "WHERE user_id = ? AND group_id IS NULL "
-                "ORDER BY created_at DESC LIMIT ?",
-                (user_id, limit),
-            )
-        rows = await cursor.fetchall()
-        return [dict(row) for row in reversed(rows)]
+        """获取对话历史（按时间正序返回最近 limit 条）"""
+        async with get_session_factory()() as session:
+            if group_id:
+                stmt = (
+                    select(Message)
+                    .where(Message.group_id == group_id, Message.user_id == user_id)
+                    .order_by(Message.created_at.desc())
+                    .limit(limit)
+                )
+            else:
+                stmt = (
+                    select(Message)
+                    .where(Message.user_id == user_id, Message.group_id.is_(None))
+                    .order_by(Message.created_at.desc())
+                    .limit(limit)
+                )
+            rows = (await session.execute(stmt)).scalars().all()
+            # 反转为正序，保持与旧 API 一致
+            return [row.dict() for row in reversed(rows)]
 
     async def search_messages(
         self,
@@ -115,44 +94,89 @@ class Database:
         offset: int = 0,
     ) -> list[dict]:
         """搜索消息记录"""
-        conditions = []
-        params = []
-        if keyword:
-            conditions.append("content LIKE ?")
-            params.append(f"%{keyword}%")
-        if user_id:
-            conditions.append("user_id = ?")
-            params.append(user_id)
-        if group_id:
-            conditions.append("group_id = ?")
-            params.append(group_id)
-
-        where = " AND ".join(conditions) if conditions else "1=1"
-        cursor = await self._conn.execute(
-            f"SELECT * FROM messages WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            (*params, limit, offset),
-        )
-        rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
+        async with get_session_factory()() as session:
+            stmt = select(Message)
+            if keyword:
+                stmt = stmt.where(Message.content.contains(keyword))
+            if user_id:
+                stmt = stmt.where(Message.user_id == user_id)
+            if group_id:
+                stmt = stmt.where(Message.group_id == group_id)
+            stmt = (
+                stmt.order_by(Message.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [row.dict() for row in rows]
 
     async def get_message_count(self) -> int:
-        cursor = await self._conn.execute("SELECT COUNT(*) FROM messages")
-        row = await cursor.fetchone()
-        return row[0] if row else 0
+        """获取消息总数"""
+        async with get_session_factory()() as session:
+            stmt = select(func.count(Message.id))
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
+    # ============ LLM 会话持久化（新增，为 Step 2 准备）============
+
+    async def save_session(self, session_key: str, role: str, content: str):
+        """保存一条 LLM 会话历史"""
+        async with get_session_factory()() as session:
+            session.add(
+                SessionHistory(
+                    session_key=session_key,
+                    role=role,
+                    content=content,
+                )
+            )
+            await session.commit()
+
+    async def get_sessions(self, session_key: str, limit: int = 40) -> list[dict]:
+        """获取指定会话的历史（按时间正序返回最近 limit 条）"""
+        async with get_session_factory()() as session:
+            stmt = (
+                select(SessionHistory)
+                .where(SessionHistory.session_key == session_key)
+                .order_by(SessionHistory.created_at.desc())
+                .limit(limit)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [row.dict() for row in reversed(rows)]
+
+    async def clear_sessions(self, session_key: Optional[str] = None):
+        """清除会话历史：指定 key 清除单会话，None 清除全部"""
+        async with get_session_factory()() as session:
+            if session_key:
+                stmt = select(SessionHistory).where(
+                    SessionHistory.session_key == session_key
+                )
+            else:
+                stmt = select(SessionHistory)
+            rows = (await session.execute(stmt)).scalars().all()
+            for row in rows:
+                await session.delete(row)
+            await session.commit()
 
     # ============ 插件配置 ============
 
     async def get_plugin_config(self, key: str) -> Optional[str]:
-        cursor = await self._conn.execute(
-            "SELECT value FROM plugin_configs WHERE key = ?", (key,)
-        )
-        row = await cursor.fetchone()
-        return row["value"] if row else None
+        """读取插件配置"""
+        async with get_session_factory()() as session:
+            stmt = select(PluginConfig).where(PluginConfig.key == key)
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return row.value if row else None
 
     async def set_plugin_config(self, key: str, value: str):
-        await self._conn.execute(
-            "INSERT OR REPLACE INTO plugin_configs (key, value, updated_at) "
-            "VALUES (?, ?, CURRENT_TIMESTAMP)",
-            (key, value),
-        )
-        await self._conn.commit()
+        """写入插件配置（upsert）"""
+        async with get_session_factory()() as session:
+            existing = (
+                await session.execute(
+                    select(PluginConfig).where(PluginConfig.key == key)
+                )
+            ).scalar_one_or_none()
+            if existing:
+                existing.value = value
+                existing.updated_at = datetime.utcnow()
+            else:
+                session.add(PluginConfig(key=key, value=value))
+            await session.commit()
