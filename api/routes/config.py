@@ -2,18 +2,45 @@
 
 import asyncio
 import logging
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import ValidationError
 
 from bot.core.bot import get_bot as _get_bot
 from bot.config import ConfigManager, LLMConfig, LLM_PROVIDER_PRESETS
 from bot.llm.manager import LLMManager
 from api.auth import require_auth
+from api.audit import record_audit
 
 logger = logging.getLogger("qingci-bot.api.config")
 
-_config_lock = asyncio.Lock()
+# 配置锁：惰性创建，避免模块导入时绑定到（可能不同的）事件循环
+_config_lock: Optional[asyncio.Lock] = None
+
+# 后台任务引用集合：防止 fire-and-forget 任务被 GC 提前回收
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _get_config_lock() -> asyncio.Lock:
+    """获取配置锁（在当前事件循环中惰性创建）"""
+    global _config_lock
+    if _config_lock is None:
+        _config_lock = asyncio.Lock()
+    return _config_lock
+
+
+def _spawn_background_task(coro, name: str) -> None:
+    """创建后台任务并保存引用，完成后记录异常日志，避免异常静默丢失"""
+    task = asyncio.create_task(coro, name=name)
+    _background_tasks.add(task)
+
+    def _on_done(t: asyncio.Task) -> None:
+        _background_tasks.discard(t)
+        if not t.cancelled() and t.exception() is not None:
+            logger.exception(f"后台任务 {name} 执行失败", exc_info=t.exception())
+
+    task.add_done_callback(_on_done)
 
 
 def _get_config_manager() -> ConfigManager:
@@ -36,8 +63,17 @@ def _maybe_notify_bot(reload_llm: bool = True):
         if bot:
             bot.config.reload()
             if reload_llm and bot.llm:
-                # 异步执行 reload，不阻塞 HTTP 请求
-                asyncio.create_task(bot.llm.reload(bot.config.llm))
+                # 异步执行 reload，不阻塞 HTTP 请求；保存任务引用并记录异常。
+                # config.reload() 会新建 AppConfig，须把新的 session_summary
+                # 对象与用量开关一并传入，否则 LLMManager 持有的旧引用不会生效
+                _spawn_background_task(
+                    bot.llm.reload(
+                        bot.config.llm,
+                        bot.config.session_summary,
+                        bot.config.log.usage_tracking,
+                    ),
+                    "llm-reload",
+                )
     except RuntimeError:
         pass  # Bot 未运行
     except Exception:
@@ -95,9 +131,9 @@ async def get_config():
 
 
 @router.put("", dependencies=[Depends(require_auth)])
-async def update_config(data: dict):
+async def update_config(data: dict, request: Request):
     """更新配置"""
-    async with _config_lock:
+    async with _get_config_lock():
         try:
             cfg = _get_config_manager()
             current = cfg.to_dict()
@@ -106,12 +142,16 @@ async def update_config(data: dict):
             _deep_merge(current, filtered)
             cfg.update(current)
             _maybe_notify_bot(reload_llm=True)
+            # 审计埋点：仅记录变更的顶层字段名，不含字段值（避免泄露密钥）
+            await record_audit(
+                "config_update", f"更新全局配置，字段: {sorted(filtered.keys())}", request
+            )
             return {"message": "配置已更新", "config": _mask_sensitive(cfg.to_dict())}
         except ValidationError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        except Exception as e:
+        except Exception:
             logger.exception("配置更新失败")
-            raise HTTPException(status_code=500, detail=f"内部错误: {e}")
+            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
 
 
 @router.get("/bot", dependencies=[Depends(require_auth)])
@@ -121,9 +161,9 @@ async def get_bot_config():
 
 
 @router.put("/bot", dependencies=[Depends(require_auth)])
-async def update_bot_config(data: dict):
+async def update_bot_config(data: dict, request: Request):
     """更新 Bot 配置（深度合并，未传入字段保留原值）"""
-    async with _config_lock:
+    async with _get_config_lock():
         try:
             cfg = _get_config_manager()
             current = cfg.bot.model_dump()
@@ -134,12 +174,16 @@ async def update_bot_config(data: dict):
             full["bot"] = current
             cfg.update(full)
             _maybe_notify_bot(reload_llm=False)
+            # 审计埋点：仅记录变更字段名
+            await record_audit(
+                "config_update_bot", f"更新 Bot 配置，字段: {sorted(data.keys())}", request
+            )
             return {"message": "Bot 配置已更新"}
         except ValidationError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        except Exception as e:
+        except Exception:
             logger.exception("配置更新失败")
-            raise HTTPException(status_code=500, detail=f"内部错误: {e}")
+            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
 
 
 @router.get("/llm", dependencies=[Depends(require_auth)])
@@ -161,9 +205,9 @@ async def get_llm_presets():
 
 
 @router.put("/llm", dependencies=[Depends(require_auth)])
-async def update_llm_config(data: dict):
+async def update_llm_config(data: dict, request: Request):
     """更新 LLM 配置（深度合并）"""
-    async with _config_lock:
+    async with _get_config_lock():
         try:
             cfg = _get_config_manager()
             current = cfg.llm.model_dump()
@@ -175,12 +219,16 @@ async def update_llm_config(data: dict):
             full["llm"] = current
             cfg.update(full)
             _maybe_notify_bot(reload_llm=True)
+            # 审计埋点：仅记录变更字段名（不含 api_key 等字段值）
+            await record_audit(
+                "config_update_llm", f"更新 LLM 配置，字段: {sorted(data.keys())}", request
+            )
             return {"message": "LLM 配置已更新"}
         except ValidationError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        except Exception as e:
+        except Exception:
             logger.exception("配置更新失败")
-            raise HTTPException(status_code=500, detail=f"内部错误: {e}")
+            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
 
 
 @router.post("/llm/test", dependencies=[Depends(require_auth)])
@@ -202,9 +250,9 @@ async def test_llm_config(data: dict):
         }
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except Exception:
         logger.exception("LLM 连接测试失败")
-        raise HTTPException(status_code=500, detail=f"内部错误: {e}")
+        raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
     finally:
         if manager is not None:
             await manager.close()

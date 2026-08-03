@@ -13,6 +13,10 @@ def run_desktop(args):
     """启动桌面应用"""
     import webview
 
+    # 结构化日志：与 main 入口保持一致（幂等：log_json=False 时不做任何变更）
+    from bot.core.logformat import apply_logging_from_config
+    apply_logging_from_config(args.config)
+
     # 在后台线程启动 Bot + API
     from main import run_bot_and_api
 

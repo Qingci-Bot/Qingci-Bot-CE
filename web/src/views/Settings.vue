@@ -11,11 +11,17 @@ const form = reactive({
 const apiKeyInput = ref('')
 const saving = ref(false)
 const toast = ref({ show: false, type: 'info', message: '' })
+const backupLoading = ref(false)
+const backupResult = ref(null)
+const exporting = ref(false)
+const auditLogs = ref([])
+const auditLoading = ref(false)
 let toastTimer = null
 
 onMounted(() => {
   resetForm()
   apiKeyInput.value = store.getApiKey()
+  loadAuditLogs()
 })
 
 onUnmounted(() => {
@@ -89,6 +95,76 @@ async function saveConfig() {
     showToast('error', `保存失败：${e.message}`)
   } finally {
     saving.value = false
+  }
+}
+
+function formatSize(bytes) {
+  if (!bytes && bytes !== 0) return '-'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+}
+
+async function backupDb() {
+  backupLoading.value = true
+  backupResult.value = null
+  try {
+    const data = await store.apiFetch('/api/backup/db', { method: 'POST' })
+    backupResult.value = data
+    showToast('success', `数据库备份成功：${data.filename}`)
+  } catch (e) {
+    showToast('error', `备份失败：${e.message}`)
+  } finally {
+    backupLoading.value = false
+  }
+}
+
+async function exportCsv() {
+  exporting.value = true
+  try {
+    const headers = {}
+    const key = store.getApiKey()
+    if (key) headers['X-API-Key'] = key
+    const res = await fetch('/api/log/messages/export', { headers })
+    if (!res.ok) {
+      const text = await res.text()
+      let msg = text || `HTTP ${res.status}`
+      try {
+        msg = JSON.parse(text).detail || msg
+      } catch (e) {
+        // 非 JSON 响应体，直接使用原文本
+      }
+      // 401 时跳转登录页，与 apiFetch 的鉴权失败行为保持一致
+      if (res.status === 401 && window.location.hash !== '#/login') {
+        window.location.hash = '#/login'
+      }
+      throw new Error(msg)
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'messages.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast('success', '消息 CSV 已开始下载')
+  } catch (e) {
+    showToast('error', `导出失败：${e.message}`)
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function loadAuditLogs() {
+  auditLoading.value = true
+  try {
+    const data = await store.apiFetch('/api/audit/logs?limit=100')
+    auditLogs.value = data.logs || []
+  } catch (e) {
+    auditLogs.value = []
+    showToast('error', `审计日志加载失败：${e.message}`)
+  } finally {
+    auditLoading.value = false
   }
 }
 </script>
@@ -182,6 +258,61 @@ async function saveConfig() {
             <button class="btn btn-secondary btn-sm" @click="saveApiKey">保存</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="card fade-in" style="margin-top: 22px;">
+      <div class="card-header">
+        <div class="card-title">数据管理</div>
+        <div class="action-bar">
+          <button class="btn btn-secondary" :disabled="backupLoading" @click="backupDb">
+            <span style="display: inline-block" :class="{ spin: backupLoading }">◍</span>
+            {{ backupLoading ? '备份中' : '立即备份' }}
+          </button>
+          <button class="btn btn-secondary" :disabled="exporting" @click="exportCsv">
+            <span style="display: inline-block" :class="{ spin: exporting }">⇩</span>
+            {{ exporting ? '导出中' : '导出消息 CSV' }}
+          </button>
+        </div>
+      </div>
+      <div v-if="backupResult" class="toast success">
+        备份完成：{{ backupResult.filename }}（{{ formatSize(backupResult.size) }}），保存在服务端 data/backups/ 目录
+      </div>
+      <div class="hint-text" style="margin-top: 8px;">
+        备份使用 SQLite 在线备份 API，保留最近 10 份；CSV 导出包含全部消息记录（utf-8-sig 编码，Excel 可直接打开）。
+      </div>
+    </div>
+
+    <div class="card fade-in" style="margin-top: 22px;">
+      <div class="card-header">
+        <div class="card-title">审计日志</div>
+        <button class="btn btn-secondary btn-sm" :disabled="auditLoading" @click="loadAuditLogs">
+          <span style="display: inline-block" :class="{ spin: auditLoading }">↻</span> 刷新
+        </button>
+      </div>
+      <div v-if="auditLogs.length === 0" class="empty-state">
+        <div class="icon">✦</div>
+        <div>暂无审计日志</div>
+      </div>
+      <div v-else style="max-height: 420px; overflow-y: auto;">
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="width: 170px;">时间</th>
+              <th style="width: 170px;">动作</th>
+              <th>详情</th>
+              <th style="width: 120px;">来源 IP</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="log in auditLogs" :key="log.id">
+              <td style="font-family: var(--font-mono); color: var(--text-muted); white-space: nowrap;">{{ log.created_at }}</td>
+              <td><span class="tag tag-blue">{{ log.action }}</span></td>
+              <td style="word-break: break-all;">{{ log.detail || '-' }}</td>
+              <td style="font-family: var(--font-mono);">{{ log.client_ip || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 

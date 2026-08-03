@@ -24,10 +24,13 @@ _session_factory_lock = threading.Lock()
 
 
 def _set_sqlite_pragma(dbapi_conn, _connection_record):
-    """在每个底层连接上设置 SQLite PRAGMA（WAL 模式）"""
+    """在每个底层连接上设置 SQLite PRAGMA（WAL 模式 + 并发调优）"""
     cursor = dbapi_conn.cursor()
     try:
         cursor.execute("PRAGMA journal_mode=WAL")
+        # WAL 下 NORMAL 安全且写入更快；busy_timeout 降低 "database is locked" 风险
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
     finally:
         cursor.close()
 

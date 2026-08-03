@@ -1,5 +1,6 @@
 """插件管理器"""
 
+import asyncio
 import importlib
 import logging
 import pkgutil
@@ -33,16 +34,17 @@ class PluginManager:
         return self._plugins.get(name)
 
     def all_matchers(self) -> list[Matcher]:
-        """收集所有插件的 Matcher（用于调度），结果已按优先级降序排序"""
+        """收集所有插件的 Matcher（用于调度），结果已按优先级升序排序
+
+        约定：priority 越小越先执行。返回缓存副本，防止调用方污染缓存。
+        """
         if self._cached_matchers is None:
             result = []
             for plugin in self._plugins.values():
                 if plugin.matchers:
                     result.extend(plugin.matchers)
-            self._cached_matchers = sorted(
-                result, key=lambda m: m.priority, reverse=True
-            )
-        return self._cached_matchers
+            self._cached_matchers = sorted(result, key=lambda m: m.priority)
+        return list(self._cached_matchers)
 
     def _invalidate_matchers_cache(self) -> None:
         """使 matcher 缓存失效"""
@@ -70,25 +72,60 @@ class PluginManager:
             logger.exception(f"加载外部插件失败: {module_path}")
             return False
 
-    async def _load_or_reload(self, full_path: str, bot) -> None:
+    async def _load_or_reload(
+        self, full_path: str, bot, replaced_name: Optional[str] = None
+    ) -> None:
         """加载或重载模块，确保模块级装饰器重新执行
 
         对已缓存的模块使用 reload，对新模块使用 import_module。
         始终包裹 begin/end collection 以收集模块级 Matcher。
+
+        Args:
+            replaced_name: reload 场景下被替换插件的原注册名（插件可能改名，
+                首次 load 传 None）
         """
         collector = begin_module_collection()
+        stale_classes: Optional[set] = None
         try:
             if full_path in sys.modules:
-                module = importlib.reload(sys.modules[full_path])
+                module = sys.modules[full_path]
+                # reload 前记录模块旧命名空间中已定义的插件类：
+                # importlib.reload 在原命名空间重新执行代码、不清除旧属性，
+                # 源码中已删除的类仍会残留在 module.__dict__ 中，
+                # 需据此过滤出本次执行新定义的类
+                stale_classes = {
+                    attr
+                    for attr in vars(module).values()
+                    if isinstance(attr, type)
+                    and issubclass(attr, PluginBase)
+                    and attr is not PluginBase
+                    and attr.__module__ == module.__name__
+                }
+                module = importlib.reload(module)
             else:
                 module = importlib.import_module(full_path)
         finally:
             end_module_collection()
 
-        await self._register_from_module(module, collector, bot)
+        await self._register_from_module(
+            module, collector, bot, replaced_name, stale_classes
+        )
 
-    async def _register_from_module(self, module, collector: list[Matcher], bot) -> None:
-        """从模块中查找 PluginBase 子类并注册"""
+    async def _register_from_module(
+        self,
+        module,
+        collector: list[Matcher],
+        bot,
+        replaced_name: Optional[str] = None,
+        stale_classes: Optional[set] = None,
+    ) -> None:
+        """从模块中查找 PluginBase 子类并注册
+
+        Args:
+            stale_classes: reload 前模块中已存在的插件类集合；
+                reload 后仅新定义/重新定义的类（不在该集合中）才视为有效，
+                首次 load 传 None 不过滤
+        """
         plugin_classes = []
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
@@ -100,7 +137,19 @@ class PluginManager:
             ):
                 plugin_classes.append(attr)
 
+        if stale_classes is not None:
+            # reload 场景：过滤掉旧命名空间残留的旧类对象（同一类重新执行后
+            # 会生成新的类对象，身份不在旧集合中），仅保留本次新定义的类
+            plugin_classes = [c for c in plugin_classes if c not in stale_classes]
+
         if not plugin_classes:
+            # reload 路径：目标模块不再含插件类属于明确错误，不能静默成功；
+            # 首次 load 路径保持原有语义（空模块直接跳过）
+            if replaced_name is not None:
+                raise ValueError(
+                    f"模块 {module.__name__} 中未找到插件类，"
+                    f"无法替换已注册的插件 {replaced_name}"
+                )
             return
 
         if len(plugin_classes) > 1:
@@ -111,15 +160,27 @@ class PluginManager:
 
         plugin_cls = plugin_classes[0]
         plugin = plugin_cls()
-        # 同名插件先卸载
-        if plugin.name in self._plugins:
-            await self.unload(plugin.name)
+        # reload 时插件可能改名：按原注册名查找/卸载旧实例，避免旧实例泄漏
+        target_name = replaced_name or plugin.name
+        old_plugin = self._plugins.get(target_name)
+        # 先建后拆：先完整初始化新插件（含 on_load），失败时旧插件保持生效
         await self._init_plugin(plugin, bot)
         # 关联模块级 Matcher
         for m in collector:
             m.owner = plugin.name
             plugin.matchers.append(m)
-        self._plugins[plugin.name] = plugin
+        # 新插件就绪后再卸载旧插件并注册，避免插件真空；
+        # 若此阶段被异常/取消打断，补偿调用新插件 on_unload 避免资源泄漏
+        try:
+            if old_plugin is not None:
+                await self.unload(target_name)
+            self._plugins[plugin.name] = plugin
+        except BaseException:
+            try:
+                await plugin.on_unload()
+            except (Exception, asyncio.CancelledError):
+                logger.exception(f"插件 {plugin.name} 补偿 on_unload 异常")
+            raise
         matcher_count = len(plugin.matchers) if plugin.matchers else 0
         logger.info(
             f"插件已加载: {plugin.name} v{plugin.version}"
@@ -135,6 +196,14 @@ class PluginManager:
                 await plugin.on_unload()
             except Exception:
                 logger.exception(f"插件 {name} on_unload 异常")
+            # 兜底清理该插件注册的定时任务（job_id 带插件名前缀）；
+            # bot/scheduler 可能为 None（如调度器未启用），需逐层守卫
+            scheduler = getattr(plugin.bot, "scheduler", None) if plugin.bot else None
+            if scheduler is not None:
+                try:
+                    scheduler.remove_jobs_by_owner(name)
+                except Exception:
+                    logger.exception(f"清理插件 {name} 定时任务异常")
             logger.info(f"插件已卸载: {name}")
         self._invalidate_matchers_cache()
 
@@ -145,16 +214,15 @@ class PluginManager:
             logger.warning(f"重载失败：插件 {name} 不存在")
             return
 
-        # 先卸载旧插件
-        await self.unload(name)
-
         # 重新加载模块（reload 会重新执行装饰器）
+        # 先建后拆：_register_from_module 会在新插件 on_load 成功后才卸载旧插件，
+        # 新插件加载失败时旧插件继续生效；
+        # replaced_name 传入原注册名，防止插件改名后旧实例泄漏
         module_path = type(plugin).__module__
         try:
-            await self._load_or_reload(module_path, bot)
+            await self._load_or_reload(module_path, bot, replaced_name=name)
         except Exception:
-            logger.exception(f"重载插件 {name} 失败")
-            # 旧插件已卸载，新插件加载失败，不残留僵尸状态
+            logger.exception(f"重载插件 {name} 失败，旧插件保持生效")
             raise
         finally:
             self._invalidate_matchers_cache()
@@ -166,6 +234,10 @@ class PluginManager:
         plugin.config = bot.config
         plugin.connection = bot.connection
         plugin.llm = bot.llm
+        # 可选依赖注入（允许为 None，由后续批次创建真实例）
+        plugin.scheduler = bot.scheduler          # 批次 1：定时任务调度器
+        plugin.tool_registry = bot.tool_registry  # 批次 3：Function Calling 工具注册表
+        plugin.knowledge_store = bot.knowledge_store  # 批次 3：知识库向量存储
         plugin.matchers = []  # 初始化 Matcher 列表
         await plugin.on_load()
 

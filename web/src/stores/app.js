@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, reactive } from 'vue'
+import { invalidateAuthStatusCache } from '../router/index.js'
 
 const API = ''
 
@@ -93,6 +94,12 @@ export const useAppStore = defineStore('app', () => {
       const res = await fetch(`${API}${url}`, { ...options, headers })
       if (res.status === 401) {
         error.value = 'API Key 鉴权失败，请在设置中配置正确的 API Key'
+        // 失效路由层的鉴权状态缓存，使跳转登录后能重新拉取最新状态
+        invalidateAuthStatusCache()
+        // 跳转登录页（hash 模式直改 location，避免 store 与 router 循环依赖）
+        if (window.location.hash !== '#/login') {
+          window.location.hash = '#/login'
+        }
         throw new Error(error.value)
       }
       if (!res.ok) {
@@ -204,6 +211,6 @@ export const useAppStore = defineStore('app', () => {
     statusText, statusColor,
     fetchStatus, fetchConfig, fetchLLMPresets, startBot, stopBot, restartBot,
     saveConfig, testLLM, fetchLogs, fetchMessageCount, addLog,
-    getApiKey, setApiKey,
+    apiFetch, getApiKey, setApiKey,
   }
 })

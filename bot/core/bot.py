@@ -7,10 +7,14 @@ from typing import Any, Optional
 
 from ..config import ConfigManager
 from ..db import Database
+from .alerter import AlertHandler
 from .connection import OneBotConnection
 from .dispatcher import MessageDispatcher, MessageContext
-from ..llm import LLMManager
+from .filter import SensitiveFilter
+from .scheduler import BotScheduler
+from ..llm import LLMManager, ToolRegistry, register_builtin_tools
 from ..plugin import PluginManager
+from ..rag import KnowledgeStore
 
 logger = logging.getLogger("qingci-bot")
 
@@ -30,11 +34,52 @@ class QingciBot:
             access_token=self.config.onebot.access_token,
         )
         self.dispatcher = MessageDispatcher()
-        self.llm = LLMManager(self.config.llm, db=self.db)
+        self.llm = LLMManager(
+            self.config.llm,
+            db=self.db,
+            summary_config=self.config.session_summary,
+            usage_tracking=self.config.log.usage_tracking,
+        )
         self.plugin_manager = PluginManager()
 
         self._running = False
         self._pending_tasks: set[asyncio.Task[Any]] = set()
+        # 后台任务引用集合：防止 fire-and-forget 任务被 GC 提前回收、异常静默丢失
+        self._background_tasks: set[asyncio.Task[Any]] = set()
+        # 错误告警处理器（alert.enabled 时 start 中 attach，stop 中 detach）
+        self._alert_handler: Optional[AlertHandler] = None
+
+        # ---- 功能增强组件 ----
+        # 批次 1：限流器实例（rate_limit.enabled 时创建）
+        self.rate_limiter = None
+        # 批次 1：定时任务调度器（start/stop 中启动与关闭）
+        self.scheduler = BotScheduler()
+        # 批次 3：Function Calling 工具注册表（常驻创建，轻量；
+        # 仅在 llm.enable_tools 开启且模型支持 tools 时才实际参与调用）
+        self.tool_registry = ToolRegistry()
+        register_builtin_tools(self.tool_registry)
+        self.llm.set_tool_registry(self.tool_registry)
+        # 批次 3：知识库（rag.enabled 时创建，未启用时为 None）
+        self.knowledge_store = None
+        if self.config.rag.enabled:
+            rag_cfg = self.config.rag
+            knowledge_dir = Path(rag_cfg.knowledge_dir)
+            if not knowledge_dir.is_absolute():
+                knowledge_dir = (
+                    Path(__file__).resolve().parent.parent.parent / knowledge_dir
+                )
+            self.knowledge_store = KnowledgeStore(
+                root=knowledge_dir,
+                chunk_size=rag_cfg.chunk_size,
+                chunk_overlap=rag_cfg.chunk_overlap,
+                top_k=rag_cfg.top_k,
+            )
+        # 敏感词过滤器：本批实例化，词库路径相对项目根目录解析
+        # （enabled 开关由批次 1 的拦截逻辑判断，此处仅构造）
+        words_file = Path(self.config.filter.words_file)
+        if not words_file.is_absolute():
+            words_file = Path(__file__).resolve().parent.parent.parent / words_file
+        self.sensitive_filter = SensitiveFilter(words_file)
 
     # ============ 生命周期 ============
 
@@ -46,24 +91,58 @@ class QingciBot:
         self.connection.on_event(self._handle_event)
         try:
             await self.connection.start()
-        except Exception:
-            # 连接启动失败，清理已初始化的资源
+        except (Exception, asyncio.CancelledError):
+            # 连接启动失败或被取消（如 API 层 wait_for 超时），清理已初始化的资源
             try:
                 await self.plugin_manager.shutdown()
-            except Exception:
+            except (Exception, asyncio.CancelledError):
                 logger.exception("清理插件失败")
             try:
                 await self.db.close()
-            except Exception:
+            except (Exception, asyncio.CancelledError):
                 logger.exception("清理数据库失败")
             raise
+
+        # 连接就绪后启动调度器与错误告警；失败时连同连接/插件/数据库一并回滚
+        try:
+            if self.config.scheduler.enabled:
+                self.scheduler.start()
+            if self.config.alert.enabled:
+                self._alert_handler = AlertHandler()
+                self._alert_handler.attach(logger, self.connection, self.config)
+        except (Exception, asyncio.CancelledError):
+            logger.exception("调度器/告警启动失败，回滚已启动资源")
+            self._detach_alert_handler()
+            try:
+                await self.scheduler.shutdown(wait=False)
+            except (Exception, asyncio.CancelledError):
+                logger.exception("回滚调度器失败")
+            try:
+                await self.connection.stop()
+            except (Exception, asyncio.CancelledError):
+                logger.exception("回滚连接失败")
+            try:
+                await self.plugin_manager.shutdown()
+            except (Exception, asyncio.CancelledError):
+                logger.exception("清理插件失败")
+            try:
+                await self.db.close()
+            except (Exception, asyncio.CancelledError):
+                logger.exception("清理数据库失败")
+            raise
+
         self._running = True
         logger.info("Qingci-Bot 启动成功")
 
     async def stop(self) -> None:
         """停止 Bot"""
-        if not self._running and not self.connection.is_connected:
-            # 完全未启动，无需停止
+        if (
+            not self._running
+            and not self.connection.is_connected
+            and not self.plugin_manager.plugins
+        ):
+            # 完全未启动或资源已全部清理，无需停止
+            # 注意：部分启动（如 start 超时被取消）后插件仍已加载，需继续清理
             return
         logger.info("Qingci-Bot 停止中...")
         self._running = False
@@ -92,6 +171,18 @@ class QingciBot:
         except (Exception, asyncio.CancelledError):
             logger.exception("插件卸载异常")
 
+        # 关闭定时任务调度器（wait=False 快速返回，配合 stop 的超时保护语义）
+        try:
+            await self.scheduler.shutdown(wait=False)
+        except (Exception, asyncio.CancelledError):
+            logger.exception("调度器关闭异常")
+
+        # 卸载错误告警处理器
+        try:
+            self._detach_alert_handler()
+        except (Exception, asyncio.CancelledError):
+            logger.exception("告警处理器卸载异常")
+
         try:
             await self.llm.close()
         except (Exception, asyncio.CancelledError):
@@ -104,19 +195,42 @@ class QingciBot:
 
         logger.info("Qingci-Bot 已停止")
 
+    def _detach_alert_handler(self) -> None:
+        """卸载错误告警处理器（幂等）"""
+        if self._alert_handler is not None:
+            self._alert_handler.detach()
+            self._alert_handler = None
+
     # ============ 事件处理 ============
+
+    def _spawn_background_task(self, coro, name: str = "") -> asyncio.Task:
+        """创建后台任务并保存引用，防止任务被 GC 与异常静默丢失
+
+        done callback 中记录异常日志并移除引用（兼容任务被取消的场景）。
+        """
+        task = asyncio.create_task(coro, name=name or None)
+        self._background_tasks.add(task)
+
+        def _on_done(t: asyncio.Task[Any]) -> None:
+            self._background_tasks.discard(t)
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc is not None:
+                logger.exception(f"后台任务异常: {name or 'unknown'}", exc_info=exc)
+
+        task.add_done_callback(_on_done)
+        return task
 
     async def _handle_event(self, event: dict) -> None:
         """处理 OneBot 事件 - 创建独立任务避免 stop() 死锁"""
         if not self._running:
             return
-        task = asyncio.create_task(self._process_event(event))
+        task = self._spawn_background_task(self._process_event(event), "event-process")
         self._pending_tasks.add(task)
 
         def _cleanup(t: asyncio.Task[Any]) -> None:
             self._pending_tasks.discard(t)
-            if t.exception():
-                logger.exception("事件处理任务异常", exc_info=t.exception())
 
         task.add_done_callback(_cleanup)
 

@@ -10,12 +10,13 @@ provider 映射规则：
 - custom  -> f"openai/{model}" + api_base（兼容任意 OpenAI 协议服务）
 """
 
+import asyncio
 import logging
 from typing import Any, AsyncIterator, Optional
 
 import litellm
 
-from .adapter import LLMAdapter
+from .adapter import ChatResult, LLMAdapter
 
 logger = logging.getLogger("qingci-bot.llm.litellm_adapter")
 
@@ -37,12 +38,14 @@ class LiteLLMAdapter(LLMAdapter):
         api_key: str = "",
         model: str = "gpt-4o-mini",
         timeout: float = 60.0,
+        num_retries: int = 2,
     ):
         self._provider = provider
         self._api_url = api_url.rstrip("/") if api_url else ""
         self._api_key = api_key
         self._model = model
         self._timeout = timeout
+        self._num_retries = num_retries
 
     @property
     def provider_name(self) -> str:
@@ -105,6 +108,7 @@ class LiteLLMAdapter(LLMAdapter):
             "temperature": temperature,
             "stream": stream,
             "timeout": self._timeout,
+            "num_retries": self._num_retries,
         }
         if self._api_key:
             kwargs["api_key"] = self._api_key
@@ -119,7 +123,7 @@ class LiteLLMAdapter(LLMAdapter):
 
     # ============ 接口实现 ============
 
-    async def chat(
+    async def chat_detail(
         self,
         messages: list[dict],
         system_prompt: Optional[str] = None,
@@ -128,7 +132,7 @@ class LiteLLMAdapter(LLMAdapter):
         tools: Optional[list[dict]] = None,
         images: Optional[list[str]] = None,
         **kwargs,
-    ) -> str:
+    ) -> ChatResult:
         try:
             response = await litellm.acompletion(
                 **self._build_kwargs(
@@ -146,15 +150,48 @@ class LiteLLMAdapter(LLMAdapter):
             logger.error(f"litellm 调用失败: {e}")
             raise
 
+        # 提取 token 用量（服务未提供时保持 None）
+        usage: Optional[dict] = None
+        raw_usage = getattr(response, "usage", None)
+        if raw_usage is not None:
+            usage = {
+                "prompt_tokens": getattr(raw_usage, "prompt_tokens", 0) or 0,
+                "completion_tokens": getattr(raw_usage, "completion_tokens", 0) or 0,
+            }
+
         choices = response.choices or []
         if not choices:
-            return ""
+            return ChatResult(content="", usage=usage)
         message = choices[0].message
-        # 若模型返回 tool_calls，记录警告但不混入文本历史
-        if getattr(message, "tool_calls", None):
-            logger.warning("模型返回了 tool_calls，当前版本不支持 Function Calling 循环，已忽略")
-            return getattr(message, "content", "") or ""
-        return getattr(message, "content", "") or ""
+        # tool_calls 透传给调用方（Function Calling 循环在批次 3 使用）
+        tool_calls = getattr(message, "tool_calls", None) or None
+        return ChatResult(
+            content=getattr(message, "content", "") or "",
+            usage=usage,
+            tool_calls=tool_calls,
+        )
+
+    async def chat(
+        self,
+        messages: list[dict],
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+        tools: Optional[list[dict]] = None,
+        images: Optional[list[str]] = None,
+        **kwargs,
+    ) -> str:
+        # 包装 chat_detail：对外签名与异常行为保持不变，仅返回文本
+        result = await self.chat_detail(
+            messages,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            tools=tools,
+            images=images,
+            **kwargs,
+        )
+        return result.content
 
     async def chat_stream(
         self,
@@ -180,26 +217,39 @@ class LiteLLMAdapter(LLMAdapter):
             raise
         async for chunk in response:
             try:
+                # choices 可能为 None 或空列表，先判空避免 TypeError/IndexError
+                if not chunk.choices:
+                    continue
                 delta = chunk.choices[0].delta
                 content = getattr(delta, "content", None)
                 if content:
                     yield content
-            except (IndexError, AttributeError):
+            except (IndexError, AttributeError, TypeError):
                 continue
 
     async def check_availability(self) -> bool:
         try:
+            # 可用性探测使用较短超时，避免接口长时间阻塞
             await litellm.acompletion(
                 **self._build_kwargs(
                     [{"role": "user", "content": "ping"}],
                     system_prompt="回复 pong",
                     max_tokens=10,
                     stream=False,
+                    timeout=10,
                 )
             )
             return True
         except Exception as e:
-            logger.warning(f"LLM 可用性检查失败: {e}")
+            err_type = type(e).__name__
+            if isinstance(e, litellm.AuthenticationError):
+                logger.warning(f"LLM 可用性检查失败（鉴权错误 {err_type}）: {e}")
+            elif isinstance(e, (litellm.Timeout, asyncio.TimeoutError)):
+                logger.warning(f"LLM 可用性检查超时（{err_type}）: {e}")
+            elif isinstance(e, (litellm.APIConnectionError, OSError)):
+                logger.warning(f"LLM 可用性检查失败（网络错误 {err_type}）: {e}")
+            else:
+                logger.warning(f"LLM 可用性检查失败（{err_type}）: {e}")
             return False
 
     async def close(self):

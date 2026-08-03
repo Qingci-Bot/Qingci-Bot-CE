@@ -1,24 +1,90 @@
+# Qingci-Bot 配置文件
+# 新增配置节均带默认值，功能开关默认关闭，按需开启
+
+# Bot 基础配置
 bot:
   name: Qingci-Bot
-  admin_users: []
-  trigger_mode: at
+  admin_users: []          # 管理员 QQ 号
+  trigger_mode: at         # 触发方式: at / keyword / always
   trigger_keywords:
   - /bot
   - /ai
-  group_blacklist: []
-  user_blacklist: []
+  group_blacklist: []      # 群黑名单
+  user_blacklist: []       # 用户黑名单
+  log_json: false          # 结构化 JSON 日志（false 使用普通文本日志）
+
+# OneBot WebSocket 连接配置
 onebot:
   host: 127.0.0.1
   port: 3001
   access_token: ''
+
+# LLM 大模型配置
 llm:
   provider: deepseek
   api_url: https://api.openai.com/v1
   api_key: ''
   model: gpt-4o-mini
-  max_tokens: 2048
+  max_tokens: 2048         # 单次回复最大 token
   temperature: 0.7
   system_prompt: 你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。
-  max_history: 20
-  max_context_tokens: 8192
-api_key: ''
+  max_history: 20          # 最大对话历史轮数（每轮 = user + assistant）
+  max_context_tokens: 8192 # 上下文窗口 token 上限，超出后裁剪历史
+  timeout: 60              # 单次 LLM 请求超时（秒）
+  num_retries: 2           # LLM 请求失败重试次数
+  enable_summary: false    # 会话摘要开关（与 session_summary.enabled 等价，任一为 true 即启用）
+  enable_tools: false      # Function Calling 工具调用开关
+  max_tool_rounds: 5       # 工具调用最大轮次
+
+# 对话限流配置（默认关闭）
+rate_limit:
+  enabled: false
+  daily_limit: 50          # 每用户每日对话上限
+  cooldown_seconds: 10     # 同一用户两次对话最小间隔（秒）
+
+# 敏感词过滤配置（默认关闭）
+filter:
+  enabled: false
+  words_file: data/sensitive_words.txt  # 词库文件路径（相对项目根目录）
+  exempt_admins: true      # 管理员豁免
+
+# 定时任务调度器配置
+scheduler:
+  enabled: true
+
+# 错误告警配置（默认关闭）
+alert:
+  enabled: false
+  error_threshold: 5       # 冷却窗口内 ERROR 日志条数阈值
+  cooldown_minutes: 10     # 告警冷却时间（分钟）
+
+# 图片生成配置（默认关闭）
+image:
+  enabled: false
+  model: dall-e-3
+  api_url: ''              # 留空则按 litellm 默认路由
+  api_key: ''
+
+# 轻量知识库（RAG）配置（默认关闭）
+rag:
+  enabled: false
+  embedding_model: ''      # 预留字段（当前为关键词检索，不使用向量）
+  top_k: 3                 # 检索返回的最相关条目数
+  knowledge_dir: data/knowledge  # 知识库目录（相对项目根目录）
+  chunk_size: 400          # 文档分块大小（字符数）
+  chunk_overlap: 50        # 相邻分块重叠字符数
+  max_inject_chars: 800    # 注入 system_prompt 的参考资料长度上限（字符）
+
+# 会话摘要（历史裁剪）配置（默认关闭）
+session_summary:
+  enabled: false
+  keep_recent_turns: 3     # 摘要时保留最近 N 轮原文
+  max_messages: 20         # 触发摘要的条数阈值
+  max_tokens: 4096         # 触发摘要的 token 阈值
+  summary_max_tokens: 512  # 摘要生成单次回复最大 token
+
+# 日志与遥测配置
+log:
+  usage_tracking: true     # LLM 用量入库开关（可退出的遥测；Dashboard 用量统计依赖该数据）
+
+api_key: ''                # API 鉴权密钥，为空则不启用鉴权

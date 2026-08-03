@@ -1,12 +1,26 @@
-"""消息日志接口"""
+"""消息日志接口
+
+含用量统计（/usage）与消息 CSV 流式导出（/messages/export）。
+"""
+
+import csv
+import io
 
 from fastapi import APIRouter, Query, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 
 from bot.core.bot import get_bot as _get_bot
 from api.auth import require_auth
 
 
 router = APIRouter()
+
+# CSV 导出列与分批大小（id 游标分页，避免一次性载入全表）
+_EXPORT_COLUMNS = (
+    "message_id", "user_id", "group_id", "content",
+    "message_type", "role", "created_at",
+)
+_EXPORT_BATCH_SIZE = 1000
 
 
 def _get_bot_instance():
@@ -68,6 +82,73 @@ async def clear_messages(
         kwargs["before_days"] = before_days
     count = await bot.db.clear_messages(**kwargs)
     return {"message": f"已清理 {count} 条消息记录", "count": count}
+
+
+@router.get("/usage", dependencies=[Depends(require_auth)])
+async def get_usage_stats(days: int = Query(default=30, ge=1, le=365)):
+    """用量统计：按天聚合最近 days 天的 token 用量与调用次数
+
+    返回：daily 数组（date/prompt_tokens/completion_tokens/calls/total_tokens，
+    按日期升序）+ summary 汇总。
+    """
+    bot = _get_bot_instance()
+    try:
+        daily = await bot.db.get_usage_stats(days=days)
+    except Exception:
+        raise HTTPException(status_code=500, detail="查询用量统计失败，详见服务端日志")
+    summary = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "total_tokens": 0}
+    for row in daily:
+        row["total_tokens"] = row["prompt_tokens"] + row["completion_tokens"]
+        summary["prompt_tokens"] += row["prompt_tokens"]
+        summary["completion_tokens"] += row["completion_tokens"]
+        summary["calls"] += row["calls"]
+    summary["total_tokens"] = summary["prompt_tokens"] + summary["completion_tokens"]
+    return {"days": days, "daily": daily, "summary": summary}
+
+
+@router.get("/messages/export", dependencies=[Depends(require_auth)])
+async def export_messages():
+    """流式导出全部消息为 CSV
+
+    - utf-8-sig 头（Excel 直接打开不乱码）
+    - 按 id 游标分批（每批 1000 行），内存占用恒定
+    """
+    bot = _get_bot_instance()
+
+    async def _generate():
+        # utf-8-sig BOM，保证 Excel 识别 UTF-8
+        yield "\ufeff"
+        buf = io.StringIO()
+        writer = csv.writer(buf, lineterminator="\n")
+        writer.writerow(_EXPORT_COLUMNS)
+        yield buf.getvalue()
+        after_id = 0
+        while True:
+            try:
+                rows = await bot.db.get_messages_batch(
+                    after_id=after_id, limit=_EXPORT_BATCH_SIZE
+                )
+            except Exception:
+                # 流已开始输出时无法再改状态码，仅中止并记日志
+                import logging
+                logging.getLogger("qingci-bot.api.log").exception("导出消息分批查询失败")
+                break
+            if not rows:
+                break
+            buf = io.StringIO()
+            writer = csv.writer(buf, lineterminator="\n")
+            for row in rows:
+                writer.writerow([row.get(col, "") for col in _EXPORT_COLUMNS])
+            yield buf.getvalue()
+            after_id = rows[-1]["id"]
+            if len(rows) < _EXPORT_BATCH_SIZE:
+                break
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=messages.csv"},
+    )
 
 
 @router.delete("/sessions", dependencies=[Depends(require_auth)])

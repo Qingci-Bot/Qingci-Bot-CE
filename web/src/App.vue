@@ -10,6 +10,7 @@ const interval = ref(null)
 const navItems = [
   { path: '/', name: '仪表盘', icon: '◈' },
   { path: '/config', name: 'LLM 配置', icon: '✦' },
+  { path: '/groups', name: '群配置', icon: '▣' },
   { path: '/plugins', name: '插件管理', icon: '◇' },
   { path: '/logs', name: '消息日志', icon: '✉' },
   { path: '/settings', name: '系统设置', icon: '⚙' },
@@ -36,6 +37,10 @@ onUnmounted(() => {
 
 <template>
   <div id="app-root">
+    <!-- 登录页：无侧边栏全屏展示 -->
+    <RouterView v-if="route.path === '/login'" />
+
+    <template v-else>
     <aside class="sidebar">
       <div class="sidebar-logo">
         <div class="title">Qingci-Bot</div>
@@ -106,6 +111,7 @@ onUnmounted(() => {
         </RouterView>
       </div>
     </main>
+    </template>
   </div>
 </template>
 

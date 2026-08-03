@@ -8,7 +8,24 @@
 """
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, AsyncIterator, Optional
+
+
+@dataclass
+class ChatResult:
+    """chat_detail 的完整返回结果
+
+    Attributes:
+        content: 回复文本（模型未返回文本时为 ""）
+        usage: token 用量信息，形如 {"prompt_tokens": int, "completion_tokens": int}，
+            服务未提供时为 None
+        tool_calls: 模型返回的 tool_calls 原始列表（OpenAI tools 格式），
+            未调用工具时为 None
+    """
+    content: str
+    usage: Optional[dict] = None
+    tool_calls: Optional[list] = None
 
 
 class LLMAdapter(ABC):
@@ -38,7 +55,35 @@ class LLMAdapter(ABC):
         ...
 
     @abstractmethod
-    async def chat_stream(
+    async def chat_detail(
+        self,
+        messages: list[dict],
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+        tools: Optional[list[dict]] = None,
+        images: Optional[list[str]] = None,
+        **kwargs,
+    ) -> ChatResult:
+        """同步聊天（返回完整结果，含 usage 与 tool_calls）
+
+        与 chat() 参数完全一致，但返回 ChatResult 而非纯文本：
+        - content 为回复文本
+        - usage 为 token 用量（用于用量统计）
+        - tool_calls 为工具调用原始列表（用于 Function Calling 循环）
+
+        Args:
+            messages: OpenAI 格式的消息列表
+            system_prompt: 系统提示词，若提供则前置到 messages
+            max_tokens: 单次回复最大 token
+            temperature: 采样温度
+            tools: Function Calling 工具定义（OpenAI tools 格式）
+            images: 图片列表，每项为 URL 或 base64 data URI
+        """
+        ...
+
+    @abstractmethod
+    def chat_stream(
         self,
         messages: list[dict],
         system_prompt: Optional[str] = None,
@@ -46,7 +91,13 @@ class LLMAdapter(ABC):
         temperature: float = 0.7,
         **kwargs,
     ) -> AsyncIterator[str]:
-        """流式聊天（逐段返回增量文本）"""
+        """流式聊天（逐段返回增量文本）
+
+        契约：子类必须实现为异步生成器（async generator），
+        返回 AsyncIterator[str]，调用方直接用 ``async for`` 迭代，
+        例如：``async for chunk in adapter.chat_stream(...): ...``。
+        注意本方法不能定义为 ``async def`` 普通方法（那会返回协程而非迭代器）。
+        """
         ...
 
     @abstractmethod

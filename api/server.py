@@ -83,11 +83,19 @@ def create_app() -> FastAPI:
     )
 
     # 注册路由
-    from api.routes import bot_router, config_router, plugin_router, log_router
+    from api.routes import (
+        bot_router, config_router, plugin_router, log_router,
+        group_router, auth_router, backup_router,
+    )
+    from api.audit import router as audit_router
     app.include_router(bot_router, prefix="/api/bot", tags=["Bot"])
     app.include_router(config_router, prefix="/api/config", tags=["Config"])
     app.include_router(plugin_router, prefix="/api/plugin", tags=["Plugin"])
     app.include_router(log_router, prefix="/api/log", tags=["Log"])
+    app.include_router(group_router, prefix="/api/group", tags=["Group"])
+    app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
+    app.include_router(audit_router, prefix="/api/audit", tags=["Audit"])
+    app.include_router(backup_router, prefix="/api/backup", tags=["Backup"])
 
     # 注册 WebSocket 广播 broker（register_broker 内部已去重，create_app 多次调用安全）
     register_broker(_broadcast_message_to_ws)

@@ -45,6 +45,15 @@ class LLMConfig(BaseModel):
     system_prompt: str = "你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。"
     max_history: int = 20               # 最大对话历史轮数（每轮 = user + assistant）
     max_context_tokens: int = 8192      # 上下文窗口 token 上限，超出后裁剪历史
+    timeout: int = 60                   # 单次 LLM 请求超时（秒）
+    num_retries: int = 2                # LLM 请求失败重试次数
+    # 会话历史超长时生成摘要（默认关闭）。
+    # 与 session_summary.enabled 等价：两者任一为 true 即启用摘要，
+    # 阈值类参数统一读 session_summary 节（未配置时用默认值）。
+    # 保留本字段是为了兼容已有 config.yaml，不要删除。
+    enable_summary: bool = False
+    enable_tools: bool = False          # Function Calling 工具调用（默认关闭）
+    max_tool_rounds: int = 5            # 工具调用最大轮次
 
     @model_validator(mode="after")
     def apply_provider_preset(self):
@@ -77,6 +86,92 @@ class BotConfig(BaseModel):
     trigger_keywords: list[str] = ["/bot", "/ai"]
     group_blacklist: list[int] = []     # 群黑名单
     user_blacklist: list[int] = []      # 用户黑名单
+    log_json: bool = False              # 结构化 JSON 日志（默认关闭，使用普通文本日志）
+
+
+class RateLimitConfig(BaseModel):
+    """对话限流配置（默认关闭）"""
+    model_config = {"extra": "ignore"}
+
+    enabled: bool = False
+    daily_limit: int = 50               # 每用户每日对话上限
+    cooldown_seconds: int = 10          # 同一用户两次对话最小间隔（秒）
+
+
+class FilterConfig(BaseModel):
+    """敏感词过滤配置（默认关闭）"""
+    model_config = {"extra": "ignore"}
+
+    enabled: bool = False
+    words_file: str = "data/sensitive_words.txt"  # 词库文件路径（相对项目根目录）
+    exempt_admins: bool = True          # 管理员豁免
+
+
+class SchedulerConfig(BaseModel):
+    """定时任务调度器配置（默认启用，插件未注册任务时无副作用）"""
+    model_config = {"extra": "ignore"}
+
+    enabled: bool = True
+
+
+class AlertConfig(BaseModel):
+    """错误告警配置（默认关闭）"""
+    model_config = {"extra": "ignore"}
+
+    enabled: bool = False
+    error_threshold: int = 5            # 冷却窗口内 ERROR 日志条数阈值
+    cooldown_minutes: int = 10          # 告警冷却时间（分钟）
+
+
+class ImageConfig(BaseModel):
+    """图片生成配置（默认关闭）"""
+    model_config = {"extra": "ignore"}
+
+    enabled: bool = False
+    model: str = "dall-e-3"
+    api_url: str = ""                   # 留空则按 litellm 默认路由
+    api_key: str = ""
+
+
+class SessionSummaryConfig(BaseModel):
+    """会话摘要（历史裁剪）配置（默认关闭）
+
+    开启后，当会话上下文超过条数/token 阈值时，将较早消息异步
+    摘要压缩为一条 summary 消息，保留最近 N 轮原文。
+    开关与 llm.enable_summary 等价：两者任一为 true 即启用。
+    """
+    model_config = {"extra": "ignore"}
+
+    enabled: bool = False
+    keep_recent_turns: int = 3          # 摘要时保留最近 N 轮原文（每轮 = user + assistant）
+    max_messages: int = 20              # 触发摘要的条数阈值（历史消息数超过即摘要）
+    max_tokens: int = 4096              # 触发摘要的 token 阈值（估算超过即摘要）
+    summary_max_tokens: int = 512       # 摘要生成单次回复最大 token
+
+
+class LogConfig(BaseModel):
+    """日志与遥测配置"""
+    model_config = {"extra": "ignore"}
+
+    # LLM 用量入库开关（可退出的遥测）：默认保持 True，Dashboard 的
+    # 用量统计依赖该数据；关闭后 chat/摘要等调用不再写 usage_logs。
+    usage_tracking: bool = True
+
+
+class RAGConfig(BaseModel):
+    """轻量知识库（RAG）配置（默认关闭）
+
+    基于本地文件的关键词检索实现，纯 Python 无重型依赖。
+    """
+    model_config = {"extra": "ignore"}
+
+    enabled: bool = False
+    embedding_model: str = ""           # 预留字段（当前为关键词检索，不使用向量）
+    top_k: int = 3                      # 检索时返回的最相关条目数
+    knowledge_dir: str = "data/knowledge"  # 知识库目录（相对项目根目录）
+    chunk_size: int = 400               # 文档分块大小（字符数）
+    chunk_overlap: int = 50             # 相邻分块重叠字符数
+    max_inject_chars: int = 800         # 注入 system_prompt 的参考资料长度上限（字符）
 
 
 class AppConfig(BaseModel):
@@ -86,6 +181,14 @@ class AppConfig(BaseModel):
     bot: BotConfig = BotConfig()
     onebot: OneBotConfig = OneBotConfig()
     llm: LLMConfig = LLMConfig()
+    rate_limit: RateLimitConfig = RateLimitConfig()
+    filter: FilterConfig = FilterConfig()
+    scheduler: SchedulerConfig = SchedulerConfig()
+    alert: AlertConfig = AlertConfig()
+    image: ImageConfig = ImageConfig()
+    rag: RAGConfig = RAGConfig()
+    session_summary: SessionSummaryConfig = SessionSummaryConfig()
+    log: LogConfig = LogConfig()
     api_key: str = ""               # API 鉴权密钥，为空则不启用鉴权
 
 
@@ -117,6 +220,38 @@ class ConfigManager:
     @property
     def llm(self) -> LLMConfig:
         return self._config.llm
+
+    @property
+    def rate_limit(self) -> RateLimitConfig:
+        return self._config.rate_limit
+
+    @property
+    def filter(self) -> FilterConfig:
+        return self._config.filter
+
+    @property
+    def scheduler(self) -> SchedulerConfig:
+        return self._config.scheduler
+
+    @property
+    def alert(self) -> AlertConfig:
+        return self._config.alert
+
+    @property
+    def image(self) -> ImageConfig:
+        return self._config.image
+
+    @property
+    def rag(self) -> RAGConfig:
+        return self._config.rag
+
+    @property
+    def session_summary(self) -> SessionSummaryConfig:
+        return self._config.session_summary
+
+    @property
+    def log(self) -> LogConfig:
+        return self._config.log
 
     def load(self) -> AppConfig:
         """从文件加载配置，不存在则创建默认配置"""

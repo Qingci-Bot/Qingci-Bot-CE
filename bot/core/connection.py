@@ -99,7 +99,11 @@ class OneBotConnection:
     # ============ 生命周期 ============
 
     async def start(self) -> None:
-        """启动反向 WebSocket 服务器（异步）"""
+        """启动反向 WebSocket 服务器（异步）
+
+        若启动过程中被取消（如 API 层 wait_for 超时），会先回收已创建的
+        server task 再重新抛出 CancelledError，避免孤儿 task 占用端口。
+        """
         self._running = True
         logger.info(f"OneBot WS 服务器启动: ws://{self.host}:{self.port}/ws")
         self._server_task = asyncio.create_task(
@@ -108,7 +112,20 @@ class OneBotConnection:
                 port=self.port,
             )
         )
-        await asyncio.sleep(0.1)
+        try:
+            await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            # 启动被取消：回收已创建的 server task，避免孤儿 task 持续占用端口
+            self._running = False
+            if self._server_task and not self._server_task.done():
+                self._server_task.cancel()
+                try:
+                    await self._server_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            self._server_task = None
+            logger.warning("OneBot WS 服务器启动被取消，已回收 server task")
+            raise
         # 检查服务器是否启动失败（如端口被占用）
         if self._server_task.done():
             exc = self._server_task.exception()

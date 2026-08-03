@@ -27,8 +27,10 @@
 - **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 100+ 提供商（OpenAI / DeepSeek / Claude / Gemini / Ollama 等），含流式响应、Function Calling、多模态
 - **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪
 - **插件系统**：借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持优先级、权限控制、命令注册器，向后兼容旧式 `on_message`
+- **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）
+- **增强能力**：AI 图片生成、轻量知识库（文件型 RAG）、会话摘要（历史裁剪）、Function Calling、定时任务调度器、LLM 用量统计
 - **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式）
-- **Web UI**：原神风格暗色主题，仪表盘 / LLM 配置 / 插件管理 / 消息日志 / 系统设置
+- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置 / 群配置 / 插件管理 / 消息日志 / 登录审计 / 系统设置
 - **桌面应用**：PyWebView 套壳 + 系统托盘，开机自启
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖
 
@@ -98,7 +100,11 @@ llm:
   model: deepseek-chat
   system_prompt: 你是一个友好的 QQ 机器人助手。
   max_context_tokens: 8192        # 上下文窗口 token 上限，超出自动裁剪历史
+  timeout: 60                     # 单次 LLM 请求超时（秒）
+  num_retries: 2                  # 请求失败重试次数
 ```
+
+LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不受 `timeout` 配置影响。
 
 **provider 路由规则**（基于 litellm）：
 - `api_url` 非空：统一走 OpenAI 兼容协议（`openai/{model}` + `api_base`），兼容任意 OpenAI 协议服务
@@ -125,6 +131,11 @@ Bot 运行时，管理员可在群聊/私聊中发送以下命令：
 | `/clear` | 清除当前会话历史 |
 | `/blacklist add <QQ>` | 添加用户到黑名单 |
 | `/blacklist remove <QQ>` | 从黑名单移除用户 |
+| `/help` | 显示当前用户可用的命令列表 |
+| `/filter on\|off\|reload` | 敏感词过滤开关 / 重载词库（词库为空时会提示编辑 `data/sensitive_words.txt`） |
+| `/group on\|off` | 当前群 Bot 开关 |
+| `/image <提示词>` | AI 绘图（需开启 `image.enabled`） |
+| `/kb add\|list\|search\|remove\|reload` | 知识库管理（需开启 `rag.enabled`，仅管理员） |
 
 管理员 QQ 号在 `config.yaml` 的 `bot.admin_users` 中配置。
 
@@ -150,6 +161,7 @@ bot:
   trigger_keywords: ["/bot", "/ai"] # keyword 模式的触发词
   group_blacklist: []              # 群黑名单
   user_blacklist: []               # 用户黑名单
+  log_json: false                  # 结构化 JSON 日志（false 使用普通文本日志）
 onebot:
   host: 127.0.0.1
   port: 3001                       # LLBot 连接 ws://host:port/ws
@@ -164,8 +176,63 @@ llm:
   system_prompt: 你是一个友好的 QQ 机器人助手。
   max_history: 20                  # 最大对话历史轮数（每轮 = user + assistant）
   max_context_tokens: 8192         # 上下文窗口 token 上限，超出自动裁剪历史
+  timeout: 60                      # 单次 LLM 请求超时（秒）
+  num_retries: 2                   # LLM 请求失败重试次数
+  enable_summary: false            # 会话摘要开关（与 session_summary.enabled 等价，任一为 true 即启用）
+  enable_tools: false              # Function Calling 工具调用开关（默认关闭）
+  max_tool_rounds: 5               # 工具调用最大轮次
+rate_limit:
+  enabled: false                   # 对话限流（默认关闭）
+  daily_limit: 50                  # 每用户每日对话上限
+  cooldown_seconds: 10             # 同一用户两次对话最小间隔（秒）
+filter:
+  enabled: false                   # 敏感词过滤（默认关闭）
+  words_file: data/sensitive_words.txt  # 词库文件（一行一词，支持 # 注释）
+  exempt_admins: true              # 管理员豁免
+scheduler:
+  enabled: true                    # 定时任务调度器（插件未注册任务时无副作用）
+alert:
+  enabled: false                   # 错误告警（默认关闭）
+  error_threshold: 5               # 冷却窗口内 ERROR 日志条数阈值
+  cooldown_minutes: 10             # 告警冷却时间（分钟）
+image:
+  enabled: false                   # 图片生成（默认关闭）
+  model: dall-e-3
+  api_url: ''                      # 留空则按 litellm 默认路由
+  api_key: ''                      # 留空则回退 llm.api_key
+rag:
+  enabled: false                   # 轻量知识库（默认关闭，文件型关键词检索）
+  top_k: 3                         # 检索返回的最相关分块数
+  knowledge_dir: data/knowledge    # 知识库目录（相对项目根目录）
+  chunk_size: 400                  # 文档分块大小（字符数）
+  chunk_overlap: 50                # 相邻分块重叠字符数
+  max_inject_chars: 800            # 注入 system_prompt 的参考资料长度上限
+session_summary:
+  enabled: false                   # 会话摘要（默认关闭；与 llm.enable_summary 等价）
+  keep_recent_turns: 3             # 摘要时保留最近 N 轮原文
+  max_messages: 20                 # 触发摘要的条数阈值
+  max_tokens: 4096                 # 触发摘要的 token 阈值
+  summary_max_tokens: 512          # 摘要生成单次回复最大 token
+log:
+  usage_tracking: true             # LLM 用量入库（可退出的遥测；Dashboard 用量统计依赖该数据）
 api_key: ''                        # API 鉴权密钥
 ```
+
+## 进阶功能说明（功能开关均默认关闭）
+
+| 配置节 | 功能 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `rate_limit` | 对话限流 | `enabled: false` | 每用户每日对话上限 + 两次对话冷却间隔，超限回复提示 |
+| `filter` | 敏感词过滤 | `enabled: false` | 词库为 `data/sensitive_words.txt`（一行一词，支持 `#` 注释）；词库为空时 `/filter` 命令与日志会明确提示；管理员可通过 `exempt_admins` 豁免 |
+| `scheduler` | 定时任务调度器 | `enabled: true` | 调度器基座，由插件注册任务；无任务注册时零副作用 |
+| `alert` | 错误告警 | `enabled: false` | 冷却窗口内 ERROR 日志达到 `error_threshold` 条时向管理员发消息告警，带 `cooldown_minutes` 冷却 |
+| `image` | 图片生成 | `enabled: false` | `/image <提示词>` 命令；`image.api_key` 为空时回退 `llm.api_key`；成功后以 CQ 图片段回复 |
+| `rag` | 轻量知识库 | `enabled: false` | 文件型关键词检索（纯 Python 无重型依赖）；开启后对话自动注入检索到的参考资料；`/kb` 命令管理文档 |
+| `session_summary` | 会话摘要 | `enabled: false` | 与 `llm.enable_summary` 等价，任一为 true 即启用；上下文超过条数/token 阈值时将较早消息摘要压缩，保留最近 N 轮原文 |
+| `log.usage_tracking` | LLM 用量入库 | `true` | 可退出的遥测：关闭后 chat/摘要/图片不再写 usage_logs，Dashboard 用量统计将为空 |
+| `llm.enable_tools` | Function Calling | `false` | 启用工具调用（内置 `get_current_time` / `random_quote`，可经 ToolRegistry 扩展）；`max_tool_rounds` 限制最大轮次（默认 5） |
+| `llm.timeout` / `llm.num_retries` | 请求超时与重试 | `60` / `2` | 单次 LLM 请求超时秒数与失败重试次数 |
+| `bot.log_json` | 结构化 JSON 日志 | `false` | 面向机器可读的日志采集场景 |
 
 ---
 
@@ -185,11 +252,18 @@ Qingci-Bot/
 │   │   ├── bot.py             # Bot 主类（生命周期、事件调度）
 │   │   ├── connection.py      # OneBot 连接（aiocqhttp 反向 WS）
 │   │   ├── dispatcher.py      # 消息分发 + Matcher 调度
-│   │   └── broadcast.py       # 消息广播
+│   │   ├── broadcast.py       # 消息广播
+│   │   ├── filter.py          # 敏感词过滤器
+│   │   ├── scheduler.py       # 定时任务调度器
+│   │   ├── alerter.py         # 错误告警器
+│   │   └── logformat.py       # 结构化 JSON 日志
 │   ├── llm/
 │   │   ├── adapter.py         # LLM 适配器基类（支持 tools/images）
 │   │   ├── litellm_adapter.py # litellm 实现（100+ 提供商）
-│   │   └── manager.py         # 会话管理 + Token 裁剪 + 持久化
+│   │   ├── manager.py         # 会话管理 + Token 裁剪 + 摘要 + 持久化
+│   │   └── tools.py           # Function Calling 工具注册表
+│   ├── rag/
+│   │   └── knowledge.py       # 轻量知识库（文件型关键词检索）
 │   ├── db/
 │   │   ├── database.py        # 数据库仓储（基于 SQLModel）
 │   │   ├── engine.py          # 异步引擎 + 会话工厂（WAL 模式）
@@ -202,14 +276,18 @@ Qingci-Bot/
 │       ├── permission.py      # 权限系统（SUPERUSER/PRIVATE/GROUP 等）
 │       └── builtin/           # 内置插件
 │           ├── chat.py        # LLM 对话（Matcher API）
-│           └── admin.py       # 管理命令（Matcher API）
+│           ├── admin.py       # 管理命令（含 /filter /group）
+│           ├── help.py        # /help 命令（按权限列出可用命令）
+│           ├── imagegen.py    # AI 绘图（/image 命令）
+│           └── knowledge.py   # 知识库管理（/kb 命令）
 ├── migrations/                # Alembic 迁移脚本
 │   ├── env.py                 # 异步迁移环境
 │   └── versions/              # 迁移版本
 ├── api/
 │   ├── auth.py                # API 鉴权
+│   ├── audit.py               # 审计日志（埋点 + 查询）
 │   ├── server.py              # FastAPI 应用
-│   └── routes/                # API 路由
+│   └── routes/                # API 路由（bot/config/plugin/log/group/auth/backup）
 ├── web/                       # Vue 3 前端
 │   └── src/
 │       ├── views/             # 页面组件
@@ -558,6 +636,10 @@ async def weather_log(ctx: MatcherContext) -> None:
     await self.db.save_message(...)
 ```
 
+> **兼容性说明**：此前实现与文档不一致（实际为大者优先），本次已修正为与文档一致的升序匹配。
+> 内置插件中 admin（priority=1）先于 chat（priority=50）执行。
+> 外部插件开发者若此前依赖旧的“大者优先”实际顺序，请自查 priority 配置。
+
 ### 消息格式（CQ 码）
 
 返回的回复文本支持 CQ 码：
@@ -614,10 +696,18 @@ reply = f"{at_code} 收到！"
 - 插件可通过 `self.config` 修改配置，但需调用 `self.config.save()` 持久化
 - 热重载会重新执行模块代码，类级别的可变状态会丢失
 - 模块级装饰器注册的 Matcher 会自动关联到同模块的 PluginBase 子类
+- 插件重载采用“先建后拆”：新版本加载成功前旧插件保持生效；新版本加载失败时旧插件继续工作，不会出现插件真空
+- 重载后的模块若不再定义插件类，重载接口会返回失败（而非静默成功），旧插件保持生效
 
 ## API 接口
 
 所有接口前缀 `/api`，写操作需携带 `X-API-Key` 请求头（启用鉴权时）。
+
+**错误响应与超时说明：**
+
+- `/api/bot/start`、`/stop`、`/restart` 有超时保护（启动 30s / 停止 15s），超时返回 `504` 并自动尝试清理残留资源，可通过 `/api/bot/status` 确认实际状态
+- `/api/plugin/load` 请求体必须为 JSON 且包含字符串字段 `module_path`，类型非法时返回 `422`
+- 所有 `5xx` 错误的 `detail` 为通用文案（不暴露内部异常细节），详细原因见服务端日志
 
 ### Bot 控制 `/api/bot`
 
@@ -652,13 +742,43 @@ reply = f"{at_code} 收到！"
 | POST | `/load` | 是 | 加载外部插件 |
 | DELETE | `/{name}` | 是 | 卸载插件 |
 
-### 消息日志 `/api/log`
+### 消息日志与用量 `/api/log`
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| GET | `/messages` | 否 | 搜索消息记录 |
-| GET | `/messages/count` | 否 | 获取消息总数 |
+| GET | `/messages` | 是 | 搜索消息记录 |
+| GET | `/messages/count` | 是 | 获取消息总数 |
+| GET | `/messages/export` | 是 | 导出消息记录 |
+| GET | `/usage` | 是 | LLM 用量统计（依赖 `log.usage_tracking`） |
+| DELETE | `/messages` | 是 | 删除消息记录 |
 | DELETE | `/sessions` | 是 | 清除所有会话 |
+
+### 群配置 `/api/group`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | `/list` | 是 | 群配置列表 |
+| GET | `/{group_id}` | 是 | 获取单群配置 |
+| PUT | `/{group_id}` | 是 | 更新群配置（Bot 开关等） |
+
+### 登录与鉴权 `/api/auth`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | `/status` | 否 | 是否需要登录（配置 api_key 是否非空） |
+| POST | `/login` | 否 | 登录；按来源 IP 防暴力限流，连续失败 5 次后冷却 60 秒返回 429 |
+
+### 数据库备份 `/api/backup`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| POST | `/db` | 是 | 在线备份到 `data/backups/`（sqlite backup API，文件名带随机后缀，保留最近 10 份） |
+
+### 审计日志 `/api/audit`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | `/logs` | 是 | 审计日志倒序查询（配置变更 / 启停 / 登录 / 备份等） |
 
 ### WebSocket `/api/ws/log`
 

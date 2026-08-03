@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import delete, func, select
 
 from .engine import dispose_engine, get_session_factory, init_db
-from .models import Message, PluginConfig, SessionHistory
+from .models import AuditLog, GroupConfig, Message, PluginConfig, SessionHistory, UsageLog
 
 logger = logging.getLogger("qingci-bot.db")
 
@@ -230,3 +230,139 @@ class Database:
             else:
                 session.add(PluginConfig(key=key, value=value))
             await session.commit()
+
+    # ============ 群粒度配置 ============
+
+    async def get_group_config(self, group_id: int) -> Optional[dict]:
+        """获取群配置（未配置时返回 None）"""
+        async with get_session_factory()() as session:
+            row = (
+                await session.execute(
+                    select(GroupConfig).where(GroupConfig.group_id == group_id)
+                )
+            ).scalar_one_or_none()
+            return row.model_dump(mode="json") if row else None
+
+    async def upsert_group_config(
+        self,
+        group_id: int,
+        enabled: bool,
+        trigger_mode: Optional[str] = None,
+    ) -> None:
+        """新增或更新群配置
+
+        Args:
+            enabled: 群内是否启用 Bot
+            trigger_mode: 群触发模式（None 表示跟随全局）
+        """
+        async with get_session_factory()() as session:
+            existing = (
+                await session.execute(
+                    select(GroupConfig).where(GroupConfig.group_id == group_id)
+                )
+            ).scalar_one_or_none()
+            if existing:
+                existing.enabled = enabled
+                existing.trigger_mode = trigger_mode
+                existing.updated_at = datetime.now(timezone.utc)
+            else:
+                session.add(
+                    GroupConfig(
+                        group_id=group_id,
+                        enabled=enabled,
+                        trigger_mode=trigger_mode,
+                    )
+                )
+            await session.commit()
+
+    async def list_group_configs(self) -> list[dict]:
+        """列出所有已配置的群（按 group_id 升序）"""
+        async with get_session_factory()() as session:
+            rows = (
+                await session.execute(
+                    select(GroupConfig).order_by(GroupConfig.group_id)
+                )
+            ).scalars().all()
+            return [row.model_dump(mode="json") for row in rows]
+
+    # ============ 用量统计 ============
+
+    async def save_usage(
+        self,
+        session_key: str,
+        user_id: int,
+        model: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        source: str = "chat",
+    ) -> None:
+        """记录一次 LLM 调用用量（source: chat/tool/summary/image）"""
+        async with get_session_factory()() as session:
+            session.add(
+                UsageLog(
+                    session_key=session_key,
+                    user_id=user_id,
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    source=source,
+                )
+            )
+            await session.commit()
+
+    async def get_usage_stats(self, days: int = 30) -> list[dict]:
+        """按天聚合最近 days 天的用量（走 created_at 索引）
+
+        返回：[{date, prompt_tokens, completion_tokens, calls}]，按日期升序
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        async with get_session_factory()() as session:
+            day_col = func.date(UsageLog.created_at).label("day")
+            stmt = (
+                select(
+                    day_col,
+                    func.sum(UsageLog.prompt_tokens).label("prompt_tokens"),
+                    func.sum(UsageLog.completion_tokens).label("completion_tokens"),
+                    func.count(UsageLog.id).label("calls"),
+                )
+                .where(UsageLog.created_at >= cutoff)
+                .group_by(day_col)
+                .order_by(day_col)
+            )
+            rows = (await session.execute(stmt)).all()
+            return [
+                {
+                    "date": row.day,
+                    "prompt_tokens": row.prompt_tokens or 0,
+                    "completion_tokens": row.completion_tokens or 0,
+                    "calls": row.calls or 0,
+                }
+                for row in rows
+            ]
+
+    # ============ 审计日志 ============
+
+    async def get_audit_logs(self, limit: int = 100) -> list[dict]:
+        """获取审计日志（按时间倒序）"""
+        async with get_session_factory()() as session:
+            stmt = (
+                select(AuditLog)
+                .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+                .limit(limit)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [row.model_dump(mode="json") for row in rows]
+
+    # ============ 消息分批导出 ============
+
+    async def get_messages_batch(self, after_id: int = 0, limit: int = 1000) -> list[dict]:
+        """按 id 游标分批获取消息（用于 CSV 流式导出）"""
+        async with get_session_factory()() as session:
+            stmt = (
+                select(Message)
+                .where(Message.id > after_id)
+                .order_by(Message.id)
+                .limit(limit)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [row.model_dump(mode="json") for row in rows]

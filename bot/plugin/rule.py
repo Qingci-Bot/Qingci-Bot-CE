@@ -230,3 +230,41 @@ def keyword(*kws: str) -> Rule:
         return False
 
     return Rule(checker)
+
+
+def rate_limit() -> Rule:
+    """限流规则（每日上限 + 冷却间隔，读 config.rate_limit）
+
+    行为约定：
+    - bot.rate_limiter 为 None 或 rate_limit.enabled=False 时直接放行
+      （开关关闭时零行为变化）
+    - admin_users 豁免限流
+    - 拒绝时在 checker 内直接经 bot.connection 发送提示后返回 False：
+      Rule 失败会导致 handler 不执行、Dispatcher 不会回复，
+      在 checker 内主动发送是不改 Dispatcher 语义下唯一能反馈
+      拒绝原因的方式（发送失败不影响拒绝结果）
+    """
+
+    async def checker(bot, event, ctx: MessageContext) -> bool:
+        rl_cfg = getattr(bot.config, "rate_limit", None) if bot and bot.config else None
+        limiter = getattr(bot, "rate_limiter", None) if bot else None
+        if limiter is None or rl_cfg is None or not rl_cfg.enabled:
+            return True
+        # 管理员豁免
+        admin_users = bot.config.bot.admin_users if bot.config else []
+        if ctx.user_id in admin_users:
+            return True
+        ok, reason = limiter.check(ctx.user_id)
+        if ok:
+            return True
+        # 被限流：尽力发送提示（失败仅记日志，不改变拒绝结果）
+        try:
+            connection = getattr(bot, "connection", None)
+            if connection is not None and connection.is_connected:
+                target = ctx.group_id if ctx.message_type == "group" else ctx.user_id
+                await connection.send_msg(ctx.message_type, target, reason)
+        except Exception:
+            logger.warning(f"发送限流提示失败: user_id={ctx.user_id}", exc_info=True)
+        return False
+
+    return Rule(checker)

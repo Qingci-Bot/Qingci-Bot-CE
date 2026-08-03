@@ -16,6 +16,7 @@ from pathlib import Path
 import uvicorn
 
 from bot.core.bot import QingciBot, set_bot, clear_bot
+from bot.core.logformat import apply_logging_from_config
 from api.auth import set_config_path
 from api.server import create_app
 
@@ -87,6 +88,9 @@ async def run_bot_and_api(args):
 
 def main():
     args = parse_args()
+
+    # 结构化日志：config.bot.log_json=True 时切换 JSON 格式，否则保持上方文本格式不变
+    apply_logging_from_config(args.config)
 
     if args.desktop:
         from desktop.main import run_desktop

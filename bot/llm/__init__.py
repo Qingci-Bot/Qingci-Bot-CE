@@ -3,5 +3,12 @@
 from .adapter import LLMAdapter
 from .litellm_adapter import LiteLLMAdapter
 from .manager import LLMManager
+from .tools import ToolRegistry, register_builtin_tools
 
-__all__ = ["LLMAdapter", "LiteLLMAdapter", "LLMManager"]
+__all__ = [
+    "LLMAdapter",
+    "LiteLLMAdapter",
+    "LLMManager",
+    "ToolRegistry",
+    "register_builtin_tools",
+]

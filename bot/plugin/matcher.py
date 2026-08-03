@@ -98,6 +98,7 @@ class Matcher:
         temp: 临时匹配器（预留，当前未实现自动移除）
         owner: 所属插件名
         event_type: 事件类型（message/notice/request/meta_event）
+        meta: 元信息字典（如 command 主名、description，供 /help 等使用）
     """
     handler: Callable
     rule: Rule = field(default_factory=Rule)
@@ -107,6 +108,7 @@ class Matcher:
     temp: bool = False  # 临时匹配器（预留，当前未实现自动移除）
     owner: str = ""
     event_type: str = "message"
+    meta: dict = field(default_factory=dict)
 
 
 # ============ 工厂函数 ============
@@ -165,6 +167,7 @@ def on_command(
     permission: Permission = None,
     priority: int = 1,
     block: bool = True,
+    description: str = "",
 ) -> Callable:
     """注册命令匹配器
 
@@ -193,6 +196,9 @@ def on_command(
             temp=False,
             event_type="message",
         )
+        # 回填元信息：命令主名（tuple 取第一个）与描述，供 /help 等使用
+        m.meta["command"] = cmd[0] if isinstance(cmd, tuple) else cmd
+        m.meta["description"] = description
         _collect_module_matcher(m)
         return m
     return decorator
@@ -204,6 +210,7 @@ def on_startswith(
     permission: Permission = None,
     priority: int = 1,
     block: bool = True,
+    description: str = "",
 ) -> Callable:
     """注册前缀匹配器"""
     from .rule import startswith as _startswith
@@ -221,6 +228,8 @@ def on_startswith(
             temp=False,
             event_type="message",
         )
+        # 回填元信息：前缀触发无命令名，仅记录描述
+        m.meta["description"] = description
         _collect_module_matcher(m)
         return m
     return decorator
@@ -232,6 +241,7 @@ def on_keyword(
     permission: Permission = None,
     priority: int = 1,
     block: bool = True,
+    description: str = "",
 ) -> Callable:
     """注册关键词匹配器"""
     from .rule import keyword as _keyword
@@ -250,6 +260,8 @@ def on_keyword(
             temp=False,
             event_type="message",
         )
+        # 回填元信息：关键词触发无命令名，仅记录描述
+        m.meta["description"] = description
         _collect_module_matcher(m)
         return m
     return decorator

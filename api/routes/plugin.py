@@ -1,11 +1,21 @@
 """插件管理接口"""
 
+import logging
 import re
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
+from pydantic import BaseModel, Field
 
 from bot.core.bot import get_bot as _get_bot
 from api.auth import require_auth
+from api.audit import record_audit
+
+logger = logging.getLogger("qingci-bot.api.plugin")
+
+
+class LoadPluginRequest(BaseModel):
+    """加载外部插件请求体（类型非法时由 FastAPI 返回 422）"""
+    module_path: str = Field(..., description="插件模块路径，如 plugins.my_plugin")
 
 
 router = APIRouter()
@@ -14,8 +24,8 @@ router = APIRouter()
 # 防止加载 os / subprocess 等危险标准库模块
 _ALLOWED_MODULE_PREFIXES = ("plugins.", "bot.plugin.builtin.")
 
-# 内置插件白名单：不允许卸载
-_BUILTIN_PLUGINS = {"chat", "admin"}
+# 内置插件白名单：不允许卸载（与 bot/plugin/builtin/ 下各插件的 name 属性一致）
+_BUILTIN_PLUGINS = {"chat", "admin", "help", "imagegen", "knowledge"}
 
 
 def _is_safe_module_path(module_path: str) -> bool:
@@ -68,22 +78,24 @@ async def get_plugin(name: str):
 
 
 @router.post("/{name}/reload", dependencies=[Depends(require_auth)])
-async def reload_plugin(name: str):
+async def reload_plugin(name: str, request: Request):
     """重载插件"""
     bot = _get_bot_instance()
     if not bot.plugin_manager.get(name):
         raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
     try:
         await bot.plugin_manager.reload(name, bot)
+        await record_audit("plugin_reload", f"重载插件: {name}", request)
         return {"message": f"插件 {name} 已重载"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception(f"插件 {name} 重载失败")
+        raise HTTPException(status_code=500, detail="插件操作失败，详见服务端日志")
 
 
 @router.post("/load", dependencies=[Depends(require_auth)])
-async def load_plugin(data: dict):
+async def load_plugin(data: LoadPluginRequest, request: Request):
     """加载外部插件（仅允许 plugins.* 前缀的模块路径）"""
-    module_path = data.get("module_path")
+    module_path = data.module_path
     if not module_path:
         raise HTTPException(status_code=400, detail="缺少 module_path")
     if not _is_safe_module_path(module_path):
@@ -95,11 +107,12 @@ async def load_plugin(data: dict):
     ok = await bot.plugin_manager.load_external(module_path, bot)
     if not ok:
         raise HTTPException(status_code=400, detail="加载失败")
+    await record_audit("plugin_load", f"加载外部插件: {module_path}", request)
     return {"message": "插件已加载"}
 
 
 @router.delete("/{name}", dependencies=[Depends(require_auth)])
-async def unload_plugin(name: str):
+async def unload_plugin(name: str, request: Request):
     """卸载插件"""
     bot = _get_bot_instance()
     if name in _BUILTIN_PLUGINS:
@@ -107,4 +120,5 @@ async def unload_plugin(name: str):
     if not bot.plugin_manager.get(name):
         raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
     await bot.plugin_manager.unload(name)
+    await record_audit("plugin_unload", f"卸载插件: {name}", request)
     return {"message": f"插件 {name} 已卸载"}

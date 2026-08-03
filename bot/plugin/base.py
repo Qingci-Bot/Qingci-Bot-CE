@@ -1,7 +1,7 @@
 """插件基类"""
 
 from abc import ABC, abstractmethod
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 from ..core.dispatcher import MessageContext
 
@@ -37,6 +37,14 @@ class PluginBase(ABC):
     config: Optional["ConfigManager"] = None
     connection: Optional["OneBotConnection"] = None
     llm: Optional["LLMManager"] = None
+
+    # 可选依赖引用（由 PluginManager 注入，允许为 None）
+    # 定时任务调度器（批次 1：BotScheduler 实例，随 bot 启停）
+    scheduler: Optional[Any] = None
+    # Function Calling 工具注册表（批次 3 创建，未启用时为 None）
+    tool_registry: Optional[Any] = None
+    # 知识库向量存储（批次 3 创建，未启用时为 None）
+    knowledge_store: Optional[Any] = None
 
     # Matcher 列表（由 PluginManager 初始化，新式插件在 on_load 中填充）
     matchers: Optional[list["Matcher"]] = None  # 实际值由 PluginManager._init_plugin 设置为 list

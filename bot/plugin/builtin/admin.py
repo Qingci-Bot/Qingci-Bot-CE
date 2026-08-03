@@ -34,15 +34,34 @@ class AdminPlugin(PluginBase):
 
         # 注册 Matcher（handler 为 self 的方法，可访问 self.config/self.llm 等）
         self.matchers.append(
-            on_command("clear", permission=SUPERUSER, priority=1)(self._cmd_clear)
+            on_command(
+                "clear", permission=SUPERUSER, priority=1,
+                description="清除当前会话的对话历史",
+            )(self._cmd_clear)
         )
         self.matchers.append(
-            on_command("status", permission=SUPERUSER, priority=1)(self._cmd_status)
+            on_command(
+                "status", permission=SUPERUSER, priority=1,
+                description="查看 Bot 运行状态",
+            )(self._cmd_status)
         )
         self.matchers.append(
-            on_command(("blacklist", "黑名单"), permission=SUPERUSER, priority=1)(
-                self._cmd_blacklist
-            )
+            on_command(
+                ("blacklist", "黑名单"), permission=SUPERUSER, priority=1,
+                description="黑名单管理: /blacklist add/remove <QQ号>",
+            )(self._cmd_blacklist)
+        )
+        self.matchers.append(
+            on_command(
+                "filter", permission=SUPERUSER, priority=1,
+                description="敏感词过滤开关: /filter on|off|reload",
+            )(self._cmd_filter)
+        )
+        self.matchers.append(
+            on_command(
+                "group", permission=SUPERUSER, priority=1,
+                description="当前群 Bot 开关: /group on|off",
+            )(self._cmd_group)
         )
 
     async def on_unload(self):
@@ -126,6 +145,72 @@ class AdminPlugin(PluginBase):
             return f"{target} 不在黑名单中。"
 
         return "格式: /blacklist add/remove <QQ号>"
+
+    async def _cmd_filter(self, ctx: MatcherContext) -> str:
+        """敏感词过滤管理: /filter on|off|reload"""
+        action = ctx.args.strip().lower()
+        if action == "on":
+            self.config.filter.enabled = True
+            try:
+                await self._save_config_async()
+            except Exception:
+                self.config.filter.enabled = False
+                logger.exception("保存配置失败，已回滚")
+                return "保存配置失败，请稍后再试。"
+            return "已开启敏感词过滤。" + self._filter_empty_warning()
+        if action == "off":
+            self.config.filter.enabled = False
+            try:
+                await self._save_config_async()
+            except Exception:
+                self.config.filter.enabled = True
+                logger.exception("保存配置失败，已回滚")
+                return "保存配置失败，请稍后再试。"
+            return "已关闭敏感词过滤。"
+        if action == "reload":
+            sensitive_filter = getattr(self.bot, "sensitive_filter", None)
+            if sensitive_filter is None:
+                return "敏感词过滤器未初始化。"
+            sensitive_filter.reload()
+            if not sensitive_filter.words:
+                # 空词库时 reload 成功但过滤不会生效，明确提示用户
+                return (
+                    "敏感词库已重新加载，但词库为空，过滤不会生效。"
+                    "请编辑 data/sensitive_words.txt（一行一词）。"
+                )
+            return f"敏感词库已重新加载，当前 {len(sensitive_filter.words)} 个词。"
+        return "格式: /filter on|off|reload"
+
+    def _filter_empty_warning(self) -> str:
+        """词库为空时返回用户可见提示（开启成功但过滤形同虚设）"""
+        sensitive_filter = getattr(self.bot, "sensitive_filter", None)
+        if sensitive_filter is not None and not sensitive_filter.words:
+            return "注意：词库为空，请编辑 data/sensitive_words.txt（一行一词）。"
+        return ""
+
+    async def _cmd_group(self, ctx: MatcherContext) -> str:
+        """当前群 Bot 开关: /group on|off"""
+        if ctx.message_type != "group" or not ctx.group_id:
+            return "该命令只能在群聊中使用。"
+        action = ctx.args.strip().lower()
+        if action not in ("on", "off"):
+            return "格式: /group on|off"
+        enabled = action == "on"
+        # 保留群已有的 trigger_mode，仅变更开关
+        trigger_mode = None
+        if self.db:
+            try:
+                existing = await self.db.get_group_config(ctx.group_id)
+                if existing:
+                    trigger_mode = existing.get("trigger_mode")
+                await self.db.upsert_group_config(ctx.group_id, enabled, trigger_mode)
+            except Exception:
+                logger.exception(f"保存群配置失败: group_id={ctx.group_id}")
+                return "保存群配置失败，请稍后再试。"
+        # 失效 chat 插件的群配置缓存，使变更立即生效
+        from .chat import invalidate_group_config_cache
+        invalidate_group_config_cache(ctx.group_id)
+        return f"本群 Bot 已{'开启' if enabled else '关闭'}。"
 
     async def _save_config_async(self):
         """异步保存配置（加锁防止并发写）"""

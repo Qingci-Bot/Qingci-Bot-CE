@@ -1,9 +1,11 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAppStore } from '../stores/app'
 
 const store = useAppStore()
 const messageCount = ref(0)
+const usage = ref(null)
+const usageLoading = ref(false)
 
 onMounted(async () => {
   try {
@@ -12,7 +14,39 @@ onMounted(async () => {
   } catch (e) {
     messageCount.value = 0
   }
+  loadUsage()
 })
+
+async function loadUsage() {
+  usageLoading.value = true
+  try {
+    usage.value = await store.apiFetch('/api/log/usage?days=30')
+  } catch (e) {
+    usage.value = null
+  } finally {
+    usageLoading.value = false
+  }
+}
+
+const usageDaily = computed(() => usage.value?.daily || [])
+const usageSummary = computed(() => usage.value?.summary || { calls: 0, total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 })
+const maxTokens = computed(() => Math.max(1, ...usageDaily.value.map(d => d.total_tokens || 0)))
+
+function formatNum(n) {
+  return (n || 0).toLocaleString('zh-CN')
+}
+
+function barHeight(d) {
+  return `${Math.max(2, Math.round(((d.total_tokens || 0) / maxTokens.value) * 120))}px`
+}
+
+function barTitle(d) {
+  return `${d.date}\n总 token：${formatNum(d.total_tokens)}（prompt ${formatNum(d.prompt_tokens)} / completion ${formatNum(d.completion_tokens)}）\n调用次数：${formatNum(d.calls)}`
+}
+
+function showLabel(index) {
+  return index % 5 === 0 || index === usageDaily.value.length - 1
+}
 
 const triggerDesc = {
   always: '所有消息都回复',
@@ -54,6 +88,46 @@ const triggerDesc = {
           {{ store.config.llm?.model || '-' }}
         </div>
         <div class="stat-desc">{{ store.config.llm?.provider || '未配置' }}</div>
+      </div>
+    </div>
+
+    <div class="card fade-in" style="margin-top: 22px;">
+      <div class="card-header">
+        <div class="card-title">近 30 天 LLM 用量</div>
+        <button class="btn btn-secondary btn-sm" :disabled="usageLoading" @click="loadUsage">
+          <span style="display: inline-block" :class="{ spin: usageLoading }">↻</span> 刷新
+        </button>
+      </div>
+      <div v-if="usage" class="grid grid-2" style="margin-bottom: 18px;">
+        <div class="card stat-card" style="padding: 16px 18px;">
+          <div class="stat-label">总调用次数</div>
+          <div class="stat-value" style="font-size: 22px; color: var(--blue);">{{ formatNum(usageSummary.calls) }}</div>
+          <div class="stat-desc">近 {{ usage.days || 30 }} 天 LLM 调用总数</div>
+        </div>
+        <div class="card stat-card" style="padding: 16px 18px;">
+          <div class="stat-label">总 Token 用量</div>
+          <div class="stat-value" style="font-size: 22px; color: var(--accent);">{{ formatNum(usageSummary.total_tokens) }}</div>
+          <div class="stat-desc">prompt {{ formatNum(usageSummary.prompt_tokens) }} · completion {{ formatNum(usageSummary.completion_tokens) }}</div>
+        </div>
+      </div>
+      <div v-if="usage && usageDaily.length === 0" class="empty-state">
+        <div class="icon">▤</div>
+        <div>近 30 天暂无用量数据</div>
+      </div>
+      <div v-else-if="usage" class="usage-chart">
+        <div
+          v-for="(d, i) in usageDaily"
+          :key="d.date"
+          class="usage-bar-wrap"
+          :title="barTitle(d)"
+        >
+          <div class="usage-bar" :style="{ height: barHeight(d) }"></div>
+          <div class="usage-date">{{ showLabel(i) ? d.date.slice(5) : '' }}</div>
+        </div>
+      </div>
+      <div v-else class="empty-state">
+        <div class="icon">▤</div>
+        <div>用量数据加载失败</div>
       </div>
     </div>
 
@@ -129,4 +203,46 @@ const triggerDesc = {
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 1100px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 640px) { .grid-4 { grid-template-columns: 1fr; } }
+
+.usage-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 14px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.usage-bar-wrap {
+  flex: 1;
+  min-width: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.usage-bar {
+  width: 100%;
+  max-width: 18px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, var(--blue), rgba(56, 189, 248, 0.35));
+  transition: all 0.2s ease;
+}
+
+.usage-bar-wrap:hover .usage-bar {
+  background: linear-gradient(180deg, var(--accent), rgba(251, 191, 36, 0.4));
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.usage-date {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  height: 12px;
+}
 </style>
