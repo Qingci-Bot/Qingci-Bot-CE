@@ -21,7 +21,10 @@ logger = logging.getLogger("qingci-bot.llm.litellm_adapter")
 
 # 关闭 litellm 的冗余日志与遥测
 litellm.suppress_debug_info = True
-litellm.set_verbose = False
+try:
+    litellm.set_verbose(False)
+except (AttributeError, TypeError):
+    pass  # 某些 litellm 版本中 set_verbose 不是可调用对象
 
 
 class LiteLLMAdapter(LLMAdapter):
@@ -147,13 +150,10 @@ class LiteLLMAdapter(LLMAdapter):
         if not choices:
             return ""
         message = choices[0].message
-        # 若模型返回 tool_calls，返回 JSON 字符串便于上层处理
+        # 若模型返回 tool_calls，记录警告但不混入文本历史
         if getattr(message, "tool_calls", None):
-            import json
-            return json.dumps(
-                {"tool_calls": [tc.model_dump() for tc in message.tool_calls]},
-                ensure_ascii=False,
-            )
+            logger.warning("模型返回了 tool_calls，当前版本不支持 Function Calling 循环，已忽略")
+            return getattr(message, "content", "") or ""
         return getattr(message, "content", "") or ""
 
     async def chat_stream(
@@ -203,5 +203,11 @@ class LiteLLMAdapter(LLMAdapter):
             return False
 
     async def close(self):
-        # litellm 内部管理连接池，无需显式关闭
-        pass
+        """关闭适配器资源"""
+        try:
+            import litellm
+            # litellm 内部使用 httpx，尝试清理连接池
+            if hasattr(litellm, '_async_client') and litellm._async_client:
+                await litellm._async_client.aclose()
+        except Exception:
+            pass  # litellm 版本不同，内部 API 可能变化

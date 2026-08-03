@@ -1,10 +1,18 @@
 """配置管理接口"""
 
+import asyncio
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import ValidationError
 
 from bot.core.bot import get_bot as _get_bot
 from bot.config import ConfigManager
 from api.auth import require_auth
+
+logger = logging.getLogger("qingci-bot.api.config")
+
+_config_lock = asyncio.Lock()
 
 
 def _get_config_manager() -> ConfigManager:
@@ -59,16 +67,20 @@ async def get_config():
 @router.put("", dependencies=[Depends(require_auth)])
 async def update_config(data: dict):
     """更新配置"""
-    try:
-        cfg = _get_config_manager()
-        cfg.update(data)
-        await _maybe_notify_bot()
-        return {"message": "配置已更新"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    async with _config_lock:
+        try:
+            cfg = _get_config_manager()
+            cfg.update(data)
+            await _maybe_notify_bot()
+            return {"message": "配置已更新"}
+        except ValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.exception("配置更新失败")
+            raise HTTPException(status_code=500, detail=f"内部错误: {e}")
 
 
-@router.get("/bot")
+@router.get("/bot", dependencies=[Depends(require_auth)])
 async def get_bot_config():
     """获取 Bot 配置（无敏感字段）"""
     return _get_config_manager().bot.model_dump()
@@ -77,17 +89,23 @@ async def get_bot_config():
 @router.put("/bot", dependencies=[Depends(require_auth)])
 async def update_bot_config(data: dict):
     """更新 Bot 配置（深度合并，未传入字段保留原值）"""
-    try:
-        cfg = _get_config_manager()
-        current = cfg.bot.model_dump()
-        current.update(data)
-        full = cfg.to_dict()
-        full["bot"] = current
-        cfg.update(full)
-        await _maybe_notify_bot()
-        return {"message": "Bot 配置已更新"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    async with _config_lock:
+        try:
+            cfg = _get_config_manager()
+            current = cfg.bot.model_dump()
+            for k, v in data.items():
+                if v is not None:
+                    current[k] = v
+            full = cfg.to_dict()
+            full["bot"] = current
+            cfg.update(full)
+            await _maybe_notify_bot()
+            return {"message": "Bot 配置已更新"}
+        except ValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.exception("配置更新失败")
+            raise HTTPException(status_code=500, detail=f"内部错误: {e}")
 
 
 @router.get("/llm", dependencies=[Depends(require_auth)])
@@ -102,20 +120,24 @@ async def get_llm_config():
 @router.put("/llm", dependencies=[Depends(require_auth)])
 async def update_llm_config(data: dict):
     """更新 LLM 配置（深度合并）"""
-    try:
-        cfg = _get_config_manager()
-        current = cfg.llm.model_dump()
-        # 如果前端传回脱敏的 "***"，保留原值
-        if data.get("api_key") == "***":
-            data["api_key"] = current["api_key"]
-        current.update(data)
-        full = cfg.to_dict()
-        full["llm"] = current
-        cfg.update(full)
-        await _maybe_notify_bot()
-        return {"message": "LLM 配置已更新"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    async with _config_lock:
+        try:
+            cfg = _get_config_manager()
+            current = cfg.llm.model_dump()
+            # 过滤 None 值与脱敏占位 "***"，避免覆盖已有配置
+            for k, v in data.items():
+                if v is not None and v != "***":
+                    current[k] = v
+            full = cfg.to_dict()
+            full["llm"] = current
+            cfg.update(full)
+            await _maybe_notify_bot()
+            return {"message": "LLM 配置已更新"}
+        except ValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.exception("配置更新失败")
+            raise HTTPException(status_code=500, detail=f"内部错误: {e}")
 
 
 @router.get("/onebot", dependencies=[Depends(require_auth)])

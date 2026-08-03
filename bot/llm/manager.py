@@ -32,6 +32,8 @@ class LLMManager:
         # 已从 DB 懒加载过的 session key
         self._loaded_sessions: set[str] = set()
         # 会话级锁：防止同一 session 的并发调用导致历史交叉
+        # 注意：锁随 session 创建，在 clear_session 时清理
+        # 长期运行的 bot 可能累积大量锁，未来可引入 LRU 淘汰
         self._locks: dict[str, asyncio.Lock] = {}
         # 后台任务引用（防止被 GC 回收）
         self._bg_tasks: set[asyncio.Task] = set()
@@ -69,10 +71,13 @@ class LLMManager:
             except Exception:
                 logger.exception("关闭 LLM 适配器异常")
             self._adapter = None
-        # 取消所有后台任务
-        for task in self._bg_tasks:
-            task.cancel()
-        self._bg_tasks.clear()
+        # 等待后台任务完成（而非直接取消，避免丢失未落盘数据）
+        if self._bg_tasks:
+            try:
+                await asyncio.gather(*self._bg_tasks, return_exceptions=True)
+            except Exception:
+                pass
+            self._bg_tasks.clear()
 
     # ============ 会话管理 ============
 
@@ -91,18 +96,20 @@ class LLMManager:
         """懒加载：首次访问某会话时从 DB 读取历史"""
         if key in self._loaded_sessions:
             return
-        self._loaded_sessions.add(key)
         if self._db is None:
             self._sessions.setdefault(key, [])
+            self._loaded_sessions.add(key)
             return
         try:
             rows = await self._db.get_sessions(key, limit=self._config.max_history * 2)
             self._sessions[key] = [
                 {"role": r["role"], "content": r["content"]} for r in rows
             ]
+            self._loaded_sessions.add(key)
         except Exception:
             logger.exception(f"加载会话历史失败: {key}")
             self._sessions.setdefault(key, [])
+            # 不标记 _loaded_sessions，允许下次重试
 
     def _trim_history(self, key: str):
         """双重裁剪：max_history 条数 + max_context_tokens"""
@@ -134,11 +141,11 @@ class LLMManager:
                 total -= removed_tokens
             self._sessions[key] = msgs
         except Exception:
-            # 降级：粗略估算（中文≈1.5 token/字符）
+            # 降级：粗略估算（中文≈2 token/字符）
             while len(msgs) > 2 and sum(
                 len(m.get("content", "")) if isinstance(m.get("content"), str) else 0
                 for m in msgs
-            ) * 3 // 2 > max_tokens:
+            ) * 2 > max_tokens:
                 msgs.pop(0)
 
     def clear_session(self, message_type: str = "", group_id: int = 0, user_id: int = 0):
@@ -191,9 +198,11 @@ class LLMManager:
             # 追加用户消息
             self._sessions.setdefault(key, []).append({"role": "user", "content": message})
             # 持久化用户消息
+            db_saved = False
             if self._db is not None:
                 try:
                     await self._db.save_session(key, "user", message)
+                    db_saved = True
                 except Exception:
                     logger.exception("持久化用户消息失败")
 
@@ -214,7 +223,7 @@ class LLMManager:
                 # 回滚刚加入的用户消息，保持内存与 DB 一致
                 if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
                     self._sessions[key].pop()
-                    if self._db is not None:
+                    if db_saved:
                         try:
                             await self._db.delete_last_session(key, "user")
                         except Exception:
@@ -244,9 +253,11 @@ class LLMManager:
             await self._ensure_session_loaded(key)
 
             self._sessions.setdefault(key, []).append({"role": "user", "content": message})
+            db_saved = False
             if self._db is not None:
                 try:
                     await self._db.save_session(key, "user", message)
+                    db_saved = True
                 except Exception:
                     logger.exception("持久化用户消息失败")
 
@@ -266,7 +277,7 @@ class LLMManager:
                 success = True
             except Exception as e:
                 logger.error(f"LLM 流式调用失败: {e}")
-                yield "抱歉，AI 服务暂时不可用。"
+                # 不 yield 错误信息，避免污染内容流
 
             # 仅在成功完成时保存完整回复，避免部分回复污染上下文
             if success and full_reply:
@@ -280,11 +291,19 @@ class LLMManager:
                 # 失败时回滚用户消息
                 if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
                     self._sessions[key].pop()
-                    if self._db is not None:
+                    if db_saved:
                         try:
                             await self._db.delete_last_session(key, "user")
                         except Exception:
                             logger.exception("回滚用户消息失败")
+            elif success and not full_reply:
+                # 空回复也记录，保持历史成对一致
+                self._sessions[key].append({"role": "assistant", "content": ""})
+                if self._db is not None:
+                    try:
+                        await self._db.save_session(key, "assistant", "")
+                    except Exception:
+                        logger.exception("持久化助手回复失败")
 
     async def check_availability(self) -> bool:
         try:

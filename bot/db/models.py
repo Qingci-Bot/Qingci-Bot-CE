@@ -18,7 +18,7 @@ class Message(SQLModel, table=True):
     __tablename__ = "messages"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    message_id: str = Field(index=True)
+    message_id: str = Field(default="", index=True, unique=True)
     user_id: int = Field(index=True)
     group_id: Optional[int] = Field(default=None, index=True)
     content: str

@@ -11,9 +11,12 @@
 权限检查基于 event + ctx，返回 bool。
 """
 
+import logging
 from typing import Callable, Union
 
 from ..core.dispatcher import MessageContext
+
+logger = logging.getLogger("qingci-bot.permission")
 
 
 class Permission:
@@ -35,6 +38,7 @@ class Permission:
                 if not result:
                     return False
             except Exception:
+                logger.warning(f"权限 checker 异常: {checker!r}", exc_info=True)
                 return False
         return True
 
@@ -46,15 +50,17 @@ class Permission:
 
     def __or__(self, other: "Permission") -> "Permission":
         """OR 组合：满足其一即可"""
+        import copy
         perm = Permission()
         left_checkers = self._checkers[:]
         right_checkers = other._checkers[:]
 
         async def _combined_or(bot, event, ctx):
-            # 左侧全部通过即返回 True
+            # 左侧全部通过即返回 True（用副本避免污染 ctx）
+            left_ctx = copy.copy(ctx)
             left_ok = True
             for c in left_checkers:
-                r = c(bot, event, ctx)
+                r = c(bot, event, left_ctx)
                 if hasattr(r, "__await__"):
                     r = await r
                 if not r:
@@ -62,7 +68,7 @@ class Permission:
                     break
             if left_ok:
                 return True
-            # 右侧全部通过即返回 True
+            # 右侧全部通过即返回 True（用原始 ctx）
             for c in right_checkers:
                 r = c(bot, event, ctx)
                 if hasattr(r, "__await__"):
@@ -104,8 +110,8 @@ async def _is_superuser(bot, event, ctx):
 SUPERUSER = Permission(_is_superuser)
 """超级管理员（配置中的 admin_users）"""
 
-ADMIN = SUPERUSER
-"""管理员（SUPERUSER 别名）"""
+ADMIN = Permission(_is_superuser)
+"""管理员（与 SUPERUSER 等价但独立实例）"""
 
 
 def _is_private(bot, event, ctx):
@@ -122,8 +128,8 @@ PRIVATE = Permission(_is_private)
 GROUP = Permission(_is_group)
 """群聊消息"""
 
-MEMBER = EVERYONE
-"""普通群员（默认所有人）"""
+MEMBER = Permission(lambda bot, event, ctx: True)
+"""普通群员（与 EVERYONE 等价但独立实例）"""
 
 
 def USER(user_ids: Union[int, list[int]]) -> Permission:

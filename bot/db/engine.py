@@ -23,8 +23,10 @@ _session_factory: Optional[sessionmaker] = None
 def _set_sqlite_pragma(dbapi_conn, _connection_record):
     """在每个底层连接上设置 SQLite PRAGMA（WAL 模式）"""
     cursor = dbapi_conn.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.close()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+    finally:
+        cursor.close()
 
 
 def get_engine():
@@ -61,8 +63,8 @@ async def init_db():
     Alembic 迁移用于后续 schema 演进（手动执行 alembic upgrade head）。
     """
     # 确保所有模型被导入，以便 SQLModel.metadata 能发现它们
-    from . import models  # 副作用导入：注册模型到 metadata
-    del models  # 仅需导入副作用，无需引用
+    import bot.db.models  # noqa: F401  # 副作用导入：注册模型到 metadata
+    bot.db.models  # 引用模块，使静态检查识别该导入已被使用
 
     engine = get_engine()
     async with engine.begin() as conn:

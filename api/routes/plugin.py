@@ -22,7 +22,7 @@ def _is_safe_module_path(module_path: str) -> bool:
     if not re.match(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$", module_path):
         return False
     return any(
-        module_path == prefix.rstrip(".") or module_path.startswith(prefix)
+        module_path.startswith(prefix)
         for prefix in _ALLOWED_MODULE_PREFIXES
     )
 
@@ -34,7 +34,7 @@ def _get_bot_instance():
         raise HTTPException(status_code=503, detail="Bot 未初始化，请先启动 Bot 服务")
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_auth)])
 async def list_plugins():
     """获取插件列表"""
     bot = _get_bot_instance()
@@ -49,7 +49,7 @@ async def list_plugins():
     return plugins
 
 
-@router.get("/{name}")
+@router.get("/{name}", dependencies=[Depends(require_auth)])
 async def get_plugin(name: str):
     """获取插件详情"""
     bot = _get_bot_instance()
@@ -68,8 +68,13 @@ async def get_plugin(name: str):
 async def reload_plugin(name: str):
     """重载插件"""
     bot = _get_bot_instance()
-    await bot.plugin_manager.reload(name, bot)
-    return {"message": f"插件 {name} 已重载"}
+    if not bot.plugin_manager.get(name):
+        raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
+    try:
+        await bot.plugin_manager.reload(name, bot)
+        return {"message": f"插件 {name} 已重载"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/load", dependencies=[Depends(require_auth)])

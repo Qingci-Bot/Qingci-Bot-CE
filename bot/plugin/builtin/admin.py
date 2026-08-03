@@ -5,6 +5,7 @@
 - handler 接收 MatcherContext，通过 ctx.bot/plugin/matcher 访问依赖
 """
 
+import asyncio
 import logging
 import time
 
@@ -29,6 +30,7 @@ class AdminPlugin(PluginBase):
 
     async def on_load(self):
         logger.info("管理插件已加载")
+        self._config_lock = asyncio.Lock()
 
         # 注册 Matcher（handler 为 self 的方法，可访问 self.config/self.llm 等）
         self.matchers.append(
@@ -62,7 +64,7 @@ class AdminPlugin(PluginBase):
         """查看 Bot 状态"""
         connected = self.connection.is_connected if self.connection else False
         llm_ok = await self._check_llm_cached()
-        msg_count = await self.db.get_message_count() if self.db else 0
+        msg_count = (await self.db.get_message_count()) if self.db else 0
         return (
             f"Bot 状态:\n"
             f"  LLBot 连接: {'在线' if connected else '离线'}\n"
@@ -103,20 +105,30 @@ class AdminPlugin(PluginBase):
         if action == "add":
             if target not in cfg.user_blacklist:
                 cfg.user_blacklist.append(target)
-                await self._save_config_async()
+                try:
+                    await self._save_config_async()
+                except Exception:
+                    cfg.user_blacklist.remove(target)
+                    logger.exception("保存配置失败，已回滚")
+                    return "保存配置失败，请稍后再试。"
                 return f"已将 {target} 加入黑名单。"
             return f"{target} 已在黑名单中。"
         elif action == "remove":
             if target in cfg.user_blacklist:
                 cfg.user_blacklist.remove(target)
-                await self._save_config_async()
+                try:
+                    await self._save_config_async()
+                except Exception:
+                    cfg.user_blacklist.append(target)
+                    logger.exception("保存配置失败，已回滚")
+                    return "保存配置失败，请稍后再试。"
                 return f"已将 {target} 移出黑名单。"
             return f"{target} 不在黑名单中。"
 
         return "格式: /blacklist add/remove <QQ号>"
 
     async def _save_config_async(self):
-        """异步保存配置（避免阻塞事件循环）"""
-        import asyncio
-        await asyncio.to_thread(self.config.save)
+        """异步保存配置（加锁防止并发写）"""
+        async with self._config_lock:
+            await asyncio.to_thread(self.config.save)
 

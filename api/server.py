@@ -2,6 +2,7 @@
 
 import json
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -26,6 +27,7 @@ logger = logging.getLogger("qingci-bot.api")
 
 # WebSocket 连接池（用于实时消息推送）
 _ws_clients: set[WebSocket] = set()
+_MAX_WS_CLIENTS = 32
 
 
 async def _send_to_all_ws(data: str) -> None:
@@ -45,9 +47,6 @@ async def _send_to_all_ws(data: str) -> None:
 async def _broadcast_message_to_ws(message: dict) -> None:
     """通过 WebSocket 广播消息"""
     await _send_to_all_ws(json.dumps(message, ensure_ascii=False))
-
-
-register_broker(_broadcast_message_to_ws)
 
 
 @asynccontextmanager
@@ -79,12 +78,18 @@ def create_app() -> FastAPI:
     app.include_router(plugin_router, prefix="/api/plugin", tags=["Plugin"])
     app.include_router(log_router, prefix="/api/log", tags=["Log"])
 
+    # 注册 WebSocket 广播 broker（register_broker 内部已去重，create_app 多次调用安全）
+    register_broker(_broadcast_message_to_ws)
+
     # WebSocket 实时日志（鉴权：通过 token 查询参数传递 API Key）
     @app.websocket("/api/ws/log")
     async def ws_log(ws: WebSocket, token: str = Query(default="")):
         configured_key = _get_configured_api_key()
-        if configured_key and token != configured_key:
+        if configured_key and not secrets.compare_digest(token, configured_key):
             await ws.close(code=4001, reason="未授权")
+            return
+        if len(_ws_clients) >= _MAX_WS_CLIENTS:
+            await ws.close(code=4003, reason="连接数已满")
             return
         await ws.accept()
         _ws_clients.add(ws)

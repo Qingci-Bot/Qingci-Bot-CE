@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Optional
 
 from ..config import ConfigManager
@@ -18,7 +19,6 @@ class QingciBot:
     """Qingci-Bot 主类"""
 
     def __init__(self, config_path: Optional[str] = None):
-        from pathlib import Path
         path = Path(config_path) if config_path else None
         self.config = ConfigManager(path)
         self.config.load()
@@ -60,11 +60,17 @@ class QingciBot:
         logger.info("Qingci-Bot 启动完成")
 
     async def stop(self):
-        """停止 Bot，等待进行中的事件处理完成"""
+        """停止 Bot"""
         if not self._running:
             return
         logger.info("Qingci-Bot 停止中...")
         self._running = False
+
+        # 先停止接收新事件
+        try:
+            await self.connection.stop()
+        except Exception:
+            logger.exception("OneBot 连接停止异常")
 
         # 等待进行中的事件处理完成（最多 5 秒）
         if self._pending_tasks:
@@ -82,11 +88,6 @@ class QingciBot:
             logger.exception("插件卸载异常")
 
         try:
-            await self.connection.stop()
-        except Exception:
-            logger.exception("OneBot 连接停止异常")
-
-        try:
             await self.llm.close()
         except Exception:
             logger.exception("LLM 关闭异常")
@@ -101,40 +102,31 @@ class QingciBot:
     # ============ 事件处理 ============
 
     async def _handle_event(self, event: dict):
-        """处理 OneBot 事件
+        """处理 OneBot 事件 - 创建独立任务避免 stop() 死锁"""
+        if not self._running:
+            return
+        task = asyncio.create_task(self._process_event(event))
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
 
-        调度顺序：
-        1. Dispatcher 解析事件
-        2. 新式 Matcher 调度（按 priority 排序）
-        3. 旧式 on_message 调度（若无 Matcher 匹配且事件为 message）
-        """
-        # 创建任务跟踪，确保 stop() 时能等待完成
-        task = asyncio.current_task()
-        if task is not None:
-            self._pending_tasks.add(task)
-            task.add_done_callback(self._pending_tasks.discard)
-
+    async def _process_event(self, event: dict):
+        """实际事件处理逻辑"""
         ctx = await self.dispatcher.dispatch(event)
-
         if ctx is None:
             return
 
         post_type = ctx.post_type or event.get("post_type", "")
 
-        # notice/request 事件：仅走 Matcher（无旧式 on_message 调度）
         if post_type != "message":
             await self.dispatcher._run_event_matchers(self, event, ctx)
             return
 
-        # 消息事件：先走 Matcher
         reply = await self.dispatcher.run_matchers(self, event, ctx)
         if reply is not None:
             await self._send_reply(ctx, reply)
             return
 
-        # 无 Matcher 匹配，走旧式 on_message（向后兼容）
         for plugin in list(self.plugin_manager.plugins.values()):
-            # 跳过已注册 Matcher 的插件（避免重复处理）
             if plugin.matchers:
                 continue
             try:
@@ -148,8 +140,10 @@ class QingciBot:
     async def _send_reply(self, ctx: MessageContext, reply: str):
         """发送插件回复"""
         target_id = ctx.group_id if ctx.message_type == "group" else ctx.user_id
-        # 群聊中 @ 回复
-        if ctx.message_type == "group":
+        if not target_id:
+            logger.warning(f"无法发送回复：target_id 为空 (type={ctx.message_type})")
+            return
+        if ctx.message_type == "group" and ctx.user_id:
             reply = (
                 MessageDispatcher.build_cq_reply(ctx.message_id)
                 + MessageDispatcher.build_cq_at(ctx.user_id)

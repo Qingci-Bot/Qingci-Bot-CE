@@ -63,20 +63,9 @@ class MessageDispatcher:
         return ctx
 
     async def run_matchers(self, bot, event: dict, ctx: MessageContext) -> Optional[str]:
-        """执行 Matcher 调度（消息事件）
-
-        Returns:
-            非 None: 匹配到的 handler 返回的回复文本
-            None: 无 Matcher 匹配
-        """
+        """执行 Matcher 调度（消息事件）"""
         from ..plugin.matcher import MatcherContext
 
-        post_type = event.get("post_type", "")
-        if post_type != "message":
-            # notice/request 事件走 Matcher 调度（如果有注册）
-            return await self._run_event_matchers(bot, event, ctx)
-
-        # 收集所有 Matcher 并按 priority 排序
         matchers = bot.plugin_manager.all_matchers()
         if not matchers:
             return None
@@ -185,6 +174,10 @@ class MessageDispatcher:
 
         # 解析 message 数组
         message = event.get("message", [])
+        if isinstance(message, str):
+            message = [{"type": "text", "data": {"text": message}}]
+        elif not isinstance(message, list):
+            message = []
         text_parts = []
         for seg in message:
             seg_type = seg.get("type", "")
@@ -193,16 +186,17 @@ class MessageDispatcher:
                 text_parts.append(data.get("text", ""))
             elif seg_type == "at":
                 qq_val = data.get("qq", "0")
-                # @全体成员 时 qq="all"，不解析为数字
                 if qq_val == "all":
                     ctx.at_list.append(0)  # 0 表示全体成员
                 else:
                     try:
                         target = int(qq_val)
                     except (ValueError, TypeError):
-                        target = 0
+                        continue  # 跳过无效 @
+                    if target == 0:
+                        continue
                     ctx.at_list.append(target)
-                    if target == ctx.self_id:
+                    if ctx.self_id and target == ctx.self_id:
                         ctx.is_at_bot = True
             elif seg_type == "image":
                 ctx.images.append(data.get("url", ""))

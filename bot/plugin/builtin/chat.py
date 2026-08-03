@@ -97,7 +97,7 @@ class ChatPlugin(PluginBase):
 
     async def _handle_chat(self, ctx: MatcherContext) -> Optional[str]:
         """处理聊天消息：调用 LLM + 保存记录 + 实时广播"""
-        message = ctx.args or ctx.plain_text
+        message = ctx.args
         if not message:
             return None
 
@@ -112,43 +112,49 @@ class ChatPlugin(PluginBase):
         # 保存消息记录到数据库
         group_id = ctx.group_id if ctx.message_type == "group" else None
         if self.db:
-            await self.db.save_message(
-                message_id=ctx.message_id,
-                user_id=ctx.user_id,
-                group_id=group_id,
-                content=message,
-                message_type=ctx.message_type,
-                role="user",
-            )
-            await self.db.save_message(
-                message_id=f"{ctx.message_id}_reply",
-                user_id=ctx.self_id,
-                group_id=group_id,
-                content=reply,
-                message_type=ctx.message_type,
-                role="assistant",
-            )
+            try:
+                await self.db.save_message(
+                    message_id=ctx.message_id,
+                    user_id=ctx.user_id,
+                    group_id=group_id,
+                    content=message,
+                    message_type=ctx.message_type,
+                    role="user",
+                )
+                await self.db.save_message(
+                    message_id=f"{ctx.message_id}_reply",
+                    user_id=ctx.self_id,
+                    group_id=group_id,
+                    content=reply,
+                    message_type=ctx.message_type,
+                    role="assistant",
+                )
+            except Exception:
+                logger.exception("保存消息记录失败")
 
         # 实时广播（独立于数据库）
-        from ...core.broadcast import broadcast_message
-        now = datetime.now().isoformat()
-        await broadcast_message({
-            "message_id": ctx.message_id,
-            "user_id": ctx.user_id,
-            "group_id": group_id,
-            "content": message,
-            "message_type": ctx.message_type,
-            "role": "user",
-            "created_at": now,
-        })
-        await broadcast_message({
-            "message_id": f"{ctx.message_id}_reply",
-            "user_id": ctx.self_id,
-            "group_id": group_id,
-            "content": reply,
-            "message_type": ctx.message_type,
-            "role": "assistant",
-            "created_at": now,
-        })
+        try:
+            from ...core.broadcast import broadcast_message
+            now = datetime.now().isoformat()
+            await broadcast_message({
+                "message_id": ctx.message_id,
+                "user_id": ctx.user_id,
+                "group_id": group_id,
+                "content": message,
+                "message_type": ctx.message_type,
+                "role": "user",
+                "created_at": now,
+            })
+            await broadcast_message({
+                "message_id": f"{ctx.message_id}_reply",
+                "user_id": ctx.self_id,
+                "group_id": group_id,
+                "content": reply,
+                "message_type": ctx.message_type,
+                "role": "assistant",
+                "created_at": now,
+            })
+        except Exception:
+            logger.exception("广播消息失败")
 
         return reply

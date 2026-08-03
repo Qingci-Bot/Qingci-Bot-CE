@@ -75,17 +75,17 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
-    """在线模式：智能处理事件循环嵌套"""
+    """在在线模式下运行迁移"""
     try:
-        # 检测是否已在事件循环中（如应用启动时调用）
         asyncio.get_running_loop()
-        # 已在循环中：创建 task 在当前循环执行
-        # 注意：这种情况下调用方需自行 await，这里退回到新建循环的兼容做法
-        raise RuntimeError("nested")
     except RuntimeError:
-        # 无嵌套循环或检测到嵌套：统一用 asyncio.run
-        # 如果真在嵌套场景，调用方应直接调 run_async_migrations()
+        # 无运行中的事件循环，安全使用 asyncio.run
         asyncio.run(run_async_migrations())
+        return
+    # 已在事件循环中，调用方应直接 await run_async_migrations()
+    raise RuntimeError(
+        "迁移在运行中的事件循环内被触发，请直接 await run_async_migrations()"
+    )
 
 
 if context.is_offline_mode():

@@ -1,5 +1,7 @@
 """Bot 控制接口"""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Depends
 
 from bot.core.bot import get_bot as _get_bot
@@ -7,6 +9,7 @@ from api.auth import require_auth
 
 
 router = APIRouter()
+_lifecycle_lock = asyncio.Lock()
 
 
 def _get_bot_or_none():
@@ -28,37 +31,49 @@ async def get_status():
 @router.post("/start", dependencies=[Depends(require_auth)])
 async def start_bot():
     """启动 Bot"""
-    bot = _get_bot_or_none()
-    if not bot:
-        raise HTTPException(status_code=503, detail="Bot 未初始化")
-    if bot.is_running:
-        return {"message": "Bot 已在运行"}
-    await bot.start()
-    return {"message": "Bot 已启动"}
+    async with _lifecycle_lock:
+        bot = _get_bot_or_none()
+        if not bot:
+            raise HTTPException(status_code=503, detail="Bot 未初始化")
+        if bot.is_running:
+            return {"message": "Bot 已在运行"}
+        try:
+            await bot.start()
+            return {"message": "Bot 启动成功"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/stop", dependencies=[Depends(require_auth)])
 async def stop_bot():
     """停止 Bot"""
-    bot = _get_bot_or_none()
-    if not bot:
-        raise HTTPException(status_code=503, detail="Bot 未初始化")
-    if not bot.is_running:
-        return {"message": "Bot 未运行"}
-    await bot.stop()
-    return {"message": "Bot 已停止"}
+    async with _lifecycle_lock:
+        bot = _get_bot_or_none()
+        if not bot:
+            raise HTTPException(status_code=503, detail="Bot 未初始化")
+        if not bot.is_running:
+            return {"message": "Bot 未在运行"}
+        try:
+            await bot.stop()
+            return {"message": "Bot 停止成功"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/restart", dependencies=[Depends(require_auth)])
 async def restart_bot():
     """重启 Bot"""
-    bot = _get_bot_or_none()
-    if not bot:
-        raise HTTPException(status_code=503, detail="Bot 未初始化")
-    if bot.is_running:
-        await bot.stop()
-    await bot.start()
-    return {"message": "Bot 已重启"}
+    async with _lifecycle_lock:
+        bot = _get_bot_or_none()
+        if not bot:
+            raise HTTPException(status_code=503, detail="Bot 未初始化")
+        try:
+            if bot.is_running:
+                await bot.stop()
+            await bot.start()
+            return {"message": "Bot 重启成功"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/health")

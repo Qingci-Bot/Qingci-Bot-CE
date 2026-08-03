@@ -80,6 +80,7 @@ class PluginManager:
 
     async def _register_from_module(self, module, collector: list, bot):
         """从模块中查找 PluginBase 子类并注册"""
+        plugin_classes = []
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
             if (
@@ -87,21 +88,33 @@ class PluginManager:
                 and issubclass(attr, PluginBase)
                 and attr is not PluginBase
             ):
-                plugin = attr()
-                # 同名插件先卸载
-                if plugin.name in self._plugins:
-                    await self.unload(plugin.name)
-                await self._init_plugin(plugin, bot)
-                # 关联模块级 Matcher
-                for m in collector:
-                    m.owner = plugin.name
-                    plugin.matchers.append(m)
-                self._plugins[plugin.name] = plugin
-                matcher_count = len(plugin.matchers) if plugin.matchers else 0
-                logger.info(
-                    f"插件已加载: {plugin.name} v{plugin.version}"
-                    f" (matchers: {matcher_count})"
-                )
+                plugin_classes.append(attr)
+
+        if not plugin_classes:
+            return
+
+        if len(plugin_classes) > 1:
+            raise ValueError(
+                f"模块 {module.__name__} 定义了 {len(plugin_classes)} 个 PluginBase 子类，"
+                f"每模块仅允许 1 个"
+            )
+
+        plugin_cls = plugin_classes[0]
+        plugin = plugin_cls()
+        # 同名插件先卸载
+        if plugin.name in self._plugins:
+            await self.unload(plugin.name)
+        await self._init_plugin(plugin, bot)
+        # 关联模块级 Matcher
+        for m in collector:
+            m.owner = plugin.name
+            plugin.matchers.append(m)
+        self._plugins[plugin.name] = plugin
+        matcher_count = len(plugin.matchers) if plugin.matchers else 0
+        logger.info(
+            f"插件已加载: {plugin.name} v{plugin.version}"
+            f" (matchers: {matcher_count})"
+        )
 
     async def unload(self, name: str):
         """卸载插件"""

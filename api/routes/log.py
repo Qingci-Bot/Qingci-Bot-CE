@@ -16,7 +16,7 @@ def _get_bot_instance():
         raise HTTPException(status_code=503, detail="Bot 未初始化，请先启动 Bot 服务")
 
 
-@router.get("/messages")
+@router.get("/messages", dependencies=[Depends(require_auth)])
 async def search_messages(
     keyword: str = Query(default=""),
     user_id: int = Query(default=0),
@@ -36,7 +36,7 @@ async def search_messages(
     return messages
 
 
-@router.get("/messages/count")
+@router.get("/messages/count", dependencies=[Depends(require_auth)])
 async def get_message_count():
     """获取消息总数"""
     bot = _get_bot_instance()

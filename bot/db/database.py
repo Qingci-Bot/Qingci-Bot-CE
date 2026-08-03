@@ -65,7 +65,7 @@ class Database:
     ) -> list[dict]:
         """获取对话历史（按时间正序返回最近 limit 条）"""
         async with get_session_factory()() as session:
-            if group_id:
+            if group_id is not None:
                 stmt = (
                     select(Message)
                     .where(Message.group_id == group_id, Message.user_id == user_id)
@@ -95,10 +95,12 @@ class Database:
         async with get_session_factory()() as session:
             stmt = select(Message)
             if keyword:
-                stmt = stmt.where(Message.content.contains(keyword))
-            if user_id:
+                # 转义 LIKE 特殊字符
+                escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                stmt = stmt.where(Message.content.like(f"%{escaped}%", escape="\\"))
+            if user_id is not None:
                 stmt = stmt.where(Message.user_id == user_id)
-            if group_id:
+            if group_id is not None:
                 stmt = stmt.where(Message.group_id == group_id)
             stmt = (
                 stmt.order_by(Message.created_at.desc())
@@ -154,10 +156,11 @@ class Database:
             await session.commit()
 
     async def delete_last_session(self, session_key: str, role: str):
-        """删除指定会话最后一条指定角色的记录（用于 LLM 调用失败时回滚）"""
+        """删除指定会话最后一条指定角色的记录（原子操作）"""
         async with get_session_factory()() as session:
-            stmt = (
-                select(SessionHistory)
+            # 使用子查询原子删除最后一条匹配记录
+            subq = (
+                select(SessionHistory.id)
                 .where(
                     SessionHistory.session_key == session_key,
                     SessionHistory.role == role,
@@ -165,10 +168,9 @@ class Database:
                 .order_by(SessionHistory.created_at.desc())
                 .limit(1)
             )
-            row = (await session.execute(stmt)).scalar_one_or_none()
-            if row:
-                await session.delete(row)
-                await session.commit()
+            stmt = delete(SessionHistory).where(SessionHistory.id.in_(subq))
+            await session.execute(stmt)
+            await session.commit()
 
     # ============ 插件配置 ============
 

@@ -23,11 +23,15 @@ handler 签名: async (ctx: MatcherContext) -> Optional[str]
 
 import logging
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, TYPE_CHECKING, Union
 
 from ..core.dispatcher import MessageContext
 from .permission import EVERYONE, Permission
 from .rule import Rule
+
+if TYPE_CHECKING:
+    from ..core.bot import QingciBot
+    from .base import PluginBase
 
 logger = logging.getLogger("qingci-bot.matcher")
 
@@ -44,9 +48,9 @@ class MatcherContext(MessageContext):
     - args: 命令参数 / 前缀后的剩余文本（startswith/command 规则写入）
     - match: 正则 Match 对象（regex 规则写入）
     """
-    bot: object = None
-    plugin: object = None
-    matcher: "Matcher" = None
+    bot: Optional["QingciBot"] = None
+    plugin: Optional["PluginBase"] = None
+    matcher: Optional["Matcher"] = None
     command: str = ""
     args: str = ""
     match: Optional[object] = None
@@ -55,9 +59,9 @@ class MatcherContext(MessageContext):
     def from_message_context(
         cls,
         ctx: MessageContext,
-        bot: object = None,
-        plugin: object = None,
-        matcher: "Matcher" = None,
+        bot: Optional["QingciBot"] = None,
+        plugin: Optional["PluginBase"] = None,
+        matcher: Optional["Matcher"] = None,
     ) -> "MatcherContext":
         """从 MessageContext 升级为 MatcherContext"""
         return cls(
@@ -100,38 +104,9 @@ class Matcher:
     permission: Permission = field(default_factory=lambda: EVERYONE)
     priority: int = 1
     block: bool = True
-    temp: bool = False
+    temp: bool = False  # 临时匹配器（预留，当前未实现自动移除）
     owner: str = ""
     event_type: str = "message"
-
-    async def match_and_run(self, bot, event: dict, ctx: MatcherContext) -> Optional[bool]:
-        """检查规则与权限，匹配则执行 handler
-
-        Returns:
-            None: 未匹配
-            True: 匹配并执行
-        """
-        # 事件类型检查
-        if self.event_type != "message":
-            if event.get("post_type") != self.event_type:
-                return None
-        elif event.get("post_type") != "message":
-            return None
-
-        # 权限检查
-        if not await self.permission.check(bot, event, ctx):
-            return None
-
-        # 规则检查（可能修改 ctx.command/args/match）
-        if not await self.rule.check(bot, event, ctx):
-            return None
-
-        # 注入 matcher 引用并执行 handler
-        ctx.matcher = self
-        result = self.handler(ctx)
-        if hasattr(result, "__await__"):
-            result = await result
-        return True if result is not None else True
 
 
 # ============ 工厂函数 ============

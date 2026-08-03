@@ -10,10 +10,12 @@
 import argparse
 import asyncio
 import logging
+from pathlib import Path
 
 import uvicorn
 
 from bot.core.bot import QingciBot, set_bot, clear_bot
+from api.auth import set_config_path
 from api.server import create_app
 
 # 日志配置
@@ -46,6 +48,7 @@ async def run_bot_and_api(args):
             set_bot(bot)
             await bot.start()
 
+        set_config_path(Path(args.config))
         app = create_app()
         config = uvicorn.Config(
             app,
@@ -58,7 +61,7 @@ async def run_bot_and_api(args):
 
         logger.info(f"Web UI: http://{args.host}:{args.port}/ui")
         await server.serve()
-    except asyncio.CancelledError:
+    except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("服务取消，开始清理...")
         if server:
             server.should_exit = True
@@ -71,6 +74,7 @@ async def run_bot_and_api(args):
                     await asyncio.wait_for(server.shutdown(), timeout=3)
             except Exception:
                 logger.exception("uvicorn 关闭异常")
+                server.force_exit = True
 
         if bot:
             try:

@@ -30,12 +30,12 @@ class OneBotConnection:
     def __init__(self, host: str = "127.0.0.1", port: int = 3001, access_token: str = ""):
         self.host = host
         self.port = port
-        self.access_token = access_token
+        self.access_token = access_token.strip() if access_token else ""
 
         # aiocqhttp 引擎（反向 WS 模式：不传 api_root）
         self._bot = CQHttp(
             import_name="qingci-bot.connection",
-            access_token=access_token or None,
+            access_token=self.access_token or None,
             api_timeout_sec=30,
         )
         self._server_task: Optional[asyncio.Task] = None
@@ -103,16 +103,19 @@ class OneBotConnection:
         """启动反向 WebSocket 服务器（异步）"""
         self._running = True
         logger.info(f"OneBot WS 服务器启动: ws://{self.host}:{self.port}/ws")
-        # aiocqhttp 的 run_task 返回 coroutine，用 create_task 后台运行
-        # 注意：Quart.run_task 不支持 use_reloader 参数，默认不启用 reloader
         self._server_task = asyncio.create_task(
             self._bot.run_task(
                 host=self.host,
                 port=self.port,
             )
         )
-        # 给 Quart 一点启动时间
         await asyncio.sleep(0.1)
+        # 检查服务器是否启动失败（如端口被占用）
+        if self._server_task.done():
+            exc = self._server_task.exception()
+            if exc:
+                self._running = False
+                raise RuntimeError(f"OneBot WS 服务器启动失败: {exc}")
 
     async def stop(self):
         """停止服务器，清理事件处理器"""
@@ -135,9 +138,9 @@ class OneBotConnection:
     # ============ API 调用 ============
 
     async def call_api(self, action: str, params: Optional[dict] = None, timeout: float = 30) -> dict:
-        """调用 OneBot API（委托给 aiocqhttp.call_action）
+        """调用 OneBot API
 
-        返回完整响应 dict（含 status/retcode/data）。
+        返回 API 响应中的 data 字段（aiocqhttp 已自动解包）。
         """
         try:
             result = await asyncio.wait_for(

@@ -1,7 +1,8 @@
 """配置管理模块 - 基于 YAML 的配置读写"""
 
+import threading
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import yaml
 from pydantic import BaseModel
@@ -39,7 +40,7 @@ class BotConfig(BaseModel):
 
     name: str = "Qingci-Bot"
     admin_users: list[int] = []         # 管理员 QQ 号
-    trigger_mode: str = "at"            # 触发方式: at / keyword / always
+    trigger_mode: Literal["at", "keyword", "always"] = "at"  # 触发方式
     trigger_keywords: list[str] = ["/bot", "/ai"]
     group_blacklist: list[int] = []     # 群黑名单
     user_blacklist: list[int] = []      # 用户黑名单
@@ -57,7 +58,7 @@ class AppConfig(BaseModel):
 
 # ============ 配置管理器 ============
 
-DEFAULT_CONFIG_PATH = Path("config.yaml")
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
 
 
 class ConfigManager:
@@ -66,6 +67,7 @@ class ConfigManager:
     def __init__(self, path: Optional[Path] = None):
         self._path = path or DEFAULT_CONFIG_PATH
         self._config: AppConfig = AppConfig()
+        self._lock = threading.RLock()
 
     @property
     def config(self) -> AppConfig:
@@ -85,29 +87,47 @@ class ConfigManager:
 
     def load(self) -> AppConfig:
         """从文件加载配置，不存在则创建默认配置"""
-        if self._path.exists():
-            with open(self._path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-            self._config = AppConfig(**data)
-        else:
-            self.save()
-        return self._config
+        with self._lock:
+            if self._path.exists():
+                with open(self._path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
+                self._config = AppConfig(**data)
+            else:
+                self.save()
+            return self._config
 
     def save(self):
-        """保存配置到文件"""
-        with open(self._path, "w", encoding="utf-8") as f:
-            yaml.dump(
-                self._config.model_dump(),
-                f,
-                allow_unicode=True,
-                default_flow_style=False,
-                sort_keys=False,
+        """保存配置到文件（原子写入）"""
+        with self._lock:
+            import os
+            import tempfile
+            data = self._config.model_dump()
+            # 先写入临时文件，再原子重命名
+            tmp_fd, tmp_path = tempfile.mkstemp(
+                dir=str(self._path.parent), suffix=".tmp"
             )
+            try:
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                    yaml.dump(
+                        data,
+                        f,
+                        allow_unicode=True,
+                        default_flow_style=False,
+                        sort_keys=False,
+                    )
+                os.replace(tmp_path, str(self._path))
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
 
     def update(self, data: dict):
         """更新配置并保存"""
-        self._config = AppConfig(**data)
-        self.save()
+        with self._lock:
+            self._config = AppConfig(**data)
+            self.save()
 
     def reload(self) -> AppConfig:
         """重新加载配置"""

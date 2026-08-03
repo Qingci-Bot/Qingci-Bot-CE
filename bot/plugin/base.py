@@ -1,9 +1,17 @@
 """插件基类"""
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from ..core.dispatcher import MessageContext
+
+if TYPE_CHECKING:
+    from ..core.bot import QingciBot
+    from ..core.connection import OneBotConnection
+    from ..config import ConfigManager
+    from ..db.database import Database
+    from ..llm.manager import LLMManager
+    from .matcher import Matcher
 
 
 class PluginBase(ABC):
@@ -24,14 +32,14 @@ class PluginBase(ABC):
     description: str = ""
 
     # 依赖引用（由 PluginManager 注入）
-    bot = None       # Bot 实例
-    db = None        # Database 实例
-    config = None    # ConfigManager 实例
-    connection = None  # OneBotConnection 实例
-    llm = None       # LLMManager 实例
+    bot: Optional["QingciBot"] = None
+    db: Optional["Database"] = None
+    config: Optional["ConfigManager"] = None
+    connection: Optional["OneBotConnection"] = None
+    llm: Optional["LLMManager"] = None
 
     # Matcher 列表（由 PluginManager 初始化，新式插件在 on_load 中填充）
-    matchers: list = None  # type: list  # list[Matcher]
+    matchers: Optional[list["Matcher"]] = None  # 实际值由 PluginManager._init_plugin 设置为 list
 
     @abstractmethod
     async def on_load(self):

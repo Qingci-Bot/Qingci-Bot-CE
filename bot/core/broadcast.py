@@ -3,6 +3,7 @@
 允许任意模块注册消息回调，例如 WebSocket 实时推送。
 """
 
+import asyncio
 import logging
 from typing import Callable, Awaitable
 
@@ -12,8 +13,9 @@ _brokers: list[Callable[[dict], Awaitable[None]]] = []
 
 
 def register_broker(broker: Callable[[dict], Awaitable[None]]) -> None:
-    """注册消息广播回调"""
-    _brokers.append(broker)
+    """注册消息广播回调（自动去重）"""
+    if broker not in _brokers:
+        _brokers.append(broker)
 
 
 def unregister_broker(broker: Callable[[dict], Awaitable[None]]) -> None:
@@ -23,9 +25,10 @@ def unregister_broker(broker: Callable[[dict], Awaitable[None]]) -> None:
 
 
 async def broadcast_message(message: dict) -> None:
-    """广播消息到所有注册 broker"""
-    for broker in list(_brokers):
-        try:
-            await broker(message)
-        except Exception:
-            logger.warning("广播消息失败", exc_info=True)
+    """广播消息到所有注册 broker（并发执行）"""
+    if not _brokers:
+        return
+    await asyncio.gather(
+        *[broker(message) for broker in _brokers],
+        return_exceptions=True,
+    )

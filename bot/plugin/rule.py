@@ -15,10 +15,13 @@
 匹配后可修改 ctx（如 command 规则解析参数写入 ctx.command/ctx.args）。
 """
 
+import logging
 import re
 from typing import Callable, Union
 
 from ..core.dispatcher import MessageContext
+
+logger = logging.getLogger("qingci-bot.rule")
 
 
 class Rule:
@@ -43,6 +46,7 @@ class Rule:
                 if not result:
                     return False
             except Exception:
+                logger.warning(f"规则 checker 异常: {checker!r}", exc_info=True)
                 return False
         return True
 
@@ -54,14 +58,16 @@ class Rule:
 
     def __or__(self, other: "Rule") -> "Rule":
         """OR 组合：满足其一即可"""
+        import copy
         rule = Rule()
         left_checkers = self._checkers[:]
         right_checkers = other._checkers[:]
         async def _or_checker(bot, event, ctx):
-            # 尝试左侧（可能修改 ctx，用副本避免污染）
+            # 尝试左侧（用副本避免污染 ctx）
+            left_ctx = copy.copy(ctx)
             left_ok = True
             for c in left_checkers:
-                r = c(bot, event, ctx)
+                r = c(bot, event, left_ctx)
                 if hasattr(r, "__await__"):
                     r = await r
                 if not r:
@@ -69,7 +75,7 @@ class Rule:
                     break
             if left_ok:
                 return True
-            # 左侧失败，尝试右侧
+            # 左侧失败，尝试右侧（用原始 ctx）
             for c in right_checkers:
                 r = c(bot, event, ctx)
                 if hasattr(r, "__await__"):
@@ -178,7 +184,7 @@ def command(cmd: Union[str, tuple[str, ...]]) -> Rule:
                 ctx.command = c
                 ctx.args = text_for_match[len(c):].strip()
                 return True
-            # 支持命令直接连参数无空格的情况（如 /ping123 不匹配 ping）
+            # 不支持命令直接连参数无空格（如 /ping123 不匹配 ping）
         return False
 
     return Rule(_check)
