@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from bot.core.bot import get_bot as _get_bot, QingciBot
 from bot.core.broadcast import register_broker, unregister_broker
@@ -138,12 +138,46 @@ def create_app() -> FastAPI:
 
     # 静态文件（Web UI 构建产物）
     import os
+    import re
+
     web_dir = os.path.join(os.path.dirname(__file__), "..", "web", "dist")
-    if os.path.exists(web_dir):
+    web_ready = False
+    if os.path.isdir(web_dir):
+        index_path = os.path.join(web_dir, "index.html")
+        if os.path.exists(index_path):
+            try:
+                with open(index_path, "r", encoding="utf-8") as f:
+                    index_html = f.read()
+                # 校验 index.html 引用的资源是否都存在
+                missing = []
+                for ref in re.findall(r'(?:src|href)="/ui/([^"]+)"', index_html):
+                    if not os.path.exists(os.path.join(web_dir, ref)):
+                        missing.append(ref)
+                if missing:
+                    logger.warning(
+                        f"Web UI 构建产物不完整，缺少资源: {missing}，"
+                        f"请在 web/ 目录运行 'npm run build' 重新构建"
+                    )
+                else:
+                    web_ready = True
+            except Exception:
+                logger.exception("检查 Web UI 构建产物失败")
+
+    if web_ready:
         app.mount("/ui", StaticFiles(directory=web_dir, html=True), name="web")
 
         @app.get("/")
         async def root():
             return RedirectResponse(url="/ui")
+    else:
+        build_hint = (
+            "<h1>Qingci-Bot Web UI 未构建</h1>"
+            "<p>请在项目根目录执行以下命令构建 Web 界面：</p>"
+            "<pre>cd web\nnpm install\nnpm run build</pre>"
+        )
+
+        @app.get("/")
+        async def root():
+            return HTMLResponse(content=build_hint, status_code=200)
 
     return app
