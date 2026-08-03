@@ -155,6 +155,8 @@ class MessageDispatcher:
                     return None
             except Exception:
                 logger.exception(f"事件 Matcher 执行异常: owner={matcher.owner}")
+                if matcher.block:
+                    return None
 
         return None
 

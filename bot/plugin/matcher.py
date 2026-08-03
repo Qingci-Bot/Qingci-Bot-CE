@@ -95,7 +95,7 @@ class Matcher:
         permission: 权限要求
         priority: 优先级（越小越先执行，默认 1）
         block: 是否阻塞后续匹配器（默认 True）
-        temp: 临时匹配器（执行一次后自动移除）
+        temp: 临时匹配器（预留，当前未实现自动移除）
         owner: 所属插件名
         event_type: 事件类型（message/notice/request/meta_event）
     """

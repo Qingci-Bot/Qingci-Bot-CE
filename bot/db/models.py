@@ -6,7 +6,7 @@
 3. FastAPI 响应模型
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -24,7 +24,9 @@ class Message(SQLModel, table=True):
     content: str
     message_type: str = Field(default="group")
     role: str = Field(default="user")
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
 
 
 class SessionHistory(SQLModel, table=True):
@@ -41,7 +43,9 @@ class SessionHistory(SQLModel, table=True):
     session_key: str = Field(index=True)
     role: str  # user / assistant
     content: str
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
 
 
 class PluginConfig(SQLModel, table=True):
@@ -51,4 +55,6 @@ class PluginConfig(SQLModel, table=True):
 
     key: str = Field(primary_key=True)
     value: str
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )

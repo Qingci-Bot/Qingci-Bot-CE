@@ -56,8 +56,8 @@ class Permission:
         right_checkers = other._checkers[:]
 
         async def _combined_or(bot, event, ctx):
-            # 左侧全部通过即返回 True（用副本避免污染 ctx）
-            left_ctx = copy.copy(ctx)
+            # 左侧全部通过即返回 True（用深拷贝避免 mutable 字段共享引用）
+            left_ctx = copy.deepcopy(ctx)
             left_ok = True
             for c in left_checkers:
                 r = c(bot, event, left_ctx)

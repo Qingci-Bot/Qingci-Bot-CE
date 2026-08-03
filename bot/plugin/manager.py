@@ -87,6 +87,7 @@ class PluginManager:
                 isinstance(attr, type)
                 and issubclass(attr, PluginBase)
                 and attr is not PluginBase
+                and attr.__module__ == module.__name__  # 仅注册本模块定义的类
             ):
                 plugin_classes.append(attr)
 

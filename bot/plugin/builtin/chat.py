@@ -108,6 +108,9 @@ class ChatPlugin(PluginBase):
             group_id=ctx.group_id,
             user_id=ctx.user_id,
         )
+        if not reply:
+            # LLM 调用失败（返回 None 或空字符串），不保存到 DB/广播
+            return "抱歉，AI 服务暂时不可用，请稍后再试。"
 
         # 保存消息记录到数据库
         group_id = ctx.group_id if ctx.message_type == "group" else None

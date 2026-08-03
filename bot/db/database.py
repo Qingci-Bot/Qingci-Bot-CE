@@ -5,9 +5,10 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import delete, func, select
 
 from .engine import dispose_engine, get_session_factory, init_db
@@ -55,7 +56,11 @@ class Database:
                     role=role,
                 )
             )
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                logger.debug(f"消息已存在，跳过: {message_id}")
 
     async def get_history(
         self,
@@ -165,7 +170,7 @@ class Database:
                     SessionHistory.session_key == session_key,
                     SessionHistory.role == role,
                 )
-                .order_by(SessionHistory.created_at.desc())
+                .order_by(SessionHistory.created_at.desc(), SessionHistory.id.desc())
                 .limit(1)
             )
             stmt = delete(SessionHistory).where(SessionHistory.id.in_(subq))
@@ -191,7 +196,7 @@ class Database:
             ).scalar_one_or_none()
             if existing:
                 existing.value = value
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(timezone.utc)
             else:
                 session.add(PluginConfig(key=key, value=value))
             await session.commit()

@@ -171,10 +171,13 @@ class OneBotConnection:
         })
 
     async def send_msg(self, message_type: str, target_id: int, message: str) -> dict:
-        """发送消息（自动判断私聊/群聊）"""
+        """发送消息"""
         if message_type == "private":
             return await self.send_private_msg(target_id, message)
-        return await self.send_group_msg(target_id, message)
+        elif message_type == "group":
+            return await self.send_group_msg(target_id, message)
+        else:
+            raise ValueError(f"未知的 message_type: {message_type}")
 
     async def get_group_info(self, group_id: int) -> dict:
         return await self.call_api("get_group_info", {"group_id": group_id})

@@ -28,7 +28,13 @@ async def broadcast_message(message: dict) -> None:
     """广播消息到所有注册 broker（并发执行）"""
     if not _brokers:
         return
-    await asyncio.gather(
-        *[broker(message) for broker in _brokers],
+    brokers = list(_brokers)
+    results = await asyncio.gather(
+        *[broker(message) for broker in brokers],
         return_exceptions=True,
     )
+    for broker, result in zip(brokers, results):
+        if isinstance(result, Exception):
+            logger.warning(
+                f"广播 broker 失败: {getattr(broker, '__name__', repr(broker))}: {result}"
+            )

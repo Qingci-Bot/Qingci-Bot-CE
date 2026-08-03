@@ -203,11 +203,9 @@ class LiteLLMAdapter(LLMAdapter):
             return False
 
     async def close(self):
-        """关闭适配器资源"""
-        try:
-            import litellm
-            # litellm 内部使用 httpx，尝试清理连接池
-            if hasattr(litellm, '_async_client') and litellm._async_client:
-                await litellm._async_client.aclose()
-        except Exception:
-            pass  # litellm 版本不同，内部 API 可能变化
+        """关闭适配器资源
+
+        注意：litellm 内部使用模块级单例 httpx 客户端，由多个适配器实例共享。
+        不手动关闭以避免影响其他实例。连接池由 litellm 自行管理。
+        """
+        pass

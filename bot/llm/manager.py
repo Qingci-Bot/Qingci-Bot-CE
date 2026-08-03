@@ -4,7 +4,7 @@
 - 基于 LiteLLMAdapter 统一调用 100+ LLM 提供商
 - 会话历史双写：内存缓存 + 数据库持久化（可选）
 - 按 max_history 条数与 max_context_tokens 双重裁剪
-- clear_session 保持同步签名（兼容旧调用方），DB 清除异步触发
+- clear_session 为 async 方法，安全处理与进行中 chat 的并发竞态
 - 同一 session key 的并发调用通过 asyncio.Lock 串行化
 """
 
@@ -32,7 +32,7 @@ class LLMManager:
         # 已从 DB 懒加载过的 session key
         self._loaded_sessions: set[str] = set()
         # 会话级锁：防止同一 session 的并发调用导致历史交叉
-        # 注意：锁随 session 创建，在 clear_session 时清理
+        # 注意：锁随 session 创建，clear_session 不弹出锁以保护进行中的 chat
         # 长期运行的 bot 可能累积大量锁，未来可引入 LRU 淘汰
         self._locks: dict[str, asyncio.Lock] = {}
         # 后台任务引用（防止被 GC 回收）
@@ -56,12 +56,23 @@ class LLMManager:
         return self._adapter
 
     async def reload(self, config: LLMConfig):
-        """重新加载配置并重置适配器，按新配置裁剪已有会话"""
+        """重载 LLM 配置
+
+        等待所有进行中的 chat 完成后再重置适配器与会话状态，
+        避免与进行中的 chat 竞态。
+        """
+        # 等待所有进行中的 chat 完成
+        for key in list(self._locks.keys()):
+            lock = self._locks[key]
+            async with lock:
+                pass
         self._config = config
         await self.close()
-        # 按新配置裁剪所有已缓存会话
-        for key in list(self._sessions.keys()):
-            self._trim_history(key)
+        self._adapter = self._create_adapter()
+        # 重置会话状态
+        self._sessions.clear()
+        self._loaded_sessions.clear()
+        logger.info("LLM 配置已重载")
 
     async def close(self):
         """关闭适配器，释放资源"""
@@ -148,35 +159,42 @@ class LLMManager:
             ) * 2 > max_tokens:
                 msgs.pop(0)
 
-    def clear_session(self, message_type: str = "", group_id: int = 0, user_id: int = 0):
-        """清除会话历史（同步清内存，异步清 DB）
+    async def clear_session(
+        self, message_type: str = "", group_id: int = 0, user_id: int = 0
+    ):
+        """清除会话历史
 
-        保持同步签名以兼容 admin.py / log.py 的同步调用。
+        指定参数清除单会话，不指定参数清除全部。
+        改为 async 以安全处理并发 chat 调用：在清内存前获取对应会话锁。
         """
         if message_type and user_id:
             key = self._session_key(message_type, group_id, user_id)
-            self._sessions.pop(key, None)
-            self._loaded_sessions.discard(key)
-            self._locks.pop(key, None)
-            self._schedule_db_clear(key)
+            # 获取会话锁后再清理，避免与进行中的 chat 竞态
+            lock = self._get_lock(key)
+            async with lock:
+                self._sessions.pop(key, None)
+                self._loaded_sessions.discard(key)
+            # 注意：不弹出 _locks[key]，避免进行中的 chat 丢失锁保护
+            # 异步清除 DB
+            if self._db is not None:
+                try:
+                    await self._db.clear_sessions(key)
+                except Exception:
+                    logger.exception(f"清除 DB 会话失败: {key}")
         else:
-            self._sessions.clear()
-            self._loaded_sessions.clear()
-            self._locks.clear()
-            self._schedule_db_clear(None)
-
-    def _schedule_db_clear(self, key: Optional[str]):
-        """异步触发数据库会话清除（保存任务引用防止 GC）"""
-        if self._db is None:
-            return
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            logger.warning("无运行中的事件循环，跳过数据库会话清除")
-            return
-        task = loop.create_task(self._db.clear_sessions(key))
-        self._bg_tasks.add(task)
-        task.add_done_callback(self._bg_tasks.discard)
+            # 清除全部：获取所有锁
+            keys = list(self._sessions.keys())
+            for k in keys:
+                lock = self._get_lock(k)
+                async with lock:
+                    self._sessions.pop(k, None)
+                    self._loaded_sessions.discard(k)
+            # 不清空 _locks，避免进行中的 chat 丢失锁保护
+            if self._db is not None:
+                try:
+                    await self._db.clear_sessions(None)
+                except Exception:
+                    logger.exception("清除全部 DB 会话失败")
 
     # ============ 对话调用 ============
 
@@ -188,8 +206,8 @@ class LLMManager:
         user_id: int = 0,
         user_name: str = "",
         images: Optional[list[str]] = None,
-    ) -> str:
-        """同步聊天（返回完整回复）"""
+    ) -> Optional[str]:
+        """同步聊天（返回完整回复，失败时返回 None）"""
         key = self._session_key(message_type, group_id, user_id)
         lock = self._get_lock(key)
         async with lock:
@@ -228,7 +246,7 @@ class LLMManager:
                             await self._db.delete_last_session(key, "user")
                         except Exception:
                             logger.exception("回滚用户消息失败")
-                return "抱歉，AI 服务暂时不可用，请稍后再试。"
+                return None
 
             # 保存助手回复
             self._sessions[key].append({"role": "assistant", "content": reply})
@@ -275,6 +293,11 @@ class LLMManager:
                     full_reply += chunk
                     yield chunk
                 success = True
+            except GeneratorExit:
+                # 消费者提前停止迭代，需要回滚用户消息
+                # 捕获后不再 re-raise，让清理逻辑执行后正常结束
+                # 注意：捕获 GeneratorExit 后不能再 yield（会抛 RuntimeError）
+                success = False
             except Exception as e:
                 logger.error(f"LLM 流式调用失败: {e}")
                 # 不 yield 错误信息，避免污染内容流

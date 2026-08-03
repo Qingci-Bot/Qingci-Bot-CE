@@ -41,27 +41,29 @@ class QingciBot:
     async def start(self):
         """启动 Bot"""
         logger.info("Qingci-Bot 启动中...")
-
-        # 初始化数据库
         await self.db.connect()
-        logger.info("数据库已连接")
-
-        # 加载内置插件
         await self.plugin_manager.load_builtin(self)
-        logger.info(f"已加载 {len(self.plugin_manager.plugins)} 个插件")
-
-        # 注册事件分发
         self.connection.on_event(self._handle_event)
-
-        # 启动 OneBot WS 服务器
-        await self.connection.start()
-
+        try:
+            await self.connection.start()
+        except Exception:
+            # 连接启动失败，清理已初始化的资源
+            try:
+                await self.plugin_manager.shutdown()
+            except Exception:
+                logger.exception("清理插件失败")
+            try:
+                await self.db.close()
+            except Exception:
+                logger.exception("清理数据库失败")
+            raise
         self._running = True
-        logger.info("Qingci-Bot 启动完成")
+        logger.info("Qingci-Bot 启动成功")
 
     async def stop(self):
         """停止 Bot"""
-        if not self._running:
+        if not self._running and not self.connection.is_connected:
+            # 完全未启动，无需停止
             return
         logger.info("Qingci-Bot 停止中...")
         self._running = False
@@ -80,6 +82,9 @@ class QingciBot:
             )
             for task in pending:
                 task.cancel()
+            # 等待取消的任务完成，避免 "Task destroyed while pending" 警告
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
             self._pending_tasks.clear()
 
         try:
@@ -112,13 +117,27 @@ class QingciBot:
     async def _process_event(self, event: dict):
         """实际事件处理逻辑"""
         ctx = await self.dispatcher.dispatch(event)
-        if ctx is None:
+        if ctx is None:  # 防御性检查，dispatch 当前总返回非 None
             return
 
         post_type = ctx.post_type or event.get("post_type", "")
 
         if post_type != "message":
             await self.dispatcher._run_event_matchers(self, event, ctx)
+            # 旧式回调 fallback：通知未使用 Matcher 的插件
+            for plugin in list(self.plugin_manager.plugins.values()):
+                if plugin.matchers:
+                    continue
+                try:
+                    if post_type == "notice":
+                        await plugin.on_notice(event)
+                    elif post_type == "request":
+                        approve = await plugin.on_request(event)
+                        # request 事件的审批返回值处理
+                        if approve is not None:
+                            await self._handle_request_approval(event, approve)
+                except Exception:
+                    logger.exception(f"插件处理异常: {plugin.name}")
             return
 
         reply = await self.dispatcher.run_matchers(self, event, ctx)
@@ -153,6 +172,26 @@ class QingciBot:
             await self.connection.send_msg(ctx.message_type, target_id, reply)
         except Exception:
             logger.exception("发送消息失败")
+
+    async def _handle_request_approval(self, event: dict, approve: bool):
+        """处理加好友/加群请求的审批结果"""
+        try:
+            request_type = event.get("request_type", "")
+            flag = event.get("flag", "")
+            if not flag:
+                return
+            if request_type == "friend":
+                await self.connection.call_api(
+                    "set_friend_add_request", {"flag": flag, "approve": approve}
+                )
+            elif request_type == "group":
+                sub_type = event.get("sub_type", "")
+                await self.connection.call_api(
+                    "set_group_add_request",
+                    {"flag": flag, "sub_type": sub_type, "approve": approve},
+                )
+        except Exception:
+            logger.exception("处理请求审批失败")
 
     # ============ 状态 ============
 

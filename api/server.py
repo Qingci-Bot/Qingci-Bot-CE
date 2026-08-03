@@ -1,5 +1,6 @@
 """FastAPI 接口层"""
 
+import asyncio
 import json
 import logging
 import secrets
@@ -31,17 +32,17 @@ _MAX_WS_CLIENTS = 32
 
 
 async def _send_to_all_ws(data: str) -> None:
-    """向所有 WebSocket 客户端发送数据（迭代前复制，避免并发修改）"""
+    """向所有 WebSocket 客户端发送数据（并发）"""
     if not _ws_clients:
         return
-    disconnected = []
-    for ws in list(_ws_clients):
-        try:
-            await ws.send_text(data)
-        except Exception:
-            disconnected.append(ws)
-    for ws in disconnected:
-        _ws_clients.discard(ws)
+    clients = list(_ws_clients)
+    results = await asyncio.gather(
+        *[ws.send_text(data) for ws in clients],
+        return_exceptions=True,
+    )
+    for ws, result in zip(clients, results):
+        if isinstance(result, Exception):
+            _ws_clients.discard(ws)
 
 
 async def _broadcast_message_to_ws(message: dict) -> None:
@@ -85,7 +86,7 @@ def create_app() -> FastAPI:
     @app.websocket("/api/ws/log")
     async def ws_log(ws: WebSocket, token: str = Query(default="")):
         configured_key = _get_configured_api_key()
-        if configured_key and not secrets.compare_digest(token, configured_key):
+        if configured_key is not None and not secrets.compare_digest(token, configured_key):
             await ws.close(code=4001, reason="未授权")
             return
         if len(_ws_clients) >= _MAX_WS_CLIENTS:
@@ -95,9 +96,18 @@ def create_app() -> FastAPI:
         _ws_clients.add(ws)
         try:
             while True:
-                await ws.receive_text()
+                try:
+                    await asyncio.wait_for(ws.receive_text(), timeout=60)
+                except asyncio.TimeoutError:
+                    # 心跳检测：发送 ping，客户端无响应则关闭
+                    try:
+                        await ws.send_json({"type": "ping"})
+                    except Exception:
+                        break
         except WebSocketDisconnect:
             pass
+        except Exception:
+            logger.debug("WebSocket 异常断开", exc_info=True)
         finally:
             _ws_clients.discard(ws)
 

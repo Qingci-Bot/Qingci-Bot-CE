@@ -48,5 +48,5 @@ async def get_message_count():
 async def clear_all_sessions():
     """清除所有会话"""
     bot = _get_bot_instance()
-    bot.llm.clear_session()
+    await bot.llm.clear_session()
     return {"message": "所有会话已清除"}

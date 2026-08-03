@@ -5,6 +5,7 @@
 首次运行使用 Alembic 迁移建表（若迁移脚本可用），否则回退到 create_all。
 """
 
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +19,8 @@ DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "qingci-bot.d
 
 _engine: Optional[AsyncEngine] = None
 _session_factory: Optional[sessionmaker] = None
+_engine_lock = threading.Lock()
+_session_factory_lock = threading.Lock()
 
 
 def _set_sqlite_pragma(dbapi_conn, _connection_record):
@@ -30,29 +33,34 @@ def _set_sqlite_pragma(dbapi_conn, _connection_record):
 
 
 def get_engine():
-    """获取全局异步引擎（懒加载）"""
+    """获取全局异步引擎（懒加载，线程安全）"""
     global _engine
     if _engine is None:
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _engine = create_async_engine(
-            f"sqlite+aiosqlite:///{DB_PATH}",
-            echo=False,
-            connect_args={"check_same_thread": False},
-        )
-        # 在底层同步引擎上注册 connect 事件，设置 WAL 模式
-        event.listen(_engine.sync_engine, "connect", _set_sqlite_pragma)
+        with _engine_lock:
+            if _engine is None:
+                DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+                engine = create_async_engine(
+                    f"sqlite+aiosqlite:///{DB_PATH}",
+                    echo=False,
+                    connect_args={"check_same_thread": False},
+                )
+                # 在底层同步引擎上注册 connect 事件，设置 WAL 模式
+                event.listen(engine.sync_engine, "connect", _set_sqlite_pragma)
+                _engine = engine
     return _engine
 
 
 def get_session_factory() -> sessionmaker:
-    """获取 AsyncSession 工厂（懒加载）"""
+    """获取 AsyncSession 工厂（懒加载，线程安全）"""
     global _session_factory
     if _session_factory is None:
-        _session_factory = sessionmaker(
-            get_engine(),
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
+        with _session_factory_lock:
+            if _session_factory is None:
+                _session_factory = sessionmaker(
+                    get_engine(),
+                    class_=AsyncSession,
+                    expire_on_commit=False,
+                )
     return _session_factory
 
 
@@ -63,8 +71,8 @@ async def init_db():
     Alembic 迁移用于后续 schema 演进（手动执行 alembic upgrade head）。
     """
     # 确保所有模型被导入，以便 SQLModel.metadata 能发现它们
-    import bot.db.models  # noqa: F401  # 副作用导入：注册模型到 metadata
-    bot.db.models  # 引用模块，使静态检查识别该导入已被使用
+    from . import models  # noqa: F401  # 副作用导入：注册模型到 metadata
+    models  # 引用使静态检查满意
 
     engine = get_engine()
     async with engine.begin() as conn:

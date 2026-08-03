@@ -16,12 +16,14 @@ _config_lock = asyncio.Lock()
 
 
 def _get_config_manager() -> ConfigManager:
-    """获取 Bot 实例的 ConfigManager，若 Bot 未初始化则使用默认路径"""
+    """获取 Bot 实例的 ConfigManager，若 Bot 未初始化则使用自定义路径"""
     try:
         bot = _get_bot()
         return bot.config
     except RuntimeError:
-        cfg = ConfigManager()
+        from api.auth import _config_path
+        from bot.config import DEFAULT_CONFIG_PATH
+        cfg = ConfigManager(_config_path or DEFAULT_CONFIG_PATH)
         cfg.load()
         return cfg
 

@@ -67,7 +67,7 @@ class AdminPlugin(PluginBase):
         msg_count = (await self.db.get_message_count()) if self.db else 0
         return (
             f"Bot 状态:\n"
-            f"  LLBot 连接: {'在线' if connected else '离线'}\n"
+            f"  OneBot 连接: {'在线' if connected else '离线'}\n"
             f"  LLM 服务: {'可用' if llm_ok else '不可用'}\n"
             f"  消息记录: {msg_count} 条"
         )

@@ -99,5 +99,7 @@ async def load_plugin(data: dict):
 async def unload_plugin(name: str):
     """卸载插件"""
     bot = _get_bot_instance()
+    if not bot.plugin_manager.get(name):
+        raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
     await bot.plugin_manager.unload(name)
     return {"message": f"插件 {name} 已卸载"}

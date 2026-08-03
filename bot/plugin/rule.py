@@ -63,8 +63,8 @@ class Rule:
         left_checkers = self._checkers[:]
         right_checkers = other._checkers[:]
         async def _or_checker(bot, event, ctx):
-            # 尝试左侧（用副本避免污染 ctx）
-            left_ctx = copy.copy(ctx)
+            # 尝试左侧（用深拷贝避免 mutable 字段共享引用）
+            left_ctx = copy.deepcopy(ctx)
             left_ok = True
             for c in left_checkers:
                 r = c(bot, event, left_ctx)
@@ -208,6 +208,20 @@ def is_group() -> Rule:
 
 
 def keyword(*keywords: str) -> Rule:
-    """关键词触发（包含任一关键词）"""
+    """关键词触发（包含任一关键词，按词边界匹配）"""
     kws = keywords
-    return Rule(lambda bot, event, ctx: any(k in ctx.plain_text for k in kws))
+
+    def _check(bot, event, ctx) -> bool:
+        text = ctx.plain_text
+        for kw in kws:
+            # 检查关键词是否作为独立词出现（前后为边界或非字母数字）
+            idx = text.find(kw)
+            while idx != -1:
+                before = text[idx - 1] if idx > 0 else " "
+                after = text[idx + len(kw)] if idx + len(kw) < len(text) else " "
+                if not before.isalnum() and not after.isalnum():
+                    return True
+                idx = text.find(kw, idx + 1)
+        return False
+
+    return Rule(_check)

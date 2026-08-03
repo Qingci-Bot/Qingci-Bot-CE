@@ -124,10 +124,16 @@ class ConfigManager:
                 raise
 
     def update(self, data: dict):
-        """更新配置并保存"""
+        """更新配置并保存（save 失败时回滚内存）"""
         with self._lock:
-            self._config = AppConfig(**data)
-            self.save()
+            new_config = AppConfig(**data)
+            old_config = self._config
+            self._config = new_config
+            try:
+                self.save()
+            except Exception:
+                self._config = old_config
+                raise
 
     def reload(self) -> AppConfig:
         """重新加载配置"""
