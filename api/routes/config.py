@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import ValidationError
 
 from bot.core.bot import get_bot as _get_bot
-from bot.config import ConfigManager, LLMConfig
+from bot.config import ConfigManager, LLMConfig, LLM_PROVIDER_PRESETS
 from bot.llm.manager import LLMManager
 from api.auth import require_auth
 
@@ -149,6 +149,15 @@ async def get_llm_config():
     if data.get("api_key"):
         data["api_key"] = "***"
     return data
+
+
+@router.get("/llm/presets", dependencies=[Depends(require_auth)])
+async def get_llm_presets():
+    """获取 LLM 提供商预设列表（api_url + 推荐 model）"""
+    return {
+        "providers": list(LLM_PROVIDER_PRESETS.keys()),
+        "presets": LLM_PROVIDER_PRESETS,
+    }
 
 
 @router.put("/llm", dependencies=[Depends(require_auth)])

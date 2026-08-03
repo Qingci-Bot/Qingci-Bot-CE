@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import yaml
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
 
 
 # ============ 配置模型 ============
@@ -18,6 +18,18 @@ class OneBotConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 3001
     access_token: str = ""
+
+
+# 提供商预设：切换 provider 时自动带出推荐的 api_url 和 model
+LLM_PROVIDER_PRESETS: dict[str, dict[str, str]] = {
+    "openai": {"api_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
+    "deepseek": {"api_url": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
+    "ollama": {"api_url": "http://localhost:11434", "model": "llama3.1"},
+    "siliconflow": {"api_url": "https://api.siliconflow.cn/v1", "model": "deepseek-ai/DeepSeek-V3"},
+    "claude": {"api_url": "https://api.anthropic.com/v1", "model": "claude-3-5-sonnet-20241022"},
+    "gemini": {"api_url": "https://generativelanguage.googleapis.com/v1", "model": "gemini-1.5-flash"},
+    "custom": {"api_url": "", "model": "gpt-4o-mini"},
+}
 
 
 class LLMConfig(BaseModel):
@@ -33,6 +45,26 @@ class LLMConfig(BaseModel):
     system_prompt: str = "你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。"
     max_history: int = 20               # 最大对话历史轮数（每轮 = user + assistant）
     max_context_tokens: int = 8192      # 上下文窗口 token 上限，超出后裁剪历史
+
+    @model_validator(mode="after")
+    def apply_provider_preset(self):
+        """根据 provider 自动切换 api_url 和 model。
+
+        仅当当前 api_url/model 为空或与某个 preset 一致时才会更新，
+        避免覆盖用户自定义的地址和模型。
+        """
+        preset = LLM_PROVIDER_PRESETS.get(self.provider)
+        if not preset:
+            return self
+
+        preset_api_urls = {p["api_url"] for p in LLM_PROVIDER_PRESETS.values() if p["api_url"]}
+        preset_models = {p["model"] for p in LLM_PROVIDER_PRESETS.values()}
+
+        if not self.api_url or self.api_url in preset_api_urls:
+            self.api_url = preset["api_url"]
+        if not self.model or self.model in preset_models:
+            self.model = preset["model"]
+        return self
 
 
 class BotConfig(BaseModel):
