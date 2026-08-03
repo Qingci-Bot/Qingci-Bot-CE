@@ -70,6 +70,7 @@ export const useAppStore = defineStore('app', () => {
   const botConnected = ref(false)
   const plugins = ref([])
   const config = reactive(JSON.parse(JSON.stringify(defaultConfig)))
+  const llmPresets = ref({})
   const logs = ref([])
   const loading = ref(false)
   const error = ref('')
@@ -125,6 +126,15 @@ export const useAppStore = defineStore('app', () => {
       error.value = ''
     } catch (e) {
       console.warn('fetchConfig failed:', e.message)
+    }
+  }
+
+  async function fetchLLMPresets() {
+    try {
+      const data = await apiFetch('/api/config/llm/presets')
+      llmPresets.value = data.presets || {}
+    } catch (e) {
+      console.warn('fetchLLMPresets failed:', e.message)
     }
   }
 
@@ -190,9 +200,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   return {
-    botRunning, botConnected, plugins, config, logs, loading, error,
+    botRunning, botConnected, plugins, config, llmPresets, logs, loading, error,
     statusText, statusColor,
-    fetchStatus, fetchConfig, startBot, stopBot, restartBot,
+    fetchStatus, fetchConfig, fetchLLMPresets, startBot, stopBot, restartBot,
     saveConfig, testLLM, fetchLogs, fetchMessageCount, addLog,
     getApiKey, setApiKey,
   }

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useAppStore } from '../stores/app'
 
 const store = useAppStore()
@@ -9,8 +9,29 @@ const saving = ref(false)
 const toast = ref({ show: false, type: 'info', message: '' })
 let toastTimer = null
 
+// 提供商列表，从后端 presets 动态生成
+const providerOptions = computed(() => {
+  const presets = store.llmPresets
+  const labels = {
+    openai: 'OpenAI',
+    deepseek: 'DeepSeek',
+    ollama: 'Ollama (本地)',
+    siliconflow: 'SiliconFlow',
+    claude: 'Claude (Anthropic)',
+    gemini: 'Gemini (Google)',
+    custom: '自定义',
+  }
+  const keys = Object.keys(presets).length ? Object.keys(presets) : ['openai', 'deepseek', 'ollama', 'custom']
+  return keys.map(k => ({ value: k, label: labels[k] || k }))
+})
+
+// 收集所有 preset 的默认值，用于判断是否需要自动填充
+const presetApiUrls = computed(() => new Set(Object.values(store.llmPresets).map(p => p.api_url).filter(Boolean)))
+const presetModels = computed(() => new Set(Object.values(store.llmPresets).map(p => p.model).filter(Boolean)))
+
 onMounted(() => {
   resetForm()
+  store.fetchLLMPresets()
 })
 
 onUnmounted(() => {
@@ -39,6 +60,19 @@ function showToast(type, message) {
   toast.value = { show: true, type, message }
   if (toastTimer) clearTimeout(toastTimer)
   toastTimer = setTimeout(() => toast.value.show = false, 4000)
+}
+
+// provider 切换时自动填充 api_url 和 model
+function onProviderChange() {
+  const preset = store.llmPresets[form.provider]
+  if (!preset) return
+  // 仅当当前值为空或属于某个 preset 默认值时才自动填充
+  if (!form.api_url || presetApiUrls.value.has(form.api_url)) {
+    form.api_url = preset.api_url
+  }
+  if (!form.model || presetModels.value.has(form.model)) {
+    form.model = preset.model
+  }
 }
 
 async function testConnection() {
@@ -91,11 +125,8 @@ async function saveConfig() {
       <div class="form-grid">
         <div class="form-group">
           <label>提供商</label>
-          <select v-model="form.provider">
-            <option value="openai">OpenAI</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="ollama">Ollama</option>
-            <option value="custom">自定义</option>
+          <select v-model="form.provider" @change="onProviderChange">
+            <option v-for="opt in providerOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
         <div class="form-group">
