@@ -10,7 +10,7 @@ block=False（即使匹配也不阻止后续 Matcher，但返回回复会停止�
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from ..base import PluginBase
@@ -107,13 +107,14 @@ class ChatPlugin(PluginBase):
             message_type=ctx.message_type,
             group_id=ctx.group_id,
             user_id=ctx.user_id,
+            images=ctx.images or None,
         )
         if not reply:
             # LLM 调用失败（返回 None 或空字符串），不保存到 DB/广播
             return "抱歉，AI 服务暂时不可用，请稍后再试。"
 
         # 保存消息记录到数据库
-        group_id = ctx.group_id if ctx.message_type == "group" else None
+        group_id = ctx.group_id if ctx.message_type == "group" and ctx.group_id else None
         if self.db:
             try:
                 await self.db.save_message(
@@ -138,7 +139,7 @@ class ChatPlugin(PluginBase):
         # 实时广播（独立于数据库）
         try:
             from ...core.broadcast import broadcast_message
-            now = datetime.now().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             await broadcast_message({
                 "message_id": ctx.message_id,
                 "user_id": ctx.user_id,

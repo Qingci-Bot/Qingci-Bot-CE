@@ -71,7 +71,7 @@ class QingciBot:
         # 先停止接收新事件
         try:
             await self.connection.stop()
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             logger.exception("OneBot 连接停止异常")
 
         # 等待进行中的事件处理完成（最多 5 秒）
@@ -89,17 +89,17 @@ class QingciBot:
 
         try:
             await self.plugin_manager.shutdown()
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             logger.exception("插件卸载异常")
 
         try:
             await self.llm.close()
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             logger.exception("LLM 关闭异常")
 
         try:
             await self.db.close()
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             logger.exception("数据库关闭异常")
 
         logger.info("Qingci-Bot 已停止")
@@ -123,8 +123,11 @@ class QingciBot:
         post_type = ctx.post_type or event.get("post_type", "")
 
         if post_type != "message":
-            await self.dispatcher._run_event_matchers(self, event, ctx)
-            # 旧式回调 fallback：通知未使用 Matcher 的插件
+            matcher_result = await self.dispatcher._run_event_matchers(self, event, ctx)
+            if matcher_result is not None:
+                # Matcher 已处理，跳过旧式回调
+                return
+            # 旧式回调 fallback
             for plugin in list(self.plugin_manager.plugins.values()):
                 if plugin.matchers:
                     continue
@@ -133,9 +136,9 @@ class QingciBot:
                         await plugin.on_notice(event)
                     elif post_type == "request":
                         approve = await plugin.on_request(event)
-                        # request 事件的审批返回值处理
                         if approve is not None:
                             await self._handle_request_approval(event, approve)
+                            break  # request 已审批，跳出循环
                 except Exception:
                     logger.exception(f"插件处理异常: {plugin.name}")
             return
@@ -163,11 +166,11 @@ class QingciBot:
             logger.warning(f"无法发送回复：target_id 为空 (type={ctx.message_type})")
             return
         if ctx.message_type == "group" and ctx.user_id:
-            reply = (
-                MessageDispatcher.build_cq_reply(ctx.message_id)
-                + MessageDispatcher.build_cq_at(ctx.user_id)
-                + " " + reply
-            )
+            prefix = ""
+            if ctx.message_id:
+                prefix += MessageDispatcher.build_cq_reply(ctx.message_id)
+            prefix += MessageDispatcher.build_cq_at(ctx.user_id)
+            reply = prefix + " " + reply
         try:
             await self.connection.send_msg(ctx.message_type, target_id, reply)
         except Exception:

@@ -50,35 +50,21 @@ class Permission:
 
     def __or__(self, other: "Permission") -> "Permission":
         """OR 组合：满足其一即可"""
-        import copy
-        perm = Permission()
-        left_checkers = self._checkers[:]
-        right_checkers = other._checkers[:]
+        left = self
+        right = other
 
-        async def _combined_or(bot, event, ctx):
-            # 左侧全部通过即返回 True（用深拷贝避免 mutable 字段共享引用）
-            left_ctx = copy.deepcopy(ctx)
-            left_ok = True
-            for c in left_checkers:
-                r = c(bot, event, left_ctx)
-                if hasattr(r, "__await__"):
-                    r = await r
-                if not r:
-                    left_ok = False
-                    break
-            if left_ok:
-                return True
-            # 右侧全部通过即返回 True（用原始 ctx）
-            for c in right_checkers:
-                r = c(bot, event, ctx)
-                if hasattr(r, "__await__"):
-                    r = await r
-                if not r:
-                    return False
-            return True
+        async def combined_check(bot, event, ctx) -> bool:
+            try:
+                if await left.check(bot, event, ctx):
+                    return True
+            except Exception:
+                return False
+            try:
+                return await right.check(bot, event, ctx)
+            except Exception:
+                return False
 
-        perm._checkers = [_combined_or]
-        return perm
+        return Permission(combined_check)
 
     def __invert__(self) -> "Permission":
         """NOT 组合：取反"""

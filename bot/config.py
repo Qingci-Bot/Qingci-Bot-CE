@@ -1,5 +1,6 @@
 """配置管理模块 - 基于 YAML 的配置读写"""
 
+import logging
 import threading
 from pathlib import Path
 from typing import Literal, Optional
@@ -89,9 +90,15 @@ class ConfigManager:
         """从文件加载配置，不存在则创建默认配置"""
         with self._lock:
             if self._path.exists():
-                with open(self._path, "r", encoding="utf-8") as f:
-                    data = yaml.safe_load(f) or {}
-                self._config = AppConfig(**data)
+                try:
+                    with open(self._path, "r", encoding="utf-8") as f:
+                        data = yaml.safe_load(f) or {}
+                    self._config = AppConfig(**data)
+                except Exception as e:
+                    logger = logging.getLogger("qingci-bot.config")
+                    logger.error(f"配置文件解析失败，使用默认配置: {e}")
+                    self._config = AppConfig()
+                    self.save()
             else:
                 self.save()
             return self._config

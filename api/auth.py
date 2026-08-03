@@ -15,6 +15,9 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 _config_path: Optional[Path] = None
 
+_cached_key: Optional[str] = None
+_cached_mtime: float = 0.0
+
 
 def set_config_path(path: Path):
     """设置配置文件路径（由 main.py 在启动时调用）"""
@@ -30,6 +33,7 @@ def _get_configured_api_key() -> Optional[str]:
     - "": 显式未配置 api_key（跳过鉴权）
     - 非空字符串: 已配置 api_key
     """
+    global _cached_key, _cached_mtime
     try:
         from bot.core.bot import get_bot
         bot = get_bot()
@@ -37,13 +41,21 @@ def _get_configured_api_key() -> Optional[str]:
             return bot.config.config.api_key or ""
     except Exception:
         pass
-    # 回退：直接读取配置文件
+    # 回退：直接读取配置文件（带 mtime 缓存）
     try:
         from bot.config import ConfigManager, DEFAULT_CONFIG_PATH
         path = _config_path or DEFAULT_CONFIG_PATH
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            mtime = 0
+        if _cached_key is not None and mtime == _cached_mtime:
+            return _cached_key
         cm = ConfigManager(path)
         cm.load()
-        return cm.config.api_key or ""
+        _cached_key = cm.config.api_key or ""
+        _cached_mtime = mtime
+        return _cached_key
     except Exception:
         logger.warning("读取配置文件失败，API 鉴权将 fail-closed")
         return None

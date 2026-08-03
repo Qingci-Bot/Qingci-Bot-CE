@@ -115,8 +115,8 @@ class MessageDispatcher:
                     f"Matcher 执行异常: owner={matcher.owner}, "
                     f"handler={getattr(matcher.handler, '__name__', repr(matcher.handler))}"
                 )
-                if matcher.block:
-                    return None
+                # 异常不应触发 block 语义，继续执行后续 Matcher
+                continue
 
         return None
 
@@ -155,8 +155,8 @@ class MessageDispatcher:
                     return None
             except Exception:
                 logger.exception(f"事件 Matcher 执行异常: owner={matcher.owner}")
-                if matcher.block:
-                    return None
+                # 异常不应触发 block 语义，继续执行后续 Matcher
+                continue
 
         return None
 
@@ -168,9 +168,9 @@ class MessageDispatcher:
         ctx.message_type = event.get("message_type", "")
         ctx.sub_type = event.get("sub_type", "")
         ctx.message_id = str(event.get("message_id", ""))
-        ctx.user_id = event.get("user_id", 0)
-        ctx.group_id = event.get("group_id", 0)
-        ctx.self_id = event.get("self_id", 0)
+        ctx.self_id = int(event.get("self_id", 0) or 0)
+        ctx.user_id = int(event.get("user_id", 0) or 0)
+        ctx.group_id = int(event.get("group_id", 0) or 0)
         ctx.sender = event.get("sender", {})
         ctx.raw_message = event.get("raw_message", "")
 
@@ -182,13 +182,15 @@ class MessageDispatcher:
             message = []
         text_parts = []
         for seg in message:
+            if not isinstance(seg, dict):
+                continue
             seg_type = seg.get("type", "")
             data = seg.get("data", {})
             if seg_type == "text":
                 text_parts.append(data.get("text", ""))
             elif seg_type == "at":
                 qq_val = data.get("qq", "0")
-                if qq_val == "all":
+                if qq_val == "all" or qq_val == 0 or qq_val == "0":
                     ctx.at_list.append(0)  # 0 表示全体成员
                 else:
                     try:

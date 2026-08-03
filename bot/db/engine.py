@@ -82,7 +82,9 @@ async def init_db():
 async def dispose_engine():
     """关闭引擎，释放连接池资源"""
     global _engine, _session_factory
-    if _engine is not None:
-        await _engine.dispose()
-    _engine = None
-    _session_factory = None
+    with _engine_lock:
+        engine = _engine
+        _engine = None
+        _session_factory = None
+    if engine is not None:
+        await engine.dispose()

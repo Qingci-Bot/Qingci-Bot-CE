@@ -28,14 +28,18 @@ def _get_config_manager() -> ConfigManager:
         return cfg
 
 
-async def _maybe_notify_bot():
-    """如果 Bot 已运行，通知其重新加载配置"""
+def _maybe_notify_bot(reload_llm: bool = True):
+    """通知 Bot 配置变更（异步执行，不阻塞 HTTP 响应）"""
     try:
         bot = _get_bot()
-        if bot and bot.is_running:
+        if bot:
             bot.config.reload()
-            await bot.llm.reload(bot.config.llm)
+            if reload_llm and bot.llm:
+                # 异步执行 reload，不阻塞 HTTP 请求
+                asyncio.create_task(bot.llm.reload(bot.config.llm))
     except RuntimeError:
+        pass  # Bot 未运行
+    except Exception:
         pass
 
 
@@ -57,6 +61,29 @@ def _mask_sensitive(data: dict) -> dict:
     return masked
 
 
+def _filter_masked(data: dict) -> dict:
+    """过滤掉脱敏占位符 "***"，保留原值"""
+    filtered = {}
+    for k, v in data.items():
+        if v == "***":
+            continue  # 跳过脱敏占位符
+        if isinstance(v, dict):
+            filtered[k] = _filter_masked(v)
+        else:
+            filtered[k] = v
+    return filtered
+
+
+def _deep_merge(base: dict, update: dict) -> dict:
+    """深度合并 update 到 base"""
+    for k, v in update.items():
+        if k in base and isinstance(base[k], dict) and isinstance(v, dict):
+            _deep_merge(base[k], v)
+        else:
+            base[k] = v
+    return base
+
+
 router = APIRouter()
 
 
@@ -72,9 +99,13 @@ async def update_config(data: dict):
     async with _config_lock:
         try:
             cfg = _get_config_manager()
-            cfg.update(data)
-            await _maybe_notify_bot()
-            return {"message": "配置已更新"}
+            current = cfg.to_dict()
+            # 过滤脱敏占位符后深度合并
+            filtered = _filter_masked(data)
+            _deep_merge(current, filtered)
+            cfg.update(current)
+            _maybe_notify_bot(reload_llm=True)
+            return {"message": "配置已更新", "config": _mask_sensitive(cfg.to_dict())}
         except ValidationError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
@@ -101,7 +132,7 @@ async def update_bot_config(data: dict):
             full = cfg.to_dict()
             full["bot"] = current
             cfg.update(full)
-            await _maybe_notify_bot()
+            _maybe_notify_bot(reload_llm=False)
             return {"message": "Bot 配置已更新"}
         except ValidationError as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -133,7 +164,7 @@ async def update_llm_config(data: dict):
             full = cfg.to_dict()
             full["llm"] = current
             cfg.update(full)
-            await _maybe_notify_bot()
+            _maybe_notify_bot(reload_llm=True)
             return {"message": "LLM 配置已更新"}
         except ValidationError as e:
             raise HTTPException(status_code=400, detail=str(e))

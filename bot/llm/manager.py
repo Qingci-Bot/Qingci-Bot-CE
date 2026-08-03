@@ -35,8 +35,6 @@ class LLMManager:
         # 注意：锁随 session 创建，clear_session 不弹出锁以保护进行中的 chat
         # 长期运行的 bot 可能累积大量锁，未来可引入 LRU 淘汰
         self._locks: dict[str, asyncio.Lock] = {}
-        # 后台任务引用（防止被 GC 回收）
-        self._bg_tasks: set[asyncio.Task] = set()
 
     # ============ 适配器管理 ============
 
@@ -58,37 +56,40 @@ class LLMManager:
     async def reload(self, config: LLMConfig):
         """重载 LLM 配置
 
-        等待所有进行中的 chat 完成后再重置适配器与会话状态，
-        避免与进行中的 chat 竞态。
+        获取所有会话锁后再重置，避免与进行中的 chat 竞态。
+        锁在重置完成后才释放，确保新的 chat 使用新配置。
         """
-        # 等待所有进行中的 chat 完成
-        for key in list(self._locks.keys()):
-            lock = self._locks[key]
-            async with lock:
-                pass
-        self._config = config
-        await self.close()
-        self._adapter = self._create_adapter()
-        # 重置会话状态
-        self._sessions.clear()
-        self._loaded_sessions.clear()
-        logger.info("LLM 配置已重载")
+        # 获取所有现有会话锁（持有到方法结束）
+        locks = [self._locks[k] for k in list(self._locks.keys())]
+        for lock in locks:
+            await lock.acquire()
+        try:
+            self._config = config
+            if self._adapter is not None:
+                try:
+                    await self._adapter.close()
+                except Exception:
+                    logger.exception("关闭旧适配器失败")
+            self._adapter = None
+            self._sessions.clear()
+            self._loaded_sessions.clear()
+            # 重建适配器
+            self._adapter = self._create_adapter()
+            logger.info("LLM 配置已重载")
+        finally:
+            for lock in locks:
+                lock.release()
 
     async def close(self):
-        """关闭适配器，释放资源"""
-        if self._adapter:
+        """关闭 LLM 管理器，释放资源"""
+        if self._adapter is not None:
             try:
                 await self._adapter.close()
             except Exception:
-                logger.exception("关闭 LLM 适配器异常")
-            self._adapter = None
-        # 等待后台任务完成（而非直接取消，避免丢失未落盘数据）
-        if self._bg_tasks:
-            try:
-                await asyncio.gather(*self._bg_tasks, return_exceptions=True)
-            except Exception:
-                pass
-            self._bg_tasks.clear()
+                logger.exception("关闭 LLM 适配器失败")
+        self._adapter = None
+        self._sessions.clear()
+        self._loaded_sessions.clear()
 
     # ============ 会话管理 ============
 
@@ -123,7 +124,11 @@ class LLMManager:
             # 不标记 _loaded_sessions，允许下次重试
 
     def _trim_history(self, key: str):
-        """双重裁剪：max_history 条数 + max_context_tokens"""
+        """裁剪会话历史，确保不超过 max_history 和 max_context_tokens
+
+        注意：仅裁剪内存中的历史。DB 中的旧记录由 _ensure_session_loaded
+        的 limit 参数限制加载，不会影响上下文。定期 clear_session 可清理 DB。
+        """
         msgs = self._sessions.get(key, [])
         if not msgs:
             return
@@ -248,13 +253,14 @@ class LLMManager:
                             logger.exception("回滚用户消息失败")
                 return None
 
-            # 保存助手回复
-            self._sessions[key].append({"role": "assistant", "content": reply})
+            # 保存 assistant 回复（先 DB 后内存，保持一致性）
             if self._db is not None:
                 try:
                     await self._db.save_session(key, "assistant", reply)
                 except Exception:
                     logger.exception("持久化助手回复失败")
+                    # DB 失败时仍保留内存（容错），记录不一致
+            self._sessions.setdefault(key, []).append({"role": "assistant", "content": reply})
             return reply
 
     async def chat_stream(
@@ -304,12 +310,14 @@ class LLMManager:
 
             # 仅在成功完成时保存完整回复，避免部分回复污染上下文
             if success and full_reply:
-                self._sessions[key].append({"role": "assistant", "content": full_reply})
+                # 保存 assistant 回复（先 DB 后内存，保持一致性）
                 if self._db is not None:
                     try:
                         await self._db.save_session(key, "assistant", full_reply)
                     except Exception:
                         logger.exception("持久化助手回复失败")
+                        # DB 失败时仍保留内存（容错），记录不一致
+                self._sessions.setdefault(key, []).append({"role": "assistant", "content": full_reply})
             elif not success:
                 # 失败时回滚用户消息
                 if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
@@ -320,13 +328,14 @@ class LLMManager:
                         except Exception:
                             logger.exception("回滚用户消息失败")
             elif success and not full_reply:
-                # 空回复也记录，保持历史成对一致
-                self._sessions[key].append({"role": "assistant", "content": ""})
-                if self._db is not None:
-                    try:
-                        await self._db.save_session(key, "assistant", "")
-                    except Exception:
-                        logger.exception("持久化助手回复失败")
+                # 空回复：回滚用户消息，避免历史中出现空 assistant 回复
+                if self._sessions.get(key) and self._sessions[key][-1]["role"] == "user":
+                    self._sessions[key].pop()
+                    if db_saved:
+                        try:
+                            await self._db.delete_last_session(key, "user")
+                        except Exception:
+                            logger.exception("回滚用户消息失败")
 
     async def check_availability(self) -> bool:
         try:

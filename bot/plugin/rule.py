@@ -58,33 +58,32 @@ class Rule:
 
     def __or__(self, other: "Rule") -> "Rule":
         """OR 组合：满足其一即可"""
-        import copy
-        rule = Rule()
-        left_checkers = self._checkers[:]
-        right_checkers = other._checkers[:]
-        async def _or_checker(bot, event, ctx):
-            # 尝试左侧（用深拷贝避免 mutable 字段共享引用）
-            left_ctx = copy.deepcopy(ctx)
-            left_ok = True
-            for c in left_checkers:
-                r = c(bot, event, left_ctx)
-                if hasattr(r, "__await__"):
-                    r = await r
-                if not r:
-                    left_ok = False
-                    break
-            if left_ok:
-                return True
-            # 左侧失败，尝试右侧（用原始 ctx）
-            for c in right_checkers:
-                r = c(bot, event, ctx)
-                if hasattr(r, "__await__"):
-                    r = await r
-                if not r:
-                    return False
-            return True
-        rule._checkers = [_or_checker]
-        return rule
+        left = self
+        right = other
+
+        async def combined_check(bot, event, ctx) -> bool:
+            # 备份可能被 checker 修改的字段（MatcherContext 才有，MessageContext 没有）
+            fields = ("command", "args", "match")
+            backup = {f: getattr(ctx, f, None) for f in fields}
+            try:
+                result = await left.check(bot, event, ctx)
+                if result:
+                    return True
+                # 左侧失败，恢复 ctx 避免污染右侧
+                for f in fields:
+                    if hasattr(ctx, f):
+                        setattr(ctx, f, backup[f])
+            except Exception:
+                for f in fields:
+                    if hasattr(ctx, f):
+                        setattr(ctx, f, backup[f])
+                return False
+            try:
+                return await right.check(bot, event, ctx)
+            except Exception:
+                return False
+
+        return Rule(combined_check)
 
     def __invert__(self) -> "Rule":
         """NOT 组合：取反"""
@@ -207,21 +206,27 @@ def is_group() -> Rule:
     return Rule(lambda bot, event, ctx: ctx.message_type == "group")
 
 
-def keyword(*keywords: str) -> Rule:
-    """关键词触发（包含任一关键词，按词边界匹配）"""
-    kws = keywords
+def _is_word_boundary(ch: str) -> bool:
+    """判断字符是否为词边界（非 ASCII 字母数字）"""
+    return not (ch.isascii() and ch.isalnum())
 
-    def _check(bot, event, ctx) -> bool:
+
+def keyword(*kws: str) -> Rule:
+    """关键词触发规则"""
+    if not kws:
+        raise ValueError("至少需要一个关键词")
+
+    async def checker(bot, event, ctx: MessageContext) -> bool:
         text = ctx.plain_text
         for kw in kws:
-            # 检查关键词是否作为独立词出现（前后为边界或非字母数字）
             idx = text.find(kw)
             while idx != -1:
                 before = text[idx - 1] if idx > 0 else " "
                 after = text[idx + len(kw)] if idx + len(kw) < len(text) else " "
-                if not before.isalnum() and not after.isalnum():
+                # 仅当前后字符都是 ASCII 词边界时匹配（中文字符视为边界）
+                if _is_word_boundary(before) and _is_word_boundary(after):
                     return True
                 idx = text.find(kw, idx + 1)
         return False
 
-    return Rule(_check)
+    return Rule(checker)

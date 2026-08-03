@@ -14,6 +14,9 @@ router = APIRouter()
 # 防止加载 os / subprocess 等危险标准库模块
 _ALLOWED_MODULE_PREFIXES = ("plugins.", "bot.plugin.builtin.")
 
+# 内置插件白名单：不允许卸载
+_BUILTIN_PLUGINS = {"chat", "admin"}
+
 
 def _is_safe_module_path(module_path: str) -> bool:
     """检查模块路径是否安全（仅允许白名单前缀，禁止相对导入和标准库）"""
@@ -99,6 +102,8 @@ async def load_plugin(data: dict):
 async def unload_plugin(name: str):
     """卸载插件"""
     bot = _get_bot_instance()
+    if name in _BUILTIN_PLUGINS:
+        raise HTTPException(status_code=400, detail=f"不允许卸载内置插件 {name}")
     if not bot.plugin_manager.get(name):
         raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
     await bot.plugin_manager.unload(name)

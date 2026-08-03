@@ -53,7 +53,7 @@ class AdminPlugin(PluginBase):
     async def _cmd_clear(self, ctx: MatcherContext) -> str:
         """清除对话历史"""
         if self.llm:
-            self.llm.clear_session(
+            await self.llm.clear_session(
                 message_type=ctx.message_type,
                 group_id=ctx.group_id,
                 user_id=ctx.user_id,

@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import secrets
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -55,7 +56,14 @@ async def lifespan(app: FastAPI):
     """应用生命周期"""
     logger.info("API 服务启动")
     yield
-    logger.info("API 服务关闭")
+    # 清理 WebSocket 连接
+    for ws in list(_ws_clients):
+        try:
+            await ws.close()
+        except Exception:
+            pass
+    _ws_clients.clear()
+    logger.info("API 服务已关闭")
 
 
 def create_app() -> FastAPI:
@@ -86,20 +94,35 @@ def create_app() -> FastAPI:
     @app.websocket("/api/ws/log")
     async def ws_log(ws: WebSocket, token: str = Query(default="")):
         configured_key = _get_configured_api_key()
-        if configured_key is not None and not secrets.compare_digest(token, configured_key):
+        if configured_key is None:
+            # 配置读取失败，fail-closed
+            await ws.close(code=4001, reason="服务暂不可用")
+            return
+        if configured_key and not secrets.compare_digest(token, configured_key):
             await ws.close(code=4001, reason="未授权")
             return
+        # 连接数限制（accept 前检查）
         if len(_ws_clients) >= _MAX_WS_CLIENTS:
             await ws.close(code=4003, reason="连接数已满")
             return
         await ws.accept()
         _ws_clients.add(ws)
+        # 二次检查，防止并发超过上限
+        if len(_ws_clients) > _MAX_WS_CLIENTS:
+            _ws_clients.discard(ws)
+            await ws.close(code=4003, reason="连接数已满")
+            return
+        last_recv = time.monotonic()
         try:
             while True:
                 try:
                     await asyncio.wait_for(ws.receive_text(), timeout=60)
+                    last_recv = time.monotonic()
                 except asyncio.TimeoutError:
-                    # 心跳检测：发送 ping，客户端无响应则关闭
+                    # 60 秒无消息，发送 ping 再等 30 秒
+                    if time.monotonic() - last_recv > 90:
+                        # 超过 90 秒无任何消息，断开
+                        break
                     try:
                         await ws.send_json({"type": "ping"})
                     except Exception:
@@ -122,10 +145,3 @@ def create_app() -> FastAPI:
             return RedirectResponse(url="/ui")
 
     return app
-
-
-async def broadcast_log(level: str, message: str) -> None:
-    """向所有 WebSocket 客户端广播日志"""
-    await _send_to_all_ws(
-        json.dumps({"level": level, "message": message, "type": "log"}, ensure_ascii=False)
-    )

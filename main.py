@@ -72,14 +72,14 @@ async def run_bot_and_api(args):
                 if server.started:
                     server.should_exit = True
                     await asyncio.wait_for(server.shutdown(), timeout=3)
-            except Exception:
+            except (Exception, asyncio.CancelledError):
                 logger.exception("uvicorn 关闭异常")
                 server.force_exit = True
 
         if bot:
             try:
                 await bot.stop()
-            except Exception:
+            except (Exception, asyncio.CancelledError):
                 logger.exception("Bot 停止异常")
         clear_bot()
         logger.info("Qingci-Bot 已停止")
