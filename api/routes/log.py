@@ -44,6 +44,32 @@ async def get_message_count():
     return {"count": count}
 
 
+@router.delete("/messages", dependencies=[Depends(require_auth)])
+async def clear_messages(
+    user_id: int = Query(default=0),
+    group_id: int = Query(default=0),
+    before_days: int = Query(default=0, ge=0),
+):
+    """清理消息记录
+
+    - user_id: 仅清理该用户的消息
+    - group_id: 仅清理该群的消息
+    - before_days: 仅清理 N 天前的消息
+
+    所有参数为 0 或不传时表示清理全部消息。
+    """
+    bot = _get_bot_instance()
+    kwargs: dict = {}
+    if user_id:
+        kwargs["user_id"] = user_id
+    if group_id:
+        kwargs["group_id"] = group_id
+    if before_days:
+        kwargs["before_days"] = before_days
+    count = await bot.db.clear_messages(**kwargs)
+    return {"message": f"已清理 {count} 条消息记录", "count": count}
+
+
 @router.delete("/sessions", dependencies=[Depends(require_auth)])
 async def clear_all_sessions():
     """清除所有会话"""

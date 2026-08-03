@@ -5,7 +5,7 @@
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
@@ -121,6 +121,36 @@ class Database:
             stmt = select(func.count(Message.id))
             result = await session.execute(stmt)
             return result.scalar() or 0
+
+    async def clear_messages(
+        self,
+        user_id: Optional[int] = None,
+        group_id: Optional[int] = None,
+        before_days: Optional[int] = None,
+    ) -> int:
+        """按条件清理消息记录，返回删除条数。
+
+        参数:
+            user_id: 仅清理该用户的消息
+            group_id: 仅清理该群的消息
+            before_days: 仅清理 N 天前的消息
+        """
+        async with get_session_factory()() as session:
+            stmt = delete(Message)
+            if user_id is not None:
+                stmt = stmt.where(Message.user_id == user_id)
+            if group_id is not None:
+                stmt = stmt.where(Message.group_id == group_id)
+            if before_days is not None and before_days > 0:
+                cutoff = datetime.now(timezone.utc) - timedelta(days=before_days)
+                stmt = stmt.where(Message.created_at < cutoff)
+            result = await session.execute(stmt)
+            await session.commit()
+            logger.info(
+                f"清理消息记录 {result.rowcount} 条 "
+                f"(user_id={user_id}, group_id={group_id}, before_days={before_days})"
+            )
+            return result.rowcount or 0
 
     # ============ LLM 会话持久化（新增，为 Step 2 准备）============
 
