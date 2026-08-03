@@ -69,7 +69,7 @@ class LLMManager:
                 try:
                     await self._adapter.close()
                 except Exception:
-                    logger.exception("关闭旧适配器失败")
+                    logger.exception(f"关闭旧适配器失败: model={self._config.model}")
             self._adapter = None
             self._sessions.clear()
             self._loaded_sessions.clear()
@@ -86,7 +86,7 @@ class LLMManager:
             try:
                 await self._adapter.close()
             except Exception:
-                logger.exception("关闭 LLM 适配器失败")
+                logger.exception(f"关闭 LLM 适配器失败: model={self._config.model}")
         self._adapter = None
         self._sessions.clear()
         self._loaded_sessions.clear()
@@ -119,7 +119,9 @@ class LLMManager:
             ]
             self._loaded_sessions.add(key)
         except Exception:
-            logger.exception(f"加载会话历史失败: {key}")
+            logger.exception(
+                f"加载会话历史失败: key={key}, model={self._config.model}"
+            )
             self._sessions.setdefault(key, [])
             # 不标记 _loaded_sessions，允许下次重试
 
@@ -157,6 +159,10 @@ class LLMManager:
                 total -= removed_tokens
             self._sessions[key] = msgs
         except Exception:
+            logger.exception(
+                f"token 裁剪失败，降级为字符估算: key={key}, "
+                f"model={self._config.model}"
+            )
             # 降级：粗略估算（中文≈2 token/字符）
             while len(msgs) > 2 and sum(
                 len(m.get("content", "")) if isinstance(m.get("content"), str) else 0
@@ -185,7 +191,9 @@ class LLMManager:
                 try:
                     await self._db.clear_sessions(key)
                 except Exception:
-                    logger.exception(f"清除 DB 会话失败: {key}")
+                    logger.exception(
+                        f"清除 DB 会话失败: key={key}, model={self._config.model}"
+                    )
         else:
             # 清除全部：获取所有锁
             keys = list(self._sessions.keys())
@@ -199,7 +207,9 @@ class LLMManager:
                 try:
                     await self._db.clear_sessions(None)
                 except Exception:
-                    logger.exception("清除全部 DB 会话失败")
+                    logger.exception(
+                        f"清除全部 DB 会话失败: model={self._config.model}"
+                    )
 
     # ============ 对话调用 ============
 
@@ -227,7 +237,9 @@ class LLMManager:
                     await self._db.save_session(key, "user", message)
                     db_saved = True
                 except Exception:
-                    logger.exception("持久化用户消息失败")
+                    logger.exception(
+                        f"持久化用户消息失败: key={key}, model={self._config.model}"
+                    )
 
             # 裁剪上下文
             self._trim_history(key)
@@ -242,7 +254,9 @@ class LLMManager:
                     images=images,
                 )
             except Exception as e:
-                logger.error(f"LLM 调用失败: {e}")
+                logger.error(
+                    f"LLM 调用失败: {e}, key={key}, model={self._config.model}"
+                )
                 # 回滚刚加入的用户消息，保持内存与 DB 一致
                 if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
                     self._sessions[key].pop()
@@ -250,7 +264,10 @@ class LLMManager:
                         try:
                             await self._db.delete_last_session(key, "user")
                         except Exception:
-                            logger.exception("回滚用户消息失败")
+                            logger.exception(
+                                f"回滚用户消息失败: key={key}, "
+                                f"model={self._config.model}"
+                            )
                 return None
 
             # 保存 assistant 回复（先 DB 后内存，保持一致性）
@@ -258,7 +275,9 @@ class LLMManager:
                 try:
                     await self._db.save_session(key, "assistant", reply)
                 except Exception:
-                    logger.exception("持久化助手回复失败")
+                    logger.exception(
+                        f"持久化助手回复失败: key={key}, model={self._config.model}"
+                    )
                     # DB 失败时仍保留内存（容错），记录不一致
             self._sessions.setdefault(key, []).append({"role": "assistant", "content": reply})
             return reply
@@ -283,7 +302,9 @@ class LLMManager:
                     await self._db.save_session(key, "user", message)
                     db_saved = True
                 except Exception:
-                    logger.exception("持久化用户消息失败")
+                    logger.exception(
+                        f"持久化用户消息失败: key={key}, model={self._config.model}"
+                    )
 
             self._trim_history(key)
 
@@ -305,7 +326,9 @@ class LLMManager:
                 # 注意：捕获 GeneratorExit 后不能再 yield（会抛 RuntimeError）
                 success = False
             except Exception as e:
-                logger.error(f"LLM 流式调用失败: {e}")
+                logger.error(
+                    f"LLM 流式调用失败: {e}, key={key}, model={self._config.model}"
+                )
                 # 不 yield 错误信息，避免污染内容流
 
             # 仅在成功完成时保存完整回复，避免部分回复污染上下文
@@ -315,7 +338,10 @@ class LLMManager:
                     try:
                         await self._db.save_session(key, "assistant", full_reply)
                     except Exception:
-                        logger.exception("持久化助手回复失败")
+                        logger.exception(
+                            f"持久化助手回复失败: key={key}, "
+                            f"model={self._config.model}"
+                        )
                         # DB 失败时仍保留内存（容错），记录不一致
                 self._sessions.setdefault(key, []).append({"role": "assistant", "content": full_reply})
             elif not success:
@@ -326,7 +352,10 @@ class LLMManager:
                         try:
                             await self._db.delete_last_session(key, "user")
                         except Exception:
-                            logger.exception("回滚用户消息失败")
+                            logger.exception(
+                                f"回滚用户消息失败: key={key}, "
+                                f"model={self._config.model}"
+                            )
             elif success and not full_reply:
                 # 空回复：回滚用户消息，避免历史中出现空 assistant 回复
                 if self._sessions.get(key) and self._sessions[key][-1]["role"] == "user":
@@ -335,7 +364,10 @@ class LLMManager:
                         try:
                             await self._db.delete_last_session(key, "user")
                         except Exception:
-                            logger.exception("回滚用户消息失败")
+                            logger.exception(
+                                f"回滚用户消息失败: key={key}, "
+                                f"model={self._config.model}"
+                            )
 
     async def check_availability(self) -> bool:
         try:

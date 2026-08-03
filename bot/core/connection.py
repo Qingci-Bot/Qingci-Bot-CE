@@ -75,11 +75,10 @@ class OneBotConnection:
                 logger.info(f"LLBot 生命周期事件: {event.get('sub_type', '')}")
             await self._dispatch_event(event)
 
-    def on_event(self, handler: Callable):
+    def on_event(self, handler: Callable) -> None:
         """注册事件处理器（兼容旧 API，自动去重避免重复注册）"""
         if handler not in self._event_handlers:
             self._event_handlers.append(handler)
-        return handler
 
     async def _dispatch_event(self, event):
         """分发事件到所有处理器
@@ -99,7 +98,7 @@ class OneBotConnection:
 
     # ============ 生命周期 ============
 
-    async def start(self):
+    async def start(self) -> None:
         """启动反向 WebSocket 服务器（异步）"""
         self._running = True
         logger.info(f"OneBot WS 服务器启动: ws://{self.host}:{self.port}/ws")
@@ -117,7 +116,7 @@ class OneBotConnection:
                 self._running = False
                 raise RuntimeError(f"OneBot WS 服务器启动失败: {exc}")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """停止服务器，清理事件处理器"""
         self._running = False
         # 清理事件处理器，防止重启时重复注册

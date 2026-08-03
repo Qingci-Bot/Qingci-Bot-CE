@@ -11,7 +11,10 @@ block=True 的 Matcher 匹配后（无论 handler 返回什么）停止后续 Ma
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from .bot import QingciBot
 
 logger = logging.getLogger("qingci-bot.dispatcher")
 
@@ -41,6 +44,9 @@ class MessageContext:
     # 回复专用
     sender: dict = field(default_factory=dict)         # 发送者信息
 
+    # 所有原始消息段
+    segments: list[dict] = field(default_factory=list)  # 完整消息段列表
+
 
 class MessageDispatcher:
     """消息分发器：解析事件、路由到插件"""
@@ -48,7 +54,7 @@ class MessageDispatcher:
     def __init__(self):
         pass
 
-    async def dispatch(self, event: dict) -> Optional[MessageContext]:
+    def dispatch(self, event: dict) -> MessageContext:
         """分发事件（仅解析，不执行 Matcher）
 
         Matcher 调度由 PluginManager + Dispatcher.run_matchers 完成。
@@ -62,7 +68,7 @@ class MessageDispatcher:
 
         return ctx
 
-    async def run_matchers(self, bot, event: dict, ctx: MessageContext) -> Optional[str]:
+    async def run_matchers(self, bot: "QingciBot", event: dict, ctx: MessageContext) -> Optional[str]:
         """执行 Matcher 调度（消息事件）"""
         from ..plugin.matcher import MatcherContext
 
@@ -70,9 +76,7 @@ class MessageDispatcher:
         if not matchers:
             return None
 
-        sorted_matchers = sorted(matchers, key=lambda m: m.priority)
-
-        for matcher in sorted_matchers:
+        for matcher in matchers:
             # 每次匹配用全新的 MatcherContext（避免 rule 修改污染后续）
             mctx = MatcherContext.from_message_context(ctx, bot=bot, plugin=None, matcher=matcher)
 
@@ -120,19 +124,16 @@ class MessageDispatcher:
 
         return None
 
-    async def _run_event_matchers(self, bot, event: dict, ctx: MessageContext) -> Optional[str]:
+    async def _run_event_matchers(self, bot: "QingciBot", event: dict, ctx: MessageContext) -> Optional[str]:
         """执行 notice/request 事件的 Matcher 调度"""
         from ..plugin.matcher import MatcherContext
 
         matchers = bot.plugin_manager.all_matchers()
         post_type = event.get("post_type", "")
 
-        sorted_matchers = sorted(
-            [m for m in matchers if m.event_type == post_type],
-            key=lambda m: m.priority,
-        )
+        event_matchers = [m for m in matchers if m.event_type == post_type]
 
-        for matcher in sorted_matchers:
+        for matcher in event_matchers:
             mctx = MatcherContext.from_message_context(ctx, bot=bot, plugin=None, matcher=matcher)
             if matcher.owner:
                 mctx.plugin = bot.plugin_manager.get(matcher.owner)
@@ -184,6 +185,7 @@ class MessageDispatcher:
         for seg in message:
             if not isinstance(seg, dict):
                 continue
+            ctx.segments.append(seg)
             seg_type = seg.get("type", "")
             data = seg.get("data", {})
             if seg_type == "text":

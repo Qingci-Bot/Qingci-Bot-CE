@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 
 # ============ 配置模型 ============
@@ -94,6 +94,16 @@ class ConfigManager:
                     with open(self._path, "r", encoding="utf-8") as f:
                         data = yaml.safe_load(f) or {}
                     self._config = AppConfig(**data)
+                except yaml.YAMLError as e:
+                    logger = logging.getLogger("qingci-bot.config")
+                    logger.error(f"配置文件 YAML 格式错误: {e}")
+                    self._config = AppConfig()
+                    self.save()
+                except ValidationError as e:
+                    logger = logging.getLogger("qingci-bot.config")
+                    logger.error(f"配置字段验证失败: {e}")
+                    self._config = AppConfig()
+                    self.save()
                 except Exception as e:
                     logger = logging.getLogger("qingci-bot.config")
                     logger.error(f"配置文件解析失败，使用默认配置: {e}")

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from .base import PluginBase
-from .matcher import begin_module_collection, end_module_collection
+from .matcher import Matcher, begin_module_collection, end_module_collection
 
 logger = logging.getLogger("qingci-bot.plugin.manager")
 
@@ -23,6 +23,7 @@ class PluginManager:
 
     def __init__(self):
         self._plugins: dict[str, PluginBase] = {}  # name -> instance
+        self._cached_matchers: Optional[list[Matcher]] = None
 
     @property
     def plugins(self) -> dict[str, PluginBase]:
@@ -31,15 +32,23 @@ class PluginManager:
     def get(self, name: str) -> Optional[PluginBase]:
         return self._plugins.get(name)
 
-    def all_matchers(self) -> list:
-        """收集所有插件的 Matcher（用于调度）"""
-        result = []
-        for plugin in self._plugins.values():
-            if plugin.matchers:
-                result.extend(plugin.matchers)
-        return result
+    def all_matchers(self) -> list[Matcher]:
+        """收集所有插件的 Matcher（用于调度），结果已按优先级降序排序"""
+        if self._cached_matchers is None:
+            result = []
+            for plugin in self._plugins.values():
+                if plugin.matchers:
+                    result.extend(plugin.matchers)
+            self._cached_matchers = sorted(
+                result, key=lambda m: m.priority, reverse=True
+            )
+        return self._cached_matchers
 
-    async def load_builtin(self, bot):
+    def _invalidate_matchers_cache(self) -> None:
+        """使 matcher 缓存失效"""
+        self._cached_matchers = None
+
+    async def load_builtin(self, bot) -> None:
         """加载内置插件"""
         from . import builtin
         pkg_path = Path(builtin.__path__[0])
@@ -61,7 +70,7 @@ class PluginManager:
             logger.exception(f"加载外部插件失败: {module_path}")
             return False
 
-    async def _load_or_reload(self, full_path: str, bot):
+    async def _load_or_reload(self, full_path: str, bot) -> None:
         """加载或重载模块，确保模块级装饰器重新执行
 
         对已缓存的模块使用 reload，对新模块使用 import_module。
@@ -78,7 +87,7 @@ class PluginManager:
 
         await self._register_from_module(module, collector, bot)
 
-    async def _register_from_module(self, module, collector: list, bot):
+    async def _register_from_module(self, module, collector: list[Matcher], bot) -> None:
         """从模块中查找 PluginBase 子类并注册"""
         plugin_classes = []
         for attr_name in dir(module):
@@ -116,8 +125,9 @@ class PluginManager:
             f"插件已加载: {plugin.name} v{plugin.version}"
             f" (matchers: {matcher_count})"
         )
+        self._invalidate_matchers_cache()
 
-    async def unload(self, name: str):
+    async def unload(self, name: str) -> None:
         """卸载插件"""
         plugin = self._plugins.pop(name, None)
         if plugin:
@@ -126,8 +136,9 @@ class PluginManager:
             except Exception:
                 logger.exception(f"插件 {name} on_unload 异常")
             logger.info(f"插件已卸载: {name}")
+        self._invalidate_matchers_cache()
 
-    async def reload(self, name: str, bot):
+    async def reload(self, name: str, bot) -> None:
         """重载插件"""
         plugin = self._plugins.get(name)
         if not plugin:
@@ -145,8 +156,10 @@ class PluginManager:
             logger.exception(f"重载插件 {name} 失败")
             # 旧插件已卸载，新插件加载失败，不残留僵尸状态
             raise
+        finally:
+            self._invalidate_matchers_cache()
 
-    async def _init_plugin(self, plugin: PluginBase, bot):
+    async def _init_plugin(self, plugin: PluginBase, bot) -> None:
         """初始化插件依赖"""
         plugin.bot = bot
         plugin.db = bot.db
@@ -156,7 +169,7 @@ class PluginManager:
         plugin.matchers = []  # 初始化 Matcher 列表
         await plugin.on_load()
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         """关闭所有插件"""
         for name in list(self._plugins.keys()):
             await self.unload(name)

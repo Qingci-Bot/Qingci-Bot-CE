@@ -10,6 +10,7 @@
 import argparse
 import asyncio
 import logging
+import sys
 from pathlib import Path
 
 import uvicorn
@@ -39,13 +40,12 @@ def parse_args():
 
 async def run_bot_and_api(args):
     """在同个事件循环中运行 Bot 和 API 服务"""
-    bot = None
+    bot = QingciBot(args.config)
+    set_bot(bot)
     server = None
 
     try:
         if not args.no_bot:
-            bot = QingciBot(args.config)
-            set_bot(bot)
             await bot.start()
 
         set_config_path(Path(args.config))
@@ -97,8 +97,11 @@ def main():
         asyncio.run(run_bot_and_api(args))
     except KeyboardInterrupt:
         logger.info("收到退出信号")
+    except asyncio.CancelledError:
+        logger.warning("运行被取消")
     except Exception:
         logger.exception("运行异常")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

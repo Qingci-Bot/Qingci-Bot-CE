@@ -24,12 +24,12 @@ class Database:
         # path 参数保留为兼容签名，实际路径由 engine.py 统一管理
         pass
 
-    async def connect(self):
+    async def connect(self) -> None:
         """初始化数据库连接并建表"""
         await init_db()
         logger.info("数据库已连接")
 
-    async def close(self):
+    async def close(self) -> None:
         """关闭数据库连接，释放连接池"""
         await dispose_engine()
 
@@ -43,7 +43,7 @@ class Database:
         message_type: str = "group",
         group_id: Optional[int] = None,
         role: str = "user",
-    ):
+    ) -> None:
         """保存一条消息记录"""
         async with get_session_factory()() as session:
             session.add(
@@ -124,7 +124,7 @@ class Database:
 
     # ============ LLM 会话持久化（新增，为 Step 2 准备）============
 
-    async def save_session(self, session_key: str, role: str, content: str):
+    async def save_session(self, session_key: str, role: str, content: str) -> None:
         """保存一条 LLM 会话历史"""
         async with get_session_factory()() as session:
             session.add(
@@ -148,7 +148,7 @@ class Database:
             rows = (await session.execute(stmt)).scalars().all()
             return [row.model_dump() for row in reversed(rows)]
 
-    async def clear_sessions(self, session_key: Optional[str] = None):
+    async def clear_sessions(self, session_key: Optional[str] = None) -> None:
         """清除会话历史：指定 key 清除单会话，None 清除全部"""
         async with get_session_factory()() as session:
             if session_key:
@@ -160,7 +160,7 @@ class Database:
             await session.execute(stmt)
             await session.commit()
 
-    async def delete_last_session(self, session_key: str, role: str):
+    async def delete_last_session(self, session_key: str, role: str) -> None:
         """删除指定会话最后一条指定角色的记录（原子操作）"""
         async with get_session_factory()() as session:
             # 使用子查询原子删除最后一条匹配记录
@@ -186,7 +186,7 @@ class Database:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return row.value if row else None
 
-    async def set_plugin_config(self, key: str, value: str):
+    async def set_plugin_config(self, key: str, value: str) -> None:
         """写入插件配置（upsert）"""
         async with get_session_factory()() as session:
             existing = (

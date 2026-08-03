@@ -23,8 +23,15 @@ onUnmounted(() => {
 function connectWebSocket() {
   if (!shouldReconnect) return
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  socket = new WebSocket(`${proto}//${location.host}/api/ws/log`)
-  socket.onopen = () => { wsConnected.value = true }
+  const token = encodeURIComponent(store.getApiKey() || '')
+  socket = new WebSocket(`${proto}//${location.host}/api/ws/log?token=${token}`)
+  socket.onopen = () => {
+    wsConnected.value = true
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+  }
   socket.onclose = () => {
     wsConnected.value = false
     if (shouldReconnect) {
@@ -34,6 +41,7 @@ function connectWebSocket() {
   socket.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
+      if (data?.type === 'ping') return
       if (!keyword.value) {
         store.addLog(data)
       }

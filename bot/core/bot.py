@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from ..config import ConfigManager
 from ..db import Database
@@ -34,11 +34,11 @@ class QingciBot:
         self.plugin_manager = PluginManager()
 
         self._running = False
-        self._pending_tasks: set[asyncio.Task] = set()
+        self._pending_tasks: set[asyncio.Task[Any]] = set()
 
     # ============ 生命周期 ============
 
-    async def start(self):
+    async def start(self) -> None:
         """启动 Bot"""
         logger.info("Qingci-Bot 启动中...")
         await self.db.connect()
@@ -60,7 +60,7 @@ class QingciBot:
         self._running = True
         logger.info("Qingci-Bot 启动成功")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """停止 Bot"""
         if not self._running and not self.connection.is_connected:
             # 完全未启动，无需停止
@@ -106,64 +106,95 @@ class QingciBot:
 
     # ============ 事件处理 ============
 
-    async def _handle_event(self, event: dict):
+    async def _handle_event(self, event: dict) -> None:
         """处理 OneBot 事件 - 创建独立任务避免 stop() 死锁"""
         if not self._running:
             return
         task = asyncio.create_task(self._process_event(event))
         self._pending_tasks.add(task)
-        task.add_done_callback(self._pending_tasks.discard)
 
-    async def _process_event(self, event: dict):
+        def _cleanup(t: asyncio.Task[Any]) -> None:
+            self._pending_tasks.discard(t)
+            if t.exception():
+                logger.exception("事件处理任务异常", exc_info=t.exception())
+
+        task.add_done_callback(_cleanup)
+
+    async def _process_event(self, event: dict) -> None:
         """实际事件处理逻辑"""
-        ctx = await self.dispatcher.dispatch(event)
-        if ctx is None:  # 防御性检查，dispatch 当前总返回非 None
-            return
-
-        post_type = ctx.post_type or event.get("post_type", "")
-
-        if post_type != "message":
-            matcher_result = await self.dispatcher._run_event_matchers(self, event, ctx)
-            if matcher_result is not None:
-                # Matcher 已处理，跳过旧式回调
+        try:
+            ctx = self.dispatcher.dispatch(event)
+            if ctx is None:  # 防御性检查，dispatch 当前总返回非 None
                 return
-            # 旧式回调 fallback
+
+            post_type = ctx.post_type or event.get("post_type", "")
+
+            if post_type != "message":
+                matcher_result = await self.dispatcher._run_event_matchers(self, event, ctx)
+                if matcher_result is not None:
+                    # Matcher 已处理，跳过旧式回调
+                    return
+                # 旧式回调 fallback
+                for plugin in list(self.plugin_manager.plugins.values()):
+                    if plugin.matchers:
+                        continue
+                    try:
+                        if post_type == "notice":
+                            await plugin.on_notice(event)
+                        elif post_type == "request":
+                            approve = await plugin.on_request(event)
+                            if approve is not None:
+                                await self._handle_request_approval(event, approve)
+                                break  # request 已审批，跳出循环
+                    except Exception:
+                        logger.exception(
+                            f"插件处理异常: {plugin.name}, "
+                            f"post_type={post_type}, "
+                            f"event_summary={self._event_summary(event)}"
+                        )
+                return
+
+            reply = await self.dispatcher.run_matchers(self, event, ctx)
+            if reply is not None:
+                await self._send_reply(ctx, reply)
+                return
+
             for plugin in list(self.plugin_manager.plugins.values()):
                 if plugin.matchers:
                     continue
                 try:
-                    if post_type == "notice":
-                        await plugin.on_notice(event)
-                    elif post_type == "request":
-                        approve = await plugin.on_request(event)
-                        if approve is not None:
-                            await self._handle_request_approval(event, approve)
-                            break  # request 已审批，跳出循环
+                    reply = await plugin.on_message(ctx)
+                    if reply:
+                        await self._send_reply(ctx, reply)
+                        break
                 except Exception:
-                    logger.exception(f"插件处理异常: {plugin.name}")
-            return
+                    logger.exception(
+                        f"插件处理异常: {plugin.name}, "
+                        f"post_type={post_type}, "
+                        f"event_summary={self._event_summary(event)}"
+                    )
+        except Exception:
+            logger.exception(f"处理事件异常: {event.get('post_type', 'unknown')}")
 
-        reply = await self.dispatcher.run_matchers(self, event, ctx)
-        if reply is not None:
-            await self._send_reply(ctx, reply)
-            return
+    @staticmethod
+    def _event_summary(event: dict) -> str:
+        """生成事件摘要（用于日志）"""
+        return (
+            f"user_id={event.get('user_id')}, "
+            f"group_id={event.get('group_id')}, "
+            f"message_type={event.get('message_type')}, "
+            f"request_type={event.get('request_type')}, "
+            f"notice_type={event.get('notice_type')}"
+        )
 
-        for plugin in list(self.plugin_manager.plugins.values()):
-            if plugin.matchers:
-                continue
-            try:
-                reply = await plugin.on_message(ctx)
-                if reply:
-                    await self._send_reply(ctx, reply)
-                    break
-            except Exception:
-                logger.exception(f"插件处理异常: {plugin.name}")
-
-    async def _send_reply(self, ctx: MessageContext, reply: str):
+    async def _send_reply(self, ctx: MessageContext, reply: str) -> None:
         """发送插件回复"""
         target_id = ctx.group_id if ctx.message_type == "group" else ctx.user_id
         if not target_id:
-            logger.warning(f"无法发送回复：target_id 为空 (type={ctx.message_type})")
+            logger.warning(
+                f"无法发送回复：target_id 为空 (type={ctx.message_type}, "
+                f"user_id={ctx.user_id}, group_id={ctx.group_id})"
+            )
             return
         if ctx.message_type == "group" and ctx.user_id:
             prefix = ""
@@ -171,12 +202,20 @@ class QingciBot:
                 prefix += MessageDispatcher.build_cq_reply(ctx.message_id)
             prefix += MessageDispatcher.build_cq_at(ctx.user_id)
             reply = prefix + " " + reply
-        try:
-            await self.connection.send_msg(ctx.message_type, target_id, reply)
-        except Exception:
-            logger.exception("发送消息失败")
 
-    async def _handle_request_approval(self, event: dict, approve: bool):
+        for attempt in range(3):
+            try:
+                await self.connection.send_msg(ctx.message_type, target_id, reply)
+                return
+            except Exception:
+                logger.exception(
+                    f"发送消息失败 (attempt {attempt + 1}/3, "
+                    f"type={ctx.message_type}, target={target_id})"
+                )
+                if attempt < 2:
+                    await asyncio.sleep(0.5)
+
+    async def _handle_request_approval(self, event: dict, approve: bool) -> None:
         """处理加好友/加群请求的审批结果"""
         try:
             request_type = event.get("request_type", "")

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
 from bot.core.bot import get_bot as _get_bot, QingciBot
-from bot.core.broadcast import register_broker
+from bot.core.broadcast import register_broker, unregister_broker
 from api.auth import _get_configured_api_key
 
 
@@ -63,6 +63,8 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
     _ws_clients.clear()
+    # 注销 WebSocket 广播 broker，避免测试场景多次 create_app 时 broker 累积
+    unregister_broker(_broadcast_message_to_ws)
     logger.info("API 服务已关闭")
 
 

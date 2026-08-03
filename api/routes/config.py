@@ -7,7 +7,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import ValidationError
 
 from bot.core.bot import get_bot as _get_bot
-from bot.config import ConfigManager
+from bot.config import ConfigManager, LLMConfig
+from bot.llm.manager import LLMManager
 from api.auth import require_auth
 
 logger = logging.getLogger("qingci-bot.api.config")
@@ -171,6 +172,33 @@ async def update_llm_config(data: dict):
         except Exception as e:
             logger.exception("配置更新失败")
             raise HTTPException(status_code=500, detail=f"内部错误: {e}")
+
+
+@router.post("/llm/test", dependencies=[Depends(require_auth)])
+async def test_llm_config(data: dict):
+    """测试 LLM 连接"""
+    manager = None
+    try:
+        cfg = _get_config_manager()
+        current = cfg.llm.model_dump()
+        for k, v in _filter_masked(data).items():
+            if v is not None:
+                current[k] = v
+
+        manager = LLMManager(LLMConfig(**current))
+        available = await manager.check_availability()
+        return {
+            "available": available,
+            "message": "LLM 连接正常" if available else "LLM 连接失败",
+        }
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("LLM 连接测试失败")
+        raise HTTPException(status_code=500, detail=f"内部错误: {e}")
+    finally:
+        if manager is not None:
+            await manager.close()
 
 
 @router.get("/onebot", dependencies=[Depends(require_auth)])
