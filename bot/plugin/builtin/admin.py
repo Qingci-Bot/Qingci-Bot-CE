@@ -6,12 +6,11 @@
 """
 
 import logging
-from typing import Optional
+import time
 
 from ..base import PluginBase
 from ..matcher import MatcherContext, on_command
 from ..permission import SUPERUSER
-from ...core.dispatcher import MessageContext
 
 logger = logging.getLogger("qingci-bot.plugin.admin")
 
@@ -23,6 +22,10 @@ class AdminPlugin(PluginBase):
     version = "2.0.0"
     author = "Qingci-Bot"
     description = "管理命令插件：开关、清除对话、状态查询（Matcher API）"
+
+    # LLM 可用性缓存（避免每次 /status 都消耗 token）
+    _llm_check_cache: tuple[bool, float] = (False, 0.0)  # (ok, timestamp)
+    _LLM_CACHE_TTL = 60  # 缓存 60 秒
 
     async def on_load(self):
         logger.info("管理插件已加载")
@@ -43,12 +46,6 @@ class AdminPlugin(PluginBase):
     async def on_unload(self):
         logger.info("管理插件已卸载")
 
-    # ============ 旧式兼容（空实现，走 Matcher 调度） ============
-
-    async def on_message(self, ctx: MessageContext) -> Optional[str]:
-        # 已通过 Matcher 注册命令，这里返回 None 让旧式调度跳过
-        return None
-
     # ============ Matcher handlers ============
 
     async def _cmd_clear(self, ctx: MatcherContext) -> str:
@@ -64,7 +61,7 @@ class AdminPlugin(PluginBase):
     async def _cmd_status(self, ctx: MatcherContext) -> str:
         """查看 Bot 状态"""
         connected = self.connection.is_connected if self.connection else False
-        llm_ok = await self.llm.check_availability() if self.llm else False
+        llm_ok = await self._check_llm_cached()
         msg_count = await self.db.get_message_count() if self.db else 0
         return (
             f"Bot 状态:\n"
@@ -72,6 +69,19 @@ class AdminPlugin(PluginBase):
             f"  LLM 服务: {'可用' if llm_ok else '不可用'}\n"
             f"  消息记录: {msg_count} 条"
         )
+
+    async def _check_llm_cached(self) -> bool:
+        """检查 LLM 可用性（带 60 秒缓存，避免频繁消耗 token）"""
+        now = time.time()
+        ok, ts = self._llm_check_cache
+        if now - ts < self._LLM_CACHE_TTL:
+            return ok
+        if self.llm:
+            ok = await self.llm.check_availability()
+        else:
+            ok = False
+        self._llm_check_cache = (ok, now)
+        return ok
 
     async def _cmd_blacklist(self, ctx: MatcherContext) -> str:
         """黑名单管理: /blacklist add/remove <qq>"""
@@ -93,14 +103,20 @@ class AdminPlugin(PluginBase):
         if action == "add":
             if target not in cfg.user_blacklist:
                 cfg.user_blacklist.append(target)
-                self.config.save()
+                await self._save_config_async()
                 return f"已将 {target} 加入黑名单。"
             return f"{target} 已在黑名单中。"
         elif action == "remove":
             if target in cfg.user_blacklist:
                 cfg.user_blacklist.remove(target)
-                self.config.save()
+                await self._save_config_async()
                 return f"已将 {target} 移出黑名单。"
             return f"{target} 不在黑名单中。"
 
         return "格式: /blacklist add/remove <QQ号>"
+
+    async def _save_config_async(self):
+        """异步保存配置（避免阻塞事件循环）"""
+        import asyncio
+        await asyncio.to_thread(self.config.save)
+

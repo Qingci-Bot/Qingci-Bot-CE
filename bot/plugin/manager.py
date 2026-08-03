@@ -3,6 +3,7 @@
 import importlib
 import logging
 import pkgutil
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -45,72 +46,71 @@ class PluginManager:
         for module_info in pkgutil.iter_modules([str(pkg_path)]):
             if module_info.name.startswith("_"):
                 continue
+            full_path = f"bot.plugin.builtin.{module_info.name}"
             try:
-                # 开启模块级 Matcher 收集
-                collector = begin_module_collection()
-                module = importlib.import_module(
-                    f".builtin.{module_info.name}", package="bot.plugin"
-                )
-                end_module_collection()
-
-                for attr_name in dir(module):
-                    attr = getattr(module, attr_name)
-                    if (
-                        isinstance(attr, type)
-                        and issubclass(attr, PluginBase)
-                        and attr is not PluginBase
-                    ):
-                        plugin = attr()
-                        await self._init_plugin(plugin, bot)
-                        # 关联模块级 Matcher
-                        for m in collector:
-                            m.owner = plugin.name
-                            plugin.matchers.append(m)
-                        self._plugins[plugin.name] = plugin
-                        matcher_count = len(plugin.matchers) if plugin.matchers else 0
-                        logger.info(
-                            f"内置插件已加载: {plugin.name} v{plugin.version}"
-                            f" (matchers: {matcher_count})"
-                        )
+                await self._load_or_reload(full_path, bot)
             except Exception:
                 logger.exception(f"加载内置插件失败: {module_info.name}")
 
     async def load_external(self, module_path: str, bot) -> bool:
         """加载外部插件"""
         try:
-            collector = begin_module_collection()
-            module = importlib.import_module(module_path)
-            end_module_collection()
-
-            for attr_name in dir(module):
-                attr = getattr(module, attr_name)
-                if (
-                    isinstance(attr, type)
-                    and issubclass(attr, PluginBase)
-                    and attr is not PluginBase
-                ):
-                    plugin = attr()
-                    # 同名插件先卸载
-                    if plugin.name in self._plugins:
-                        await self.unload(plugin.name)
-                    await self._init_plugin(plugin, bot)
-                    # 关联模块级 Matcher
-                    for m in collector:
-                        m.owner = plugin.name
-                        plugin.matchers.append(m)
-                    self._plugins[plugin.name] = plugin
-                    logger.info(f"外部插件已加载: {plugin.name} v{plugin.version}")
-                    return True
+            await self._load_or_reload(module_path, bot)
+            return True
         except Exception:
             logger.exception(f"加载外部插件失败: {module_path}")
             return False
-        return False
+
+    async def _load_or_reload(self, full_path: str, bot):
+        """加载或重载模块，确保模块级装饰器重新执行
+
+        对已缓存的模块使用 reload，对新模块使用 import_module。
+        始终包裹 begin/end collection 以收集模块级 Matcher。
+        """
+        collector = begin_module_collection()
+        try:
+            if full_path in sys.modules:
+                module = importlib.reload(sys.modules[full_path])
+            else:
+                module = importlib.import_module(full_path)
+        finally:
+            end_module_collection()
+
+        await self._register_from_module(module, collector, bot)
+
+    async def _register_from_module(self, module, collector: list, bot):
+        """从模块中查找 PluginBase 子类并注册"""
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if (
+                isinstance(attr, type)
+                and issubclass(attr, PluginBase)
+                and attr is not PluginBase
+            ):
+                plugin = attr()
+                # 同名插件先卸载
+                if plugin.name in self._plugins:
+                    await self.unload(plugin.name)
+                await self._init_plugin(plugin, bot)
+                # 关联模块级 Matcher
+                for m in collector:
+                    m.owner = plugin.name
+                    plugin.matchers.append(m)
+                self._plugins[plugin.name] = plugin
+                matcher_count = len(plugin.matchers) if plugin.matchers else 0
+                logger.info(
+                    f"插件已加载: {plugin.name} v{plugin.version}"
+                    f" (matchers: {matcher_count})"
+                )
 
     async def unload(self, name: str):
         """卸载插件"""
         plugin = self._plugins.pop(name, None)
         if plugin:
-            await plugin.on_unload()
+            try:
+                await plugin.on_unload()
+            except Exception:
+                logger.exception(f"插件 {name} on_unload 异常")
             logger.info(f"插件已卸载: {name}")
 
     async def reload(self, name: str, bot):
@@ -119,32 +119,18 @@ class PluginManager:
         if not plugin:
             logger.warning(f"重载失败：插件 {name} 不存在")
             return
-        await plugin.on_unload()
+
+        # 先卸载旧插件
+        await self.unload(name)
+
+        # 重新加载模块（reload 会重新执行装饰器）
         module_path = type(plugin).__module__
-        module = importlib.import_module(module_path)
-
-        collector = begin_module_collection()
-        module = importlib.reload(module)
-        end_module_collection()
-
-        for attr_name in dir(module):
-            attr = getattr(module, attr_name)
-            if (
-                isinstance(attr, type)
-                and issubclass(attr, PluginBase)
-                and attr is not PluginBase
-            ):
-                new_plugin = attr()
-                await self._init_plugin(new_plugin, bot)
-                # 关联模块级 Matcher
-                for m in collector:
-                    m.owner = new_plugin.name
-                    new_plugin.matchers.append(m)
-                # 使用新插件的实际 name 作为 key
-                self._plugins.pop(name, None)
-                self._plugins[new_plugin.name] = new_plugin
-                logger.info(f"插件已重载: {new_plugin.name}")
-                return
+        try:
+            await self._load_or_reload(module_path, bot)
+        except Exception:
+            logger.exception(f"重载插件 {name} 失败")
+            # 旧插件已卸载，新插件加载失败，不残留僵尸状态
+            raise
 
     async def _init_plugin(self, plugin: PluginBase, bot):
         """初始化插件依赖"""

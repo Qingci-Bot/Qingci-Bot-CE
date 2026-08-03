@@ -1,25 +1,26 @@
 """FastAPI 接口层"""
 
-import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
-from bot.core.bot import get_bot as _get_bot
+from bot.core.bot import get_bot as _get_bot, QingciBot
 from bot.core.broadcast import register_broker
+from api.auth import _get_configured_api_key
 
 
-def get_bot():
+def get_bot() -> Optional[QingciBot]:
     try:
         return _get_bot()
     except RuntimeError:
         return None
+
 
 logger = logging.getLogger("qingci-bot.api")
 
@@ -27,18 +28,23 @@ logger = logging.getLogger("qingci-bot.api")
 _ws_clients: set[WebSocket] = set()
 
 
-async def _broadcast_message_to_ws(message: dict):
-    """通过 WebSocket 广播消息"""
+async def _send_to_all_ws(data: str) -> None:
+    """向所有 WebSocket 客户端发送数据（迭代前复制，避免并发修改）"""
     if not _ws_clients:
         return
-    data = json.dumps(message, ensure_ascii=False)
-    disconnected = set()
-    for ws in _ws_clients:
+    disconnected = []
+    for ws in list(_ws_clients):
         try:
             await ws.send_text(data)
         except Exception:
-            disconnected.add(ws)
-    _ws_clients -= disconnected
+            disconnected.append(ws)
+    for ws in disconnected:
+        _ws_clients.discard(ws)
+
+
+async def _broadcast_message_to_ws(message: dict) -> None:
+    """通过 WebSocket 广播消息"""
+    await _send_to_all_ws(json.dumps(message, ensure_ascii=False))
 
 
 register_broker(_broadcast_message_to_ws)
@@ -56,11 +62,12 @@ def create_app() -> FastAPI:
     """创建 FastAPI 应用"""
     app = FastAPI(title="Qingci-Bot API", version="0.1.0", lifespan=lifespan)
 
-    # CORS
+    # CORS：不使用 allow_credentials=True + allow_origins=["*"]（违反 CORS 规范）
+    # 安全由 X-API-Key 鉴权保证，CORS 仅放开方法/头
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -72,9 +79,13 @@ def create_app() -> FastAPI:
     app.include_router(plugin_router, prefix="/api/plugin", tags=["Plugin"])
     app.include_router(log_router, prefix="/api/log", tags=["Log"])
 
-    # WebSocket 实时日志
+    # WebSocket 实时日志（鉴权：通过 token 查询参数传递 API Key）
     @app.websocket("/api/ws/log")
-    async def ws_log(ws: WebSocket):
+    async def ws_log(ws: WebSocket, token: str = Query(default="")):
+        configured_key = _get_configured_api_key()
+        if configured_key and token != configured_key:
+            await ws.close(code=4001, reason="未授权")
+            return
         await ws.accept()
         _ws_clients.add(ws)
         try:
@@ -98,15 +109,8 @@ def create_app() -> FastAPI:
     return app
 
 
-async def broadcast_log(level: str, message: str):
+async def broadcast_log(level: str, message: str) -> None:
     """向所有 WebSocket 客户端广播日志"""
-    if not _ws_clients:
-        return
-    data = json.dumps({"level": level, "message": message, "type": "log"}, ensure_ascii=False)
-    disconnected = set()
-    for ws in _ws_clients:
-        try:
-            await ws.send_text(data)
-        except Exception:
-            disconnected.add(ws)
-    _ws_clients -= disconnected
+    await _send_to_all_ws(
+        json.dumps({"level": level, "message": message, "type": "log"}, ensure_ascii=False)
+    )

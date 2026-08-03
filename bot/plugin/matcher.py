@@ -109,7 +109,7 @@ class Matcher:
 
         Returns:
             None: 未匹配
-            True: 匹配并执行（handler 返回 None 或值都算）
+            True: 匹配并执行
         """
         # 事件类型检查
         if self.event_type != "message":
@@ -126,18 +126,12 @@ class Matcher:
         if not await self.rule.check(bot, event, ctx):
             return None
 
-        # 注入 matcher 引用
+        # 注入 matcher 引用并执行 handler
         ctx.matcher = self
-
-        # 执行 handler
-        try:
-            return True  # 标记已匹配
-        finally:
-            pass
-
-    def call_handler(self) -> Callable:
-        """返回实际 handler（供调度器调用）"""
-        return self.handler
+        result = self.handler(ctx)
+        if hasattr(result, "__await__"):
+            result = await result
+        return True if result is not None else True
 
 
 # ============ 工厂函数 ============
@@ -341,7 +335,6 @@ def _collect_module_matcher(matcher: Matcher):
     1. PluginManager 加载模块时设置了 _matcher_collector -> 收集到列表
     2. 插件在 on_load 中手动 self.matchers.append() -> 不收集（已是 Matcher 对象）
     """
-    global _matcher_collector
     if _matcher_collector is not None:
         _matcher_collector.append(matcher)
     # 否则：matcher 直接作为装饰器返回值，由调用方自行处理

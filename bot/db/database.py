@@ -6,10 +6,9 @@
 
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
-from sqlmodel import func, select
+from sqlmodel import delete, func, select
 
 from .engine import dispose_engine, get_session_factory, init_db
 from .models import Message, PluginConfig, SessionHistory
@@ -20,9 +19,8 @@ logger = logging.getLogger("qingci-bot.db")
 class Database:
     """SQLite 数据库仓储类"""
 
-    def __init__(self, path: Optional[Path] = None):
+    def __init__(self, path: Optional[str] = None):
         # path 参数保留为兼容签名，实际路径由 engine.py 统一管理
-        # 旧代码 Database() / Database(some_path) 均可工作
         pass
 
     async def connect(self):
@@ -83,7 +81,7 @@ class Database:
                 )
             rows = (await session.execute(stmt)).scalars().all()
             # 反转为正序，保持与旧 API 一致
-            return [row.dict() for row in reversed(rows)]
+            return [row.model_dump() for row in reversed(rows)]
 
     async def search_messages(
         self,
@@ -108,7 +106,7 @@ class Database:
                 .offset(offset)
             )
             rows = (await session.execute(stmt)).scalars().all()
-            return [row.dict() for row in rows]
+            return [row.model_dump() for row in rows]
 
     async def get_message_count(self) -> int:
         """获取消息总数"""
@@ -141,21 +139,36 @@ class Database:
                 .limit(limit)
             )
             rows = (await session.execute(stmt)).scalars().all()
-            return [row.dict() for row in reversed(rows)]
+            return [row.model_dump() for row in reversed(rows)]
 
     async def clear_sessions(self, session_key: Optional[str] = None):
         """清除会话历史：指定 key 清除单会话，None 清除全部"""
         async with get_session_factory()() as session:
             if session_key:
-                stmt = select(SessionHistory).where(
+                stmt = delete(SessionHistory).where(
                     SessionHistory.session_key == session_key
                 )
             else:
-                stmt = select(SessionHistory)
-            rows = (await session.execute(stmt)).scalars().all()
-            for row in rows:
-                await session.delete(row)
+                stmt = delete(SessionHistory)
+            await session.execute(stmt)
             await session.commit()
+
+    async def delete_last_session(self, session_key: str, role: str):
+        """删除指定会话最后一条指定角色的记录（用于 LLM 调用失败时回滚）"""
+        async with get_session_factory()() as session:
+            stmt = (
+                select(SessionHistory)
+                .where(
+                    SessionHistory.session_key == session_key,
+                    SessionHistory.role == role,
+                )
+                .order_by(SessionHistory.created_at.desc())
+                .limit(1)
+            )
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            if row:
+                await session.delete(row)
+                await session.commit()
 
     # ============ 插件配置 ============
 

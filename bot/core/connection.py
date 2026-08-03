@@ -76,8 +76,9 @@ class OneBotConnection:
             await self._dispatch_event(event)
 
     def on_event(self, handler: Callable):
-        """注册事件处理器（兼容旧 API）"""
-        self._event_handlers.append(handler)
+        """注册事件处理器（兼容旧 API，自动去重避免重复注册）"""
+        if handler not in self._event_handlers:
+            self._event_handlers.append(handler)
         return handler
 
     async def _dispatch_event(self, event):
@@ -87,7 +88,7 @@ class OneBotConnection:
         """
         # Event 是 dict 子类，直接传入
         raw = dict(event)
-        for handler in self._event_handlers:
+        for handler in list(self._event_handlers):
             try:
                 if asyncio.iscoroutinefunction(handler):
                     await handler(raw)
@@ -114,21 +115,21 @@ class OneBotConnection:
         await asyncio.sleep(0.1)
 
     async def stop(self):
-        """停止服务器"""
+        """停止服务器，清理事件处理器"""
         self._running = False
+        # 清理事件处理器，防止重启时重复注册
+        self._event_handlers.clear()
         # 关闭 Quart server
         try:
-            # 触发 shutdown
-            if self._bot.server_app:
-                # hypercorn 通过取消 task 来停止
-                if self._server_task and not self._server_task.done():
-                    self._server_task.cancel()
-                    try:
-                        await asyncio.wait_for(self._server_task, timeout=2)
-                    except (asyncio.TimeoutError, asyncio.CancelledError):
-                        pass
+            if self._server_task and not self._server_task.done():
+                self._server_task.cancel()
+                try:
+                    await asyncio.wait_for(self._server_task, timeout=2)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    pass
         except Exception:
             logger.exception("停止 OneBot WS 服务器异常")
+        self._server_task = None
         logger.info("OneBot WS 服务器已停止")
 
     # ============ API 调用 ============
@@ -185,12 +186,16 @@ class OneBotConnection:
 
     @property
     def is_connected(self) -> bool:
-        """是否有 OneBot 客户端连接（基于 aiocqhttp 的 wsr_api_clients）"""
+        """是否有 OneBot 客户端连接"""
         if not self._running:
             return False
         try:
-            # aiocqhttp 维护的反向 WS API 客户端字典
-            return len(self._bot._wsr_api_clients) > 0
+            # 优先用公开属性，回退到内部属性
+            clients = getattr(self._bot, "_wsr_api_clients", None)
+            if clients is None:
+                # 尝试通过 server_app 检查
+                clients = getattr(self._bot, "wsr_api_clients", None)
+            return bool(clients)
         except Exception:
             return False
 

@@ -92,6 +92,8 @@ class LiteLLMAdapter(LLMAdapter):
             last = full_messages[-1]
             if last.get("role") == "user" and isinstance(last.get("content"), str):
                 full_messages[-1] = self.build_image_message(last["content"], images)
+            elif last.get("role") != "user" or not isinstance(last.get("content"), str):
+                logger.warning("images 参数被忽略：最后一条消息不是 user 文本消息")
 
         kwargs: dict[str, Any] = {
             "model": self._build_model(),
@@ -162,16 +164,20 @@ class LiteLLMAdapter(LLMAdapter):
         temperature: float = 0.7,
         **kwargs,
     ) -> AsyncIterator[str]:
-        response = await litellm.acompletion(
-            **self._build_kwargs(
-                messages,
-                system_prompt,
-                max_tokens,
-                temperature,
-                stream=True,
-                **kwargs,
+        try:
+            response = await litellm.acompletion(
+                **self._build_kwargs(
+                    messages,
+                    system_prompt,
+                    max_tokens,
+                    temperature,
+                    stream=True,
+                    **kwargs,
+                )
             )
-        )
+        except Exception as e:
+            logger.error(f"litellm 流式调用失败: {e}")
+            raise
         async for chunk in response:
             try:
                 delta = chunk.choices[0].delta

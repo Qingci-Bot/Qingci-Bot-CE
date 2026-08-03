@@ -1,11 +1,10 @@
 """配置管理模块 - 基于 YAML 的配置读写"""
 
-import os
 from pathlib import Path
 from typing import Optional
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 # ============ 配置模型 ============

@@ -18,7 +18,7 @@ class SystemTray:
         """创建托盘图标"""
         try:
             import pystray
-            from PIL import Image, ImageDraw
+            from PIL import Image
 
             # 生成默认图标（32x32 蓝色圆形）
             icon_path = Path(__file__).parent / "icon.png"

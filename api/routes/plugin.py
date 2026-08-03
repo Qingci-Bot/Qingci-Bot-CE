@@ -1,5 +1,7 @@
 """插件管理接口"""
 
+import re
+
 from fastapi import APIRouter, HTTPException, Depends
 
 from bot.core.bot import get_bot as _get_bot
@@ -7,6 +9,22 @@ from api.auth import require_auth
 
 
 router = APIRouter()
+
+# 模块路径白名单：仅允许 plugins.* / bot.plugin.builtin.* 前缀
+# 防止加载 os / subprocess 等危险标准库模块
+_ALLOWED_MODULE_PREFIXES = ("plugins.", "bot.plugin.builtin.")
+
+
+def _is_safe_module_path(module_path: str) -> bool:
+    """检查模块路径是否安全（仅允许白名单前缀，禁止相对导入和标准库）"""
+    if not module_path or module_path.startswith("."):
+        return False
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$", module_path):
+        return False
+    return any(
+        module_path == prefix.rstrip(".") or module_path.startswith(prefix)
+        for prefix in _ALLOWED_MODULE_PREFIXES
+    )
 
 
 def _get_bot_instance():
@@ -56,10 +74,15 @@ async def reload_plugin(name: str):
 
 @router.post("/load", dependencies=[Depends(require_auth)])
 async def load_plugin(data: dict):
-    """加载外部插件"""
+    """加载外部插件（仅允许 plugins.* 前缀的模块路径）"""
     module_path = data.get("module_path")
     if not module_path:
         raise HTTPException(status_code=400, detail="缺少 module_path")
+    if not _is_safe_module_path(module_path):
+        raise HTTPException(
+            status_code=400,
+            detail=f"不安全的模块路径，仅允许 {', '.join(_ALLOWED_MODULE_PREFIXES)} 前缀",
+        )
     bot = _get_bot_instance()
     ok = await bot.plugin_manager.load_external(module_path, bot)
     if not ok:

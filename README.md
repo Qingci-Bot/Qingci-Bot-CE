@@ -201,8 +201,8 @@ Qingci-Bot/
 │       ├── rule.py            # 规则系统（startswith/command/regex 等）
 │       ├── permission.py      # 权限系统（SUPERUSER/PRIVATE/GROUP 等）
 │       └── builtin/           # 内置插件
-│           ├── chat.py        # LLM 对话（旧式 API）
-│           └── admin.py       # 管理命令（新式 Matcher API）
+│           ├── chat.py        # LLM 对话（Matcher API）
+│           └── admin.py       # 管理命令（Matcher API）
 ├── migrations/                # Alembic 迁移脚本
 │   ├── env.py                 # 异步迁移环境
 │   └── versions/              # 迁移版本

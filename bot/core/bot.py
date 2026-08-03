@@ -34,13 +34,13 @@ class QingciBot:
         self.plugin_manager = PluginManager()
 
         self._running = False
-        self._tasks: list[asyncio.Task] = []
+        self._pending_tasks: set[asyncio.Task] = set()
 
     # ============ 生命周期 ============
 
     async def start(self):
         """启动 Bot"""
-        logger.info(f"Qingci-Bot 启动中...")
+        logger.info("Qingci-Bot 启动中...")
 
         # 初始化数据库
         await self.db.connect()
@@ -60,11 +60,21 @@ class QingciBot:
         logger.info("Qingci-Bot 启动完成")
 
     async def stop(self):
-        """停止 Bot"""
+        """停止 Bot，等待进行中的事件处理完成"""
         if not self._running:
             return
         logger.info("Qingci-Bot 停止中...")
         self._running = False
+
+        # 等待进行中的事件处理完成（最多 5 秒）
+        if self._pending_tasks:
+            logger.info(f"等待 {len(self._pending_tasks)} 个事件处理完成...")
+            done, pending = await asyncio.wait(
+                self._pending_tasks, timeout=5
+            )
+            for task in pending:
+                task.cancel()
+            self._pending_tasks.clear()
 
         try:
             await self.plugin_manager.shutdown()
@@ -98,6 +108,12 @@ class QingciBot:
         2. 新式 Matcher 调度（按 priority 排序）
         3. 旧式 on_message 调度（若无 Matcher 匹配且事件为 message）
         """
+        # 创建任务跟踪，确保 stop() 时能等待完成
+        task = asyncio.current_task()
+        if task is not None:
+            self._pending_tasks.add(task)
+            task.add_done_callback(self._pending_tasks.discard)
+
         ctx = await self.dispatcher.dispatch(event)
 
         if ctx is None:

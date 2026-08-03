@@ -2,17 +2,16 @@
 
 双轨调度：
 1. 新式 Matcher：按 priority 排序，检查 rule + permission，匹配则执行 handler
-2. 旧式 on_message：Matcher 全部处理完后，依次调用插件的 on_message
+2. 旧式 on_message：Matcher 全部未匹配后，依次调用插件的 on_message
 
-Matcher 的 block=True 会停止后续 Matcher，但不会跳过旧式 on_message
-（旧式插件可能依赖 on_message 做副作用，如日志记录）。
-若 Matcher handler 返回非 None（回复文本），则停止整个分发链。
+Matcher handler 返回非 None（回复文本）则停止整个分发链。
+block=True 的 Matcher 匹配后（无论 handler 返回什么）停止后续 Matcher。
+已注册 Matcher 的插件不再走旧式 on_message 调度。
 """
 
-import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger("qingci-bot.dispatcher")
 
@@ -47,27 +46,7 @@ class MessageDispatcher:
     """消息分发器：解析事件、路由到插件"""
 
     def __init__(self):
-        self._handlers: dict[str, list] = {
-            "message": [],       # 所有消息
-            "message.group": [],  # 群消息
-            "message.private": [], # 私聊消息
-            "notice": [],         # 通知事件
-            "request": [],        # 请求事件
-            "meta_event": [],     # 元事件
-        }
-
-    def register(self, event_type: str, handler):
-        """注册事件处理器"""
-        if event_type not in self._handlers:
-            self._handlers[event_type] = []
-        self._handlers[event_type].append(handler)
-
-    def on(self, event_type: str):
-        """装饰器方式注册"""
-        def decorator(func):
-            self.register(event_type, func)
-            return func
-        return decorator
+        pass
 
     async def dispatch(self, event: dict) -> Optional[MessageContext]:
         """分发事件（仅解析，不执行 Matcher）
@@ -80,20 +59,6 @@ class MessageDispatcher:
         ctx = MessageContext(raw_event=event)
         if post_type == "message":
             ctx = self._parse_message(event)
-
-        # 分发到对应处理器（notice/request/meta_event 的低层处理器）
-        handlers = []
-        handlers.extend(self._handlers.get(post_type, []))
-        if post_type == "message":
-            handlers.extend(self._handlers.get(f"message.{event.get('message_type', '')}", []))
-
-        for handler in handlers:
-            try:
-                result = await handler(event, ctx)
-                if result is not None:
-                    return result
-            except Exception:
-                logger.exception(f"处理器异常: {getattr(handler, '__name__', repr(handler))}")
 
         return ctx
 
@@ -227,10 +192,18 @@ class MessageDispatcher:
             if seg_type == "text":
                 text_parts.append(data.get("text", ""))
             elif seg_type == "at":
-                target = int(data.get("qq", 0))
-                ctx.at_list.append(target)
-                if target == ctx.self_id:
-                    ctx.is_at_bot = True
+                qq_val = data.get("qq", "0")
+                # @全体成员 时 qq="all"，不解析为数字
+                if qq_val == "all":
+                    ctx.at_list.append(0)  # 0 表示全体成员
+                else:
+                    try:
+                        target = int(qq_val)
+                    except (ValueError, TypeError):
+                        target = 0
+                    ctx.at_list.append(target)
+                    if target == ctx.self_id:
+                        ctx.is_at_bot = True
             elif seg_type == "image":
                 ctx.images.append(data.get("url", ""))
 

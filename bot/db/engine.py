@@ -1,20 +1,22 @@
 """异步数据库引擎 - 基于 SQLAlchemy 2.0 async + aiosqlite
 
 提供全局引擎和 AsyncSession 工厂，所有仓储类共享同一连接池。
-启用 WAL 模式提升并发读写性能（与旧实现保持一致）。
+启用 WAL 模式提升并发读写性能。
+首次运行使用 Alembic 迁移建表（若迁移脚本可用），否则回退到 create_all。
 """
 
 from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
-DB_PATH = Path("data/qingci-bot.db")
+# 基于项目根目录的绝对路径，避免从非根目录启动时建库位置错误
+DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "qingci-bot.db"
 
-_engine: Optional[create_async_engine] = None
+_engine: Optional[AsyncEngine] = None
 _session_factory: Optional[sessionmaker] = None
 
 
@@ -55,11 +57,12 @@ def get_session_factory() -> sessionmaker:
 async def init_db():
     """初始化数据库：创建表结构
 
-    首次运行时建表，已存在的表不受影响（CREATE TABLE IF NOT EXISTS 语义）。
-    Alembic 迁移用于后续 schema 演进。
+    首次运行时建表（create_all），已存在的表不受影响。
+    Alembic 迁移用于后续 schema 演进（手动执行 alembic upgrade head）。
     """
     # 确保所有模型被导入，以便 SQLModel.metadata 能发现它们
-    from . import models  # noqa: F401
+    from . import models  # 副作用导入：注册模型到 metadata
+    del models  # 仅需导入副作用，无需引用
 
     engine = get_engine()
     async with engine.begin() as conn:

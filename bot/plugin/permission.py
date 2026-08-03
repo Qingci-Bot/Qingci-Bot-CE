@@ -11,7 +11,7 @@
 权限检查基于 event + ctx，返回 bool。
 """
 
-from typing import Callable, Optional, Union
+from typing import Callable, Union
 
 from ..core.dispatcher import MessageContext
 
@@ -46,20 +46,14 @@ class Permission:
 
     def __or__(self, other: "Permission") -> "Permission":
         """OR 组合：满足其一即可"""
-        async def _or_checker(bot, event, ctx):
-            left = await Permission(self._checkers[0] if len(self._checkers) == 1 else None).check(bot, event, ctx) if self._checkers else True
-            if left:
-                return True
-            right_perm = Permission()
-            right_perm._checkers = other._checkers
-            return await right_perm.check(bot, event, ctx)
-
-        # 简化：直接合并为 OR 逻辑
         perm = Permission()
+        left_checkers = self._checkers[:]
+        right_checkers = other._checkers[:]
+
         async def _combined_or(bot, event, ctx):
-            # 左侧
+            # 左侧全部通过即返回 True
             left_ok = True
-            for c in self._checkers:
+            for c in left_checkers:
                 r = c(bot, event, ctx)
                 if hasattr(r, "__await__"):
                     r = await r
@@ -68,8 +62,8 @@ class Permission:
                     break
             if left_ok:
                 return True
-            # 右侧
-            for c in other._checkers:
+            # 右侧全部通过即返回 True
+            for c in right_checkers:
                 r = c(bot, event, ctx)
                 if hasattr(r, "__await__"):
                     r = await r
