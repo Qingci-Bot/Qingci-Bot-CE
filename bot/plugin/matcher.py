@@ -22,7 +22,8 @@ handler 签名: async (ctx: MatcherContext) -> Optional[str]
 """
 
 import logging
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass, field, fields, replace
 from typing import Callable, Optional, TYPE_CHECKING, Union
 
 from ..core.dispatcher import MessageContext
@@ -53,7 +54,7 @@ class MatcherContext(MessageContext):
     matcher: Optional["Matcher"] = None
     command: str = ""
     args: str = ""
-    match: Optional[object] = None
+    match: Optional["re.Match[str]"] = None
 
     @classmethod
     def from_message_context(
@@ -63,22 +64,16 @@ class MatcherContext(MessageContext):
         plugin: Optional["PluginBase"] = None,
         matcher: Optional["Matcher"] = None,
     ) -> "MatcherContext":
-        """从 MessageContext 升级为 MatcherContext"""
-        return cls(
-            raw_event=ctx.raw_event,
-            post_type=ctx.post_type,
-            message_type=ctx.message_type,
-            sub_type=ctx.sub_type,
-            message_id=ctx.message_id,
-            user_id=ctx.user_id,
-            group_id=ctx.group_id,
-            self_id=ctx.self_id,
-            raw_message=ctx.raw_message,
-            plain_text=ctx.plain_text,
-            at_list=ctx.at_list,
-            is_at_bot=ctx.is_at_bot,
-            images=ctx.images,
-            sender=ctx.sender,
+        """从 MessageContext 升级为 MatcherContext
+
+        基于 dataclasses 字段元数据复制 MessageContext 的全部字段
+        （含 segments 等），避免手工逐字段构造时遗漏；
+        新增字段 bot/plugin/matcher 显式注入，command/args/match 保持默认值。
+        等价于对 MatcherContext 实例执行 dataclasses.replace(ctx, bot=bot, ...)。
+        """
+        base_changes = {f.name: getattr(ctx, f.name) for f in fields(MessageContext)}
+        return replace(
+            cls(**base_changes),
             bot=bot,
             plugin=plugin,
             matcher=matcher,
@@ -312,6 +307,8 @@ def on_request(
 # ============ 模块级 Matcher 收集 ============
 
 # 模块级 Matcher 收集栈：插件加载时设置，收集到的 matcher 关联到当前插件
+# 注意：仅允许在插件加载（单线程串行）阶段调用 begin/end_module_collection，
+# 勿在并发上下文使用（全局变量无锁保护）
 _matcher_collector: Optional[list] = None
 
 

@@ -784,6 +784,50 @@ reply = f"{at_code} 收到！"
 
 实时推送消息记录，连接后自动接收新消息。
 
+## 打包为 exe
+
+使用 PyInstaller 将 Qingci-Bot 打包为 Windows 可执行程序（onedir 模式）。
+
+### 构建
+
+```powershell
+# 依赖：PyInstaller 已安装在 .venv（uv pip install pyinstaller）
+# Web UI 需先构建（web\dist 存在时可跳过）
+cd web; npm install; npm run build; cd ..
+
+# 一键打包
+.\build.ps1
+```
+
+产物位于 `dist\qingci-bot\`：
+
+```
+dist\qingci-bot\
+├── qingci-bot.exe        # 主程序（带控制台，日志直接可见）
+├── _internal\            # Python 运行时与依赖（勿动）
+├── web\dist\             # Web UI 静态资源（build.ps1 复制）
+├── config.yaml           # 配置文件（首次构建从项目根复制）
+└── data\                 # SQLite 数据库 / 备份 / 敏感词库
+```
+
+### 运行
+
+```powershell
+.\dist\qingci-bot\qingci-bot.exe              # Bot + API 服务
+.\dist\qingci-bot\qingci-bot.exe --no-bot     # 仅 API / Web UI
+.\dist\qingci-bot\qingci-bot.exe --port 9000  # 指定端口
+```
+
+启动后访问 `http://127.0.0.1:8080/ui/`。
+
+### 注意事项
+
+- `config.yaml` 与 `data\` 按 **exe 所在目录** 相对定位：分发时整个 `dist\qingci-bot\` 目录一起拷贝，勿单独移动 exe。
+- 首次运行若缺少数据库会自动建表（SQLModel create_all）；`config.yaml` 缺失时会自动生成默认配置。
+- 重新执行 `build.ps1` 不会覆盖产物目录中已有的 `config.yaml` 与 `data\`（脚本会先暂存后还原）。
+- `--desktop` 桌面模式依赖系统 WebView2 运行时（pywebview EdgeChromium 后端），未安装的系统可能无法打开窗口。
+- 如需无控制台窗口模式，将 `qingci-bot.spec` 中 `console=True` 改为 `False` 后重新构建。
+
 ## 许可证
 
 MIT

@@ -73,7 +73,9 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Qingci-Bot API", version="0.1.0", lifespan=lifespan)
 
     # CORS：不使用 allow_credentials=True + allow_origins=["*"]（违反 CORS 规范）
-    # 安全由 X-API-Key 鉴权保证，CORS 仅放开方法/头
+    # 安全由 X-API-Key 鉴权保证，CORS 仅放开方法/头；
+    # 保持通配允许，否则经局域网 IP / 主机名等非固定源访问 /ui 时，
+    # 所有跨源 API 请求会被浏览器拦截（表现为页面无数据，如消息日志空白）
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -117,7 +119,8 @@ def create_app() -> FastAPI:
             return
         await ws.accept()
         _ws_clients.add(ws)
-        # 二次检查，防止并发超过上限
+        # 二次检查，防止并发超过上限：
+        # accept 前检查 + accept 后二次检查已闭合并发窗口，超限连接立即断开
         if len(_ws_clients) > _MAX_WS_CLIENTS:
             _ws_clients.discard(ws)
             await ws.close(code=4003, reason="连接数已满")
@@ -145,10 +148,13 @@ def create_app() -> FastAPI:
             _ws_clients.discard(ws)
 
     # 静态文件（Web UI 构建产物）
+    # frozen 模式下为 exe 所在目录/web/dist（见 bot/paths.py）
     import os
     import re
 
-    web_dir = os.path.join(os.path.dirname(__file__), "..", "web", "dist")
+    from bot.paths import app_root
+
+    web_dir = str(app_root() / "web" / "dist")
     web_ready = False
     if os.path.isdir(web_dir):
         index_path = os.path.join(web_dir, "index.html")

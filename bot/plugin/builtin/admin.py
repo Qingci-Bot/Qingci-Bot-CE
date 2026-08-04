@@ -171,7 +171,8 @@ class AdminPlugin(PluginBase):
             sensitive_filter = getattr(self.bot, "sensitive_filter", None)
             if sensitive_filter is None:
                 return "敏感词过滤器未初始化。"
-            sensitive_filter.reload()
+            # 同步读文件的重载丢到线程池，避免阻塞事件循环
+            await asyncio.to_thread(sensitive_filter.reload)
             if not sensitive_filter.words:
                 # 空词库时 reload 成功但过滤不会生效，明确提示用户
                 return (

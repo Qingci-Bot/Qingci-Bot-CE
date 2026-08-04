@@ -10,6 +10,7 @@ block=False（即使匹配也不阻止后续 Matcher，但返回回复会停止�
 """
 
 import logging
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -23,8 +24,10 @@ logger = logging.getLogger("qingci-bot.plugin.chat")
 
 # ============ 群配置缓存 ============
 # 模块级缓存：{group_id: 配置 dict 或 None（未配置）}，miss 时查 DB。
+# 使用 OrderedDict 实现 LRU（容量上限 512），防止群数无限增长时缓存无界膨胀。
 # 管理命令 / API 写入群配置后调用 invalidate_group_config_cache 失效。
-_group_config_cache: dict[int, Optional[dict]] = {}
+_GROUP_CONFIG_CACHE_MAX = 512
+_group_config_cache: "OrderedDict[int, Optional[dict]]" = OrderedDict()
 
 
 def invalidate_group_config_cache(group_id: Optional[int] = None) -> None:
@@ -36,8 +39,10 @@ def invalidate_group_config_cache(group_id: Optional[int] = None) -> None:
 
 
 async def _get_cached_group_config(bot, group_id: int) -> Optional[dict]:
-    """获取群配置（缓存优先，miss 查 DB）"""
+    """获取群配置（缓存优先，miss 查 DB；LRU 淘汰最久未访问项）"""
     if group_id in _group_config_cache:
+        # 命中：移到尾部标记为最近使用
+        _group_config_cache.move_to_end(group_id)
         return _group_config_cache[group_id]
     row = None
     if bot is not None and getattr(bot, "db", None) is not None:
@@ -48,6 +53,9 @@ async def _get_cached_group_config(bot, group_id: int) -> Optional[dict]:
             # 查询失败不写缓存，允许下次重试
             return None
     _group_config_cache[group_id] = row
+    # 超限时淘汰最久未访问项（LRU）
+    if len(_group_config_cache) > _GROUP_CONFIG_CACHE_MAX:
+        _group_config_cache.popitem(last=False)
     return row
 
 

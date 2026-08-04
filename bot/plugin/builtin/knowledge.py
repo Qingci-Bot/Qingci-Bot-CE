@@ -10,6 +10,7 @@
 rag.enabled 关闭时 knowledge_store 为 None，命令统一提示未启用。
 """
 
+import asyncio
 import logging
 
 from ..base import PluginBase
@@ -64,7 +65,8 @@ class KnowledgePlugin(PluginBase):
         if action == "remove":
             return self._kb_remove(store, rest.strip())
         if action == "reload":
-            count = store.reload()
+            # 同步重建索引丢到线程池，避免阻塞事件循环
+            count = await asyncio.to_thread(store.reload)
             return f"知识库已重新索引，共 {count} 个分块。"
         return "格式: /kb add|list|search|remove|reload ..."
 

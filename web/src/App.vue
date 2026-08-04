@@ -1,11 +1,13 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { RouterView, RouterLink, useRoute } from 'vue-router'
 import { useAppStore } from './stores/app'
 
 const route = useRoute()
 const store = useAppStore()
-const interval = ref(null)
+let pollTimer = null
+let pollDelay = 3000
+let disposed = false
 
 const navItems = [
   { path: '/', name: '仪表盘', icon: '◈' },
@@ -20,18 +22,26 @@ function isActive(path) {
   return route.path === path
 }
 
+// setTimeout 链式调度：成功维持 3000ms；失败间隔翻倍（上限 30000ms），成功即重置
+async function pollStatus() {
+  if (disposed) return
+  if (document.visibilityState === 'visible') {
+    const ok = await store.fetchStatus()
+    pollDelay = ok ? 3000 : Math.min(pollDelay * 2, 30000)
+  }
+  if (!disposed) {
+    pollTimer = setTimeout(pollStatus, pollDelay)
+  }
+}
+
 onMounted(() => {
-  store.fetchStatus()
   store.fetchConfig()
-  interval.value = setInterval(() => {
-    if (document.visibilityState === 'visible') {
-      store.fetchStatus()
-    }
-  }, 3000)
+  pollStatus()
 })
 
 onUnmounted(() => {
-  if (interval.value) clearInterval(interval.value)
+  disposed = true
+  if (pollTimer) clearTimeout(pollTimer)
 })
 </script>
 

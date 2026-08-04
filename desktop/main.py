@@ -41,8 +41,10 @@ def run_desktop(args):
         except Exception:
             time.sleep(0.5)
 
-    # 查找 Web UI 静态文件
-    web_dir = Path(__file__).parent.parent / "web" / "dist"
+    # 查找 Web UI 静态文件（frozen 模式下为 exe 所在目录）
+    from bot.paths import app_root
+
+    web_dir = app_root() / "web" / "dist"
     if web_dir.exists():
         url = str(web_dir / "index.html")
 

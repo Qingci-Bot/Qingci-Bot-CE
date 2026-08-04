@@ -145,7 +145,12 @@ class Database:
                 cutoff = datetime.now(timezone.utc) - timedelta(days=before_days)
                 stmt = stmt.where(Message.created_at < cutoff)
             result = await session.execute(stmt)
-            await session.commit()
+            try:
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception("清理消息记录失败，已回滚")
+                raise
             logger.info(
                 f"清理消息记录 {result.rowcount} 条 "
                 f"(user_id={user_id}, group_id={group_id}, before_days={before_days})"
@@ -164,7 +169,12 @@ class Database:
                     content=content,
                 )
             )
-            await session.commit()
+            try:
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception("会话历史写入失败，已回滚")
+                raise
 
     async def get_sessions(self, session_key: str, limit: int = 40) -> list[dict]:
         """获取指定会话的历史（按时间正序返回最近 limit 条）"""
@@ -188,7 +198,12 @@ class Database:
             else:
                 stmt = delete(SessionHistory)
             await session.execute(stmt)
-            await session.commit()
+            try:
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception("清除会话历史失败，已回滚")
+                raise
 
     async def delete_last_session(self, session_key: str, role: str) -> None:
         """删除指定会话最后一条指定角色的记录（原子操作）"""
@@ -205,7 +220,12 @@ class Database:
             )
             stmt = delete(SessionHistory).where(SessionHistory.id.in_(subq))
             await session.execute(stmt)
-            await session.commit()
+            try:
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception("删除最后一条会话记录失败，已回滚")
+                raise
 
     # ============ 插件配置 ============
 
@@ -229,7 +249,12 @@ class Database:
                 existing.updated_at = datetime.now(timezone.utc)
             else:
                 session.add(PluginConfig(key=key, value=value))
-            await session.commit()
+            try:
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception("插件配置写入失败，已回滚")
+                raise
 
     # ============ 群粒度配置 ============
 
@@ -273,7 +298,12 @@ class Database:
                         trigger_mode=trigger_mode,
                     )
                 )
-            await session.commit()
+            try:
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception("群配置写入失败，已回滚")
+                raise
 
     async def list_group_configs(self) -> list[dict]:
         """列出所有已配置的群（按 group_id 升序）"""
@@ -308,7 +338,12 @@ class Database:
                     source=source,
                 )
             )
-            await session.commit()
+            try:
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception("用量记录写入失败，已回滚")
+                raise
 
     async def get_usage_stats(self, days: int = 30) -> list[dict]:
         """按天聚合最近 days 天的用量（走 created_at 索引）

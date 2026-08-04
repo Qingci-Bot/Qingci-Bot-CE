@@ -14,8 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
-# 基于项目根目录的绝对路径，避免从非根目录启动时建库位置错误
-DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "qingci-bot.db"
+# 基于应用根目录的绝对路径，避免从非根目录启动时建库位置错误
+# （frozen 模式下为 exe 所在目录，见 bot/paths.py）
+from ..paths import app_root
+
+DB_PATH = app_root() / "data" / "qingci-bot.db"
 
 _engine: Optional[AsyncEngine] = None
 _session_factory: Optional[sessionmaker] = None
@@ -74,8 +77,7 @@ async def init_db():
     Alembic 迁移用于后续 schema 演进（手动执行 alembic upgrade head）。
     """
     # 确保所有模型被导入，以便 SQLModel.metadata 能发现它们
-    from . import models  # noqa: F401  # 副作用导入：注册模型到 metadata
-    models  # 引用使静态检查满意
+    from . import models  # noqa: F401  # 副作用导入：导入以注册 SQLModel 表元数据
 
     engine = get_engine()
     async with engine.begin() as conn:

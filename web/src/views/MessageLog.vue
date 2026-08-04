@@ -10,7 +10,7 @@ let shouldReconnect = true
 let reconnectTimer = null
 
 onMounted(() => {
-  store.fetchLogs('', 50).catch(() => {})
+  store.fetchLogs('', 50).catch((e) => console.warn('初始消息日志加载失败:', e))
   connectWebSocket()
 })
 
@@ -45,14 +45,18 @@ function connectWebSocket() {
       if (!keyword.value) {
         store.addLog(data)
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('WebSocket 消息解析失败:', e)
+    }
   }
 }
 
 async function search() {
   try {
     await store.fetchLogs(keyword.value, 50)
-  } catch (e) {}
+  } catch (e) {
+    console.warn('消息搜索失败:', e)
+  }
 }
 
 function formatTime(ts) {

@@ -1,13 +1,13 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useAppStore } from '../stores/app'
+import { useToast } from '../composables/useToast'
 
 const store = useAppStore()
+const { toast, showToast } = useToast()
 const form = reactive({})
 const testing = ref(false)
 const saving = ref(false)
-const toast = ref({ show: false, type: 'info', message: '' })
-let toastTimer = null
 
 // 提供商列表，从后端 presets 动态生成
 const providerOptions = computed(() => {
@@ -34,10 +34,6 @@ onMounted(() => {
   store.fetchLLMPresets()
 })
 
-onUnmounted(() => {
-  if (toastTimer) clearTimeout(toastTimer)
-})
-
 watch(() => store.config.llm, () => {
   resetForm()
 }, { once: true })
@@ -54,12 +50,6 @@ function resetForm() {
     system_prompt: llm.system_prompt || '',
     max_history: llm.max_history || 20,
   })
-}
-
-function showToast(type, message) {
-  toast.value = { show: true, type, message }
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => toast.value.show = false, 4000)
 }
 
 // provider 切换时自动填充 api_url 和 model

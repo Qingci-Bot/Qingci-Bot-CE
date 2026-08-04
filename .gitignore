@@ -10,3 +10,7 @@ web/dist/
 .venv/
 .env
 *.log
+.vscode/
+.idea/
+web/.env*
+*.bak-*

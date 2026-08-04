@@ -10,6 +10,7 @@ import asyncio
 import functools
 import inspect
 import logging
+import types
 from typing import Any, Callable
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -27,6 +28,9 @@ class BotScheduler:
     def __init__(self):
         self._scheduler = AsyncIOScheduler()
         self._shutting_down = False  # 防重入：shutdown 生效前避免重复发起关闭
+        # 未启动时的延迟注册表：full_id -> (wrapped, trigger, trigger_args)；
+        # dict 按 full_id 天然去重，替代对 APScheduler 私有属性 _pending_jobs 的直接操作
+        self._deferred: dict[str, tuple] = {}
 
     # ============ 生命周期（幂等） ============
 
@@ -40,6 +44,16 @@ class BotScheduler:
         if self._scheduler.running:
             return
         self._scheduler.start()
+        # 启动后将启动前延迟登记的任务逐项注册到 APScheduler
+        for full_id, (wrapped, trigger, trigger_args) in self._deferred.items():
+            self._scheduler.add_job(
+                wrapped,
+                trigger,
+                id=full_id,
+                replace_existing=True,
+                **trigger_args,
+            )
+        self._deferred.clear()
         logger.info("定时任务调度器已启动")
 
     async def shutdown(self, wait: bool = False) -> None:
@@ -92,13 +106,10 @@ class BotScheduler:
         full_id = f"{owner}:{job_id}" if owner else job_id
         wrapped = self._wrap_func(func, full_id)
         if not self._scheduler.running:
-            # 未启动时任务进入 APScheduler 的 pending 队列，
-            # 手动去重同 id 的旧任务，保证启动前 get_jobs 视图不重复；
-            # 新任务的 replace_existing 标记随 pending 项保留，启动时同样生效
-            self._scheduler._pending_jobs = [
-                item for item in self._scheduler._pending_jobs
-                if item[0].id != full_id
-            ]
+            # 未启动时写入自维护的延迟注册表（dict 按 full_id 天然去重），
+            # start() 时统一注册到 APScheduler；返回 None 与调用方约定一致
+            self._deferred[full_id] = (wrapped, trigger, trigger_args)
+            return None
         return self._scheduler.add_job(
             wrapped,
             trigger,
@@ -114,13 +125,11 @@ class BotScheduler:
         def _match(job_id: str) -> bool:
             return job_id == owner or job_id.startswith(prefix)
 
-        # 未启动时任务在 pending 队列中，Job.remove() 无法移除，需单独过滤；
-        # 已启动时 pending 队列为空，下面再清理 jobstore 中的任务
+        # 未启动时任务在自维护的延迟注册表中，需单独过滤；
+        # 已启动时延迟注册表为空，下面再清理 jobstore 中的任务
         if not self._scheduler.running:
-            self._scheduler._pending_jobs = [
-                item for item in self._scheduler._pending_jobs
-                if not _match(item[0].id)
-            ]
+            for fid in [fid for fid in self._deferred if _match(fid)]:
+                del self._deferred[fid]
         for job in list(self._scheduler.get_jobs()):
             if _match(job.id):
                 try:
@@ -130,7 +139,17 @@ class BotScheduler:
                     logger.exception(f"移除定时任务失败: {job.id}")
 
     def get_jobs(self) -> list:
-        """列出当前全部任务（APScheduler 3.11 未启动时自动返回 pending 任务）"""
+        """列出当前全部任务
+
+        未启动时返回延迟注册表中任务的轻量视图（SimpleNamespace，
+        提供 id/name/next_run_time 字段，未启动无下次运行时间故为 None）；
+        运行时返回 APScheduler 的 Job 列表。
+        """
+        if not self._scheduler.running:
+            return [
+                types.SimpleNamespace(id=full_id, name=full_id, next_run_time=None)
+                for full_id in self._deferred
+            ]
         return list(self._scheduler.get_jobs())
 
     # ============ 异常隔离 wrapper ============

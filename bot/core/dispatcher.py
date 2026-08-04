@@ -29,6 +29,8 @@ class MessageContext:
     post_type: str = ""
     message_type: str = ""          # group / private
     sub_type: str = ""             # normal / anonymous / notice
+    # 刻意保持 str 类型（OneBot 事件原始为 int）：
+    # 支持 chat.py 的 f"{message_id}_reply" 复合标识与数据库 str 列的兼容，勿改为 int
     message_id: str = ""
     user_id: int = 0
     group_id: int = 0

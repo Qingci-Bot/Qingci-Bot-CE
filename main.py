@@ -13,6 +13,14 @@ import logging
 import sys
 from pathlib import Path
 
+# frozen windowed（console=False）兼容：此时 sys.stdout/stderr 为 None，
+# 任何 print / logging 写入都会抛异常且不可见。在最早期（任何第三方导入之前）
+# 兜底重定向到 os.devnull，一处修复覆盖所有 print/logging；console 模式不受影响。
+if getattr(sys, "frozen", False) and sys.stdout is None:
+    import os
+
+    sys.stdout = sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
 import uvicorn
 
 from bot.core.bot import QingciBot, set_bot, clear_bot
@@ -36,7 +44,13 @@ def parse_args():
     parser.add_argument("--port", type=int, default=8080, help="API 端口")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="API 监听地址")
     parser.add_argument("--config", type=str, default="config.yaml", help="配置文件路径")
-    return parser.parse_args()
+    args = parser.parse_args()
+    # UX：frozen windowed 下双击（无任何参数）没有控制台也没有窗口，
+    # 用户感知为"点了没反应"；此时默认启用桌面模式提供可见窗口。
+    # 显式传参（--no-bot/--port 等）时保持原行为不变。
+    if getattr(sys, "frozen", False) and len(sys.argv) <= 1 and not args.desktop:
+        args.desktop = True
+    return args
 
 
 async def run_bot_and_api(args):

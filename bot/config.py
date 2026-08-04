@@ -8,6 +8,8 @@ from typing import Literal, Optional
 import yaml
 from pydantic import BaseModel, ValidationError, model_validator
 
+from .paths import app_root
+
 
 # ============ 配置模型 ============
 
@@ -194,7 +196,7 @@ class AppConfig(BaseModel):
 
 # ============ 配置管理器 ============
 
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
+DEFAULT_CONFIG_PATH = app_root() / "config.yaml"
 
 
 class ConfigManager:
@@ -320,7 +322,13 @@ class ConfigManager:
                 raise
 
     def reload(self) -> AppConfig:
-        """重新加载配置"""
+        """重新加载配置
+
+        注意：reload 会新建 AppConfig 实例。经 ConfigManager 属性访问的
+        组件自动取到新值；但缓存了子配置对象引用的消费方（如
+        LLMManager）持有的旧引用不会生效，需由调用方（见
+        api/routes/config.py 的 _maybe_notify_bot）显式传递新引用。
+        """
         return self.load()
 
     def to_dict(self) -> dict:

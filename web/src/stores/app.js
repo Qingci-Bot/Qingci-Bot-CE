@@ -25,6 +25,7 @@ function authHeaders(extra = {}) {
   return headers
 }
 
+// 默认值逐项与后端 bot/config.py 的模型定义保持一致
 const defaultConfig = {
   bot: {
     name: 'Qingci-Bot',
@@ -33,6 +34,7 @@ const defaultConfig = {
     trigger_keywords: ['/bot', '/ai'],
     group_blacklist: [],
     user_blacklist: [],
+    log_json: false,
   },
   llm: {
     provider: 'openai',
@@ -41,13 +43,62 @@ const defaultConfig = {
     model: 'gpt-4o-mini',
     max_tokens: 2048,
     temperature: 0.7,
-    system_prompt: '你是一个友好的 QQ 机器人助手。',
+    system_prompt: '你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。',
     max_history: 20,
+    max_context_tokens: 8192,
+    timeout: 60,
+    num_retries: 2,
+    enable_summary: false,
+    enable_tools: false,
+    max_tool_rounds: 5,
   },
   onebot: {
     host: '127.0.0.1',
     port: 3001,
     access_token: '',
+  },
+  rate_limit: {
+    enabled: false,
+    daily_limit: 50,
+    cooldown_seconds: 10,
+  },
+  filter: {
+    enabled: false,
+    words_file: 'data/sensitive_words.txt',
+    exempt_admins: true,
+  },
+  scheduler: {
+    enabled: true,
+  },
+  alert: {
+    enabled: false,
+    error_threshold: 5,
+    cooldown_minutes: 10,
+  },
+  image: {
+    enabled: false,
+    model: 'dall-e-3',
+    api_url: '',
+    api_key: '',
+  },
+  rag: {
+    enabled: false,
+    embedding_model: '',
+    top_k: 3,
+    knowledge_dir: 'data/knowledge',
+    chunk_size: 400,
+    chunk_overlap: 50,
+    max_inject_chars: 800,
+  },
+  session_summary: {
+    enabled: false,
+    keep_recent_turns: 3,
+    max_messages: 20,
+    max_tokens: 4096,
+    summary_max_tokens: 512,
+  },
+  log: {
+    usage_tracking: true,
   },
   api_key: '',
 }
@@ -75,6 +126,7 @@ export const useAppStore = defineStore('app', () => {
   const logs = ref([])
   const loading = ref(false)
   const error = ref('')
+  const configLoaded = ref(false)
 
   const statusText = computed(() => {
     if (!botRunning.value) return '未启动'
@@ -106,9 +158,15 @@ export const useAppStore = defineStore('app', () => {
         const text = await res.text()
         throw new Error(text || `HTTP ${res.status}`)
       }
-      return res.status === 204 ? null : await res.json()
+      if (res.status === 204) return null
+      try {
+        return await res.json()
+      } catch (parseErr) {
+        throw new Error(`HTTP ${res.status} 响应不是有效 JSON`)
+      }
     } catch (e) {
-      error.value = e.message
+      // 仅在尚未设置错误信息时赋值，避免覆盖 401 分支已设置的提示
+      if (!error.value) error.value = e.message
       throw e
     }
   }
@@ -120,9 +178,11 @@ export const useAppStore = defineStore('app', () => {
       botConnected.value = data.connected
       plugins.value = data.plugins || []
       error.value = ''
+      return true
     } catch (e) {
       botRunning.value = false
       botConnected.value = false
+      return false
     }
   }
 
@@ -130,6 +190,7 @@ export const useAppStore = defineStore('app', () => {
     try {
       const data = await apiFetch('/api/config')
       deepMerge(config, data)
+      configLoaded.value = true
       error.value = ''
     } catch (e) {
       console.warn('fetchConfig failed:', e.message)
@@ -208,6 +269,7 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     botRunning, botConnected, plugins, config, llmPresets, logs, loading, error,
+    configLoaded,
     statusText, statusColor,
     fetchStatus, fetchConfig, fetchLLMPresets, startBot, stopBot, restartBot,
     saveConfig, testLLM, fetchLogs, fetchMessageCount, addLog,

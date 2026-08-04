@@ -1,15 +1,15 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAppStore } from '../stores/app'
+import { useToast } from '../composables/useToast'
 
 const store = useAppStore()
+const { toast, showToast } = useToast()
 const defaults = ref({ enabled: true, trigger_mode: null })
 const groups = ref([])
 const loading = ref(false)
 const savingId = ref(null)
 const newGroupId = ref('')
-const toast = ref({ show: false, type: 'info', message: '' })
-let toastTimer = null
 
 const triggerOptions = [
   { value: '', label: '跟随全局' },
@@ -21,16 +21,6 @@ const triggerOptions = [
 onMounted(() => {
   loadGroups()
 })
-
-onUnmounted(() => {
-  if (toastTimer) clearTimeout(toastTimer)
-})
-
-function showToast(type, message) {
-  toast.value = { show: true, type, message }
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => toast.value.show = false, 4000)
-}
 
 async function loadGroups() {
   loading.value = true

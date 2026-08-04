@@ -98,6 +98,17 @@ class OneBotConnection:
 
     # ============ 生命周期 ============
 
+    @staticmethod
+    async def _never_shutdown() -> None:
+        """永不触发的关闭信号。
+
+        Hypercorn 在未传 shutdown_trigger 时会自行安装 signal 处理器，
+        在非主线程（如 desktop 模式后台线程）会抛
+        "signal only works in main thread"；显式传入本触发器即可跳过
+        signal 安装。服务关闭仍由 stop() 取消 server task 完成。
+        """
+        await asyncio.get_running_loop().create_future()
+
     async def start(self) -> None:
         """启动反向 WebSocket 服务器（异步）
 
@@ -110,10 +121,23 @@ class OneBotConnection:
             self._bot.run_task(
                 host=self.host,
                 port=self.port,
+                shutdown_trigger=self._never_shutdown,
             )
         )
         try:
-            await asyncio.sleep(0.1)
+            # 最长 2 秒的快速失败轮询：端口占用等绑定失败会很快暴露；
+            # 任务持续运行（未 done）即视为已就绪，提前退出
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + 2.0
+            while loop.time() < deadline:
+                if self._server_task.done():
+                    exc = self._server_task.exception()
+                    if exc:
+                        self._running = False
+                        raise RuntimeError(f"OneBot WS 服务器启动失败: {exc}")
+                await asyncio.sleep(0.02)
+                if not self._server_task.done():
+                    break  # 任务持续运行即视为已就绪
         except asyncio.CancelledError:
             # 启动被取消：回收已创建的 server task，避免孤儿 task 持续占用端口
             self._running = False
@@ -126,12 +150,6 @@ class OneBotConnection:
             self._server_task = None
             logger.warning("OneBot WS 服务器启动被取消，已回收 server task")
             raise
-        # 检查服务器是否启动失败（如端口被占用）
-        if self._server_task.done():
-            exc = self._server_task.exception()
-            if exc:
-                self._running = False
-                raise RuntimeError(f"OneBot WS 服务器启动失败: {exc}")
 
     async def stop(self) -> None:
         """停止服务器，清理事件处理器"""

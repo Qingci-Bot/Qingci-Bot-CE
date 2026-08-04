@@ -1,48 +1,21 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAppStore } from '../stores/app'
+import { useToast } from '../composables/useToast'
 
 const store = useAppStore()
+const { toast, showToast } = useToast()
 const modulePath = ref('')
 const loading = ref('')
-const toast = ref({ show: false, type: 'info', message: '' })
-let toastTimer = null
 
 onMounted(() => {
   store.fetchStatus()
 })
 
-onUnmounted(() => {
-  if (toastTimer) clearTimeout(toastTimer)
-})
-
-function showToast(type, message) {
-  toast.value = { show: true, type, message }
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => toast.value.show = false, 4000)
-}
-
-async function apiFetch(url, options = {}) {
-  const key = store.getApiKey()
-  const headers = { ...(options.headers || {}) }
-  if (key) {
-    headers['X-API-Key'] = key
-  }
-  const res = await fetch(url, { ...options, headers })
-  if (res.status === 401) {
-    throw new Error('API Key 鉴权失败，请在设置中配置')
-  }
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || `HTTP ${res.status}`)
-  }
-  return res
-}
-
 async function reload(name) {
   loading.value = name
   try {
-    await apiFetch(`/api/plugin/${encodeURIComponent(name)}/reload`, { method: 'POST' })
+    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}/reload`, { method: 'POST' })
     await store.fetchStatus()
     showToast('success', `插件 ${name} 已重载`)
   } catch (e) {
@@ -56,7 +29,7 @@ async function loadExternal() {
   if (!modulePath.value.trim()) return
   loading.value = '__load__'
   try {
-    await apiFetch('/api/plugin/load', {
+    await store.apiFetch('/api/plugin/load', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ module_path: modulePath.value.trim() }),
@@ -74,7 +47,7 @@ async function loadExternal() {
 async function unload(name) {
   loading.value = name
   try {
-    await apiFetch(`/api/plugin/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}`, { method: 'DELETE' })
     await store.fetchStatus()
     showToast('success', `插件 ${name} 已卸载`)
   } catch (e) {

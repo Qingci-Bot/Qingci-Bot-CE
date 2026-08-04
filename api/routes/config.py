@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import ValidationError
 
 from bot.core.bot import get_bot as _get_bot
+from bot.core.tasks import spawn_background_task
 from bot.config import ConfigManager, LLMConfig, LLM_PROVIDER_PRESETS
 from bot.llm.manager import LLMManager
 from api.auth import require_auth
@@ -18,9 +19,6 @@ logger = logging.getLogger("qingci-bot.api.config")
 # 配置锁：惰性创建，避免模块导入时绑定到（可能不同的）事件循环
 _config_lock: Optional[asyncio.Lock] = None
 
-# 后台任务引用集合：防止 fire-and-forget 任务被 GC 提前回收
-_background_tasks: set[asyncio.Task] = set()
-
 
 def _get_config_lock() -> asyncio.Lock:
     """获取配置锁（在当前事件循环中惰性创建）"""
@@ -30,34 +28,36 @@ def _get_config_lock() -> asyncio.Lock:
     return _config_lock
 
 
-def _spawn_background_task(coro, name: str) -> None:
-    """创建后台任务并保存引用，完成后记录异常日志，避免异常静默丢失"""
-    task = asyncio.create_task(coro, name=name)
-    _background_tasks.add(task)
-
-    def _on_done(t: asyncio.Task) -> None:
-        _background_tasks.discard(t)
-        if not t.cancelled() and t.exception() is not None:
-            logger.exception(f"后台任务 {name} 执行失败", exc_info=t.exception())
-
-    task.add_done_callback(_on_done)
+# Bot 未运行时的 ConfigManager 缓存，避免每次请求重复创建/读取文件
+_fallback_cfg: Optional[ConfigManager] = None
+_fallback_path: Optional[str] = None
 
 
 def _get_config_manager() -> ConfigManager:
-    """获取 Bot 实例的 ConfigManager，若 Bot 未初始化则使用自定义路径"""
+    """获取 Bot 实例的 ConfigManager，若 Bot 未初始化则使用自定义路径（带缓存）"""
     try:
         bot = _get_bot()
         return bot.config
     except RuntimeError:
         from api.auth import _config_path
         from bot.config import DEFAULT_CONFIG_PATH
-        cfg = ConfigManager(_config_path or DEFAULT_CONFIG_PATH)
-        cfg.load()
-        return cfg
+        global _fallback_cfg, _fallback_path
+        path = _config_path or DEFAULT_CONFIG_PATH
+        if _fallback_cfg is None or path != _fallback_path:
+            _fallback_cfg = ConfigManager(path)
+            _fallback_cfg.load()
+            _fallback_path = path
+        return _fallback_cfg
 
 
 def _maybe_notify_bot(reload_llm: bool = True):
-    """通知 Bot 配置变更（异步执行，不阻塞 HTTP 响应）"""
+    """通知 Bot 配置变更（异步执行，不阻塞 HTTP 响应）
+
+    引用约定：config.reload() 会新建 AppConfig 实例，经 ConfigManager
+    属性访问的组件自动取新值；但缓存了子配置对象引用的组件（如
+    LLMManager）必须在此显式传递新引用。新增此类消费方时务必在
+    此补充传参。
+    """
     try:
         bot = _get_bot()
         if bot:
@@ -66,13 +66,13 @@ def _maybe_notify_bot(reload_llm: bool = True):
                 # 异步执行 reload，不阻塞 HTTP 请求；保存任务引用并记录异常。
                 # config.reload() 会新建 AppConfig，须把新的 session_summary
                 # 对象与用量开关一并传入，否则 LLMManager 持有的旧引用不会生效
-                _spawn_background_task(
+                spawn_background_task(
                     bot.llm.reload(
                         bot.config.llm,
                         bot.config.session_summary,
                         bot.config.log.usage_tracking,
                     ),
-                    "llm-reload",
+                    name="llm-reload",
                 )
     except RuntimeError:
         pass  # Bot 未运行
@@ -80,21 +80,19 @@ def _maybe_notify_bot(reload_llm: bool = True):
         pass
 
 
+_SENSITIVE_KEYS = {"api_key", "access_token"}
+
+
 def _mask_sensitive(data: dict) -> dict:
-    """脱敏敏感字段（api_key / access_token），返回副本"""
-    masked = dict(data)
-    if "api_key" in masked and masked["api_key"]:
-        masked["api_key"] = "***"
-    if "llm" in masked and isinstance(masked["llm"], dict):
-        llm = dict(masked["llm"])
-        if llm.get("api_key"):
-            llm["api_key"] = "***"
-        masked["llm"] = llm
-    if "onebot" in masked and isinstance(masked["onebot"], dict):
-        ob = dict(masked["onebot"])
-        if ob.get("access_token"):
-            ob["access_token"] = "***"
-        masked["onebot"] = ob
+    """递归脱敏敏感字段（api_key / access_token），返回副本"""
+    masked = {}
+    for k, v in data.items():
+        if isinstance(v, dict):
+            masked[k] = _mask_sensitive(v)
+        elif k in _SENSITIVE_KEYS and v:
+            masked[k] = "***"
+        else:
+            masked[k] = v
     return masked
 
 
@@ -106,6 +104,9 @@ def _filter_masked(data: dict) -> dict:
             continue  # 跳过脱敏占位符
         if isinstance(v, dict):
             filtered[k] = _filter_masked(v)
+        elif isinstance(v, list):
+            filtered[k] = [_filter_masked(i) if isinstance(i, dict) else i
+                           for i in v if i != "***"]
         else:
             filtered[k] = v
     return filtered
@@ -167,9 +168,7 @@ async def update_bot_config(data: dict, request: Request):
         try:
             cfg = _get_config_manager()
             current = cfg.bot.model_dump()
-            for k, v in data.items():
-                if v is not None:
-                    current[k] = v
+            _deep_merge(current, {k: v for k, v in data.items() if v is not None})
             full = cfg.to_dict()
             full["bot"] = current
             cfg.update(full)
@@ -190,9 +189,7 @@ async def update_bot_config(data: dict, request: Request):
 async def get_llm_config():
     """获取 LLM 配置（api_key 脱敏）"""
     data = _get_config_manager().llm.model_dump()
-    if data.get("api_key"):
-        data["api_key"] = "***"
-    return data
+    return _mask_sensitive(data)
 
 
 @router.get("/llm/presets", dependencies=[Depends(require_auth)])
@@ -262,6 +259,4 @@ async def test_llm_config(data: dict):
 async def get_onebot_config():
     """获取 OneBot 连接配置（access_token 脱敏）"""
     data = _get_config_manager().onebot.model_dump()
-    if data.get("access_token"):
-        data["access_token"] = "***"
-    return data
+    return _mask_sensitive(data)

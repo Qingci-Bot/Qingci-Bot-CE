@@ -7,11 +7,13 @@ from typing import Any, Optional
 
 from ..config import ConfigManager
 from ..db import Database
+from ..paths import app_root
 from .alerter import AlertHandler
 from .connection import OneBotConnection
 from .dispatcher import MessageDispatcher, MessageContext
 from .filter import SensitiveFilter
 from .scheduler import BotScheduler
+from .tasks import spawn_background_task
 from ..llm import LLMManager, ToolRegistry, register_builtin_tools
 from ..plugin import PluginManager
 from ..rag import KnowledgeStore
@@ -44,8 +46,6 @@ class QingciBot:
 
         self._running = False
         self._pending_tasks: set[asyncio.Task[Any]] = set()
-        # 后台任务引用集合：防止 fire-and-forget 任务被 GC 提前回收、异常静默丢失
-        self._background_tasks: set[asyncio.Task[Any]] = set()
         # 错误告警处理器（alert.enabled 时 start 中 attach，stop 中 detach）
         self._alert_handler: Optional[AlertHandler] = None
 
@@ -65,9 +65,7 @@ class QingciBot:
             rag_cfg = self.config.rag
             knowledge_dir = Path(rag_cfg.knowledge_dir)
             if not knowledge_dir.is_absolute():
-                knowledge_dir = (
-                    Path(__file__).resolve().parent.parent.parent / knowledge_dir
-                )
+                knowledge_dir = app_root() / knowledge_dir
             self.knowledge_store = KnowledgeStore(
                 root=knowledge_dir,
                 chunk_size=rag_cfg.chunk_size,
@@ -78,7 +76,7 @@ class QingciBot:
         # （enabled 开关由批次 1 的拦截逻辑判断，此处仅构造）
         words_file = Path(self.config.filter.words_file)
         if not words_file.is_absolute():
-            words_file = Path(__file__).resolve().parent.parent.parent / words_file
+            words_file = app_root() / words_file
         self.sensitive_filter = SensitiveFilter(words_file)
 
     # ============ 生命周期 ============
@@ -206,21 +204,10 @@ class QingciBot:
     def _spawn_background_task(self, coro, name: str = "") -> asyncio.Task:
         """创建后台任务并保存引用，防止任务被 GC 与异常静默丢失
 
-        done callback 中记录异常日志并移除引用（兼容任务被取消的场景）。
+        委托至公共工具 bot.core.tasks.spawn_background_task，
+        保留方法签名与返回值语义（返回 asyncio.Task）。
         """
-        task = asyncio.create_task(coro, name=name or None)
-        self._background_tasks.add(task)
-
-        def _on_done(t: asyncio.Task[Any]) -> None:
-            self._background_tasks.discard(t)
-            if t.cancelled():
-                return
-            exc = t.exception()
-            if exc is not None:
-                logger.exception(f"后台任务异常: {name or 'unknown'}", exc_info=exc)
-
-        task.add_done_callback(_on_done)
-        return task
+        return spawn_background_task(coro, name=name)
 
     async def _handle_event(self, event: dict) -> None:
         """处理 OneBot 事件 - 创建独立任务避免 stop() 死锁"""

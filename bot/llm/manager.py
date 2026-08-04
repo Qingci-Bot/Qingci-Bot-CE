@@ -16,6 +16,7 @@ import logging
 from typing import AsyncIterator, Optional, TYPE_CHECKING
 
 from ..config import LLMConfig, SessionSummaryConfig
+from ..core.tasks import spawn_background_task
 from ..db.database import Database
 from .adapter import LLMAdapter
 from .litellm_adapter import LiteLLMAdapter
@@ -54,24 +55,10 @@ class LLMManager:
         # 注意：锁随 session 创建，clear_session 不弹出锁以保护进行中的 chat
         # 长期运行的 bot 可能累积大量锁，未来可引入 LRU 淘汰
         self._locks: dict[str, asyncio.Lock] = {}
-        # 后台任务引用集合：防止 fire-and-forget 用量入库任务被 GC 提前回收
-        self._background_tasks: set[asyncio.Task] = set()
         # Function Calling 工具注册表（enable_tools 且非 None 时启用）
         self._tool_registry: Optional["ToolRegistry"] = None
         # token 计数缓存：(role, content) -> token 数，避免对同一消息重复计数
         self._token_cache: dict[tuple[str, str], int] = {}
-
-    def _spawn_background_task(self, coro, name: str = "") -> None:
-        """创建后台任务并保存引用，完成后记录异常日志（不阻断主链路）"""
-        task = asyncio.create_task(coro, name=name)
-        self._background_tasks.add(task)
-
-        def _on_done(t: asyncio.Task) -> None:
-            self._background_tasks.discard(t)
-            if not t.cancelled() and t.exception() is not None:
-                logger.exception(f"后台任务 {name} 执行失败", exc_info=t.exception())
-
-        task.add_done_callback(_on_done)
 
     # ============ 适配器管理 ============
 
@@ -323,7 +310,7 @@ class LLMManager:
         # 摘要用量入库（fire-and-forget，受 usage_tracking 开关控制）
         if self._db is not None and result.usage and self._usage_tracking:
             usage = result.usage
-            self._spawn_background_task(
+            spawn_background_task(
                 self._db.save_usage(
                     session_key=key,
                     user_id=self._user_id_from_key(key),
@@ -621,7 +608,7 @@ class LLMManager:
                 # 用量入库（fire-and-forget）：失败仅记日志，不阻断主链路；
                 # 受 log.usage_tracking 开关控制（可退出的遥测）
                 if self._db is not None and usage and self._usage_tracking:
-                    self._spawn_background_task(
+                    spawn_background_task(
                         self._db.save_usage(
                             session_key=key,
                             user_id=user_id,
@@ -713,6 +700,7 @@ class LLMManager:
             full_reply = ""
             success = False
             cancelled = False
+            gen_exit = False
             try:
                 async for chunk in self.adapter.chat_stream(
                     messages=self._sessions[key],
@@ -725,8 +713,10 @@ class LLMManager:
                 success = True
             except GeneratorExit:
                 # 消费者提前停止迭代，需要回滚用户消息
-                # 捕获后不再 re-raise，让清理逻辑执行后正常结束
+                # 置标志并继续执行下方清理逻辑，清理完成后重抛 GeneratorExit，
+                # 与 CancelledError 的“清理后重抛”模式保持一致
                 # 注意：捕获 GeneratorExit 后不能再 yield（会抛 RuntimeError）
+                gen_exit = True
                 success = False
             except asyncio.CancelledError:
                 # 任务被取消：标记失败，由下方清理逻辑回滚用户消息后重新抛出
@@ -777,9 +767,11 @@ class LLMManager:
                                     f"model={self._config.model}"
                                 )
             finally:
-                # 清理完成后重新抛出取消异常，保持 asyncio 取消语义
+                # 清理完成后重新抛出取消/关闭异常，保持 asyncio 取消与生成器关闭语义
                 if cancelled:
                     raise
+                if gen_exit:
+                    raise GeneratorExit
 
     async def check_availability(self) -> bool:
         try:

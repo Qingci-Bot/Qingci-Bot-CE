@@ -16,6 +16,8 @@ import time
 from collections import deque
 from typing import Optional
 
+from .tasks import spawn_background_task
+
 # 告警发送相关日志专用 logger 名前缀；AlertHandler 忽略该来源的日志防止递归
 ALERT_LOGGER_PREFIX = "qingci-bot.alerter"
 
@@ -23,6 +25,16 @@ logger = logging.getLogger(ALERT_LOGGER_PREFIX)
 
 # 告警文案中错误摘要的最大长度（防止超长消息）
 _SUMMARY_MAX_LEN = 200
+
+
+def _stderr(msg: str) -> None:
+    """防御性 stderr 输出：windowed（console=False）模式下 sys.stderr 为 None，
+    直接 print 会抛 AttributeError；任何输出失败均静默忽略。"""
+    try:
+        if sys.stderr is not None:
+            print(msg, file=sys.stderr)
+    except Exception:
+        pass
 
 
 class AlertHandler(logging.Handler):
@@ -115,7 +127,7 @@ class AlertHandler(logging.Handler):
             self._fire_alert(count, self._last_summary)
         except Exception:
             # 绝不抛异常、绝不回 logging（可能递归），仅 stderr
-            print("[AlertHandler] 内部处理异常", file=sys.stderr)
+            _stderr("[AlertHandler] 内部处理异常")
 
     @staticmethod
     def _summarize(record: logging.LogRecord) -> str:
@@ -144,7 +156,7 @@ class AlertHandler(logging.Handler):
         try:
             coro = self._connection.send_private_msg(user_id, text)
         except Exception as e:
-            print(f"[AlertHandler] 构造告警消息失败 user={user_id}: {e}", file=sys.stderr)
+            _stderr(f"[AlertHandler] 构造告警消息失败 user={user_id}: {e}")
             return
         try:
             loop = asyncio.get_running_loop()
@@ -152,13 +164,18 @@ class AlertHandler(logging.Handler):
             loop = None
         try:
             if loop is not None and loop.is_running():
-                # 常规路径：事件循环内调度后台任务
-                loop.create_task(self._guarded_send(coro, user_id))
+                # 常规路径：事件循环内调度后台任务（保存引用防 GC；
+                # log_errors=False 防止告警任务异常走日志通道形成反馈环）
+                spawn_background_task(
+                    self._guarded_send(coro, user_id),
+                    name=f"alert-send-{user_id}",
+                    log_errors=False,
+                )
             else:
                 # 非事件循环线程触发日志（罕见）：尝试独立运行一次
                 asyncio.run(coro)
         except Exception as e:
-            print(f"[AlertHandler] 告警发送调度失败 user={user_id}: {e}", file=sys.stderr)
+            _stderr(f"[AlertHandler] 告警发送调度失败 user={user_id}: {e}")
 
     @staticmethod
     async def _guarded_send(coro, user_id: int) -> None:
@@ -166,4 +183,4 @@ class AlertHandler(logging.Handler):
         try:
             await coro
         except Exception as e:
-            print(f"[AlertHandler] 告警发送失败 user={user_id}: {e}", file=sys.stderr)
+            _stderr(f"[AlertHandler] 告警发送失败 user={user_id}: {e}")

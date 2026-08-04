@@ -63,6 +63,7 @@ async def clear_messages(
     user_id: int = Query(default=0),
     group_id: int = Query(default=0),
     before_days: int = Query(default=0, ge=0),
+    confirm: bool = Query(default=False),
 ):
     """清理消息记录
 
@@ -70,7 +71,7 @@ async def clear_messages(
     - group_id: 仅清理该群的消息
     - before_days: 仅清理 N 天前的消息
 
-    所有参数为 0 或不传时表示清理全部消息。
+    所有参数为 0 或不传时表示清理全部消息，需显式传入 confirm=true 确认。
     """
     bot = _get_bot_instance()
     kwargs: dict = {}
@@ -80,6 +81,12 @@ async def clear_messages(
         kwargs["group_id"] = group_id
     if before_days:
         kwargs["before_days"] = before_days
+    # 无任何过滤参数即清理全部消息，需显式确认；带过滤的部分删除不受影响
+    if not kwargs and not confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="清理全部消息需显式传入 confirm=true 确认",
+        )
     count = await bot.db.clear_messages(**kwargs)
     return {"message": f"已清理 {count} 条消息记录", "count": count}
 
@@ -152,8 +159,13 @@ async def export_messages():
 
 
 @router.delete("/sessions", dependencies=[Depends(require_auth)])
-async def clear_all_sessions():
-    """清除所有会话"""
+async def clear_all_sessions(confirm: bool = Query(default=False)):
+    """清除所有会话（需显式传入 confirm=true 确认）"""
+    if not confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="清除所有会话需显式传入 confirm=true 确认",
+        )
     bot = _get_bot_instance()
     await bot.llm.clear_session()
     return {"message": "所有会话已清除"}

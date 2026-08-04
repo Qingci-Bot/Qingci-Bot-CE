@@ -9,6 +9,7 @@
 
 import logging
 
+from ...core.tasks import spawn_background_task
 from ..base import PluginBase
 from ..matcher import MatcherContext, on_command
 from ..rule import rate_limit
@@ -92,7 +93,7 @@ class ImageGenPlugin(PluginBase):
                 else f"private:{ctx.user_id}"
             )
             try:
-                self.bot._spawn_background_task(
+                spawn_background_task(
                     db.save_usage(
                         session_key=session_key,
                         user_id=ctx.user_id,

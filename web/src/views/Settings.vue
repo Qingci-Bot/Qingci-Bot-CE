@@ -1,8 +1,10 @@
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useAppStore } from '../stores/app'
+import { useToast } from '../composables/useToast'
 
 const store = useAppStore()
+const { toast, showToast } = useToast()
 const form = reactive({
   bot: {},
   onebot: {},
@@ -10,22 +12,18 @@ const form = reactive({
 })
 const apiKeyInput = ref('')
 const saving = ref(false)
-const toast = ref({ show: false, type: 'info', message: '' })
+const showServerKey = ref(false)
+const showLocalKey = ref(false)
 const backupLoading = ref(false)
 const backupResult = ref(null)
 const exporting = ref(false)
 const auditLogs = ref([])
 const auditLoading = ref(false)
-let toastTimer = null
 
 onMounted(() => {
   resetForm()
   apiKeyInput.value = store.getApiKey()
   loadAuditLogs()
-})
-
-onUnmounted(() => {
-  if (toastTimer) clearTimeout(toastTimer)
 })
 
 watch(() => [store.config.bot, store.config.onebot], () => {
@@ -62,18 +60,20 @@ function parseList(str, asNumber = true) {
   return arr
 }
 
-function showToast(type, message) {
-  toast.value = { show: true, type, message }
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => toast.value.show = false, 4000)
-}
-
 function saveApiKey() {
   store.setApiKey(apiKeyInput.value.trim())
   showToast('success', 'API Key 已保存到浏览器')
 }
 
 async function saveConfig() {
+  if (!store.configLoaded) {
+    showToast('error', '配置尚未加载完成，无法保存')
+    return
+  }
+  // 服务端 API Key 由非空变空意味着关闭鉴权，需要二次确认
+  if (store.config.api_key && !form.api_key.trim()) {
+    if (!window.confirm('清空服务端 API Key 将关闭鉴权，确认继续？')) return
+  }
   saving.value = true
   try {
     const newConfig = JSON.parse(JSON.stringify(store.config))
@@ -243,7 +243,12 @@ async function loadAuditLogs() {
       <div class="form-grid">
         <div class="form-group">
           <label>服务端 API Key（写入 config.yaml）</label>
-          <input v-model="form.api_key" type="text" placeholder="留空则不启用鉴权">
+          <div style="display: flex; gap: 8px;">
+            <input v-model="form.api_key" :type="showServerKey ? 'text' : 'password'" placeholder="留空则不启用鉴权">
+            <button class="btn btn-secondary btn-sm" @click="showServerKey = !showServerKey">
+              {{ showServerKey ? '隐藏' : '显示' }}
+            </button>
+          </div>
         </div>
       </div>
       <div class="hint-text" style="margin-top: 8px;">
@@ -254,7 +259,10 @@ async function loadAuditLogs() {
         <div class="form-group">
           <label>浏览器 API Key（本地存储）</label>
           <div style="display: flex; gap: 8px;">
-            <input v-model="apiKeyInput" type="text" placeholder="填写服务端配置的 API Key">
+            <input v-model="apiKeyInput" :type="showLocalKey ? 'text' : 'password'" placeholder="填写服务端配置的 API Key">
+            <button class="btn btn-secondary btn-sm" @click="showLocalKey = !showLocalKey">
+              {{ showLocalKey ? '隐藏' : '显示' }}
+            </button>
             <button class="btn btn-secondary btn-sm" @click="saveApiKey">保存</button>
           </div>
         </div>
