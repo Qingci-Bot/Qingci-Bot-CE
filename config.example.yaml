@@ -1,8 +1,12 @@
+# Qingci-Bot 配置模板
+# 复制为 config.yaml 后按需修改；敏感字段（api_key / access_token）默认留空。
+# 注意：config.yaml 已被 .gitignore 忽略，不会随代码提交，避免密钥泄露。
+
 bot:
   name: Qingci-Bot
   admin_users:
   - 2101171459
-  trigger_mode: at
+  trigger_mode: at            # at / keyword / always
   trigger_keywords:
   - /bot
   - /ai
@@ -12,15 +16,17 @@ bot:
 onebot:
   host: 127.0.0.1
   port: 8888
-  access_token: ''
+  access_token: ''            # OneBot 接入令牌，留空则不校验
 llm:
-  provider: deepseek
+  provider: deepseek          # openai / deepseek / ollama / siliconflow / claude / gemini / custom
   api_url: https://api.deepseek.com/v1
-  api_key: ''
+  api_key: ''                 # 必填（ollama 除外）
   model: deepseek-chat
   max_tokens: 2048
   temperature: 0.7
   system_prompt: 你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。
+  personas: []                # 人格列表：[{name, description, system_prompt}]
+  default_persona: ''         # 默认人格名，留空使用 system_prompt
   max_history: 20
   max_context_tokens: 8192
   timeout: 60
@@ -28,6 +34,7 @@ llm:
   enable_summary: false
   enable_tools: false
   max_tool_rounds: 5
+  mcp_servers: []             # MCP 服务器：[{name, command, args, url, env}]
 rate_limit:
   enabled: false
   daily_limit: 50
@@ -63,4 +70,4 @@ session_summary:
   summary_max_tokens: 512
 log:
   usage_tracking: true
-api_key: ''
+api_key: ''                   # WebUI/API 鉴权密钥，留空则免鉴权
