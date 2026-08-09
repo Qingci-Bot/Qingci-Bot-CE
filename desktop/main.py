@@ -4,7 +4,6 @@ import asyncio
 import logging
 import threading
 import time
-from pathlib import Path
 
 logger = logging.getLogger("qingci-bot.desktop")
 
@@ -41,12 +40,11 @@ def run_desktop(args):
         except Exception:
             time.sleep(0.5)
 
-    # 查找 Web UI 静态文件（frozen 模式下为 exe 所在目录）
-    from bot.paths import app_root
-
-    web_dir = app_root() / "web" / "dist"
-    if web_dir.exists():
-        url = str(web_dir / "index.html")
+    # 桌面窗口直接加载 HTTP 服务下的 Web UI。
+    # 注意：不能用 file:// 加载 web/dist/index.html —— Vite 产物 base=/ui/，
+    # 资源引用为绝对路径 /ui/assets/...，file:// 协议下会解析到磁盘根目录而全部 404，
+    # 表现为窗口空白。经 HTTP 由 FastAPI 静态服务提供资源。
+    url = f"http://{args.host}:{args.port}/ui"
 
     # 创建窗口
     window = webview.create_window(

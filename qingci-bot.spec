@@ -67,6 +67,12 @@ a = Analysis(
         'apscheduler',
         'pydantic',
         'httpx',
+        # ---- 新功能模块（延迟导入，modulegraph 不会自动收集）----
+        'bot.core.message',          # 类型化消息构造器（Message/MessageSegment）
+        'bot.llm.mcp',               # MCP 桥接（setup_mcp_tools 内延迟导入）
+        'mcp',
+        'mcp.client.stdio',
+        'mcp.client.streamable_http',
         # ---- desktop 模式（pywebview / pystray） ----
         'webview',
         # pywebview 平台后端为动态导入，需显式声明（Windows: WinForms + EdgeChromium）
