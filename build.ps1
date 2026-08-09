@@ -54,8 +54,8 @@ if (Test-Path $StashConfig) {
     Copy-Item $StashConfig $TargetConfig -Force
     Write-Host "    restored user config.yaml"
 } else {
-    Copy-Item (Join-Path $Root "config.yaml") $TargetConfig
-    Write-Host "    copied config.yaml template"
+    Copy-Item (Join-Path $Root "config.example.yaml") $TargetConfig
+    Write-Host "    copied config.example.yaml as config.yaml template"
 }
 
 # ---------- [4/4] data\ folder (keep if exists) ----------

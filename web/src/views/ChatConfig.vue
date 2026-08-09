@@ -89,16 +89,26 @@ function removeMcpServer(idx) {
 }
 
 // provider 切换时自动填充 api_url 和 model
-// 与后端 LLMConfig.apply_provider_preset 逻辑一致：仅当当前值为空或等于
-// 当前 provider 自己的预设值时才填充，用户自定义值保留不变
+// 仅当用户未自定义 api_url/model（即当前值与旧 provider 预设一致）时才自动填充；
+// 如果用户手动修改过，保留用户自定义值。
 function onProviderChange() {
   const preset = store.llmPresets[form.provider]
   if (!preset) return
   if (form.provider === 'custom') return  // custom 完全由用户管理
-  if (!form.api_url || form.api_url === preset.api_url) {
+
+  // 判断 api_url 是否为旧 provider 的预设值（即用户未自定义）
+  const isDefaultApiUrl = !form.api_url || Object.values(store.llmPresets).some(
+    p => p.api_url && p.api_url === form.api_url
+  )
+  if (isDefaultApiUrl) {
     form.api_url = preset.api_url
   }
-  if (!form.model || form.model === preset.model) {
+
+  // 判断 model 是否为旧 provider 的预设值（即用户未自定义）
+  const isDefaultModel = !form.model || Object.values(store.llmPresets).some(
+    p => p.model && p.model === form.model
+  )
+  if (isDefaultModel) {
     form.model = preset.model
   }
 }

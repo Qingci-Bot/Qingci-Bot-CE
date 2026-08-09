@@ -64,10 +64,28 @@ def run_desktop(args):
     _exiting = False
 
     def _trigger_exit():
-        """托盘退出回调：标记退出 + 关闭窗口"""
+        """托盘退出回调：标记退出 + 关闭窗口
+
+        注意：此函数在 pystray 回调线程中执行，不能直接调用 webview.destroy()
+        （跨线程调用 GUI 方法可能不生效）。改用 ctypes 向主线程窗口发送 WM_CLOSE，
+        由主线程的消息循环处理关闭流程。
+        """
         nonlocal _exiting
         _exiting = True
-        webview.destroy()
+        # 方案 1：通过 ctypes 向窗口发送 WM_CLOSE（跨线程安全）
+        try:
+            import ctypes
+            hwnd = ctypes.windll.user32.FindWindowW(None, "Qingci-Bot")
+            if hwnd:
+                ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+                return
+        except Exception:
+            pass
+        # 方案 2：回退到 window.destroy()（在部分环境下可能不生效）
+        try:
+            window.destroy()
+        except Exception:
+            logger.exception("窗口关闭失败")
 
     try:
         # 提前验证托盘依赖可用，决定是否启用"关闭即驻留后台"行为
