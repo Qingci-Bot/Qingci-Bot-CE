@@ -144,7 +144,7 @@
         <div class="version-grid">
           <div class="version-item">
             <span class="version-label">Qingci-Bot</span>
-            <span class="version-value">0.1.0</span>
+            <span class="version-value">0.9.0-rc</span>
           </div>
           <div class="version-item">
             <span class="version-label">许可证</span>
