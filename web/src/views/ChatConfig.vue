@@ -88,24 +88,39 @@ function removeMcpServer(idx) {
   form.mcp_servers.splice(idx, 1)
 }
 
+// 内置预设（与后端 LLM_PROVIDER_PRESETS 保持一致），
+// 即使 /api/config/llm/presets 请求失败也能正常切换提供商
+const BUILTIN_PRESETS = {
+  openai: { api_url: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  deepseek: { api_url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  ollama: { api_url: 'http://localhost:11434', model: 'llama3.1' },
+  siliconflow: { api_url: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3' },
+  claude: { api_url: 'https://api.anthropic.com/v1', model: 'claude-3-5-sonnet-20241022' },
+  gemini: { api_url: 'https://generativelanguage.googleapis.com/v1', model: 'gemini-1.5-flash' },
+  custom: { api_url: '', model: 'gpt-4o-mini' },
+}
+
 // provider 切换时自动填充 api_url 和 model
-// 仅当用户未自定义 api_url/model（即当前值与旧 provider 预设一致）时才自动填充；
+// 仅当用户未自定义 api_url/model（即当前值为某个已知预设值）时才自动填充；
 // 如果用户手动修改过，保留用户自定义值。
 function onProviderChange() {
-  const preset = store.llmPresets[form.provider]
-  if (!preset) return
   if (form.provider === 'custom') return  // custom 完全由用户管理
 
-  // 判断 api_url 是否为旧 provider 的预设值（即用户未自定义）
-  const isDefaultApiUrl = !form.api_url || Object.values(store.llmPresets).some(
+  // 优先使用后端预设，未加载时回退到内置预设
+  const presets = Object.keys(store.llmPresets).length ? store.llmPresets : BUILTIN_PRESETS
+  const preset = presets[form.provider]
+  if (!preset) return
+
+  // 判断 api_url 是否为某个已知预设值（即用户未自定义）
+  const isDefaultApiUrl = !form.api_url || Object.values(presets).some(
     p => p.api_url && p.api_url === form.api_url
   )
   if (isDefaultApiUrl) {
     form.api_url = preset.api_url
   }
 
-  // 判断 model 是否为旧 provider 的预设值（即用户未自定义）
-  const isDefaultModel = !form.model || Object.values(store.llmPresets).some(
+  // 判断 model 是否为某个已知预设值（即用户未自定义）
+  const isDefaultModel = !form.model || Object.values(presets).some(
     p => p.model && p.model === form.model
   )
   if (isDefaultModel) {
