@@ -75,11 +75,17 @@ class QingciBot:
             knowledge_dir = Path(rag_cfg.knowledge_dir)
             if not knowledge_dir.is_absolute():
                 knowledge_dir = app_root() / knowledge_dir
+            llm_cfg = self.config.llm
             self.knowledge_store = KnowledgeStore(
                 root=knowledge_dir,
+                mode=rag_cfg.mode,
                 chunk_size=rag_cfg.chunk_size,
                 chunk_overlap=rag_cfg.chunk_overlap,
                 top_k=rag_cfg.top_k,
+                embedding_model=rag_cfg.embedding_model,
+                embedding_api_url=rag_cfg.embedding_api_url or llm_cfg.api_url,
+                embedding_api_key=rag_cfg.embedding_api_key or llm_cfg.api_key,
+                collection_name=rag_cfg.collection_name,
             )
         # 敏感词过滤器：本批实例化，词库路径相对项目根目录解析
         # （enabled 开关由批次 1 的拦截逻辑判断，此处仅构造）

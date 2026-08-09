@@ -4,14 +4,17 @@
 - 反向 WebSocket 服务端（端点 /ws、/ws/event、/ws/api）
 - 消息段解析、API 调用、access_token 校验
 - 事件总线
+- 连接状态监控：断连/重连回调 + 自动心跳检测
 
 OneBotConnection 作为外观层，保持与旧 API 兼容：
 - on_event(handler) 注册事件处理器
+- on_disconnect / on_reconnect 注册连接状态回调
 - call_api(action, params) 调用 OneBot API
 - send_msg / send_group_msg / send_private_msg 便捷方法
 - is_connected / last_heartbeat 状态查询
 
 OneBot 实现端（如 LLBot/NapCat）需连接 ws://host:port/ws。
+断连时 Qingci-Bot Web UI 与 API 保持可用，LLBot 重连后自动恢复消息收发。
 """
 
 import asyncio
@@ -22,6 +25,9 @@ from typing import Callable, Optional
 from aiocqhttp import CQHttp
 
 logger = logging.getLogger("qingci-bot.connection")
+
+# 连接状态监控间隔（秒）
+_CONNECTION_MONITOR_INTERVAL = 3.0
 
 
 class OneBotConnection:
@@ -42,6 +48,12 @@ class OneBotConnection:
         self._running = False
         self._event_handlers: list[Callable] = []
         self._last_heartbeat = 0.0
+
+        # 连接状态监控
+        self._was_connected = False
+        self._monitor_task: Optional[asyncio.Task] = None
+        self._on_disconnect_callbacks: list[Callable] = []
+        self._on_reconnect_callbacks: list[Callable] = []
 
         # 注册 aiocqhttp 事件转发
         self._register_aiocqhttp_hooks()
@@ -95,6 +107,49 @@ class OneBotConnection:
                     handler(raw)
             except Exception:
                 logger.exception("事件处理器异常")
+
+    # ============ 连接状态回调 ============
+
+    def on_disconnect(self, handler: Callable) -> None:
+        """注册断连回调（async callable，LLBot 断开时触发）"""
+        if handler not in self._on_disconnect_callbacks:
+            self._on_disconnect_callbacks.append(handler)
+
+    def on_reconnect(self, handler: Callable) -> None:
+        """注册重连回调（async callable，LLBot 重新连接时触发）"""
+        if handler not in self._on_reconnect_callbacks:
+            self._on_reconnect_callbacks.append(handler)
+
+    async def _monitor_connection(self) -> None:
+        """后台任务：监控连接状态变化并触发回调"""
+        while self._running:
+            try:
+                connected = self.is_connected
+                if not connected and self._was_connected:
+                    logger.warning(
+                        "LLBot 连接已断开（WebSocket 客户端全部离开），"
+                        "Web UI 与 API 仍可用"
+                    )
+                    for cb in self._on_disconnect_callbacks:
+                        try:
+                            res = cb()
+                            if asyncio.iscoroutine(res):
+                                await res
+                        except Exception:
+                            logger.exception("断连回调执行异常")
+                elif connected and not self._was_connected:
+                    logger.info("LLBot 已重新连接，恢复消息收发")
+                    for cb in self._on_reconnect_callbacks:
+                        try:
+                            res = cb()
+                            if asyncio.iscoroutine(res):
+                                await res
+                        except Exception:
+                            logger.exception("重连回调执行异常")
+                self._was_connected = connected
+            except Exception:
+                logger.exception("连接状态监控异常")
+            await asyncio.sleep(_CONNECTION_MONITOR_INTERVAL)
 
     # ============ 生命周期 ============
 
@@ -150,12 +205,24 @@ class OneBotConnection:
             self._server_task = None
             logger.warning("OneBot WS 服务器启动被取消，已回收 server task")
             raise
+        # 启动连接状态监控
+        self._monitor_task = asyncio.create_task(self._monitor_connection())
 
     async def stop(self) -> None:
         """停止服务器，清理事件处理器"""
         self._running = False
+        # 停止连接状态监控
+        if self._monitor_task and not self._monitor_task.done():
+            self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        self._monitor_task = None
         # 清理事件处理器，防止重启时重复注册
         self._event_handlers.clear()
+        self._on_disconnect_callbacks.clear()
+        self._on_reconnect_callbacks.clear()
         # 关闭 Quart server
         try:
             if self._server_task and not self._server_task.done():

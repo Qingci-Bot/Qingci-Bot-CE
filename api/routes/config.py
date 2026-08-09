@@ -353,3 +353,87 @@ async def get_onebot_config():
     """获取 OneBot 连接配置（access_token 脱敏）"""
     data = _get_config_manager().onebot.model_dump()
     return _mask_sensitive(data)
+
+
+# ============ 配置引导向导 ============
+
+@router.get("/wizard/status")
+async def get_wizard_status():
+    """检查是否需要引导配置（免鉴权，首次启动时 config.yaml 可能不存在）"""
+    try:
+        cfg = _get_config_manager()
+    except Exception:
+        return {"needs_setup": True, "reason": "config_load_failed"}
+
+    # 判断：api_key 为空 且 没有 admin_users 时，视为未配置
+    api_key = cfg.config.api_key or ""
+    llm_api_key = cfg.llm.api_key or ""
+    admin_users = cfg.bot.admin_users or []
+
+    needs_setup = not api_key and not llm_api_key and not admin_users
+    return {
+        "needs_setup": needs_setup,
+        "config_exists": cfg._path.exists(),
+        "has_api_key": bool(api_key),
+        "has_llm_key": bool(llm_api_key),
+        "has_admin_users": bool(admin_users),
+    }
+
+
+@router.post("/wizard")
+async def complete_wizard(data: dict):
+    """完成初始配置引导（免鉴权，仅首次使用）
+
+    接受字段：provider, api_key, model, admin_qq, onebot_port
+    """
+    async with _get_config_lock():
+        try:
+            cfg = _get_config_manager()
+            current = cfg.to_dict()
+
+            provider = str(data.get("provider", "") or "deepseek").strip()
+            api_key = str(data.get("api_key", "") or "").strip()
+            admin_qq = data.get("admin_qq")
+            onebot_port = data.get("onebot_port")
+
+            if not api_key:
+                raise HTTPException(status_code=400, detail="API Key 不能为空")
+
+            # 应用提供商预设
+            preset = LLM_PROVIDER_PRESETS.get(provider, LLM_PROVIDER_PRESETS["deepseek"])
+            current["llm"]["provider"] = provider
+            current["llm"]["api_key"] = api_key
+            current["llm"]["api_url"] = preset["api_url"]
+            current["llm"]["model"] = preset["model"]
+
+            # 管理员 QQ
+            if admin_qq is not None:
+                try:
+                    qq = int(admin_qq)
+                    if qq > 0:
+                        current["bot"]["admin_users"] = [qq]
+                except (ValueError, TypeError):
+                    raise HTTPException(status_code=400, detail="管理员 QQ 号格式无效")
+
+            # OneBot 端口
+            if onebot_port is not None:
+                try:
+                    port = int(onebot_port)
+                    if 1024 <= port <= 65535:
+                        current["onebot"]["port"] = port
+                except (ValueError, TypeError):
+                    pass
+
+            cfg.update(current)
+            _maybe_notify_bot(reload_llm=True)
+
+            return {
+                "message": "初始配置完成",
+                "provider": provider,
+                "model": preset["model"],
+            }
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("初始配置向导失败")
+            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")

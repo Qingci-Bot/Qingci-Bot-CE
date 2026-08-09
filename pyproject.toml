@@ -3,6 +3,7 @@ name = "qingci-bot"
 version = "0.1.0"
 description = "QQ Bot 框架，对接 LLBot (OneBot 11)，支持 LLM 对话、Web UI 和 Desktop UI"
 requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
@@ -21,6 +22,7 @@ dependencies = [
     "pystray>=0.19.0",
     "pillow>=11.0",
     "mcp>=1.6,<2",
+    "lancedb>=0.15,<1",
 ]
 
 [project.scripts]

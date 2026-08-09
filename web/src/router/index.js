@@ -8,6 +8,8 @@ const routes = [
   { path: '/plugins', name: 'plugins', component: () => import('../views/PluginManager.vue') },
   { path: '/logs', name: 'logs', component: () => import('../views/MessageLog.vue') },
   { path: '/settings', name: 'settings', component: () => import('../views/Settings.vue') },
+  { path: '/about', name: 'about', component: () => import('../views/About.vue') },
+  { path: '/setup', name: 'setup', component: () => import('../views/SetupWizard.vue') },
   { path: '/login', name: 'login', component: () => import('../views/Login.vue') },
   { path: '/:pathMatch(.*)*', name: 'notFound', component: () => import('../views/NotFound.vue') },
 ]
@@ -47,8 +49,36 @@ async function fetchAuthRequired() {
   return false
 }
 
+// 是否需要引导配置的缓存（TTL 120 秒，首次启动更长以覆盖 config 生成耗时）
+let wizardStatusCache = null
+let wizardCacheTs = 0
+const WIZARD_CACHE_TTL_MS = 120000
+
+async function fetchWizardNeeded() {
+  if (wizardStatusCache !== null && Date.now() - wizardCacheTs < WIZARD_CACHE_TTL_MS) {
+    return wizardStatusCache
+  }
+  try {
+    const res = await fetch('/api/config/wizard/status')
+    if (res.ok) {
+      const data = await res.json()
+      wizardStatusCache = !!data.needs_setup
+      wizardCacheTs = Date.now()
+      return wizardStatusCache
+    }
+  } catch (e) {
+    // 网络异常时放行
+  }
+  return false
+}
+
 router.beforeEach(async (to) => {
+  if (to.path === '/setup') return true
   if (to.path === '/login') return true
+
+  const wizardNeeded = await fetchWizardNeeded()
+  if (wizardNeeded) return '/setup'
+
   const authRequired = await fetchAuthRequired()
   const hasKey = !!localStorage.getItem('qingci_api_key')
   if (authRequired && !hasKey) return '/login'

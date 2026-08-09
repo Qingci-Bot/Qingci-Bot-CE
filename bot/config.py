@@ -191,19 +191,25 @@ class LogConfig(BaseModel):
 
 
 class RAGConfig(BaseModel):
-    """轻量知识库（RAG）配置（默认关闭）
+    """知识库（RAG）配置（默认关闭）
 
-    基于本地文件的关键词检索实现，纯 Python 无重型依赖。
+    支持两种检索模式：
+    - keyword: 纯 Python 关键词检索，无外部依赖，适合小规模文档
+    - vector:  ChromaDB 向量检索 + litellm embedding，语义匹配更精准
     """
     model_config = {"extra": "ignore"}
 
     enabled: bool = False
-    embedding_model: str = ""           # 预留字段（当前为关键词检索，不使用向量）
+    mode: Literal["keyword", "vector"] = "keyword"  # 检索模式
+    embedding_model: str = ""           # 向量模型（vector 模式使用，如 text-embedding-3-small）
+    embedding_api_url: str = ""         # 向量 API 地址（留空复用 llm.api_url）
+    embedding_api_key: str = ""         # 向量 API Key（留空复用 llm.api_key）
     top_k: int = 3                      # 检索时返回的最相关条目数
     knowledge_dir: str = "data/knowledge"  # 知识库目录（相对项目根目录）
     chunk_size: int = 400               # 文档分块大小（字符数）
     chunk_overlap: int = 50             # 相邻分块重叠字符数
     max_inject_chars: int = 800         # 注入 system_prompt 的参考资料长度上限（字符）
+    collection_name: str = "qingci_knowledge"  # ChromaDB 集合名（vector 模式使用）
 
 
 class AppConfig(BaseModel):

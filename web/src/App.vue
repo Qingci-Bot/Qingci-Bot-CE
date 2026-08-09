@@ -17,6 +17,7 @@ const navItems = [
   { path: '/plugins', name: '插件管理', icon: '◇' },
   { path: '/logs', name: '消息日志', icon: '✉' },
   { path: '/settings', name: '系统设置', icon: '⚙' },
+  { path: '/about', name: '关于', icon: '♢' },
 ]
 
 function isActive(path) {
