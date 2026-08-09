@@ -47,8 +47,27 @@ function resetForm() {
     max_tokens: llm.max_tokens ?? 2048,
     temperature: llm.temperature ?? 0.7,
     system_prompt: llm.system_prompt ?? '',
+    personas: Array.isArray(llm.personas)
+      ? llm.personas.map(p => ({ ...p }))
+      : [],
+    default_persona: llm.default_persona ?? '',
     max_history: llm.max_history ?? 20,
   })
+}
+
+// 人格管理
+function addPersona() {
+  form.personas.push({ name: '', description: '', system_prompt: '' })
+}
+function removePersona(idx) {
+  const removed = form.personas[idx]
+  if (removed && form.default_persona === removed.name) {
+    form.default_persona = ''
+  }
+  form.personas.splice(idx, 1)
+}
+function toggleDefaultPersona(name) {
+  form.default_persona = form.default_persona === name ? '' : name
 }
 
 // provider 切换时自动填充 api_url 和 model
@@ -162,6 +181,40 @@ async function saveConfig() {
 
     <div class="card" style="margin-top: 22px;">
       <div class="card-header">
+        <div class="card-title">人格管理</div>
+        <div class="action-bar">
+          <button class="btn btn-secondary" @click="addPersona">+ 添加人格</button>
+        </div>
+      </div>
+      <div class="hint-text">
+        聊天中通过 <code>/persona 名称</code> 切换会话人格，<code>/persona 列表</code> 查看全部，
+        <code>/persona 重置</code> 恢复默认。未设置人格覆盖时使用下方「系统提示词」。
+      </div>
+      <div v-for="(p, idx) in form.personas" :key="idx" class="persona-block">
+        <div class="persona-row">
+          <input v-model="p.name" placeholder="人格名（如：猫娘）" class="persona-name">
+          <input v-model="p.description" placeholder="简述" class="persona-desc">
+          <button
+            class="btn btn-secondary btn-sm"
+            :disabled="!p.name"
+            @click="toggleDefaultPersona(p.name)"
+          >
+            {{ form.default_persona === p.name ? '✓ 默认' : '设为默认' }}
+          </button>
+          <button class="btn btn-danger btn-sm" @click="removePersona(idx)">删除</button>
+        </div>
+        <textarea
+          v-model="p.system_prompt"
+          placeholder="该人格的 system prompt，例如：你是一只可爱的猫娘，喜欢用喵结尾..."
+        ></textarea>
+      </div>
+      <div v-if="!form.personas.length" class="hint-text" style="margin-top: 12px;">
+        暂无人格，点击「添加人格」开始配置。
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 22px;">
+      <div class="card-header">
         <div class="card-title">常见配置参考</div>
       </div>
       <div class="hint-text">
@@ -180,5 +233,40 @@ async function saveConfig() {
 .toast-enter-from, .toast-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+.persona-block {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.persona-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.persona-name { flex: 1; }
+.persona-desc { flex: 2; }
+.persona-block textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.persona-block input,
+.persona-block textarea {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-color, #e6e6e6);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.persona-block input:focus,
+.persona-block textarea:focus {
+  outline: none;
+  border-color: var(--primary-color, #6f8ffc);
 }
 </style>

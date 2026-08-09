@@ -5,6 +5,7 @@
 
 import csv
 import io
+import logging
 
 from fastapi import APIRouter, Query, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -12,6 +13,8 @@ from fastapi.responses import StreamingResponse
 from bot.core.bot import get_bot as _get_bot
 from api.auth import require_auth
 from api.audit import record_audit
+
+logger = logging.getLogger("qingci-bot.api.log")
 
 
 router = APIRouter()
@@ -173,3 +176,46 @@ async def clear_all_sessions(confirm: bool = Query(default=False)):
     bot = _get_bot_instance()
     await bot.llm.clear_session()
     return {"message": "所有会话已清除"}
+
+
+# ============ 会话历史可视化 ============
+
+
+@router.get("/sessions", dependencies=[Depends(require_auth)])
+async def list_sessions():
+    """列出所有 LLM 会话（按最后活跃时间倒序）"""
+    bot = _get_bot_instance()
+    try:
+        sessions = await bot.db.list_sessions()
+    except Exception:
+        logger.exception("查询会话列表失败")
+        raise HTTPException(status_code=500, detail="查询会话列表失败，详见服务端日志")
+    return {"sessions": sessions}
+
+
+@router.get("/sessions/messages", dependencies=[Depends(require_auth)])
+async def get_session_messages(
+    key: str = Query(..., min_length=1),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    """查看指定会话的消息历史（key 格式：private:{uid} / group:{gid}:{uid}）"""
+    bot = _get_bot_instance()
+    try:
+        messages = await bot.db.get_sessions(key, limit=limit)
+    except Exception:
+        logger.exception("查询会话消息失败")
+        raise HTTPException(status_code=500, detail="查询会话消息失败，详见服务端日志")
+    return {"session_key": key, "messages": messages}
+
+
+@router.delete("/sessions/one", dependencies=[Depends(require_auth)])
+async def delete_session(key: str = Query(..., min_length=1), request: Request = None):
+    """删除指定会话（清空其历史）"""
+    bot = _get_bot_instance()
+    try:
+        await bot.db.clear_sessions(session_key=key)
+    except Exception:
+        logger.exception("删除会话失败")
+        raise HTTPException(status_code=500, detail="删除会话失败，详见服务端日志")
+    await record_audit("delete_session", f"删除会话 {key}", request)
+    return {"message": f"会话 {key} 已删除"}

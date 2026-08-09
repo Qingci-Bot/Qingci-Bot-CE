@@ -248,6 +248,46 @@ class Database:
                 logger.exception("裁剪会话历史失败，已回滚")
                 raise
 
+    async def list_sessions(self) -> list[dict]:
+        """列出所有 LLM 会话（按最后活跃时间倒序）
+
+        返回：session_key / message_count / last_active / user_id / group_id。
+        用于 WebUI 会话历史可视化。
+        """
+        async with get_session_factory()() as session:
+            stmt = (
+                select(
+                    SessionHistory.session_key,
+                    func.count(SessionHistory.id).label("message_count"),
+                    func.max(SessionHistory.created_at).label("last_active"),
+                )
+                .group_by(SessionHistory.session_key)
+                .order_by(func.max(SessionHistory.created_at).desc())
+            )
+            rows = (await session.execute(stmt)).all()
+        result = []
+        for r in rows:
+            key = r.session_key
+            user_id, group_id = 0, 0
+            # 解析 session_key：private:{uid} / group:{gid}:{uid}
+            parts = str(key).split(":")
+            try:
+                if parts[0] == "private" and len(parts) >= 2:
+                    user_id = int(parts[1])
+                elif parts[0] == "group" and len(parts) >= 3:
+                    group_id = int(parts[1])
+                    user_id = int(parts[2])
+            except (ValueError, TypeError):
+                pass  # 无法解析的 key 保持 0，仅展示原始 key
+            result.append({
+                "session_key": key,
+                "message_count": r.message_count,
+                "last_active": r.last_active.isoformat() if r.last_active else None,
+                "user_id": user_id,
+                "group_id": group_id,
+            })
+        return result
+
     # ============ 插件配置 ============
 
     async def get_plugin_config(self, key: str) -> Optional[str]:

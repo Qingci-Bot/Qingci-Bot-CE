@@ -34,6 +34,19 @@ LLM_PROVIDER_PRESETS: dict[str, dict[str, str]] = {
 }
 
 
+class PersonaConfig(BaseModel):
+    """人格配置：一组可切换的 system_prompt
+
+    支持在聊天中通过 /persona 命令切换（会话级覆盖），
+    也可在 WebUI 中管理并设置默认人格。
+    """
+    model_config = {"extra": "ignore"}
+
+    name: str = ""              # 人格名（/persona <name> 切换）
+    description: str = ""       # 简述（/persona 列表 时展示）
+    system_prompt: str = ""     # 该人格的系统提示词
+
+
 class LLMConfig(BaseModel):
     """LLM 大模型配置"""
     model_config = {"extra": "ignore"}
@@ -45,6 +58,9 @@ class LLMConfig(BaseModel):
     max_tokens: int = 2048             # 单次回复最大 token
     temperature: float = 0.7
     system_prompt: str = "你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。"
+    # 人格列表与默认人格（default_persona 为空时使用 system_prompt）
+    personas: list[PersonaConfig] = []
+    default_persona: str = ""
     max_history: int = 20               # 最大对话历史轮数（每轮 = user + assistant）
     max_context_tokens: int = 8192      # 上下文窗口 token 上限，超出后裁剪历史
     timeout: int = 60                   # 单次 LLM 请求超时（秒）

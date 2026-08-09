@@ -48,6 +48,10 @@ class QingciBot:
         self._pending_tasks: set[asyncio.Task[Any]] = set()
         # 错误告警处理器（alert.enabled 时 start 中 attach，stop 中 detach）
         self._alert_handler: Optional[AlertHandler] = None
+        # 全局事件钩子（消息中间件）：横切统计/审计/预处理，
+        # 默认为空列表（零行为变化），供插件/扩展注册
+        self._pre_event_hooks: list[Any] = []
+        self._post_event_hooks: list[Any] = []
 
         # ---- 功能增强组件 ----
         # 批次 1：限流器实例（rate_limit.enabled 时创建）
@@ -216,6 +220,36 @@ class QingciBot:
         """
         return spawn_background_task(coro, name=name)
 
+    # ============ 全局事件钩子（消息中间件）============
+
+    def register_pre_hook(self, fn) -> None:
+        """注册前置钩子：async (event, ctx) -> Optional[str]
+
+        钩子返回非 None 时拦截该事件，返回值作为回复发送并终止分发
+        （跳过 Matcher 与旧式回调）。注册自动去重。
+        """
+        if fn not in self._pre_event_hooks:
+            self._pre_event_hooks.append(fn)
+
+    def register_post_hook(self, fn) -> None:
+        """注册后置钩子：async (event, ctx, reply) -> None
+
+        在消息回复发送后触发（reply 为最终回复或 None），用于横切
+        统计/审计。异常隔离，不影响主链路。注册自动去重。
+        """
+        if fn not in self._post_event_hooks:
+            self._post_event_hooks.append(fn)
+
+    async def _run_post_hooks(self, event: dict, ctx: MessageContext, reply: Optional[str]) -> None:
+        """执行后置钩子（异常隔离）"""
+        for hook in self._post_event_hooks:
+            try:
+                res = hook(event, ctx, reply)
+                if hasattr(res, "__await__"):
+                    await res
+            except Exception:
+                logger.exception("后置钩子执行异常")
+
     async def _handle_event(self, event: dict) -> None:
         """处理 OneBot 事件 - 创建独立任务避免 stop() 死锁"""
         if not self._running:
@@ -236,6 +270,18 @@ class QingciBot:
                 return
 
             post_type = ctx.post_type or event.get("post_type", "")
+
+            # 前置钩子：可在分发前拦截事件（返回非 None 即作为回复发送并终止）
+            for hook in self._pre_event_hooks:
+                try:
+                    res = hook(event, ctx)
+                    if hasattr(res, "__await__"):
+                        res = await res
+                    if res:
+                        await self._send_reply(ctx, str(res))
+                        return
+                except Exception:
+                    logger.exception("前置钩子执行异常")
 
             if post_type != "message":
                 matcher_reply, matcher_blocked = await self.dispatcher._run_event_matchers(self, event, ctx)
@@ -266,6 +312,7 @@ class QingciBot:
             reply, blocked = await self.dispatcher.run_matchers(self, event, ctx)
             if reply is not None:
                 await self._send_reply(ctx, reply)
+                await self._run_post_hooks(event, ctx, reply)
                 return
             if blocked:
                 # block 语义：Matcher 已消费该事件（handler 未返回回复），阻止旧式回调
@@ -278,6 +325,7 @@ class QingciBot:
                     reply = await plugin.on_message(ctx)
                     if reply:
                         await self._send_reply(ctx, reply)
+                        await self._run_post_hooks(event, ctx, reply)
                         break
                 except Exception:
                     logger.exception(

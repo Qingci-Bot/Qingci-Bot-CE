@@ -9,6 +9,12 @@ let socket = null
 let shouldReconnect = true
 let reconnectTimer = null
 
+// 会话记录
+const activeTab = ref('messages')
+const sessions = ref([])
+const currentSession = ref('')
+const sessionMessages = ref([])
+
 onMounted(() => {
   store.fetchLogs('', 50).catch((e) => console.warn('初始消息日志加载失败:', e))
   connectWebSocket()
@@ -19,6 +25,46 @@ onUnmounted(() => {
   if (reconnectTimer) clearTimeout(reconnectTimer)
   if (socket) socket.close()
 })
+
+function switchTab(tab) {
+  activeTab.value = tab
+  if (tab === 'sessions' && sessions.value.length === 0) {
+    loadSessions()
+  }
+}
+
+async function loadSessions() {
+  try {
+    const data = await store.apiFetch('/api/log/sessions')
+    sessions.value = data.sessions || []
+  } catch (e) {
+    console.warn('会话列表加载失败:', e)
+  }
+}
+
+async function openSession(key) {
+  try {
+    const data = await store.apiFetch(`/api/log/sessions/messages?key=${encodeURIComponent(key)}`)
+    sessionMessages.value = data.messages || []
+    currentSession.value = key
+  } catch (e) {
+    console.warn('会话消息加载失败:', e)
+  }
+}
+
+async function removeSession(key) {
+  if (!window.confirm(`确认删除会话 ${key}？`)) return
+  try {
+    await store.apiFetch(`/api/log/sessions/one?key=${encodeURIComponent(key)}`, { method: 'DELETE' })
+    if (currentSession.value === key) {
+      currentSession.value = ''
+      sessionMessages.value = []
+    }
+    await loadSessions()
+  } catch (e) {
+    console.warn('会话删除失败:', e)
+  }
+}
 
 function connectWebSocket() {
   if (!shouldReconnect) return
@@ -64,6 +110,12 @@ function formatTime(ts) {
   const d = new Date(ts)
   return d.toLocaleTimeString('zh-CN', { hour12: false })
 }
+
+function formatDate(ts) {
+  if (!ts) return '-'
+  const d = new Date(ts)
+  return d.toLocaleString('zh-CN', { hour12: false })
+}
 </script>
 
 <template>
@@ -73,7 +125,20 @@ function formatTime(ts) {
   </div>
 
   <div class="page-body">
-    <div class="card fade-in">
+    <div class="tabs">
+      <button
+        class="tab"
+        :class="{ active: activeTab === 'messages' }"
+        @click="switchTab('messages')"
+      >消息流</button>
+      <button
+        class="tab"
+        :class="{ active: activeTab === 'sessions' }"
+        @click="switchTab('sessions')"
+      >会话记录</button>
+    </div>
+
+    <div class="card fade-in" v-show="activeTab === 'messages'">
       <div class="card-header">
         <div class="card-title">
           消息流
@@ -109,9 +174,119 @@ function formatTime(ts) {
         </div>
       </div>
     </div>
+
+    <div class="card fade-in" v-show="activeTab === 'sessions'">
+      <div class="card-header">
+        <div class="card-title">LLM 会话</div>
+        <button class="btn btn-secondary btn-sm" @click="loadSessions">刷新</button>
+      </div>
+
+      <!-- 会话列表 -->
+      <div v-if="!currentSession">
+        <div v-if="sessions.length === 0" class="empty-state" style="padding: 30px;">
+          <div class="icon">🗨</div>
+          <div>暂无会话，与 Bot 对话后自动生成</div>
+        </div>
+        <div
+          v-for="s in sessions"
+          :key="s.session_key"
+          class="session-item"
+          @click="openSession(s.session_key)"
+        >
+          <div class="session-main">
+            <div class="session-title">
+              {{ s.group_id ? `群 ${s.group_id} · 用户 ${s.user_id}` : `私聊 ${s.user_id}` }}
+              <span class="tag" style="margin-left: 8px;">{{ s.message_count }} 条</span>
+            </div>
+            <div class="session-meta">
+              {{ s.session_key }} · 最后活跃 {{ formatDate(s.last_active) }}
+            </div>
+          </div>
+          <button class="btn btn-danger btn-sm" @click.stop="removeSession(s.session_key)">删除</button>
+        </div>
+      </div>
+
+      <!-- 会话详情 -->
+      <div v-else>
+        <div class="session-detail-header">
+          <button class="btn btn-secondary btn-sm" @click="currentSession = ''">← 返回</button>
+          <span class="session-detail-key">{{ currentSession }}</span>
+        </div>
+        <div class="log-container">
+          <div v-if="sessionMessages.length === 0" class="empty-state" style="padding: 30px;">
+            <div class="icon">✉</div>
+            <div>该会话暂无消息</div>
+          </div>
+          <div
+            v-for="(m, i) in sessionMessages"
+            :key="i"
+            class="log-item"
+            :class="{ user: m.role === 'user', bot: m.role === 'assistant' }"
+          >
+            <span class="time">{{ formatTime(m.created_at) }}</span>
+            <span class="meta">{{ m.role === 'user' ? '用户' : 'Bot' }}</span>
+            <span class="content">{{ m.content }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .tag-success { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.tab {
+  padding: 8px 18px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-color, #ccc);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+.tab:hover { color: var(--text-color, #fff); }
+.tab.active {
+  background: var(--primary-color, #6f8ffc);
+  border-color: var(--primary-color, #6f8ffc);
+  color: #fff;
+}
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.session-item:hover { background: rgba(255, 255, 255, 0.03); }
+.session-main { flex: 1; min-width: 0; }
+.session-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-color, #e6e6e6);
+}
+.session-meta {
+  font-size: 12px;
+  color: var(--text-muted, #8a8a8a);
+  margin-top: 2px;
+}
+.session-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+}
+.session-detail-key {
+  font-size: 13px;
+  color: var(--text-muted, #8a8a8a);
+  word-break: break-all;
+}
 </style>
