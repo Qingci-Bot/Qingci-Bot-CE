@@ -229,10 +229,10 @@ async function saveConfig() {
           <input v-model="form.api_key" type="password" placeholder="sk-..."></div>
         <div class="form-group">
           <label>模型名称</label>
-          <input v-model="form.model" type="text" list="model-list" placeholder="gpt-4o-mini">
-          <datalist id="model-list">
+          <select v-if="modelOptions.length" v-model="form.model">
             <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
-          </datalist>
+          </select>
+          <input v-else v-model="form.model" type="text" placeholder="gpt-4o-mini">
           <div class="model-actions">
             <button class="btn btn-sm btn-secondary" :disabled="fetchingModels" @click="fetchModels">
               <span :class="{ spin: fetchingModels }">⟳</span> {{ fetchingModels ? '获取中' : '获取模型列表' }}
