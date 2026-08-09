@@ -25,12 +25,13 @@
 
 - **OneBot 11 反向 WebSocket**：基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp)，完整支持 OneBot v11 协议（消息段解析、API 调用、事件总线）
 - **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 100+ 提供商（OpenAI / DeepSeek / Claude / Gemini / Ollama 等），含流式响应、Function Calling、多模态
-- **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪
-- **插件系统**：借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持优先级、权限控制、命令注册器，向后兼容旧式 `on_message`
+- **人格/人设系统**：可配置多组人格（system_prompt 集合），聊天中 `/persona` 命令随时切换（会话级覆盖），Web UI 可视化管理
+- **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪；Web UI 按会话分组可视化查看 / 删除
+- **插件系统**：借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持优先级、权限控制、命令注册器、插件间依赖声明（require），向后兼容旧式 `on_message`
 - **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）
-- **增强能力**：AI 图片生成、轻量知识库（文件型 RAG）、会话摘要（历史裁剪）、Function Calling、定时任务调度器、LLM 用量统计
+- **增强能力**：AI 图片生成、轻量知识库（文件型 RAG）、会话摘要（历史裁剪）、Function Calling、MCP 服务器接入、定时任务调度器、LLM 用量统计
 - **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式）
-- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置 / 群配置 / 插件管理 / 消息日志 / 登录审计 / 系统设置
+- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（人格 + MCP 管理）/ 群配置 / 插件管理 / 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置
 - **桌面应用**：PyWebView 套壳 + 系统托盘，开机自启
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖
 
@@ -54,7 +55,7 @@ uv pip install -e . --python .venv\Scripts\python.exe
 
 # 或手动安装核心依赖
 uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiosqlite \
-  sqlmodel alembic "sqlalchemy[asyncio]" litellm pydantic pyyaml httpx \
+  sqlmodel alembic "sqlalchemy[asyncio]" litellm pydantic pyyaml httpx mcp \
   --python .venv\Scripts\python.exe
 
 # 安装桌面依赖（可选）
@@ -102,9 +103,27 @@ llm:
   max_context_tokens: 8192        # 上下文窗口 token 上限，超出自动裁剪历史
   timeout: 60                     # 单次 LLM 请求超时（秒）
   num_retries: 2                  # 请求失败重试次数
+  enable_tools: true              # Function Calling 工具调用开关
+  mcp_servers:                    # MCP 服务器列表（需 enable_tools）
+    - name: filesystem            #   服务器名（工具名带 mcp_filesystem_ 前缀）
+      command: npx                #   stdio 模式：子进程命令
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+      url: ''                     #   HTTP 模式：填写后忽略 command
+  personas:                       # 人格列表（/persona 命令切换，会话级覆盖）
+    - name: 猫娘
+      description: 可爱的猫娘
+      system_prompt: 你是一只可爱的猫娘，喜欢用"喵"结尾。
+    - name: 助手
+      description: 严谨的助手
+      system_prompt: 你是严谨的技术助手，回答简洁准确。
+  default_persona: ''             # 默认人格名（空 = 使用 system_prompt）
 ```
 
 LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不受 `timeout` 配置影响。
+
+**人格切换**：聊天中发送 `/persona 列表` 查看全部，`/persona 猫娘` 切换（仅对当前会话生效），`/persona 重置` 恢复默认人格或 `system_prompt`。
+
+**MCP 工具**：开启 `enable_tools` 并配置 `mcp_servers` 后，启动时自动连接各服务器并将工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用。修改 MCP 配置后需重启 Bot 生效。
 
 **provider 路由规则**（基于 litellm）：
 - `api_url` 非空：统一走 OpenAI 兼容协议（`openai/{model}` + `api_base`），兼容任意 OpenAI 协议服务
@@ -138,6 +157,15 @@ Bot 运行时，管理员可在群聊/私聊中发送以下命令：
 | `/kb add\|list\|search\|remove\|reload` | 知识库管理（需开启 `rag.enabled`，仅管理员） |
 
 管理员 QQ 号在 `config.yaml` 的 `bot.admin_users` 中配置。
+
+**所有用户可用命令**（无需管理员权限）：
+
+| 命令 | 说明 |
+|------|------|
+| `/persona` | 查看当前会话人格 |
+| `/persona 列表` | 列出全部可用人格 |
+| `/persona <名称>` | 切换当前会话人格（配置了 `llm.personas` 时可用） |
+| `/persona 重置` | 恢复默认人格或 `system_prompt` |
 
 ## API 鉴权
 
@@ -181,6 +209,9 @@ llm:
   enable_summary: false            # 会话摘要开关（与 session_summary.enabled 等价，任一为 true 即启用）
   enable_tools: false              # Function Calling 工具调用开关（默认关闭）
   max_tool_rounds: 5               # 工具调用最大轮次
+  mcp_servers: []                  # MCP 服务器列表（enable_tools 开启后生效，见上方示例）
+  personas: []                     # 人格列表（/persona 命令切换，见上方示例）
+  default_persona: ''              # 默认人格名（空 = 使用 system_prompt）
 rate_limit:
   enabled: false                   # 对话限流（默认关闭）
   daily_limit: 50                  # 每用户每日对话上限
@@ -231,6 +262,8 @@ api_key: ''                        # API 鉴权密钥
 | `session_summary` | 会话摘要 | `enabled: false` | 与 `llm.enable_summary` 等价，任一为 true 即启用；上下文超过条数/token 阈值时将较早消息摘要压缩，保留最近 N 轮原文 |
 | `log.usage_tracking` | LLM 用量入库 | `true` | 可退出的遥测：关闭后 chat/摘要/图片不再写 usage_logs，Dashboard 用量统计将为空 |
 | `llm.enable_tools` | Function Calling | `false` | 启用工具调用（内置 `get_current_time` / `random_quote`，可经 ToolRegistry 扩展）；`max_tool_rounds` 限制最大轮次（默认 5） |
+| `llm.personas` | 人格/人设 | `[]` | 多组 system_prompt；聊天中 `/persona` 切换（会话级覆盖）、`/persona 列表` 查看；Web UI「LLM 配置」管理 |
+| `llm.mcp_servers` | MCP 服务器 | `[]` | 连接外部 MCP 服务器（stdio/HTTP 传输），工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用；需开启 `enable_tools`，修改后重启 Bot 生效 |
 | `llm.timeout` / `llm.num_retries` | 请求超时与重试 | `60` / `2` | 单次 LLM 请求超时秒数与失败重试次数 |
 | `bot.log_json` | 结构化 JSON 日志 | `false` | 面向机器可读的日志采集场景 |
 
@@ -249,19 +282,22 @@ Qingci-Bot/
 ├── bot/
 │   ├── config.py              # 配置管理（Pydantic 模型）
 │   ├── core/
-│   │   ├── bot.py             # Bot 主类（生命周期、事件调度）
+│   │   ├── bot.py             # Bot 主类（生命周期、事件调度、全局钩子）
 │   │   ├── connection.py      # OneBot 连接（aiocqhttp 反向 WS）
 │   │   ├── dispatcher.py      # 消息分发 + Matcher 调度
+│   │   ├── message.py         # 类型化消息构造器（Message/MessageSegment）
 │   │   ├── broadcast.py       # 消息广播
 │   │   ├── filter.py          # 敏感词过滤器
 │   │   ├── scheduler.py       # 定时任务调度器
+│   │   ├── tasks.py           # 后台任务管理（防 GC + 停机等待）
 │   │   ├── alerter.py         # 错误告警器
 │   │   └── logformat.py       # 结构化 JSON 日志
 │   ├── llm/
 │   │   ├── adapter.py         # LLM 适配器基类（支持 tools/images）
 │   │   ├── litellm_adapter.py # litellm 实现（100+ 提供商）
 │   │   ├── manager.py         # 会话管理 + Token 裁剪 + 摘要 + 持久化
-│   │   └── tools.py           # Function Calling 工具注册表
+│   │   ├── tools.py           # Function Calling 工具注册表
+│   │   └── mcp.py             # MCP 服务器接入（stdio/HTTP）
 │   ├── rag/
 │   │   └── knowledge.py       # 轻量知识库（文件型关键词检索）
 │   ├── db/
@@ -308,8 +344,9 @@ Qingci-Bot/
 | 后端 | Python 3.12 + FastAPI + uvicorn |
 | QQ 协议 | aiocqhttp (OneBot 11 反向 WS) |
 | LLM | litellm (100+ 提供商统一接口) |
+| MCP | mcp (Model Context Protocol，stdio/HTTP) |
 | 数据库 | SQLModel + Alembic + aiosqlite (WAL 模式) |
-| 插件系统 | Matcher + Rule + Permission (借鉴 NoneBot2) |
+| 插件系统 | Matcher + Rule + Permission + require (借鉴 NoneBot2) |
 | 前端 | Vue 3 + Vite + Pinia |
 | 桌面 | PyWebView + pystray |
 
@@ -346,6 +383,7 @@ class MyPlugin(PluginBase):
     version = "1.0.0"
     author = "YourName"
     description = "插件描述"
+    require = []            # 依赖的其他插件 name 列表（加载前自动先加载，见下文）
 
     async def on_load(self):
         """插件加载时调用（必须实现）"""
@@ -373,7 +411,30 @@ class MyPlugin(PluginBase):
 | `self.config` | `ConfigManager` | 配置管理器（可读写 `config.yaml`） |
 | `self.connection` | `OneBotConnection` | OneBot 连接（可调用 QQ API） |
 | `self.llm` | `LLMManager` | LLM 管理器（基于 litellm） |
+| `self.scheduler` | `BotScheduler` | 定时任务调度器 |
+| `self.tool_registry` | `ToolRegistry` | Function Calling 工具注册表 |
+| `self.knowledge_store` | `KnowledgeStore` | 知识库（RAG 未启用时为 None） |
 | `self.matchers` | `list[Matcher]` | Matcher 列表（在 `on_load` 中填充） |
+
+### 插件依赖（require）
+
+插件可声明依赖的其他插件，加载前 `PluginManager` 会自动先加载依赖：
+
+```python
+from bot.plugin.base import PluginBase
+
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+    require = ["admin"]   # 依赖 admin 插件（内置插件名或已加载插件名）
+
+    async def on_load(self):
+        # 通过 bot 获取依赖插件实例，调用其公开方法
+        admin = self.bot.plugin_manager.get("admin")
+        ...
+```
+
+- 依赖已注册则跳过；未注册时尝试加载 `bot.plugin.builtin.<name>` 模块
+- 依赖缺失或形成循环依赖时插件加载失败（报错并保持旧插件生效）
 
 ### Matcher / Rule / Permission
 
@@ -640,9 +701,26 @@ async def weather_log(ctx: MatcherContext) -> None:
 > 内置插件中 admin（priority=1）先于 chat（priority=50）执行。
 > 外部插件开发者若此前依赖旧的“大者优先”实际顺序，请自查 priority 配置。
 
-### 消息格式（CQ 码）
+### 消息构造（类型化 Message / CQ 码）
 
-返回的回复文本支持 CQ 码：
+**推荐使用类型化消息构造器**（`bot/core/message.py`），自动处理 CQ 码转义：
+
+```python
+from bot.core.message import Message, MessageSegment
+
+# 回复 + @ + 文本 + 图片 组合
+msg = Message(
+    MessageSegment.reply(ctx.message_id),
+    MessageSegment.at(ctx.user_id),
+    MessageSegment.text("请看这张图："),
+    MessageSegment.image("https://example.com/img.png"),
+)
+await self.connection.send_msg("group", ctx.group_id, str(msg))
+```
+
+支持的消息段：`text` / `at` / `at_all` / `image` / `face` / `voice` / `video` / `reply` / `forward`。`Message.extract_plain_text()` 可提取纯文本。
+
+**手动 CQ 码**（简单场景仍可用）：
 
 | CQ 码 | 说明 |
 |-------|------|
@@ -657,6 +735,27 @@ from bot.core.dispatcher import MessageDispatcher
 at_code = MessageDispatcher.build_cq_at(ctx.user_id)
 reply = f"{at_code} 收到！"
 ```
+
+### 全局事件钩子（消息中间件）
+
+Bot 提供全局前置 / 后置钩子，用于横切统计、审计、预处理，建议在插件 `on_load` 中注册：
+
+```python
+# 前置钩子：async (event, ctx) -> Optional[str]
+# 返回非 None 时拦截该事件，返回值作为回复发送并终止分发
+async def pre_hook(event, ctx):
+    return None
+
+# 后置钩子：async (event, ctx, reply) -> None
+# 在消息回复发送后触发（reply 为最终回复或 None）
+async def post_hook(event, ctx, reply):
+    pass
+
+self.bot.register_pre_hook(pre_hook)
+self.bot.register_post_hook(post_hook)
+```
+
+钩子异常隔离（不影响主链路），注册自动去重。
 
 ### 插件加载方式
 
@@ -729,6 +828,7 @@ reply = f"{at_code} 收到！"
 | PUT | `/bot` | 是 | 更新 Bot 配置 |
 | GET | `/llm` | 否 | 获取 LLM 配置 |
 | PUT | `/llm` | 是 | 更新 LLM 配置 |
+| GET | `/llm/presets` | 否 | 获取 LLM 提供商预设（api_url + 推荐 model，切换 provider 自动联动） |
 | GET | `/onebot` | 否 | 获取 OneBot 配置 |
 | POST | `/llm/test` | 是 | 测试 LLM 连接 |
 
@@ -752,6 +852,9 @@ reply = f"{at_code} 收到！"
 | GET | `/usage` | 是 | LLM 用量统计（依赖 `log.usage_tracking`） |
 | DELETE | `/messages` | 是 | 删除消息记录 |
 | DELETE | `/sessions` | 是 | 清除所有会话 |
+| GET | `/sessions` | 是 | 会话列表（按最后活跃排序，含条数与归属 QQ） |
+| GET | `/sessions/messages` | 是 | 查看指定会话历史（`?key=private:10001` 或 `group:10001:20002`） |
+| DELETE | `/sessions/one` | 是 | 删除指定会话（`?key=会话key`，带审计） |
 
 ### 群配置 `/api/group`
 
