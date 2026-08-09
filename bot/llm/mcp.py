@@ -48,34 +48,52 @@ class MCPBridge:
 
     async def _connect_one(self, cfg) -> int:
         """连接单个服务器并返回其工具数"""
-        if cfg.command:
-            from mcp import ClientSession
-            from mcp.client.stdio import StdioServerParameters, stdio_client
+        transport = None
+        session = None
+        try:
+            if cfg.command:
+                from mcp import ClientSession
+                from mcp.client.stdio import StdioServerParameters, stdio_client
 
-            params = StdioServerParameters(
-                command=cfg.command,
-                args=list(cfg.args or []),
-                env=dict(cfg.env) if cfg.env else None,
-            )
-            transport = stdio_client(params)
-            read, write = await transport.__aenter__()
-            session = await ClientSession(read, write).__aenter__()
-        elif cfg.url:
-            from mcp import ClientSession
-            from mcp.client.streamable_http import streamablehttp_client
+                params = StdioServerParameters(
+                    command=cfg.command,
+                    args=list(cfg.args or []),
+                    env=dict(cfg.env) if cfg.env else None,
+                )
+                transport = stdio_client(params)
+                read, write = await transport.__aenter__()
+                session = await ClientSession(read, write).__aenter__()
+            elif cfg.url:
+                from mcp import ClientSession
+                from mcp.client.streamable_http import streamablehttp_client
 
-            transport = streamablehttp_client(cfg.url)
-            read, write = await transport.__aenter__()
-            session = await ClientSession(read, write).__aenter__()
-        else:
-            logger.warning(
-                f"MCP 服务器 {cfg.name} 未配置 command 或 url，跳过"
-            )
-            return 0
+                transport = streamablehttp_client(cfg.url)
+                read, write = await transport.__aenter__()
+                session = await ClientSession(read, write).__aenter__()
+            else:
+                logger.warning(
+                    f"MCP 服务器 {cfg.name} 未配置 command 或 url，跳过"
+                )
+                return 0
 
-        await session.initialize()
-        result = await session.list_tools()
-        tools = getattr(result, "tools", None) or []
+            await session.initialize()
+            result = await session.list_tools()
+            tools = getattr(result, "tools", None) or []
+        except Exception:
+            # 中途失败（initialize/list_tools 等）：按打开顺序逆序关闭
+            # 已建立的 session 与 transport，避免子进程/连接泄漏
+            if session is not None:
+                try:
+                    await session.__aexit__(None, None, None)
+                except Exception:
+                    logger.exception(f"清理 MCP 会话失败: {cfg.name}")
+            if transport is not None:
+                try:
+                    await transport.__aexit__(None, None, None)
+                except Exception:
+                    logger.exception(f"清理 MCP 传输失败: {cfg.name}")
+            raise
+
         self._sessions.append((cfg.name, session))
         self._transports.append(transport)
         self._connected_servers.append(cfg.name)

@@ -194,10 +194,14 @@ class ChatPlugin(PluginBase):
         返回 None 表示使用 LLMConfig.system_prompt。
         """
         llm_cfg = self.config.llm
-        name = (
-            _persona_override.get(self._session_key(ctx))
-            or llm_cfg.default_persona
-        )
+        key = self._session_key(ctx)
+        override = _persona_override.get(key)
+        if override is not None:
+            # LRU 命中：刷新访问顺序，避免仍在使用的人格被淘汰
+            _persona_override.move_to_end(key)
+            name = override
+        else:
+            name = llm_cfg.default_persona
         if not name:
             return None
         for p in llm_cfg.personas:

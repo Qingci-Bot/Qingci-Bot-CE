@@ -256,6 +256,14 @@ export const useAppStore = defineStore('app', () => {
     })
   }
 
+  async function fetchLLMModels(cfg) {
+    return await apiFetch('/api/config/llm/models', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(cfg),
+    })
+  }
+
   async function fetchLogs(keyword = '', limit = 50) {
     const params = new URLSearchParams({ keyword, limit: String(limit) })
     logs.value = await apiFetch(`/api/log/messages?${params}`)
@@ -275,7 +283,7 @@ export const useAppStore = defineStore('app', () => {
     configLoaded,
     statusText, statusColor,
     fetchStatus, fetchConfig, fetchLLMPresets, startBot, stopBot, restartBot,
-    saveConfig, testLLM, fetchLogs, fetchMessageCount, addLog,
+    saveConfig, testLLM, fetchLLMModels, fetchLogs, fetchMessageCount, addLog,
     apiFetch, getApiKey, setApiKey,
   }
 })

@@ -27,8 +27,9 @@ def get_bot() -> Optional[QingciBot]:
 
 logger = logging.getLogger("qingci-bot.api")
 
-# WebSocket 连接池（用于实时消息推送）
+# WebSocket 连接池（实时消息推送）与对话调试台连接池
 _ws_clients: set[WebSocket] = set()
+_chat_clients: set[WebSocket] = set()
 _MAX_WS_CLIENTS = 32
 
 
@@ -63,6 +64,12 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
     _ws_clients.clear()
+    for ws in list(_chat_clients):
+        try:
+            await ws.close()
+        except Exception:
+            pass
+    _chat_clients.clear()
     # 注销 WebSocket 广播 broker，避免测试场景多次 create_app 时 broker 累积
     unregister_broker(_broadcast_message_to_ws)
     logger.info("API 服务已关闭")
@@ -159,7 +166,17 @@ def create_app() -> FastAPI:
         if configured_key and not secrets.compare_digest(token, configured_key):
             await ws.close(code=4001, reason="未授权")
             return
+        # 连接数限制（accept 前检查，独立于日志连接池）
+        if len(_chat_clients) >= _MAX_WS_CLIENTS:
+            await ws.close(code=4003, reason="连接数已满")
+            return
         await ws.accept()
+        _chat_clients.add(ws)
+        # 二次检查，防止并发超过上限
+        if len(_chat_clients) > _MAX_WS_CLIENTS:
+            _chat_clients.discard(ws)
+            await ws.close(code=4003, reason="连接数已满")
+            return
         bot = get_bot()
         try:
             while True:
@@ -195,6 +212,8 @@ def create_app() -> FastAPI:
             pass
         except Exception:
             logger.debug("Chat WebSocket 异常断开", exc_info=True)
+        finally:
+            _chat_clients.discard(ws)
 
     # 静态文件（Web UI 构建产物）
     # frozen 模式下为 exe 所在目录/web/dist（见 bot/paths.py）

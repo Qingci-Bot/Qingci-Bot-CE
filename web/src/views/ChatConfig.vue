@@ -8,6 +8,8 @@ const { toast, showToast } = useToast()
 const form = reactive({})
 const testing = ref(false)
 const saving = ref(false)
+const fetchingModels = ref(false)
+const modelOptions = ref([])
 
 // 提供商列表，从后端 presets 动态生成
 const providerOptions = computed(() => {
@@ -105,11 +107,31 @@ async function testConnection() {
   testing.value = true
   try {
     const res = await store.testLLM({ ...form })
-    showToast(res.available ? 'success' : 'error', res.available ? 'LLM 连接测试通过' : 'LLM 连接测试失败')
+    showToast(res.available ? 'success' : 'error', res.message || (res.available ? 'LLM 连接测试通过' : 'LLM 连接测试失败'))
   } catch (e) {
     showToast('error', `测试失败：${e.message}`)
   } finally {
     testing.value = false
+  }
+}
+
+// 向提供商查询可用模型列表（需先填 API Key / API 地址）
+async function fetchModels() {
+  fetchingModels.value = true
+  modelOptions.value = []
+  try {
+    const res = await store.fetchLLMModels({ ...form })
+    const models = res.models || []
+    modelOptions.value = models
+    if (!models.length) {
+      showToast('error', '未获取到任何模型，请检查 API 地址 / Key')
+      return
+    }
+    showToast('success', `获取到 ${models.length} 个模型，请选择`)
+  } catch (e) {
+    showToast('error', `获取模型列表失败：${e.message}`)
+  } finally {
+    fetchingModels.value = false
   }
 }
 
@@ -122,7 +144,10 @@ async function saveConfig() {
   try {
     const newConfig = JSON.parse(JSON.stringify(store.config))
     // 表单中的 mcp args 为逗号分隔字符串，提交前转为数组
+    // 先保留后端原有 LLM 字段（max_context_tokens/timeout/num_retries 等
+    // 未在表单中的字段），再以表单值覆盖，避免保存时被整体替换丢失
     newConfig.llm = {
+      ...(store.config.llm || {}),
       ...form,
       mcp_servers: (form.mcp_servers || []).map(s => ({
         name: s.name,
@@ -179,7 +204,16 @@ async function saveConfig() {
           <input v-model="form.api_key" type="password" placeholder="sk-..."></div>
         <div class="form-group">
           <label>模型名称</label>
-          <input v-model="form.model" type="text" placeholder="gpt-4o-mini">
+          <input v-model="form.model" type="text" list="model-list" placeholder="gpt-4o-mini">
+          <datalist id="model-list">
+            <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
+          </datalist>
+          <div class="model-actions">
+            <button class="btn btn-sm btn-secondary" :disabled="fetchingModels" @click="fetchModels">
+              <span :class="{ spin: fetchingModels }">⟳</span> {{ fetchingModels ? '获取中' : '获取模型列表' }}
+            </button>
+            <span v-if="modelOptions.length" class="hint-text">共 {{ modelOptions.length }} 个模型</span>
+          </div>
         </div>
         <div class="form-group">
           <label>最大 Token: {{ form.max_tokens }}</label>
@@ -302,6 +336,12 @@ async function saveConfig() {
 .persona-desc { flex: 2; }
 .mcp-name { flex: 1; }
 .mcp-cmd { flex: 2; }
+.model-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
 .mcp-args {
   width: 100%;
   margin-bottom: 8px;

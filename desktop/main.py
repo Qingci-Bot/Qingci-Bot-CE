@@ -59,16 +59,39 @@ def run_desktop(args):
 
     # 启动系统托盘
     tray = None
+    tray_ok = False
     try:
+        # 提前验证托盘依赖可用，决定是否启用"关闭即驻留后台"行为
+        import importlib.util
+        if importlib.util.find_spec("pystray") is None:
+            raise ImportError("pystray 未安装")
+
         from desktop.tray import SystemTray
         tray = SystemTray(
-            on_show=lambda: window.restore() if window else None,
+            on_show=lambda: (window.show(), window.restore()),
             on_exit=lambda: webview.destroy(),
         )
         tray_thread = threading.Thread(target=tray.create, daemon=True)
         tray_thread.start()
+        tray_ok = True
     except Exception:
-        logger.warning("系统托盘启动失败")
+        logger.warning("系统托盘启动失败，关闭窗口将直接退出")
+
+    if tray_ok:
+
+        def _on_closing(*_args, **_kwargs):
+            """点击关闭按钮 = 隐藏窗口驻留系统托盘，不退出进程。
+
+            返回 False 取消 pywebview 的关闭流程（WinForms 后端约定）；
+            真正退出请用托盘右键菜单「退出」。
+            """
+            try:
+                window.hide()
+            except Exception:
+                logger.exception("隐藏窗口失败")
+            return False
+
+        window.events.closing += _on_closing
 
     webview.start(debug=False)
 

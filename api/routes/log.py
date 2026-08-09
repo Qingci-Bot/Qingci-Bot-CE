@@ -144,8 +144,7 @@ async def export_messages():
                 )
             except Exception:
                 # 流已开始输出时无法再改状态码，仅中止并记日志
-                import logging
-                logging.getLogger("qingci-bot.api.log").exception("导出消息分批查询失败")
+                logger.exception("导出消息分批查询失败")
                 break
             if not rows:
                 break

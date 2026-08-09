@@ -21,6 +21,13 @@ if getattr(sys, "frozen", False) and sys.stdout is None:
 
     sys.stdout = sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
+# 跳过 litellm 启动时的远程 model cost map 拉取：无外网/慢网环境下
+# httpx.get(timeout=5) 会因 DNS 解析失败阻塞数秒，显著拖慢启动。
+# 直接使用包内本地备份（功能无影响），仅影响极个别新模型的计价信息。
+import os
+
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "true")
+
 import uvicorn
 
 from bot.core.bot import QingciBot, set_bot, clear_bot

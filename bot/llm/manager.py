@@ -47,6 +47,8 @@ class LLMManager:
         # 用量入库开关（log.usage_tracking）：关闭后不写 usage_logs
         self._usage_tracking = usage_tracking
         self._adapter: Optional[LLMAdapter] = None
+        # 最近一次可用性检查失败的原因（供 /llm/test 展示）
+        self.last_error: str = ""
         # 内存会话缓存: key = "group:{group_id}:{user_id}" 或 "private:{user_id}"
         self._sessions: dict[str, list[dict]] = {}
         # 已从 DB 懒加载过的 session key
@@ -834,6 +836,9 @@ class LLMManager:
 
     async def check_availability(self) -> bool:
         try:
-            return await self.adapter.check_availability()
+            ok = await self.adapter.check_availability()
+            # 透传适配器记录的失败原因（供 /llm/test 等展示）
+            self.last_error = getattr(self.adapter, "last_error", "")
+            return ok
         except Exception:
             return False

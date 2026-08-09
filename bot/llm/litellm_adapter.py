@@ -46,6 +46,7 @@ class LiteLLMAdapter(LLMAdapter):
         self._model = model
         self._timeout = timeout
         self._num_retries = num_retries
+        self.last_error: str = ""  # 最近一次可用性检查失败的具体原因
 
     @property
     def provider_name(self) -> str:
@@ -235,13 +236,16 @@ class LiteLLMAdapter(LLMAdapter):
                     [{"role": "user", "content": "ping"}],
                     system_prompt="回复 pong",
                     max_tokens=10,
+                    temperature=0.7,
                     stream=False,
                     timeout=10,
                 )
             )
+            self.last_error = ""
             return True
         except Exception as e:
             err_type = type(e).__name__
+            self.last_error = f"{err_type}: {e}"
             if isinstance(e, litellm.AuthenticationError):
                 logger.warning(f"LLM 可用性检查失败（鉴权错误 {err_type}）: {e}")
             elif isinstance(e, (litellm.Timeout, asyncio.TimeoutError)):

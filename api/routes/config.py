@@ -253,9 +253,12 @@ async def test_llm_config(data: dict):
             )
         manager = LLMManager(LLMConfig(**current))
         available = await manager.check_availability()
+        if not available:
+            detail = getattr(manager, "last_error", "") or "未知错误"
+            logger.warning(f"LLM 连接测试失败: {detail}")
         return {
             "available": available,
-            "message": "LLM 连接正常" if available else "LLM 连接失败",
+            "message": "LLM 连接正常" if available else f"LLM 连接失败：{detail}",
         }
     except HTTPException:
         raise
@@ -267,6 +270,82 @@ async def test_llm_config(data: dict):
     finally:
         if manager is not None:
             await manager.close()
+
+
+@router.post("/llm/models", dependencies=[Depends(require_auth)])
+async def list_llm_models(data: dict):
+    """查询提供商可用模型列表（按 provider 调用对应模型列表 API）
+
+    请求体与 /llm/test 一致（provider / api_url / api_key / model）。
+    支持：
+    - OpenAI 兼容（openai/deepseek/siliconflow/custom）: GET {api_url}/models
+    - Ollama: GET {base}/api/tags
+    - Claude: GET https://api.anthropic.com/v1/models
+    - Gemini: GET https://generativelanguage.googleapis.com/v1beta/models
+    失败返回 400 并携带具体错误信息，便于前端直接展示。
+    """
+    import httpx
+
+    cfg = _get_config_manager()
+    current = cfg.llm.model_dump()
+    for k, v in _filter_masked(data).items():
+        if v is not None:
+            current[k] = v
+
+    provider = current.get("provider", "")
+    api_url = (current.get("api_url") or "").rstrip("/")
+    api_key = current.get("api_key") or ""
+
+    async def _fetch(url: str, headers: Optional[dict] = None, params: Optional[dict] = None) -> dict:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, headers=headers, params=params)
+            resp.raise_for_status()
+            return resp.json()
+
+    try:
+        if provider == "ollama":
+            base = api_url or "http://localhost:11434"
+            payload = await _fetch(f"{base}/api/tags")
+            models = [
+                m.get("name", "") for m in payload.get("models", []) if m.get("name")
+            ]
+        elif provider == "claude":
+            base = api_url or "https://api.anthropic.com/v1"
+            payload = await _fetch(
+                f"{base}/models",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                },
+            )
+            models = [
+                m.get("id", "") for m in payload.get("data", []) if m.get("id")
+            ]
+        elif provider == "gemini":
+            if not api_key:
+                raise ValueError("Gemini 查询模型列表需要填写 API Key")
+            payload = await _fetch(
+                "https://generativelanguage.googleapis.com/v1beta/models",
+                params={"key": api_key},
+            )
+            models = [
+                m.get("name", "") for m in payload.get("models", []) if m.get("name")
+            ]
+        else:
+            # OpenAI 兼容协议（openai/deepseek/siliconflow/custom）
+            if not api_url:
+                raise ValueError(f"provider {provider} 需要填写 API 地址（api_url）")
+            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            payload = await _fetch(f"{api_url}/models", headers=headers)
+            models = [
+                m.get("id", "") for m in payload.get("data", []) if m.get("id")
+            ]
+        return {"models": sorted(set(models))}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"查询模型列表失败: provider={provider}, error={e}")
+        raise HTTPException(status_code=400, detail=f"查询模型列表失败：{e}")
 
 
 @router.get("/onebot", dependencies=[Depends(require_auth)])
