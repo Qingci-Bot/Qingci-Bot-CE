@@ -12,6 +12,7 @@ let disposed = false
 const navItems = [
   { path: '/', name: '仪表盘', icon: '◈' },
   { path: '/config', name: 'LLM 配置', icon: '✦' },
+  { path: '/lab', name: '对话调试', icon: '✎' },
   { path: '/groups', name: '群配置', icon: '▣' },
   { path: '/plugins', name: '插件管理', icon: '◇' },
   { path: '/logs', name: '消息日志', icon: '✉' },

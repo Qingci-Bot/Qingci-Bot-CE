@@ -170,6 +170,33 @@ async function loadAuditLogs() {
     auditLoading.value = false
   }
 }
+
+// 高级配置：JSON 编辑器（借鉴 AstrBot 可视化配置 + 代码编辑双模式）
+const configJson = ref('')
+const jsonSaving = ref(false)
+
+function loadConfigJson() {
+  configJson.value = JSON.stringify(store.config, null, 2)
+}
+
+async function saveConfigJson() {
+  let data
+  try {
+    data = JSON.parse(configJson.value)
+  } catch (e) {
+    showToast('error', `JSON 格式错误：${e.message}`)
+    return
+  }
+  jsonSaving.value = true
+  try {
+    await store.saveConfig(data)
+    showToast('success', '配置已保存')
+  } catch (e) {
+    showToast('error', `保存失败：${e.message}`)
+  } finally {
+    jsonSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -329,6 +356,23 @@ async function loadAuditLogs() {
 
     <div class="card fade-in" style="margin-top: 22px;">
       <div class="card-header">
+        <div class="card-title">高级配置（JSON）</div>
+        <div class="action-bar">
+          <button class="btn btn-secondary btn-sm" @click="loadConfigJson">加载当前配置</button>
+          <button class="btn btn-primary btn-sm" :disabled="jsonSaving" @click="saveConfigJson">
+            {{ jsonSaving ? '保存中' : '保存 JSON' }}
+          </button>
+        </div>
+      </div>
+      <div class="hint-text" style="margin-bottom: 12px;">
+        直接编辑完整配置（JSON 格式）。敏感字段（api_key / access_token）显示为
+        <code>***</code>，保存时后端自动过滤占位符、保留原值。修改需符合配置模型约束。
+      </div>
+      <textarea v-model="configJson" class="json-editor" spellcheck="false" placeholder="点击「加载当前配置」填充"></textarea>
+    </div>
+
+    <div class="card fade-in" style="margin-top: 22px;">
+      <div class="card-header">
         <div class="card-title">保存更改</div>
         <button class="btn btn-primary" :disabled="saving" @click="saveConfig">
           <span>✓</span> {{ saving ? '保存中' : '保存设置' }}
@@ -350,5 +394,23 @@ async function loadAuditLogs() {
 .toast-enter-from, .toast-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+.json-editor {
+  width: 100%;
+  min-height: 360px;
+  resize: vertical;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.6);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  box-sizing: border-box;
+}
+.json-editor:focus {
+  outline: none;
+  border-color: var(--primary-color);
 }
 </style>

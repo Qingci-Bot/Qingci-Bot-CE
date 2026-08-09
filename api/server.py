@@ -147,6 +147,55 @@ def create_app() -> FastAPI:
         finally:
             _ws_clients.discard(ws)
 
+    # WebSocket 流式 LLM 对话（对话调试台；鉴权方式同 /api/ws/log）
+    # 客户端发送 {"message": "...", "user_id": 900000001}，
+    # 服务端逐块返回 {"type":"delta","text":...}，结束返回 {"type":"done"}。
+    @app.websocket("/api/ws/chat")
+    async def ws_chat(ws: WebSocket, token: str = Query(default="")):
+        configured_key = _get_configured_api_key()
+        if configured_key is None:
+            await ws.close(code=4001, reason="服务暂不可用")
+            return
+        if configured_key and not secrets.compare_digest(token, configured_key):
+            await ws.close(code=4001, reason="未授权")
+            return
+        await ws.accept()
+        bot = get_bot()
+        try:
+            while True:
+                raw = await ws.receive_text()
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    await ws.send_json({"type": "error", "text": "消息格式错误"})
+                    continue
+                message = str(data.get("message", "")).strip()
+                if not message:
+                    await ws.send_json({"type": "error", "text": "消息不能为空"})
+                    continue
+                if bot is None or not bot.is_running or bot.llm is None:
+                    await ws.send_json(
+                        {"type": "error", "text": "Bot 未运行，请先在顶部启动 Bot"}
+                    )
+                    continue
+                # 调试会话固定为私聊 + 独立 user_id，避免污染真实对话
+                user_id = int(data.get("user_id") or 0) or 900000001
+                stream = bot.llm.chat_stream(
+                    message=message, message_type="private", user_id=user_id
+                )
+                try:
+                    async for chunk in stream:
+                        await ws.send_json({"type": "delta", "text": chunk})
+                finally:
+                    # 正常结束或客户端断开均关闭生成器：
+                    # chat_stream 内部会在 GeneratorExit 时回滚用户消息
+                    await stream.aclose()
+                await ws.send_json({"type": "done"})
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            logger.debug("Chat WebSocket 异常断开", exc_info=True)
+
     # 静态文件（Web UI 构建产物）
     # frozen 模式下为 exe 所在目录/web/dist（见 bot/paths.py）
     import os

@@ -3,6 +3,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 const routes = [
   { path: '/', name: 'dashboard', component: () => import('../views/Dashboard.vue') },
   { path: '/config', name: 'chat', component: () => import('../views/ChatConfig.vue') },
+  { path: '/lab', name: 'chatlab', component: () => import('../views/ChatLab.vue') },
   { path: '/groups', name: 'groups', component: () => import('../views/GroupConfig.vue') },
   { path: '/plugins', name: 'plugins', component: () => import('../views/PluginManager.vue') },
   { path: '/logs', name: 'logs', component: () => import('../views/MessageLog.vue') },
