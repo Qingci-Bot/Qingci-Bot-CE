@@ -14,7 +14,7 @@
                               │  ├──────────────────────────────────┤   │
                               │  │ PluginManager (热加载/双轨调度)    │   │
                               │  ├──────────────────────────────────┤   │
-                              │  │ LLMManager (litellm 100+ 提供商)  │   │
+                              │  │ LLMManager (litellm 多提供商)     │   │
                               │  ├──────────────────────────────────┤   │
                               │  │ Database (SQLModel + Alembic)    │   │
                               │  └──────────────────────────────────┘   │
@@ -24,16 +24,16 @@
 ## 特性
 
 - **OneBot 11 反向 WebSocket**：基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp)，完整支持 OneBot v11 协议（消息段解析、API 调用、事件总线）
-- **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 100+ 提供商（OpenAI / DeepSeek / Claude / Gemini / Ollama 等），含流式响应、Function Calling、多模态
+- **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 7 大提供商（OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义），含流式响应、Function Calling、多模态；填好 API Key 后可一键拉取提供商可用模型列表
 - **人格/人设系统**：可配置多组人格（system_prompt 集合），聊天中 `/persona` 命令随时切换（会话级覆盖），Web UI 可视化管理
-- **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪；Web UI 按会话分组可视化查看 / 删除
+- **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪（可选摘要压缩）；Web UI 按会话分组可视化查看 / 删除
 - **插件系统**：借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持优先级、权限控制、命令注册器、插件间依赖声明（require），向后兼容旧式 `on_message`
 - **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）
 - **增强能力**：AI 图片生成、轻量知识库（文件型 RAG）、会话摘要（历史裁剪）、Function Calling、MCP 服务器接入、定时任务调度器、LLM 用量统计
-- **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式）
-- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（人格 + MCP 管理）/ 群配置 / 插件管理 / 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置
-- **桌面应用**：PyWebView 套壳 + 系统托盘，开机自启
-- **离线可用**：前端资源本地打包，无外部 CDN 依赖
+- **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式），支持在线备份与消息 CSV 导出
+- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理 / 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置
+- **桌面应用**：PyWebView 套壳 + 系统托盘（关闭窗口自动驻留后台），开机自启
+- **离线可用**：前端资源本地打包，无外部 CDN 依赖；litellm 延迟导入，启动不加载重型依赖
 
 ---
 
@@ -41,8 +41,10 @@
 
 ## 环境要求
 
-- Python 3.10+
+- Python 3.10+（推荐 3.12）
 - [LLBot](https://github.com/LLOneBot/LuckyLilliaBot)（QQ 协议端）
+- Node.js 18+（仅构建 Web UI 时需要，`web/dist` 已存在可跳过）
+- 桌面模式额外依赖系统 WebView2 运行时（见「打包为 exe」注意事项）
 
 ## 1. 安装
 
@@ -50,17 +52,19 @@
 # 创建虚拟环境
 uv venv --python python3.12 .venv
 
-# 安装 Python 依赖（推荐用 uv，速度快）
+# 安装全部依赖（推荐：pyproject.toml 已声明所有依赖，含桌面与 MCP）
 uv pip install -e . --python .venv\Scripts\python.exe
-
-# 或手动安装核心依赖
-uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiosqlite \
-  sqlmodel alembic "sqlalchemy[asyncio]" litellm pydantic pyyaml httpx mcp \
-  --python .venv\Scripts\python.exe
-
-# 安装桌面依赖（可选）
-uv pip install pywebview pystray pillow --python .venv\Scripts\python.exe
 ```
+
+> 若跳过 `pyproject.toml`，可手动安装核心依赖（桌面/MCP 可选）：
+>
+> ```bash
+> uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiosqlite \
+>   sqlmodel alembic "sqlalchemy[asyncio]" litellm pydantic pyyaml httpx \
+>   "apscheduler>=3.10,<4" "mcp>=1.6,<2" \
+>   pywebview pystray pillow \
+>   --python .venv\Scripts\python.exe
+> ```
 
 ## 2. 启动
 
@@ -80,12 +84,14 @@ uv pip install pywebview pystray pillow --python .venv\Scripts\python.exe
 
 启动后访问 `http://127.0.0.1:8080/ui` 进入管理界面。
 
+> **Web UI 未构建时**：若 `web/dist` 缺失或不完整，访问 `/` 会返回构建提示页（引导在 `web/` 目录执行 `npm install` 与 `npm run build`），API 服务本身仍正常可用。克隆仓库后首次启动前请先构建前端。
+
 ## 3. 配置 LLBot
 
 在 LLBot 中添加反向 WebSocket 连接：
 
-- 地址：`ws://127.0.0.1:3001/ws`
-- Access Token：留空（与 `config.yaml` 中 `onebot.access_token` 保持一致）
+- 地址：`ws://127.0.0.1:3001/ws`（端口默认 3001，需与 `config.yaml` 的 `onebot.port` 保持一致；`config.example.yaml` 中示例为 8888，以你的实际配置为准）
+- Access Token：留空或与 `config.yaml` 中 `onebot.access_token` 保持一致
 
 LLBot 会自动携带 OneBot v11 标准的 `X-Client-Role: universal` 和 `X-Self-ID` header 连接。
 
@@ -95,7 +101,7 @@ LLBot 会自动携带 OneBot v11 标准的 `X-Client-Role: universal` 和 `X-Sel
 
 ```yaml
 llm:
-  provider: deepseek              # openai / deepseek / ollama / claude / gemini / custom
+  provider: deepseek              # openai / deepseek / ollama / siliconflow / claude / gemini / custom
   api_url: https://api.deepseek.com/v1  # 留空则按 provider 直连官方
   api_key: sk-your-key
   model: deepseek-chat
@@ -109,6 +115,7 @@ llm:
       command: npx                #   stdio 模式：子进程命令
       args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
       url: ''                     #   HTTP 模式：填写后忽略 command
+      env: {}                     #   可选额外环境变量
   personas:                       # 人格列表（/persona 命令切换，会话级覆盖）
     - name: 猫娘
       description: 可爱的猫娘
@@ -119,7 +126,9 @@ llm:
   default_persona: ''             # 默认人格名（空 = 使用 system_prompt）
 ```
 
-LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不受 `timeout` 配置影响。
+**提供商联动与模型列表**：切换 `provider` 时，Web UI 会自动带出推荐的 `api_url` 与 `model`（预设见「LLM 配置」页），用户仍可覆盖为自定义值。填入 `api_key` 后，点击「获取模型」即可调用 `/api/config/llm/models` 向提供商查询可用模型列表并回填到下拉框（Ollama / Claude / Gemini / OpenAI 兼容协议均支持）。
+
+LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不受 `timeout` 配置影响，并透传具体失败原因（鉴权 / 超时 / 网络 / 其他）。
 
 **人格切换**：聊天中发送 `/persona 列表` 查看全部，`/persona 猫娘` 切换（仅对当前会话生效），`/persona 重置` 恢复默认人格或 `system_prompt`。
 
@@ -142,26 +151,24 @@ LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不�
 
 ## 管理命令
 
-Bot 运行时，管理员可在群聊/私聊中发送以下命令：
+**管理员命令**（QQ 号在 `config.yaml` 的 `bot.admin_users` 中配置）：
 
 | 命令 | 说明 |
 |------|------|
-| `/status` | 查看 Bot 运行状态 |
+| `/status` | 查看 Bot 运行状态（OneBot 连接 / LLM 可用性 / 消息记录数） |
 | `/clear` | 清除当前会话历史 |
 | `/blacklist add <QQ>` | 添加用户到黑名单 |
 | `/blacklist remove <QQ>` | 从黑名单移除用户 |
-| `/help` | 显示当前用户可用的命令列表 |
 | `/filter on\|off\|reload` | 敏感词过滤开关 / 重载词库（词库为空时会提示编辑 `data/sensitive_words.txt`） |
 | `/group on\|off` | 当前群 Bot 开关 |
-| `/image <提示词>` | AI 绘图（需开启 `image.enabled`） |
-| `/kb add\|list\|search\|remove\|reload` | 知识库管理（需开启 `rag.enabled`，仅管理员） |
-
-管理员 QQ 号在 `config.yaml` 的 `bot.admin_users` 中配置。
+| `/kb add\|list\|search\|remove\|reload` | 知识库管理（需开启 `rag.enabled`） |
 
 **所有用户可用命令**（无需管理员权限）：
 
 | 命令 | 说明 |
 |------|------|
+| `/help`（或 `/帮助`） | 按当前用户权限列出可用命令 |
+| `/image <提示词>`（或 `/画图`） | AI 绘图（需开启 `image.enabled`，成功后以图片消息回复） |
 | `/persona` | 查看当前会话人格 |
 | `/persona 列表` | 列出全部可用人格 |
 | `/persona <名称>` | 切换当前会话人格（配置了 `llm.personas` 时可用） |
@@ -176,10 +183,16 @@ api_key: your-secret-key
 ```
 
 - 为空时**不启用鉴权**（仅本地开发推荐）
-- 设置后，所有写操作（启停 Bot、修改配置、插件管理）需要携带 `X-API-Key` 请求头
+- 设置后，除以下免鉴权端点外，**所有接口**（含 GET 读操作）都需要携带 `X-API-Key` 请求头：
+  - `GET /api/bot/status`、`GET /api/bot/health`（状态/健康检查）
+  - `GET /api/auth/status`、`POST /api/auth/login`（登录与鉴权状态）
 - 在 Web UI 的「系统设置」页面可同时配置服务端 Key 和浏览器端 Key
+- WebSocket（`/api/ws/log`、`/api/ws/chat`）通过 `token` 查询参数鉴权，方式同上
 
 ## 配置文件说明
+
+> 配置模板见 `config.example.yaml`（敏感字段已脱敏，复制为 `config.yaml` 后按需修改）。
+> 下方为完整字段说明：
 
 ```yaml
 bot:
@@ -195,7 +208,7 @@ onebot:
   port: 3001                       # LLBot 连接 ws://host:port/ws
   access_token: ''
 llm:
-  provider: openai                 # openai / deepseek / ollama / claude / gemini / custom
+  provider: openai                 # openai / deepseek / ollama / siliconflow / claude / gemini / custom
   api_url: https://api.openai.com/v1  # 留空则按 provider 直连官方
   api_key: sk-xxx
   model: gpt-4o-mini
@@ -233,6 +246,7 @@ image:
   api_key: ''                      # 留空则回退 llm.api_key
 rag:
   enabled: false                   # 轻量知识库（默认关闭，文件型关键词检索）
+  embedding_model: ''              # 预留字段（当前为关键词检索，不使用向量）
   top_k: 3                         # 检索返回的最相关分块数
   knowledge_dir: data/knowledge    # 知识库目录（相对项目根目录）
   chunk_size: 400                  # 文档分块大小（字符数）
@@ -257,13 +271,14 @@ api_key: ''                        # API 鉴权密钥
 | `filter` | 敏感词过滤 | `enabled: false` | 词库为 `data/sensitive_words.txt`（一行一词，支持 `#` 注释）；词库为空时 `/filter` 命令与日志会明确提示；管理员可通过 `exempt_admins` 豁免 |
 | `scheduler` | 定时任务调度器 | `enabled: true` | 调度器基座，由插件注册任务；无任务注册时零副作用 |
 | `alert` | 错误告警 | `enabled: false` | 冷却窗口内 ERROR 日志达到 `error_threshold` 条时向管理员发消息告警，带 `cooldown_minutes` 冷却 |
-| `image` | 图片生成 | `enabled: false` | `/image <提示词>` 命令；`image.api_key` 为空时回退 `llm.api_key`；成功后以 CQ 图片段回复 |
-| `rag` | 轻量知识库 | `enabled: false` | 文件型关键词检索（纯 Python 无重型依赖）；开启后对话自动注入检索到的参考资料；`/kb` 命令管理文档 |
+| `image` | 图片生成 | `enabled: false` | `/image <提示词>`（或 `/画图`）命令；`image.api_key` 为空时回退 `llm.api_key`；成功后以 CQ 图片段回复 |
+| `rag` | 轻量知识库 | `enabled: false` | 文件型关键词检索（纯 Python 无重型依赖）；开启后对话自动注入检索到的参考资料；`/kb` 命令管理文档（add/list/search/remove/reload） |
 | `session_summary` | 会话摘要 | `enabled: false` | 与 `llm.enable_summary` 等价，任一为 true 即启用；上下文超过条数/token 阈值时将较早消息摘要压缩，保留最近 N 轮原文 |
 | `log.usage_tracking` | LLM 用量入库 | `true` | 可退出的遥测：关闭后 chat/摘要/图片不再写 usage_logs，Dashboard 用量统计将为空 |
 | `llm.enable_tools` | Function Calling | `false` | 启用工具调用（内置 `get_current_time` / `random_quote`，可经 ToolRegistry 扩展）；`max_tool_rounds` 限制最大轮次（默认 5） |
 | `llm.personas` | 人格/人设 | `[]` | 多组 system_prompt；聊天中 `/persona` 切换（会话级覆盖）、`/persona 列表` 查看；Web UI「LLM 配置」管理 |
 | `llm.mcp_servers` | MCP 服务器 | `[]` | 连接外部 MCP 服务器（stdio/HTTP 传输），工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用；需开启 `enable_tools`，修改后重启 Bot 生效 |
+| `llm.provider` | 提供商联动 | `openai` | 切换 provider 自动带出预设 api_url/model（openai/deepseek/ollama/siliconflow/claude/gemini/custom 共 7 个）；`api_url` 非空统一走 OpenAI 兼容协议 |
 | `llm.timeout` / `llm.num_retries` | 请求超时与重试 | `60` / `2` | 单次 LLM 请求超时秒数与失败重试次数 |
 | `bot.log_json` | 结构化 JSON 日志 | `false` | 面向机器可读的日志采集场景 |
 
@@ -278,7 +293,10 @@ Qingci-Bot/
 ├── main.py                    # 统一入口
 ├── pyproject.toml
 ├── alembic.ini                # Alembic 迁移配置
-├── config.yaml                # 配置文件（首次运行自动生成）
+├── config.example.yaml        # 配置模板（脱敏，复制为 config.yaml）
+├── config.yaml                # 配置文件（首次运行自动生成，已被 .gitignore 忽略）
+├── build.ps1                  # PyInstaller 打包脚本
+├── qingci-bot.spec            # PyInstaller 打包配置
 ├── bot/
 │   ├── config.py              # 配置管理（Pydantic 模型）
 │   ├── core/
@@ -343,9 +361,10 @@ Qingci-Bot/
 |----|------|
 | 后端 | Python 3.12 + FastAPI + uvicorn |
 | QQ 协议 | aiocqhttp (OneBot 11 反向 WS) |
-| LLM | litellm (100+ 提供商统一接口) |
+| LLM | litellm (统一接口，延迟导入加速启动) |
 | MCP | mcp (Model Context Protocol，stdio/HTTP) |
 | 数据库 | SQLModel + Alembic + aiosqlite (WAL 模式) |
+| 定时任务 | APScheduler |
 | 插件系统 | Matcher + Rule + Permission + require (借鉴 NoneBot2) |
 | 前端 | Vue 3 + Vite + Pinia |
 | 桌面 | PyWebView + pystray |
@@ -360,6 +379,19 @@ npm run build    # 构建生产版本到 web/dist/
 ```
 
 开发模式下，前端请求会自动代理到 `http://127.0.0.1:8080`（在 `vite.config.js` 中配置）。
+
+## Web UI 页面
+
+| 页面 | 路由 | 说明 |
+|------|------|------|
+| 仪表盘 | `/` | 运行状态卡片 + LLM 用量统计图表（依赖 `log.usage_tracking`） |
+| LLM 配置 | `/config` | 提供商切换（联动 api_url/model）、模型列表拉取、人格管理、MCP 服务器配置、连接测试 |
+| 对话调试台 | `/lab` | 无需进入 QQ 即可流式测试 LLM 回复；独立会话 key，不污染真实对话（走 `/api/ws/chat`） |
+| 群配置 | `/groups` | 各群 Bot 开关与触发模式 |
+| 插件管理 | `/plugins` | 插件列表 / 详情 / 重载 / 加载外部插件 / 卸载 |
+| 消息日志 | `/logs` | 实时消息流 + 会话记录可视化（按会话分组查看/删除，支持清理与 CSV 导出） |
+| 系统设置 | `/settings` | 服务端/浏览器 API Key 配置 |
+| 登录 | `/login` | API Key 登录（服务端已配置 `api_key` 时显示） |
 
 ## 插件开发
 
@@ -448,14 +480,22 @@ class MyPlugin(PluginBase):
 
 | 函数 | 说明 |
 |------|------|
-| `on_message(rule, permission, priority, block)` | 通用消息匹配器 |
-| `on_command(cmd, rule, permission, priority, block)` | 命令匹配器（自动解析参数到 `ctx.args`） |
+| `on_message(rule, permission, priority, block, temp)` | 通用消息匹配器 |
+| `on_command(cmd, rule, permission, priority, block, temp)` | 命令匹配器（自动解析参数到 `ctx.args`） |
 | `on_startswith(prefix, ...)` | 前缀匹配器 |
 | `on_keyword(keywords, ...)` | 关键词匹配器 |
-| `on_notice(rule, priority, block)` | 通知事件匹配器 |
-| `on_request(rule, priority, block)` | 请求事件匹配器 |
+| `on_notice(rule, priority, block, temp)` | 通知事件匹配器 |
+| `on_request(rule, priority, block, temp)` | 请求事件匹配器 |
 
-**内置 Rule：** `startswith` / `endswith` / `fullmatch` / `contains` / `regex` / `command` / `to_me` / `is_private` / `is_group` / `keyword`
+**一次性匹配器（temp=True）**：匹配执行后自动从所属插件移除，适用于"等待下一次对话"等只应触发一次的场景，例如"输入数字确认操作"：
+
+```python
+self.matchers.append(
+    on_command("confirm", temp=True)(self._confirm)
+)
+```
+
+**内置 Rule：** `startswith` / `endswith` / `fullmatch` / `contains` / `regex` / `command` / `to_me` / `is_private` / `is_group` / `keyword` / `rate_limit`
 
 **内置 Permission：** `EVERYONE` / `SUPERUSER` / `ADMIN` / `PRIVATE` / `GROUP` / `MEMBER` / `USER(ids)` / `GROUP_MEMBER(ids)`
 
@@ -800,7 +840,7 @@ self.bot.register_post_hook(post_hook)
 
 ## API 接口
 
-所有接口前缀 `/api`，写操作需携带 `X-API-Key` 请求头（启用鉴权时）。
+所有接口前缀 `/api`。启用鉴权（配置 `api_key`）时，除 `/api/bot/status`、`/api/bot/health`、`/api/auth/*` 外均需携带 `X-API-Key` 请求头；`api_key` 为空时全部免鉴权。
 
 **错误响应与超时说明：**
 
@@ -822,25 +862,26 @@ self.bot.register_post_hook(post_hook)
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| GET | `` | 否 | 获取完整配置 |
-| PUT | `` | 是 | 更新配置 |
-| GET | `/bot` | 否 | 获取 Bot 配置 |
+| GET | `` | 是 | 获取完整配置（敏感字段脱敏为 `***`） |
+| PUT | `` | 是 | 更新配置（深度合并，`***` 占位符自动过滤） |
+| GET | `/bot` | 是 | 获取 Bot 配置 |
 | PUT | `/bot` | 是 | 更新 Bot 配置 |
-| GET | `/llm` | 否 | 获取 LLM 配置 |
-| PUT | `/llm` | 是 | 更新 LLM 配置 |
-| GET | `/llm/presets` | 否 | 获取 LLM 提供商预设（api_url + 推荐 model，切换 provider 自动联动） |
-| GET | `/onebot` | 否 | 获取 OneBot 配置 |
-| POST | `/llm/test` | 是 | 测试 LLM 连接 |
+| GET | `/llm` | 是 | 获取 LLM 配置 |
+| PUT | `/llm` | 是 | 更新 LLM 配置（provider=custom 时强制校验 api_url） |
+| GET | `/llm/presets` | 是 | 获取 LLM 提供商预设（api_url + 推荐 model，切换 provider 自动联动） |
+| POST | `/llm/models` | 是 | 查询提供商可用模型列表（按 provider 调用对应 API，10s 超时，失败 400 透传原因） |
+| GET | `/onebot` | 是 | 获取 OneBot 配置 |
+| POST | `/llm/test` | 是 | 测试 LLM 连接（返回 `{available, message}`） |
 
 ### 插件管理 `/api/plugin`
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| GET | `` | 否 | 获取插件列表 |
-| GET | `/{name}` | 否 | 获取插件详情 |
+| GET | `` | 是 | 获取插件列表 |
+| GET | `/{name}` | 是 | 获取插件详情 |
 | POST | `/{name}/reload` | 是 | 重载插件 |
-| POST | `/load` | 是 | 加载外部插件 |
-| DELETE | `/{name}` | 是 | 卸载插件 |
+| POST | `/load` | 是 | 加载外部插件（仅允许 `plugins.*` / `bot.plugin.builtin.*` 白名单前缀） |
+| DELETE | `/{name}` | 是 | 卸载插件（内置插件 chat/admin/help/imagegen/knowledge 不可卸载） |
 
 ### 消息日志与用量 `/api/log`
 
@@ -848,10 +889,10 @@ self.bot.register_post_hook(post_hook)
 |------|------|------|------|
 | GET | `/messages` | 是 | 搜索消息记录 |
 | GET | `/messages/count` | 是 | 获取消息总数 |
-| GET | `/messages/export` | 是 | 导出消息记录 |
+| GET | `/messages/export` | 是 | 导出消息记录（CSV 流式，utf-8-sig，Excel 直接打开不乱码） |
 | GET | `/usage` | 是 | LLM 用量统计（依赖 `log.usage_tracking`） |
-| DELETE | `/messages` | 是 | 删除消息记录 |
-| DELETE | `/sessions` | 是 | 清除所有会话 |
+| DELETE | `/messages` | 是 | 删除消息记录；支持 `user_id` / `group_id` / `before_days` 过滤，全部删除需显式 `confirm=true` |
+| DELETE | `/sessions` | 是 | 清除所有会话（需 `confirm=true`） |
 | GET | `/sessions` | 是 | 会话列表（按最后活跃排序，含条数与归属 QQ） |
 | GET | `/sessions/messages` | 是 | 查看指定会话历史（`?key=private:10001` 或 `group:10001:20002`） |
 | DELETE | `/sessions/one` | 是 | 删除指定会话（`?key=会话key`，带审计） |
@@ -883,9 +924,12 @@ self.bot.register_post_hook(post_hook)
 |------|------|------|------|
 | GET | `/logs` | 是 | 审计日志倒序查询（配置变更 / 启停 / 登录 / 备份等） |
 
-### WebSocket `/api/ws/log`
+### WebSocket
 
-实时推送消息记录，连接后自动接收新消息。
+| 路径 | 鉴权 | 说明 |
+|------|------|------|
+| `/api/ws/log` | `token` 查询参数 | 实时推送消息记录，连接后自动接收新消息；60s 心跳保活（90s 无消息断开），连接数上限 32 |
+| `/api/ws/chat` | `token` 查询参数 | 对话调试台：客户端发送 `{"message": "...", "user_id": 900000001}`，服务端逐块返回 `{"type":"delta","text":...}`，结束返回 `{"type":"done"}`；流式调用 LLM，独立连接池（上限 32） |
 
 ## 打包为 exe
 
@@ -902,6 +946,12 @@ cd web; npm install; npm run build; cd ..
 .\build.ps1
 ```
 
+> `config.yaml` 已被 `.gitignore` 忽略（避免密钥入库）。新克隆的仓库中没有该文件，打包前需先从 `config.example.yaml` 复制一份并填入配置：
+>
+> ```powershell
+> Copy-Item config.example.yaml config.yaml
+> ```
+
 产物位于 `dist\qingci-bot\`：
 
 ```
@@ -909,7 +959,7 @@ dist\qingci-bot\
 ├── qingci-bot.exe        # 主程序（带控制台，日志直接可见）
 ├── _internal\            # Python 运行时与依赖（勿动）
 ├── web\dist\             # Web UI 静态资源（build.ps1 复制）
-├── config.yaml           # 配置文件（首次构建从项目根复制）
+├── config.yaml           # 配置文件（build.ps1 从项目根复制/暂存还原）
 └── data\                 # SQLite 数据库 / 备份 / 敏感词库
 ```
 
@@ -922,6 +972,8 @@ dist\qingci-bot\
 ```
 
 启动后访问 `http://127.0.0.1:8080/ui/`。
+
+> **启动性能**：litellm 采用延迟导入，启动阶段不会加载该重型依赖（节省约 3.5 秒），仅首次真正调用 LLM 时一次性导入；首次运行 `config.yaml` 缺失时自动生成默认配置，无需手工准备。
 
 ### 注意事项
 
