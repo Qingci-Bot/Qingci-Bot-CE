@@ -19,6 +19,10 @@
 
 handler 签名: async (ctx: MatcherContext) -> Optional[str]
 返回非 None 则作为回复发送，并停止后续匹配器（除非 block=False）。
+
+temp 一次性匹配器：temp=True 的 Matcher 在匹配执行后自动从所属插件移除
+（由 Dispatcher 在 handler 执行后调用 PluginManager.remove_temp_matcher），
+适用于"下一次对话"等只应触发一次的场景。
 """
 
 import logging
@@ -100,7 +104,7 @@ class Matcher:
     permission: Permission = field(default_factory=lambda: EVERYONE)
     priority: int = 1
     block: bool = True
-    temp: bool = False  # 临时匹配器（预留，当前未实现自动移除）
+    temp: bool = False  # 一次性匹配器：执行后自动从插件中移除
     owner: str = ""
     event_type: str = "message"
     meta: dict = field(default_factory=dict)
@@ -133,6 +137,7 @@ def on_message(
     permission: Permission = None,
     priority: int = 1,
     block: bool = True,
+    temp: bool = False,
 ) -> Callable:
     """注册消息匹配器（装饰器工厂）
 
@@ -140,6 +145,9 @@ def on_message(
         @on_message(rule=command("ping"), permission=SUPERUSER)
         async def handler(ctx: MatcherContext) -> str:
             return "pong"
+
+    Args:
+        temp: 一次性匹配器，匹配执行后自动从插件中移除（适合 "下一次对话" 类场景）
     """
     def decorator(func: Callable) -> Matcher:
         m = _create_matcher(
@@ -148,7 +156,7 @@ def on_message(
             permission=permission or EVERYONE,
             priority=priority,
             block=block,
-            temp=False,
+            temp=temp,
             event_type="message",
         )
         _collect_module_matcher(m)
@@ -162,6 +170,7 @@ def on_command(
     permission: Permission = None,
     priority: int = 1,
     block: bool = True,
+    temp: bool = False,
     description: str = "",
 ) -> Callable:
     """注册命令匹配器
@@ -175,6 +184,9 @@ def on_command(
         @on_command(("help", "帮助"))
         async def help_cmd(ctx: MatcherContext) -> str:
             return "可用命令: ..."
+
+    Args:
+        temp: 一次性匹配器，匹配执行后自动从插件中移除
     """
     from .rule import command as _command
     combined_rule = _command(cmd)
@@ -188,7 +200,7 @@ def on_command(
             permission=permission or EVERYONE,
             priority=priority,
             block=block,
-            temp=False,
+            temp=temp,
             event_type="message",
         )
         # 回填元信息：命令主名（tuple 取第一个）与描述，供 /help 等使用
@@ -205,9 +217,14 @@ def on_startswith(
     permission: Permission = None,
     priority: int = 1,
     block: bool = True,
+    temp: bool = False,
     description: str = "",
 ) -> Callable:
-    """注册前缀匹配器"""
+    """注册前缀匹配器
+
+    Args:
+        temp: 一次性匹配器，匹配执行后自动从插件中移除
+    """
     from .rule import startswith as _startswith
     combined_rule = _startswith(prefix)
     if rule:
@@ -220,7 +237,7 @@ def on_startswith(
             permission=permission or EVERYONE,
             priority=priority,
             block=block,
-            temp=False,
+            temp=temp,
             event_type="message",
         )
         # 回填元信息：前缀触发无命令名，仅记录描述
@@ -236,9 +253,14 @@ def on_keyword(
     permission: Permission = None,
     priority: int = 1,
     block: bool = True,
+    temp: bool = False,
     description: str = "",
 ) -> Callable:
-    """注册关键词匹配器"""
+    """注册关键词匹配器
+
+    Args:
+        temp: 一次性匹配器，匹配执行后自动从插件中移除
+    """
     from .rule import keyword as _keyword
     kws = (keywords,) if isinstance(keywords, str) else keywords
     combined_rule = _keyword(*kws)
@@ -252,7 +274,7 @@ def on_keyword(
             permission=permission or EVERYONE,
             priority=priority,
             block=block,
-            temp=False,
+            temp=temp,
             event_type="message",
         )
         # 回填元信息：关键词触发无命令名，仅记录描述
@@ -266,8 +288,13 @@ def on_notice(
     rule: Rule = None,
     priority: int = 1,
     block: bool = True,
+    temp: bool = False,
 ) -> Callable:
-    """注册通知事件匹配器"""
+    """注册通知事件匹配器
+
+    Args:
+        temp: 一次性匹配器，匹配执行后自动从插件中移除
+    """
     def decorator(func: Callable) -> Matcher:
         m = _create_matcher(
             handler=func,
@@ -275,7 +302,7 @@ def on_notice(
             permission=EVERYONE,
             priority=priority,
             block=block,
-            temp=False,
+            temp=temp,
             event_type="notice",
         )
         _collect_module_matcher(m)
@@ -287,8 +314,13 @@ def on_request(
     rule: Rule = None,
     priority: int = 1,
     block: bool = True,
+    temp: bool = False,
 ) -> Callable:
-    """注册请求事件匹配器"""
+    """注册请求事件匹配器
+
+    Args:
+        temp: 一次性匹配器，匹配执行后自动从插件中移除
+    """
     def decorator(func: Callable) -> Matcher:
         m = _create_matcher(
             handler=func,
@@ -296,7 +328,7 @@ def on_request(
             permission=EVERYONE,
             priority=priority,
             block=block,
-            temp=False,
+            temp=temp,
             event_type="request",
         )
         _collect_module_matcher(m)

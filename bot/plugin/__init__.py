@@ -70,4 +70,5 @@ __all__ = [
     "is_private",
     "is_group",
     "keyword",
+    "rate_limit",
 ]

@@ -131,6 +131,10 @@ class MessageDispatcher:
                 if hasattr(result, "__await__"):
                     result = await result
 
+                # 一次性（temp）匹配器：执行后自动移除，避免重复响应
+                if matcher.temp:
+                    bot.plugin_manager.remove_temp_matcher(matcher)
+
                 # handler 返回非 None = 有回复，停止分发
                 if result is not None:
                     return result, True
@@ -175,6 +179,9 @@ class MessageDispatcher:
                 result = matcher.handler(mctx)
                 if hasattr(result, "__await__"):
                     result = await result
+                # 一次性（temp）匹配器：执行后自动移除
+                if matcher.temp:
+                    bot.plugin_manager.remove_temp_matcher(matcher)
                 if result is not None:
                     return result, True
                 if matcher.block:

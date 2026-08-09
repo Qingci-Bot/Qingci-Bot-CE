@@ -50,6 +50,20 @@ class PluginManager:
         """使 matcher 缓存失效"""
         self._cached_matchers = None
 
+    def remove_temp_matcher(self, matcher: Matcher) -> None:
+        """移除一次性（temp）匹配器并失效缓存
+
+        由 Dispatcher 在 handler 执行后调用：temp 匹配器仅触发一次，
+        触发后自动从所属插件移除，避免重复响应。
+        匹配器已不存在时静默跳过（幂等）。
+        """
+        if not getattr(matcher, "owner", ""):
+            return
+        plugin = self._plugins.get(matcher.owner)
+        if plugin is not None and plugin.matchers and matcher in plugin.matchers:
+            plugin.matchers.remove(matcher)
+            self._invalidate_matchers_cache()
+
     async def load_builtin(self, bot) -> None:
         """加载内置插件"""
         from . import builtin
