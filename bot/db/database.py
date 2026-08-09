@@ -62,6 +62,34 @@ class Database:
                 await session.rollback()
                 logger.debug(f"消息已存在，跳过: {message_id}")
 
+    async def save_messages_batch(self, records: list[dict]) -> None:
+        """批量保存消息记录（单事务，减少 SQLite commit 次数）
+
+        records 每项字段与 save_message 参数一致（dict 形式）。
+        整体插入遇唯一冲突时回滚并回退为逐条保存，避免整批失败。
+        """
+        if not records:
+            return
+        async with get_session_factory()() as session:
+            session.add_all(
+                Message(
+                    message_id=r.get("message_id", ""),
+                    user_id=r.get("user_id", 0),
+                    content=r.get("content", ""),
+                    message_type=r.get("message_type", "group"),
+                    group_id=r.get("group_id"),
+                    role=r.get("role", "user"),
+                )
+                for r in records
+            )
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                logger.debug("批量保存消息遇唯一冲突，回退逐条保存")
+                for r in records:
+                    await self.save_message(**r)
+
     async def get_history(
         self,
         user_id: int,

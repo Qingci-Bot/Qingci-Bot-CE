@@ -63,6 +63,9 @@ class LLMManager:
         self._mcp: Optional[object] = None
         # token 计数缓存：(role, content) -> token 数，避免对同一消息重复计数
         self._token_cache: dict[tuple[str, str], int] = {}
+        # 模型能力判断缓存：模型不变时 supports_function_calling 结果恒定，
+        # 避免每条消息都走 litellm.get_model_info；reload 时一并清空
+        self._tools_support_cache: Optional[bool] = None
 
     # ============ 适配器管理 ============
 
@@ -110,6 +113,7 @@ class LLMManager:
                 self._usage_tracking = usage_tracking
             # 模型可能已切换，旧 token 计数不再可靠，整体清空重建
             self._token_cache.clear()
+            self._tools_support_cache = None
             if self._adapter is not None:
                 try:
                     await self._adapter.close()
@@ -466,16 +470,21 @@ class LLMManager:
     def _model_supports_tools(self) -> bool:
         """检查当前模型是否声明支持 Function Calling
 
+        结果按模型缓存（模型切换时由 reload 清空），避免每条消息
+        都调用 litellm.get_model_info 造成额外开销。
         未知模型（如自定义 OpenAI 兼容服务）视为支持，
         实际不支持时 LLM 会返回错误并由上层降级处理。
         """
+        if self._tools_support_cache is not None:
+            return self._tools_support_cache
         try:
             import litellm
             model = getattr(self._adapter, "model", None) or self._config.model
             info = litellm.get_model_info(model)
-            return bool(info.get("supports_function_calling", True))
+            self._tools_support_cache = bool(info.get("supports_function_calling", True))
         except Exception:
-            return True
+            self._tools_support_cache = True
+        return self._tools_support_cache
 
     @staticmethod
     def _tool_call_field(tc, field: str, default=None):
@@ -617,19 +626,29 @@ class LLMManager:
 
             # 追加用户消息
             self._sessions.setdefault(key, []).append({"role": "user", "content": message})
-            # 持久化用户消息
-            db_saved = False
+
+            # 裁剪上下文（异步：开关开启且超阈时触发摘要压缩）
+            await self._trim_history(key)
+
+            # 并行持久化用户消息：与下方 LLM 网络调用同时进行（DB 写不阻塞请求）
+            save_user_task = None
             if self._db is not None:
+                save_user_task = asyncio.create_task(
+                    self._db.save_session(key, "user", message)
+                )
+
+            async def _wait_user_saved() -> bool:
+                """等待用户消息落库，返回是否成功（失败仅记日志）"""
+                if save_user_task is None:
+                    return False
                 try:
-                    await self._db.save_session(key, "user", message)
-                    db_saved = True
+                    await save_user_task
+                    return True
                 except Exception:
                     logger.exception(
                         f"持久化用户消息失败: key={key}, model={self._config.model}"
                     )
-
-            # 裁剪上下文（异步：开关开启且超阈时触发摘要压缩）
-            await self._trim_history(key)
+                    return False
 
             # 调用 LLM（走 chat_detail 以获取 usage，供后续用量统计）
             # Function Calling：仅在开关开启、注册表就绪且模型支持 tools 时启用
@@ -687,6 +706,7 @@ class LLMManager:
                 # 回滚刚加入的用户消息，保持内存与 DB 一致
                 if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
                     self._sessions[key].pop()
+                    db_saved = await _wait_user_saved()
                     if db_saved:
                         try:
                             await self._db.delete_last_session(key, "user")
@@ -696,12 +716,17 @@ class LLMManager:
                                 f"model={self._config.model}"
                             )
                 return None
+            finally:
+                # 兜底：父任务被取消等异常路径下，确保用户消息落库任务被回收
+                if save_user_task is not None and not save_user_task.done():
+                    await asyncio.gather(save_user_task, return_exceptions=True)
 
             # 空回复：回滚用户消息（与 chat_stream 语义保持一致），
             # 不 save_session/append，避免历史中出现空 assistant 回复
             if not reply:
                 if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
                     self._sessions[key].pop()
+                    db_saved = await _wait_user_saved()
                     if db_saved:
                         try:
                             await self._db.delete_last_session(key, "user")
@@ -716,8 +741,9 @@ class LLMManager:
                 )
                 return None
 
-            # 保存 assistant 回复（先 DB 后内存，保持一致性）
+            # 保存 assistant 回复（先等用户消息落库保证 DB 写入顺序，再写回复）
             if self._db is not None:
+                await _wait_user_saved()
                 try:
                     await self._db.save_session(key, "assistant", reply)
                 except Exception:
@@ -746,17 +772,28 @@ class LLMManager:
             await self._ensure_session_loaded(key)
 
             self._sessions.setdefault(key, []).append({"role": "user", "content": message})
-            db_saved = False
+
+            await self._trim_history(key)
+
+            # 并行持久化用户消息：与下方 LLM 流式调用同时进行
+            save_user_task = None
             if self._db is not None:
+                save_user_task = asyncio.create_task(
+                    self._db.save_session(key, "user", message)
+                )
+
+            async def _wait_user_saved() -> bool:
+                """等待用户消息落库，返回是否成功（失败仅记日志）"""
+                if save_user_task is None:
+                    return False
                 try:
-                    await self._db.save_session(key, "user", message)
-                    db_saved = True
+                    await save_user_task
+                    return True
                 except Exception:
                     logger.exception(
                         f"持久化用户消息失败: key={key}, model={self._config.model}"
                     )
-
-            await self._trim_history(key)
+                    return False
 
             full_reply = ""
             success = False
@@ -792,8 +829,9 @@ class LLMManager:
             # 清理逻辑：依据 success 标志决定保存回复还是回滚用户消息
             try:
                 if success and full_reply:
-                    # 保存 assistant 回复（先 DB 后内存，保持一致性）
+                    # 保存 assistant 回复（先等用户消息落库保证 DB 顺序，再写）
                     if self._db is not None:
+                        await _wait_user_saved()
                         try:
                             await self._db.save_session(key, "assistant", full_reply)
                         except Exception:
@@ -807,6 +845,7 @@ class LLMManager:
                     # 失败（含取消）时回滚用户消息
                     if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
                         self._sessions[key].pop()
+                        db_saved = await _wait_user_saved()
                         if db_saved:
                             try:
                                 await self._db.delete_last_session(key, "user")
@@ -819,6 +858,7 @@ class LLMManager:
                     # 空回复：回滚用户消息，避免历史中出现空 assistant 回复
                     if self._sessions.get(key) and self._sessions[key][-1]["role"] == "user":
                         self._sessions[key].pop()
+                        db_saved = await _wait_user_saved()
                         if db_saved:
                             try:
                                 await self._db.delete_last_session(key, "user")

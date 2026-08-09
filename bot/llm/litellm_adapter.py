@@ -14,18 +14,29 @@ import asyncio
 import logging
 from typing import Any, AsyncIterator, Optional
 
-import litellm
-
 from .adapter import ChatResult, LLMAdapter
 
 logger = logging.getLogger("qingci-bot.llm.litellm_adapter")
 
-# 关闭 litellm 的冗余日志与遥测
-litellm.suppress_debug_info = True
-try:
-    litellm.set_verbose(False)
-except (AttributeError, TypeError):
-    pass  # 某些 litellm 版本中 set_verbose 不是可调用对象
+# litellm 包导入耗时 ~3.5s（含依赖加载），顶层导入会拖慢 exe 启动。
+# 延迟到首次真正调用 LLM 时才导入，仅在首条对话时付出一次性代价。
+_litellm = None
+
+
+def _get_litellm():
+    """延迟导入 litellm 并完成一次性日志/遥测配置，返回模块引用"""
+    global _litellm
+    if _litellm is None:
+        import litellm
+
+        # 关闭 litellm 的冗余日志与遥测
+        litellm.suppress_debug_info = True
+        try:
+            litellm.set_verbose(False)
+        except (AttributeError, TypeError):
+            pass  # 某些 litellm 版本中 set_verbose 不是可调用对象
+        _litellm = litellm
+    return _litellm
 
 
 class LiteLLMAdapter(LLMAdapter):
@@ -135,6 +146,7 @@ class LiteLLMAdapter(LLMAdapter):
         **kwargs,
     ) -> ChatResult:
         try:
+            litellm = _get_litellm()
             response = await litellm.acompletion(
                 **self._build_kwargs(
                     messages,
@@ -203,6 +215,7 @@ class LiteLLMAdapter(LLMAdapter):
         **kwargs,
     ) -> AsyncIterator[str]:
         try:
+            litellm = _get_litellm()
             response = await litellm.acompletion(
                 **self._build_kwargs(
                     messages,
@@ -231,6 +244,7 @@ class LiteLLMAdapter(LLMAdapter):
     async def check_availability(self) -> bool:
         try:
             # 可用性探测使用较短超时，避免接口长时间阻塞
+            litellm = _get_litellm()
             await litellm.acompletion(
                 **self._build_kwargs(
                     [{"role": "user", "content": "ping"}],

@@ -20,6 +20,9 @@ from ..rag import KnowledgeStore
 
 logger = logging.getLogger("qingci-bot")
 
+# 事件处理并发上限：防止消息洪峰时并发任务无界堆积（超限任务排队等待）
+_EVENT_CONCURRENCY = 16
+
 
 class QingciBot:
     """Qingci-Bot 主类"""
@@ -46,6 +49,8 @@ class QingciBot:
 
         self._running = False
         self._pending_tasks: set[asyncio.Task[Any]] = set()
+        # 事件处理并发信号量：限制同时执行的事件数，洪峰时超出部分排队等待
+        self._event_sem = asyncio.Semaphore(_EVENT_CONCURRENCY)
         # 错误告警处理器（alert.enabled 时 start 中 attach，stop 中 detach）
         self._alert_handler: Optional[AlertHandler] = None
         # 全局事件钩子（消息中间件）：横切统计/审计/预处理，
@@ -265,7 +270,12 @@ class QingciBot:
         task.add_done_callback(_cleanup)
 
     async def _process_event(self, event: dict) -> None:
-        """实际事件处理逻辑"""
+        """实际事件处理逻辑（受并发信号量限流，洪峰时排队等待）"""
+        async with self._event_sem:
+            await self._process_event_impl(event)
+
+    async def _process_event_impl(self, event: dict) -> None:
+        """事件处理实现（限流后执行）"""
         try:
             ctx = self.dispatcher.dispatch(event)
             if ctx is None:  # 防御性检查，dispatch 当前总返回非 None

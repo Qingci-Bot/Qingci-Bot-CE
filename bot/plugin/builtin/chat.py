@@ -309,26 +309,28 @@ class ChatPlugin(PluginBase):
         if need_filter and not exempt:
             reply = self.bot.sensitive_filter.mask(reply)
 
-        # 保存消息记录到数据库
+        # 保存消息记录到数据库（批量单事务，减少 SQLite commit 次数）
         group_id = ctx.group_id if ctx.message_type == "group" and ctx.group_id else None
         if self.db:
             try:
-                await self.db.save_message(
-                    message_id=ctx.message_id,
-                    user_id=ctx.user_id,
-                    group_id=group_id,
-                    content=message,
-                    message_type=ctx.message_type,
-                    role="user",
-                )
-                await self.db.save_message(
-                    message_id=f"{ctx.message_id}_reply",
-                    user_id=ctx.self_id,
-                    group_id=group_id,
-                    content=reply,
-                    message_type=ctx.message_type,
-                    role="assistant",
-                )
+                await self.db.save_messages_batch([
+                    {
+                        "message_id": ctx.message_id,
+                        "user_id": ctx.user_id,
+                        "group_id": group_id,
+                        "content": message,
+                        "message_type": ctx.message_type,
+                        "role": "user",
+                    },
+                    {
+                        "message_id": f"{ctx.message_id}_reply",
+                        "user_id": ctx.self_id,
+                        "group_id": group_id,
+                        "content": reply,
+                        "message_type": ctx.message_type,
+                        "role": "assistant",
+                    },
+                ])
             except Exception:
                 logger.exception("保存消息记录失败")
 
