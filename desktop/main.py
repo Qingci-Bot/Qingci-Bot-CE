@@ -60,6 +60,15 @@ def run_desktop(args):
     # 启动系统托盘
     tray = None
     tray_ok = False
+    # 真正退出标志（托盘「退出」触发），区别于点击关闭按钮（隐藏窗口）
+    _exiting = False
+
+    def _trigger_exit():
+        """托盘退出回调：标记退出 + 关闭窗口"""
+        nonlocal _exiting
+        _exiting = True
+        webview.destroy()
+
     try:
         # 提前验证托盘依赖可用，决定是否启用"关闭即驻留后台"行为
         import importlib.util
@@ -69,7 +78,7 @@ def run_desktop(args):
         from desktop.tray import SystemTray
         tray = SystemTray(
             on_show=lambda: (window.show(), window.restore()),
-            on_exit=lambda: webview.destroy(),
+            on_exit=_trigger_exit,
         )
         tray_thread = threading.Thread(target=tray.create, daemon=True)
         tray_thread.start()
@@ -82,9 +91,12 @@ def run_desktop(args):
         def _on_closing(*_args, **_kwargs):
             """点击关闭按钮 = 隐藏窗口驻留系统托盘，不退出进程。
 
+            托盘「退出」触发时 _exiting=True，允许真正关闭窗口。
             返回 False 取消 pywebview 的关闭流程（WinForms 后端约定）；
             真正退出请用托盘右键菜单「退出」。
             """
+            if _exiting:
+                return True  # 真正退出，允许关闭
             try:
                 window.hide()
             except Exception:

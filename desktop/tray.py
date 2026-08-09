@@ -43,16 +43,25 @@ class SystemTray:
             logger.warning("pystray 未安装，跳过托盘图标")
 
     def stop(self):
+        """停止托盘（幂等，可安全重复调用）"""
         if self._icon:
-            self._icon.stop()
+            try:
+                self._icon.stop()
+            except Exception:
+                pass
 
-    def _show_window(self):
+    def _show_window(self, *_args):
+        """显示窗口（pystray 回调，接受 icon/item 参数）"""
         if self._on_show:
             self._on_show()
 
-    def _exit(self):
+    def _exit(self, *_args):
+        """退出应用（pystray 回调，接受 icon/item 参数）"""
         if self._on_exit:
-            self._on_exit()
+            try:
+                self._on_exit()
+            except Exception:
+                logger.exception("退出回调异常")
         self.stop()
 
     def _generate_default_icon(self, path: Path):

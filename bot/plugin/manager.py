@@ -86,6 +86,65 @@ class PluginManager:
             logger.exception(f"加载外部插件失败: {module_path}")
             return False
 
+    async def load_external_dir(self, bot, directory: Optional[Path] = None) -> int:
+        """扫描并加载外部插件目录（plugins/ 下的 .py 文件）
+
+        源码模式与 frozen（exe）模式均支持：exe 所在目录下创建
+        plugins/ 目录，放入 .py 文件即可自动加载。
+
+        Args:
+            bot: Bot 实例
+            directory: 插件目录路径，默认为 app_root()/plugins/
+
+        Returns:
+            成功加载的插件数量
+        """
+        if directory is None:
+            from ..paths import app_root
+            directory = app_root() / "plugins"
+
+        # 确保 app_root 在 sys.path 中（frozen 模式下 PyInstaller 也会添加，
+        # 此处作为兜底保证 plugins 包可被 importlib 发现）
+        root_str = str(directory.parent)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+
+        # 确保插件目录存在（含 __init__.py 使其成为 Python 包）
+        # 目录创建失败（如权限不足）时降级跳过，不阻止 bot 启动
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.warning(f"无法创建插件目录: {directory}，跳过外部插件加载")
+            return 0
+        init_file = directory / "__init__.py"
+        if not init_file.exists():
+            try:
+                init_file.write_text(
+                    "# Qingci-Bot 外部插件目录\n"
+                    "# 将 .py 插件文件放入此目录即可自动加载\n",
+                    encoding="utf-8",
+                )
+            except OSError:
+                logger.warning(f"无法写入 {init_file}，跳过外部插件加载")
+                return 0
+
+        count = 0
+        for py_file in sorted(directory.glob("*.py")):
+            if py_file.name.startswith("_"):
+                continue
+            module_name = py_file.stem
+            module_path = f"plugins.{module_name}"
+            try:
+                ok = await self.load_external(module_path, bot)
+                if ok:
+                    count += 1
+            except Exception:
+                logger.exception(f"加载外部插件失败: {module_path}")
+
+        if count > 0:
+            logger.info(f"从外部插件目录加载了 {count} 个插件")
+        return count
+
     async def _load_or_reload(
         self, full_path: str, bot, replaced_name: Optional[str] = None,
         _loading: Optional[set] = None,

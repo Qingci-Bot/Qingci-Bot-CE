@@ -101,6 +101,8 @@ class QingciBot:
         logger.info("Qingci-Bot 启动中...")
         await self.db.connect()
         await self.plugin_manager.load_builtin(self)
+        # 加载外部插件目录（app_root/plugins/，exe 打包后同样生效）
+        await self.plugin_manager.load_external_dir(self)
         # 初始化 MCP 工具（enable_tools + mcp_servers 配置时；失败仅记日志）
         await self.llm.setup_mcp_tools()
         self.connection.on_event(self._handle_event)
