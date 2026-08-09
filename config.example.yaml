@@ -4,8 +4,7 @@
 
 bot:
   name: Qingci-Bot
-  admin_users:
-  - 2101171459
+  admin_users: []            # 管理员 QQ 号列表，如 [123456789]
   trigger_mode: at            # at / keyword / always
   trigger_keywords:
   - /bot
