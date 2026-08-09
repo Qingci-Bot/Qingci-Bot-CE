@@ -511,13 +511,15 @@ class VectorKnowledgeStore:
 
     def list_documents(self) -> list[dict]:
         """列出知识库文档，按名称排序"""
-        col = self._get_collection()
-        existing = col.get()
         docs: dict[str, int] = {}
-        if existing["metadatas"]:
-            for meta in existing["metadatas"]:
-                src = meta.get("source", "unknown")
-                docs[src] = docs.get(src, 0) + 1
+        tbl = self._get_table()
+        if tbl is not None:
+            try:
+                rows = tbl.to_pandas()
+                for source in rows["source"].unique():
+                    docs[source] = int((rows["source"] == source).sum())
+            except Exception:
+                pass
         # 也列出目录中的文件（含空文档）
         if self._root.exists():
             for path in self._root.iterdir():

@@ -35,7 +35,9 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=litellm_binaries + tiktoken_binaries + pythonnet_binaries + clrloader_binaries,
-    datas=litellm_datas + tiktoken_datas + pythonnet_datas + clrloader_datas,
+    datas=litellm_datas + tiktoken_datas + pythonnet_datas + clrloader_datas + [
+        ('desktop\\app-icon.ico', '.'),
+    ],
     hiddenimports=[
         *litellm_hiddenimports,
         *tiktoken_hiddenimports,
@@ -79,6 +81,9 @@ a = Analysis(
         'mcp',
         'mcp.client.stdio',
         'mcp.client.streamable_http',
+        # ---- 向量知识库（VectorKnowledgeStore 内延迟导入）----
+        'lancedb',
+        'pyarrow',
         # ---- desktop 模式（pywebview / pystray） ----
         'webview',
         # pywebview 平台后端为动态导入，需显式声明（Windows: WinForms + EdgeChromium）
@@ -120,7 +125,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,       # console=True 便于查看日志；改 False 可去掉控制台窗口
-    icon=None,
+    icon='desktop\\app-icon.ico',
 )
 
 coll = COLLECT(

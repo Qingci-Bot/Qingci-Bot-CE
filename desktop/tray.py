@@ -21,12 +21,20 @@ class SystemTray:
             from PIL import Image
 
             # 生成默认图标（32x32 蓝色圆形）
-            # 源码模式位于 desktop/ 目录；frozen 模式写到 exe 所在目录（不写回包内）
+            # 源码模式位于 desktop/ 目录；frozen 模式从 _internal 或 exe 目录查找
             import sys
             if getattr(sys, "frozen", False):
-                icon_path = Path(sys.executable).resolve().parent / "tray-icon.png"
+                # onedir: _MEIPASS 指向 _internal 目录，datas 资源在此
+                base = Path(getattr(sys, "_MEIPASS", ""))
+                if not base.is_dir():
+                    base = Path(sys.executable).resolve().parent
+                icon_path = base / "app-icon.ico"
+                if not icon_path.exists():
+                    icon_path = Path(sys.executable).resolve().parent / "tray-icon.png"
             else:
-                icon_path = Path(__file__).parent / "icon.png"
+                icon_path = Path(__file__).parent / "app-icon.ico"
+                if not icon_path.exists():
+                    icon_path = Path(__file__).parent / "icon.png"
             if not icon_path.exists():
                 self._generate_default_icon(icon_path)
 

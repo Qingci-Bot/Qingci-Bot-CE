@@ -28,6 +28,10 @@ npm run build    # 构建生产版本到 web/dist/
 
 ## 插件开发
 
+> **快速开始**：复制 `plugins/_template.py` 为 `plugins/my_plugin.py` 即可开始开发。
+> 模板文件涵盖所有功能（命令/前缀/关键词/通知/请求/定时任务/Function Calling），附详细中文注释。
+> 最小示例见 `plugins/hello.py`（15 行代码，开箱即用）。
+
 Qingci-Bot 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持两种开发方式：
 
 - **新式（推荐）**：用 `on_command`/`on_message` 等装饰器注册 Matcher，配合 Rule 规则匹配和 Permission 权限控制
@@ -432,17 +436,27 @@ self.bot.register_post_hook(post_hook)
 
 ### 插件加载方式
 
-**方式一：Web UI 加载（推荐）**
+**方式一：外部目录自动加载（推荐）**
 
-在「插件管理」页面输入模块路径（如 `plugins.pingpong`），点击加载。
+将 `.py` 插件文件放入项目根目录的 `plugins/` 文件夹中，Bot 启动时自动扫描加载。无需手动操作，源码运行和 exe 打包均支持。
 
-**方式二：内置插件**
+```
+plugins/
+├── __init__.py        # 包标记（自动创建）
+├── _template.py       # 完整模板（以 _ 开头，不会被加载）
+├── hello.py           # 最小示例
+└── my_plugin.py       # 你的插件 → 自动加载
+```
+
+> 以 `_` 开头的文件（如 `_template.py`）不会被自动加载，可放心保留模板。
+
+**方式二：Web UI 加载**
+
+在「插件管理」页面输入模块路径（如 `plugins.my_plugin`），点击加载。
+
+**方式三：内置插件**
 
 将插件文件放入 `bot/plugin/builtin/` 目录，Bot 启动时自动加载。
-
-**方式三：外部目录**
-
-将插件放在项目根目录的 `plugins/` 文件夹中，确保 `plugins/__init__.py` 存在，然后用模块路径 `plugins.xxx` 加载。
 
 ### 常用 OneBot API
 

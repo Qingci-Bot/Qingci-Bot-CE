@@ -59,7 +59,7 @@ Qingci-Bot/
 │   │   ├── tools.py           # Function Calling 工具注册表
 │   │   └── mcp.py             # MCP 服务器接入（stdio/HTTP）
 │   ├── rag/
-│   │   └── knowledge.py       # 轻量知识库（文件型关键词检索）
+│   │   └── knowledge.py       # 知识库（keyword 关键词检索 + LanceDB 向量检索）
 │   ├── db/
 │   │   ├── database.py        # 数据库仓储（基于 SQLModel）
 │   │   ├── engine.py          # 异步引擎 + 会话工厂（WAL 模式）
@@ -76,6 +76,10 @@ Qingci-Bot/
 │           ├── help.py        # /help 命令（按权限列出可用命令）
 │           ├── imagegen.py    # AI 绘图（/image 命令）
 │           └── knowledge.py   # 知识库管理（/kb 命令）
+├── plugins/                   # 外部插件目录（Bot 启动时自动扫描加载）
+│   ├── __init__.py
+│   ├── _template.py           # 插件开发模板（以 _ 开头，不自动加载）
+│   └── hello.py               # 最小示例插件
 ├── migrations/                # Alembic 迁移脚本
 │   ├── env.py                 # 异步迁移环境
 │   └── versions/              # 迁移版本
@@ -92,7 +96,8 @@ Qingci-Bot/
 │       └── styles/            # 全局样式
 ├── desktop/
 │   ├── main.py                # 桌面入口
-│   └── tray.py                # 系统托盘
+│   ├── tray.py                # 系统托盘
+│   └── app-icon.ico           # 应用图标（exe 图标 + 托盘图标）
 └── data/
     └── qingci-bot.db          # SQLite 数据库文件
 ```

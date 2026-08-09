@@ -32,6 +32,7 @@ import uvicorn
 
 from bot.core.bot import QingciBot, set_bot, clear_bot
 from bot.core.logformat import apply_logging_from_config
+from bot.paths import app_root
 from api.auth import set_config_path
 from api.server import create_app
 
@@ -50,7 +51,7 @@ def parse_args():
     parser.add_argument("--desktop", action="store_true", help="启动桌面应用")
     parser.add_argument("--port", type=int, default=8080, help="API 端口")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="API 监听地址")
-    parser.add_argument("--config", type=str, default="config.yaml", help="配置文件路径")
+    parser.add_argument("--config", type=str, default=str(app_root() / "config.yaml"), help="配置文件路径")
     args = parser.parse_args()
     # UX：frozen windowed 下双击（无任何参数）没有控制台也没有窗口，
     # 用户感知为"点了没反应"；此时默认启用桌面模式提供可见窗口。
