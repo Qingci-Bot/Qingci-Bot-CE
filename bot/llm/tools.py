@@ -83,6 +83,15 @@ class ToolRegistry:
         """注销工具，返回是否成功"""
         return self._tools.pop(name, None) is not None
 
+    def unregister_by_prefix(self, prefix: str) -> int:
+        """按前缀批量注销工具（如 MCP 工具的 mcp_ 前缀），返回注销数量"""
+        names = [n for n in self._tools if n.startswith(prefix)]
+        for n in names:
+            self._tools.pop(n, None)
+        if names:
+            logger.info(f"按前缀注销工具 {len(names)} 个: {prefix}*")
+        return len(names)
+
     # ============ 查询 ============
 
     def has(self, name: str) -> bool:

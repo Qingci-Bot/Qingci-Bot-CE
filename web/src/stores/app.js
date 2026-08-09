@@ -53,6 +53,7 @@ const defaultConfig = {
     enable_summary: false,
     enable_tools: false,
     max_tool_rounds: 5,
+    mcp_servers: [],
   },
   onebot: {
     host: '127.0.0.1',

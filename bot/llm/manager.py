@@ -57,6 +57,8 @@ class LLMManager:
         self._locks: dict[str, asyncio.Lock] = {}
         # Function Calling 工具注册表（enable_tools 且非 None 时启用）
         self._tool_registry: Optional["ToolRegistry"] = None
+        # MCP 桥接器（enable_tools + mcp_servers 配置时由 setup_mcp_tools 创建）
+        self._mcp: Optional[object] = None
         # token 计数缓存：(role, content) -> token 数，避免对同一消息重复计数
         self._token_cache: dict[tuple[str, str], int] = {}
 
@@ -129,6 +131,12 @@ class LLMManager:
             except Exception:
                 logger.exception(f"关闭 LLM 适配器失败: model={self._config.model}")
         self._adapter = None
+        if self._mcp is not None:
+            try:
+                await self._mcp.close()
+            except Exception:
+                logger.exception("关闭 MCP 桥接器失败")
+            self._mcp = None
         self._sessions.clear()
         self._loaded_sessions.clear()
 
@@ -411,6 +419,43 @@ class LLMManager:
     def set_tool_registry(self, registry: Optional["ToolRegistry"]) -> None:
         """挂载工具注册表（由 Bot 装配阶段调用）"""
         self._tool_registry = registry
+
+    async def setup_mcp_tools(self) -> None:
+        """初始化 MCP 工具（enable_tools 且配置了 mcp_servers 时）
+
+        - 连接各 MCP 服务器，将工具注册进 ToolRegistry（mcp_ 前缀）
+        - mcp 包未安装、连接失败仅记录日志，不阻断启动
+        - 重复调用前先清理旧注册，保证幂等
+        """
+        if not self._config.enable_tools:
+            return
+        servers = getattr(self._config, "mcp_servers", None) or []
+        if not servers:
+            return
+        # 清理上次注册的 MCP 工具（防重复 start 残留）
+        if self._tool_registry is not None:
+            self._tool_registry.unregister_by_prefix("mcp_")
+        try:
+            from .mcp import MCPBridge
+            bridge = MCPBridge()
+            connected = await bridge.connect_servers(servers)
+            if connected and self._tool_registry is not None:
+                count = await bridge.register_tools(self._tool_registry)
+                self._mcp = bridge
+                logger.info(
+                    f"MCP 工具初始化完成: {count} 个（服务器: "
+                    f"{', '.join(bridge.connected_servers)}）"
+                )
+            else:
+                await bridge.close()
+        except Exception:
+            logger.exception("MCP 工具初始化失败")
+            if self._mcp is not None:
+                try:
+                    await self._mcp.close()
+                except Exception:
+                    logger.exception("关闭 MCP 桥接器失败")
+                self._mcp = None
 
     @property
     def tool_registry(self) -> Optional["ToolRegistry"]:

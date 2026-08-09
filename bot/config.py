@@ -34,6 +34,21 @@ LLM_PROVIDER_PRESETS: dict[str, dict[str, str]] = {
 }
 
 
+class MCPConfig(BaseModel):
+    """MCP (Model Context Protocol) 服务器配置
+
+    command 非空时使用 stdio 传输（本地子进程，如 npx/uvx/python）；
+    否则使用 url 走 HTTP 传输（远程 MCP 服务）。
+    """
+    model_config = {"extra": "ignore"}
+
+    name: str = ""                 # 服务器名（工具名将带 mcp_{name}_ 前缀）
+    command: str = ""              # stdio 模式：子进程命令
+    args: list[str] = []           # stdio 模式：命令参数
+    url: str = ""                  # HTTP 模式：MCP 服务地址
+    env: dict[str, str] = {}       # 可选额外环境变量
+
+
 class PersonaConfig(BaseModel):
     """人格配置：一组可切换的 system_prompt
 
@@ -72,6 +87,7 @@ class LLMConfig(BaseModel):
     enable_summary: bool = False
     enable_tools: bool = False          # Function Calling 工具调用（默认关闭）
     max_tool_rounds: int = 5            # 工具调用最大轮次
+    mcp_servers: list[MCPConfig] = []   # MCP 服务器列表（enable_tools 开启后生效）
 
     @model_validator(mode="after")
     def apply_provider_preset(self):

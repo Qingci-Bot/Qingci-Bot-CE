@@ -51,6 +51,14 @@ function resetForm() {
       ? llm.personas.map(p => ({ ...p }))
       : [],
     default_persona: llm.default_persona ?? '',
+    mcp_servers: Array.isArray(llm.mcp_servers)
+      ? llm.mcp_servers.map(s => ({
+          name: s.name ?? '',
+          command: s.command ?? '',
+          args: Array.isArray(s.args) ? s.args.join(', ') : '',
+          url: s.url ?? '',
+        }))
+      : [],
     max_history: llm.max_history ?? 20,
   })
 }
@@ -68,6 +76,14 @@ function removePersona(idx) {
 }
 function toggleDefaultPersona(name) {
   form.default_persona = form.default_persona === name ? '' : name
+}
+
+// MCP 服务器管理
+function addMcpServer() {
+  form.mcp_servers.push({ name: '', command: '', args: '', url: '' })
+}
+function removeMcpServer(idx) {
+  form.mcp_servers.splice(idx, 1)
 }
 
 // provider 切换时自动填充 api_url 和 model
@@ -105,7 +121,18 @@ async function saveConfig() {
   saving.value = true
   try {
     const newConfig = JSON.parse(JSON.stringify(store.config))
-    newConfig.llm = { ...form }
+    // 表单中的 mcp args 为逗号分隔字符串，提交前转为数组
+    newConfig.llm = {
+      ...form,
+      mcp_servers: (form.mcp_servers || []).map(s => ({
+        name: s.name,
+        command: s.command,
+        args: typeof s.args === 'string'
+          ? s.args.split(/[,，\s]+/).map(x => x.trim()).filter(Boolean)
+          : (s.args || []),
+        url: s.url,
+      })),
+    }
     await store.saveConfig(newConfig)
     showToast('success', 'LLM 配置已保存')
   } catch (e) {
@@ -215,6 +242,31 @@ async function saveConfig() {
 
     <div class="card" style="margin-top: 22px;">
       <div class="card-header">
+        <div class="card-title">MCP 服务器</div>
+        <div class="action-bar">
+          <button class="btn btn-secondary" @click="addMcpServer">+ 添加服务器</button>
+        </div>
+      </div>
+      <div class="hint-text">
+        连接外部 MCP 服务器，将其工具注册为 <code>mcp_服务器名_工具名</code> 供 LLM 调用。
+        需同时开启「工具调用」（enable_tools）。<strong>修改后需重启 Bot 生效。</strong>
+      </div>
+      <div v-for="(s, idx) in form.mcp_servers" :key="idx" class="persona-block">
+        <div class="persona-row">
+          <input v-model="s.name" placeholder="服务器名（如 filesystem）" class="mcp-name">
+          <input v-model="s.command" placeholder="stdio 命令（如 npx / uvx / python）" class="mcp-cmd">
+          <button class="btn btn-danger btn-sm" @click="removeMcpServer(idx)">删除</button>
+        </div>
+        <input v-model="s.args" placeholder="命令参数，逗号分隔（如 -y, @modelcontextprotocol/server-filesystem, /tmp）" class="mcp-args">
+        <input v-model="s.url" placeholder="HTTP 模式地址（填写后忽略命令；如 http://localhost:8000/mcp）" class="mcp-args">
+      </div>
+      <div v-if="!form.mcp_servers.length" class="hint-text" style="margin-top: 12px;">
+        暂未配置 MCP 服务器。
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 22px;">
+      <div class="card-header">
         <div class="card-title">常见配置参考</div>
       </div>
       <div class="hint-text">
@@ -248,6 +300,14 @@ async function saveConfig() {
 }
 .persona-name { flex: 1; }
 .persona-desc { flex: 2; }
+.mcp-name { flex: 1; }
+.mcp-cmd { flex: 2; }
+.mcp-args {
+  width: 100%;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+.mcp-args:last-child { margin-bottom: 0; }
 .persona-block textarea {
   width: 100%;
   min-height: 72px;

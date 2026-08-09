@@ -73,7 +73,8 @@ class PluginManager:
             return False
 
     async def _load_or_reload(
-        self, full_path: str, bot, replaced_name: Optional[str] = None
+        self, full_path: str, bot, replaced_name: Optional[str] = None,
+        _loading: Optional[set] = None,
     ) -> None:
         """加载或重载模块，确保模块级装饰器重新执行
 
@@ -83,6 +84,7 @@ class PluginManager:
         Args:
             replaced_name: reload 场景下被替换插件的原注册名（插件可能改名，
                 首次 load 传 None）
+            _loading: 正在加载的模块名集合（依赖解析用，检测循环依赖）
         """
         collector = begin_module_collection()
         stale_classes: Optional[set] = None
@@ -108,8 +110,31 @@ class PluginManager:
             end_module_collection()
 
         await self._register_from_module(
-            module, collector, bot, replaced_name, stale_classes
+            module, collector, bot, replaced_name, stale_classes, _loading
         )
+
+    async def _ensure_dependencies(self, plugin: PluginBase, bot, loading: set) -> None:
+        """确保插件声明的依赖已加载（借鉴 NoneBot2 require 机制）
+
+        - require 填写依赖插件 name；依赖已注册则跳过
+        - 未注册时尝试加载 bot.plugin.builtin.<name> 模块
+        - 依赖缺失或循环依赖时抛出 ValueError（插件加载失败）
+        """
+        for dep in plugin.require or []:
+            if dep in self._plugins:
+                continue
+            if dep in loading:
+                chain = " -> ".join([*loading, dep])
+                raise ValueError(f"插件循环依赖: {chain}")
+            dep_module = f"bot.plugin.builtin.{dep}"
+            try:
+                importlib.import_module(dep_module)
+            except ImportError:
+                raise ValueError(
+                    f"插件 {plugin.name} 依赖的插件 {dep} 不存在"
+                    f"（找不到模块 {dep_module}）"
+                )
+            await self._load_or_reload(dep_module, bot, _loading=loading)
 
     async def _register_from_module(
         self,
@@ -118,6 +143,7 @@ class PluginManager:
         bot,
         replaced_name: Optional[str] = None,
         stale_classes: Optional[set] = None,
+        _loading: Optional[set] = None,
     ) -> None:
         """从模块中查找 PluginBase 子类并注册
 
@@ -160,48 +186,61 @@ class PluginManager:
 
         plugin_cls = plugin_classes[0]
         plugin = plugin_cls()
-        # reload 时插件可能改名：按原注册名查找/卸载旧实例，避免旧实例泄漏
-        target_name = replaced_name or plugin.name
-        old_plugin = self._plugins.get(target_name)
-        # 先建后拆：先完整初始化新插件（含 on_load），失败时旧插件保持生效
-        await self._init_plugin(plugin, bot)
-        # on_load 中手动注册的 Matcher 未设置 owner，此处统一补齐
-        # （保证 run_matchers 能定位到所属插件，mctx.plugin 可用）
-        for m in plugin.matchers:
-            if not m.owner:
-                m.owner = plugin.name
-        # 关联模块级 Matcher（仅本模块定义的，避免跨模块 import 时误归属）
-        for m in collector:
-            handler_mod = getattr(m.handler, "__module__", "") or ""
-            if handler_mod and handler_mod != module.__name__:
-                continue
-            m.owner = plugin.name
-            plugin.matchers.append(m)
-        # 新插件就绪后再卸载旧插件并注册，避免插件真空；
-        # 若此阶段被异常/取消打断，补偿调用新插件 on_unload 避免资源泄漏
+
+        # 依赖解析：递归加载依赖插件（检测缺失与循环依赖）。
+        # loading 集合以插件 name 标识正在加载的插件（依赖解析用 name 匹配）
+        loading = _loading if _loading is not None else set()
+        if plugin.name in loading:
+            chain = " -> ".join([*loading, plugin.name])
+            raise ValueError(f"插件循环依赖: {chain}")
+        loading.add(plugin.name)
         try:
-            if old_plugin is not None:
-                await self.unload(target_name)
-            # 不同模块定义同名插件时，后者覆盖前者属于配置错误，记录警告便于排查
-            existing = self._plugins.get(plugin.name)
-            if existing is not None and existing is not old_plugin:
-                logger.warning(
-                    f"插件重名覆盖: {plugin.name}（{type(existing).__module__} "
-                    f"被 {module.__name__} 替换）"
-                )
-            self._plugins[plugin.name] = plugin
-        except BaseException:
+            await self._ensure_dependencies(plugin, bot, loading)
+
+            # reload 时插件可能改名：按原注册名查找/卸载旧实例，避免旧实例泄漏
+            target_name = replaced_name or plugin.name
+            old_plugin = self._plugins.get(target_name)
+            # 先建后拆：先完整初始化新插件（含 on_load），失败时旧插件保持生效
+            await self._init_plugin(plugin, bot)
+            # on_load 中手动注册的 Matcher 未设置 owner，此处统一补齐
+            # （保证 run_matchers 能定位到所属插件，mctx.plugin 可用）
+            for m in plugin.matchers:
+                if not m.owner:
+                    m.owner = plugin.name
+            # 关联模块级 Matcher（仅本模块定义的，避免跨模块 import 时误归属）
+            for m in collector:
+                handler_mod = getattr(m.handler, "__module__", "") or ""
+                if handler_mod and handler_mod != module.__name__:
+                    continue
+                m.owner = plugin.name
+                plugin.matchers.append(m)
+            # 新插件就绪后再卸载旧插件并注册，避免插件真空；
+            # 若此阶段被异常/取消打断，补偿调用新插件 on_unload 避免资源泄漏
             try:
-                await plugin.on_unload()
-            except (Exception, asyncio.CancelledError):
-                logger.exception(f"插件 {plugin.name} 补偿 on_unload 异常")
-            raise
-        matcher_count = len(plugin.matchers) if plugin.matchers else 0
-        logger.info(
-            f"插件已加载: {plugin.name} v{plugin.version}"
-            f" (matchers: {matcher_count})"
-        )
-        self._invalidate_matchers_cache()
+                if old_plugin is not None:
+                    await self.unload(target_name)
+                # 不同模块定义同名插件时，后者覆盖前者属于配置错误，记录警告便于排查
+                existing = self._plugins.get(plugin.name)
+                if existing is not None and existing is not old_plugin:
+                    logger.warning(
+                        f"插件重名覆盖: {plugin.name}（{type(existing).__module__} "
+                        f"被 {module.__name__} 替换）"
+                    )
+                self._plugins[plugin.name] = plugin
+            except BaseException:
+                try:
+                    await plugin.on_unload()
+                except (Exception, asyncio.CancelledError):
+                    logger.exception(f"插件 {plugin.name} 补偿 on_unload 异常")
+                raise
+            matcher_count = len(plugin.matchers) if plugin.matchers else 0
+            logger.info(
+                f"插件已加载: {plugin.name} v{plugin.version}"
+                f" (matchers: {matcher_count})"
+            )
+            self._invalidate_matchers_cache()
+        finally:
+            loading.discard(plugin.name)
 
     async def unload(self, name: str) -> None:
         """卸载插件"""

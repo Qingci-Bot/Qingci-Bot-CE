@@ -20,6 +20,7 @@ dependencies = [
     "pywebview>=5.0",
     "pystray>=0.19.0",
     "pillow>=11.0",
+    "mcp>=1.6,<2",
 ]
 
 [project.scripts]

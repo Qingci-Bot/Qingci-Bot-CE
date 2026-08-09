@@ -30,6 +30,9 @@ class PluginBase(ABC):
     version: str = "1.0.0"
     author: str = ""
     description: str = ""
+    # 依赖的插件 name 列表：加载前自动先加载依赖插件，
+    # 依赖缺失或形成循环依赖时插件加载失败（借鉴 NoneBot2 require 机制）
+    require: list[str] = []
 
     # 依赖引用（由 PluginManager 注入）
     bot: Optional["QingciBot"] = None
