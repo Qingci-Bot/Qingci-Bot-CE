@@ -77,7 +77,7 @@ def _maybe_notify_bot(reload_llm: bool = True):
     except RuntimeError:
         pass  # Bot 未运行
     except Exception:
-        pass
+        logger.exception("通知 Bot 配置变更失败")
 
 
 _SENSITIVE_KEYS = {"api_key", "access_token"}
@@ -212,6 +212,11 @@ async def update_llm_config(data: dict, request: Request):
             for k, v in data.items():
                 if v is not None and v != "***":
                     current[k] = v
+            if current.get("provider") == "custom" and not current.get("api_url"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="custom 提供商必须填写 API 地址（api_url）",
+                )
             full = cfg.to_dict()
             full["llm"] = current
             cfg.update(full)
@@ -221,6 +226,8 @@ async def update_llm_config(data: dict, request: Request):
                 "config_update_llm", f"更新 LLM 配置，字段: {sorted(data.keys())}", request
             )
             return {"message": "LLM 配置已更新"}
+        except HTTPException:
+            raise
         except ValidationError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception:
@@ -239,12 +246,19 @@ async def test_llm_config(data: dict):
             if v is not None:
                 current[k] = v
 
+        if current.get("provider") == "custom" and not current.get("api_url"):
+            raise HTTPException(
+                status_code=400,
+                detail="custom 提供商必须填写 API 地址（api_url）",
+            )
         manager = LLMManager(LLMConfig(**current))
         available = await manager.check_availability()
         return {
             "available": available,
             "message": "LLM 连接正常" if available else "LLM 连接失败",
         }
+    except HTTPException:
+        raise
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:

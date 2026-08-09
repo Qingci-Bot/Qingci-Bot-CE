@@ -227,6 +227,27 @@ class Database:
                 logger.exception("删除最后一条会话记录失败，已回滚")
                 raise
 
+    async def trim_sessions(self, session_key: str, keep: int) -> None:
+        """删除指定会话超出最近 keep 条的旧记录（防止会话表无界增长）"""
+        async with get_session_factory()() as session:
+            subq = (
+                select(SessionHistory.id)
+                .where(SessionHistory.session_key == session_key)
+                .order_by(SessionHistory.created_at.desc(), SessionHistory.id.desc())
+                .limit(keep)
+            )
+            stmt = delete(SessionHistory).where(
+                SessionHistory.session_key == session_key,
+                SessionHistory.id.not_in(subq),
+            )
+            await session.execute(stmt)
+            try:
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception("裁剪会话历史失败，已回滚")
+                raise
+
     # ============ 插件配置 ============
 
     async def get_plugin_config(self, key: str) -> Optional[str]:

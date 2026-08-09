@@ -61,19 +61,17 @@ class LLMConfig(BaseModel):
     def apply_provider_preset(self):
         """根据 provider 自动切换 api_url 和 model。
 
-        仅当当前 api_url/model 为空或与某个 preset 一致时才会更新，
-        避免覆盖用户自定义的地址和模型。
+        仅当当前 api_url/model 为空或等于当前 provider 自己的预设值时
+        才更新，避免覆盖用户自定义的地址和模型。
+        custom 提供商完全由用户管理，不自动改动。
         """
         preset = LLM_PROVIDER_PRESETS.get(self.provider)
-        if not preset:
+        if not preset or self.provider == "custom":
             return self
 
-        preset_api_urls = {p["api_url"] for p in LLM_PROVIDER_PRESETS.values() if p["api_url"]}
-        preset_models = {p["model"] for p in LLM_PROVIDER_PRESETS.values()}
-
-        if not self.api_url or self.api_url in preset_api_urls:
+        if not self.api_url or self.api_url == preset["api_url"]:
             self.api_url = preset["api_url"]
-        if not self.model or self.model in preset_models:
+        if not self.model or self.model == preset["model"]:
             self.model = preset["model"]
         return self
 

@@ -162,14 +162,25 @@ def create_app() -> FastAPI:
             try:
                 with open(index_path, "r", encoding="utf-8") as f:
                     index_html = f.read()
-                # 校验 index.html 引用的资源是否都存在
+                # 校验 index.html 引用的资源是否都存在。
+                # 要求：存在应用挂载点 + 至少一个本地资源引用 + 引用全部存在，
+                # 避免构建产物为空/引用前缀变更时误报 ready。
+                refs = [
+                    r
+                    for r in re.findall(r'(?:src|href)="([^"]+)"', index_html)
+                    if not r.startswith(("data:", "#", "http"))
+                ]
                 missing = []
-                for ref in re.findall(r'(?:src|href)="/ui/([^"]+)"', index_html):
-                    if not os.path.exists(os.path.join(web_dir, ref)):
+                for ref in refs:
+                    rel = ref[4:] if ref.startswith("/ui/") else ref.lstrip("/")
+                    rel = rel.split("?", 1)[0].split("#", 1)[0]
+                    if not rel or rel.startswith("../"):
+                        continue
+                    if not os.path.exists(os.path.join(web_dir, rel)):
                         missing.append(ref)
-                if missing:
+                if 'id="app"' not in index_html or not refs or missing:
                     logger.warning(
-                        f"Web UI 构建产物不完整，缺少资源: {missing}，"
+                        f"Web UI 构建产物不完整（missing={missing}），"
                         f"请在 web/ 目录运行 'npm run build' 重新构建"
                     )
                 else:

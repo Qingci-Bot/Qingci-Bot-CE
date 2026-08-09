@@ -14,7 +14,7 @@ import json
 import logging
 import random
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger("qingci-bot.llm.tools")
 

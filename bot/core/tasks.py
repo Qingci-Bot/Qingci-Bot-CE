@@ -27,3 +27,18 @@ def spawn_background_task(coro: Coroutine, name: str = "", log_errors: bool = Tr
 
     task.add_done_callback(_on_done)
     return task
+
+
+async def await_pending_tasks(timeout: float = 3.0) -> None:
+    """等待所有后台任务完成（用于停机前 flush 异步 DB 写入等）。
+
+    超时后取消剩余任务，避免阻塞停机。
+    """
+    if not _tasks:
+        return
+    pending = set(_tasks)
+    done, remaining = await asyncio.wait(pending, timeout=timeout)
+    for t in remaining:
+        t.cancel()
+    if remaining:
+        await asyncio.gather(*remaining, return_exceptions=True)

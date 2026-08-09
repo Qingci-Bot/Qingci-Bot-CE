@@ -98,6 +98,7 @@ class LLMManager:
         for lock in locks:
             await lock.acquire()
         try:
+            old_model = self._config.model
             self._config = config
             if summary_config is not None:
                 self._summary_config = summary_config
@@ -109,7 +110,7 @@ class LLMManager:
                 try:
                     await self._adapter.close()
                 except Exception:
-                    logger.exception(f"关闭旧适配器失败: model={self._config.model}")
+                    logger.exception(f"关闭旧适配器失败: model={old_model}")
             self._adapter = None
             self._sessions.clear()
             self._loaded_sessions.clear()
@@ -228,6 +229,14 @@ class LLMManager:
         if len(msgs) > max_msgs:
             msgs = msgs[-max_msgs:]
             self._sessions[key] = msgs
+            # 同步裁剪 DB 中的旧记录，避免会话表无界增长
+            if self._db is not None:
+                try:
+                    await self._db.trim_sessions(key, max_msgs)
+                except Exception:
+                    logger.exception(
+                        f"裁剪 DB 会话历史失败: key={key}, model={self._config.model}"
+                    )
 
         # 2. 按 token 上限裁剪（保留最近至少 1 轮）
         max_tokens = self._config.max_context_tokens
@@ -356,10 +365,15 @@ class LLMManager:
     ):
         """清除会话历史
 
-        指定参数清除单会话，不指定参数清除全部。
+        指定 message_type+user_id 清除单会话，全部参数缺省时清除全部。
+        仅提供 message_type 而未提供 user_id 属参数错误，直接抛
+        ValueError，避免误落入"清除全部"分支误删所有会话。
         改为 async 以安全处理并发 chat 调用：在清内存前获取对应会话锁。
         """
-        if message_type and user_id:
+        if message_type and not user_id:
+            raise ValueError("清除指定会话需提供 user_id")
+
+        if message_type:
             key = self._session_key(message_type, group_id, user_id)
             # 获取会话锁后再清理，避免与进行中的 chat 竞态
             lock = self._get_lock(key)

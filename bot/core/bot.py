@@ -181,6 +181,13 @@ class QingciBot:
         except (Exception, asyncio.CancelledError):
             logger.exception("告警处理器卸载异常")
 
+        # 等待后台任务（如用量统计、会话持久化）完成，避免 DB 关闭时写失败
+        try:
+            from .tasks import await_pending_tasks
+            await await_pending_tasks(timeout=3)
+        except (Exception, asyncio.CancelledError):
+            logger.exception("等待后台任务完成异常")
+
         try:
             await self.llm.close()
         except (Exception, asyncio.CancelledError):
@@ -231,13 +238,14 @@ class QingciBot:
             post_type = ctx.post_type or event.get("post_type", "")
 
             if post_type != "message":
-                matcher_result = await self.dispatcher._run_event_matchers(self, event, ctx)
-                if matcher_result is not None:
-                    # Matcher 已处理，跳过旧式回调
+                matcher_reply, matcher_blocked = await self.dispatcher._run_event_matchers(self, event, ctx)
+                if matcher_reply is not None or matcher_blocked:
+                    # Matcher 已处理或被 block，跳过旧式回调
                     return
-                # 旧式回调 fallback
+                # 旧式回调 fallback（仅跳过注册了同类型事件 Matcher 的插件，
+                # 而非任一 Matcher——消息 Matcher 不应禁用其 notice/request 回调）
                 for plugin in list(self.plugin_manager.plugins.values()):
-                    if plugin.matchers:
+                    if self._plugin_has_event_matcher(plugin, post_type):
                         continue
                     try:
                         if post_type == "notice":
@@ -255,13 +263,16 @@ class QingciBot:
                         )
                 return
 
-            reply = await self.dispatcher.run_matchers(self, event, ctx)
+            reply, blocked = await self.dispatcher.run_matchers(self, event, ctx)
             if reply is not None:
                 await self._send_reply(ctx, reply)
                 return
+            if blocked:
+                # block 语义：Matcher 已消费该事件（handler 未返回回复），阻止旧式回调
+                return
 
             for plugin in list(self.plugin_manager.plugins.values()):
-                if plugin.matchers:
+                if self._plugin_has_event_matcher(plugin, "message"):
                     continue
                 try:
                     reply = await plugin.on_message(ctx)
@@ -276,6 +287,14 @@ class QingciBot:
                     )
         except Exception:
             logger.exception(f"处理事件异常: {event.get('post_type', 'unknown')}")
+
+    @staticmethod
+    def _plugin_has_event_matcher(plugin, post_type: str) -> bool:
+        """插件是否注册了指定事件类型的 Matcher（用于决定是否走旧式回调）"""
+        for m in getattr(plugin, "matchers", None) or []:
+            if getattr(m, "event_type", "message") == post_type:
+                return True
+        return False
 
     @staticmethod
     def _event_summary(event: dict) -> str:

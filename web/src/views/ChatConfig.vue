@@ -25,42 +25,43 @@ const providerOptions = computed(() => {
   return keys.map(k => ({ value: k, label: labels[k] || k }))
 })
 
-// 收集所有 preset 的默认值，用于判断是否需要自动填充
-const presetApiUrls = computed(() => new Set(Object.values(store.llmPresets).map(p => p.api_url).filter(Boolean)))
-const presetModels = computed(() => new Set(Object.values(store.llmPresets).map(p => p.model).filter(Boolean)))
-
-onMounted(() => {
+onMounted(async () => {
+  // 先等待配置加载完成再填充表单，避免用默认值覆盖服务端真实配置
+  await store.fetchConfig()
   resetForm()
-  store.fetchLLMPresets()
+  await store.fetchLLMPresets()
 })
 
-watch(() => store.config.llm, () => {
-  resetForm()
-}, { once: true })
+// 配置加载完成后再同步一次表单（如从保存接口刷新回来）
+watch(() => store.configLoaded, (loaded) => {
+  if (loaded) resetForm()
+})
 
 function resetForm() {
   const llm = store.config.llm || {}
   Object.assign(form, {
-    provider: llm.provider || 'openai',
-    api_url: llm.api_url || 'https://api.openai.com/v1',
-    api_key: llm.api_key || '',
-    model: llm.model || 'gpt-4o-mini',
-    max_tokens: llm.max_tokens || 2048,
-    temperature: llm.temperature || 0.7,
-    system_prompt: llm.system_prompt || '',
-    max_history: llm.max_history || 20,
+    provider: llm.provider ?? 'openai',
+    api_url: llm.api_url ?? 'https://api.openai.com/v1',
+    api_key: llm.api_key ?? '',
+    model: llm.model ?? 'gpt-4o-mini',
+    max_tokens: llm.max_tokens ?? 2048,
+    temperature: llm.temperature ?? 0.7,
+    system_prompt: llm.system_prompt ?? '',
+    max_history: llm.max_history ?? 20,
   })
 }
 
 // provider 切换时自动填充 api_url 和 model
+// 与后端 LLMConfig.apply_provider_preset 逻辑一致：仅当当前值为空或等于
+// 当前 provider 自己的预设值时才填充，用户自定义值保留不变
 function onProviderChange() {
   const preset = store.llmPresets[form.provider]
   if (!preset) return
-  // 仅当当前值为空或属于某个 preset 默认值时才自动填充
-  if (!form.api_url || presetApiUrls.value.has(form.api_url)) {
+  if (form.provider === 'custom') return  // custom 完全由用户管理
+  if (!form.api_url || form.api_url === preset.api_url) {
     form.api_url = preset.api_url
   }
-  if (!form.model || presetModels.value.has(form.model)) {
+  if (!form.model || form.model === preset.model) {
     form.model = preset.model
   }
 }
@@ -78,6 +79,10 @@ async function testConnection() {
 }
 
 async function saveConfig() {
+  if (!store.configLoaded) {
+    showToast('error', '配置尚未加载完成，无法保存')
+    return
+  }
   saving.value = true
   try {
     const newConfig = JSON.parse(JSON.stringify(store.config))

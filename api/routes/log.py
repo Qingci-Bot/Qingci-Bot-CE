@@ -6,11 +6,12 @@
 import csv
 import io
 
-from fastapi import APIRouter, Query, HTTPException, Depends
+from fastapi import APIRouter, Query, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from bot.core.bot import get_bot as _get_bot
 from api.auth import require_auth
+from api.audit import record_audit
 
 
 router = APIRouter()
@@ -60,6 +61,7 @@ async def get_message_count():
 
 @router.delete("/messages", dependencies=[Depends(require_auth)])
 async def clear_messages(
+    request: Request,
     user_id: int = Query(default=0),
     group_id: int = Query(default=0),
     before_days: int = Query(default=0, ge=0),
@@ -87,6 +89,8 @@ async def clear_messages(
             status_code=400,
             detail="清理全部消息需显式传入 confirm=true 确认",
         )
+    cond = ", ".join(f"{k}={v}" for k, v in kwargs.items()) or "全部"
+    await record_audit("clear_messages", f"清理消息记录 ({cond})", request)
     count = await bot.db.clear_messages(**kwargs)
     return {"message": f"已清理 {count} 条消息记录", "count": count}
 

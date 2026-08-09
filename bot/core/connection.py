@@ -163,7 +163,11 @@ class OneBotConnection:
                 try:
                     await asyncio.wait_for(self._server_task, timeout=2)
                 except (asyncio.TimeoutError, asyncio.CancelledError):
-                    pass
+                    # 取消信号发出但任务仍在退出（如正在处理关闭回调）：
+                    # 继续等待其真正结束，避免遗留 task 触发
+                    # "Task destroyed while pending" 警告
+                    if self._server_task and not self._server_task.done():
+                        await asyncio.gather(self._server_task, return_exceptions=True)
         except Exception:
             logger.exception("停止 OneBot WS 服务器异常")
         self._server_task = None

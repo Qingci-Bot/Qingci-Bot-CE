@@ -20,15 +20,18 @@ const exporting = ref(false)
 const auditLogs = ref([])
 const auditLoading = ref(false)
 
-onMounted(() => {
+onMounted(async () => {
+  // 先等待配置加载完成再填充表单，避免用默认值覆盖服务端真实配置
+  await store.fetchConfig()
   resetForm()
   apiKeyInput.value = store.getApiKey()
   loadAuditLogs()
 })
 
-watch(() => [store.config.bot, store.config.onebot], () => {
-  resetForm()
-}, { once: true })
+// 配置加载完成后再同步一次表单（如从保存接口刷新回来）
+watch(() => store.configLoaded, (loaded) => {
+  if (loaded) resetForm()
+})
 
 function resetForm() {
   const bot = store.config.bot || {}

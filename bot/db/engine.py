@@ -6,7 +6,6 @@
 """
 
 import threading
-from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import event
@@ -76,8 +75,10 @@ async def init_db():
     首次运行时建表（create_all），已存在的表不受影响。
     Alembic 迁移用于后续 schema 演进（手动执行 alembic upgrade head）。
     """
-    # 确保所有模型被导入，以便 SQLModel.metadata 能发现它们
-    from . import models  # noqa: F401  # 副作用导入：导入以注册 SQLModel 表元数据
+    # 确保所有模型被导入，以便 SQLModel.metadata 能发现它们。
+    # 用 importlib 显式导入：pyflakes 会把副作用导入误报为未使用
+    import importlib
+    importlib.import_module("bot.db.models")
 
     engine = get_engine()
     async with engine.begin() as conn:

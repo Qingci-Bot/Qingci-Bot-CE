@@ -165,8 +165,16 @@ class PluginManager:
         old_plugin = self._plugins.get(target_name)
         # 先建后拆：先完整初始化新插件（含 on_load），失败时旧插件保持生效
         await self._init_plugin(plugin, bot)
-        # 关联模块级 Matcher
+        # on_load 中手动注册的 Matcher 未设置 owner，此处统一补齐
+        # （保证 run_matchers 能定位到所属插件，mctx.plugin 可用）
+        for m in plugin.matchers:
+            if not m.owner:
+                m.owner = plugin.name
+        # 关联模块级 Matcher（仅本模块定义的，避免跨模块 import 时误归属）
         for m in collector:
+            handler_mod = getattr(m.handler, "__module__", "") or ""
+            if handler_mod and handler_mod != module.__name__:
+                continue
             m.owner = plugin.name
             plugin.matchers.append(m)
         # 新插件就绪后再卸载旧插件并注册，避免插件真空；
@@ -174,6 +182,13 @@ class PluginManager:
         try:
             if old_plugin is not None:
                 await self.unload(target_name)
+            # 不同模块定义同名插件时，后者覆盖前者属于配置错误，记录警告便于排查
+            existing = self._plugins.get(plugin.name)
+            if existing is not None and existing is not old_plugin:
+                logger.warning(
+                    f"插件重名覆盖: {plugin.name}（{type(existing).__module__} "
+                    f"被 {module.__name__} 替换）"
+                )
             self._plugins[plugin.name] = plugin
         except BaseException:
             try:
