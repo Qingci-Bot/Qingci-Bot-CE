@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { invalidateWizardStatusCache } from '../router'
 
 const router = useRouter()
 
@@ -110,6 +111,7 @@ async function completeSetup() {
       return
     }
     // 配置完成，跳转首页
+    invalidateWizardStatusCache()
     router.push('/')
   } catch (e) {
     error.value = '网络错误: ' + e.message
@@ -128,6 +130,7 @@ async function skipSetup() {
       loading.value = false
       return
     }
+    invalidateWizardStatusCache()
     router.push('/')
   } catch (e) {
     error.value = '网络错误: ' + e.message

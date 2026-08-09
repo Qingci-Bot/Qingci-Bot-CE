@@ -54,6 +54,11 @@ let wizardStatusCache = null
 let wizardCacheTs = 0
 const WIZARD_CACHE_TTL_MS = 120000
 
+export function invalidateWizardStatusCache() {
+  wizardStatusCache = null
+  wizardCacheTs = 0
+}
+
 async function fetchWizardNeeded() {
   if (wizardStatusCache !== null && Date.now() - wizardCacheTs < WIZARD_CACHE_TTL_MS) {
     return wizardStatusCache
