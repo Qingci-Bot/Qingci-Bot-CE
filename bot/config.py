@@ -131,6 +131,7 @@ class BotConfig(BaseModel):
     group_blacklist: list[int] = []     # 群黑名单
     user_blacklist: list[int] = []      # 用户黑名单
     log_json: bool = False              # 结构化 JSON 日志（默认关闭，使用普通文本日志）
+    wizard_skipped: bool = False        # 是否跳过了首次配置引导
 
 
 class RateLimitConfig(BaseModel):

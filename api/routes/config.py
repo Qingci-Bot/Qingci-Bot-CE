@@ -365,6 +365,10 @@ async def get_wizard_status():
     except Exception:
         return {"needs_setup": True, "reason": "config_load_failed"}
 
+    # 已跳过引导则不再提示
+    if cfg.bot.wizard_skipped:
+        return {"needs_setup": False, "wizard_skipped": True}
+
     # 判断：api_key 为空 且 没有 admin_users 时，视为未配置
     api_key = cfg.config.api_key or ""
     llm_api_key = cfg.llm.api_key or ""
@@ -436,4 +440,19 @@ async def complete_wizard(data: dict):
             raise
         except Exception:
             logger.exception("初始配置向导失败")
+            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
+
+
+@router.post("/wizard/skip")
+async def skip_wizard():
+    """跳过首次配置引导（免鉴权）"""
+    async with _get_config_lock():
+        try:
+            cfg = _get_config_manager()
+            current = cfg.to_dict()
+            current["bot"]["wizard_skipped"] = True
+            cfg.update(current)
+            return {"message": "已跳过配置引导"}
+        except Exception:
+            logger.exception("跳过配置引导失败")
             raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")

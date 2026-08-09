@@ -117,6 +117,24 @@ async function completeSetup() {
   }
 }
 
+async function skipSetup() {
+  loading.value = true
+  error.value = ''
+  try {
+    const res = await fetch('/api/config/wizard/skip', { method: 'POST' })
+    if (!res.ok) {
+      const data = await res.json()
+      error.value = data.detail || '跳过失败'
+      loading.value = false
+      return
+    }
+    router.push('/')
+  } catch (e) {
+    error.value = '网络错误: ' + e.message
+    loading.value = false
+  }
+}
+
 const canTest = computed(() => {
   if (provider.value === 'ollama') return true
   return apiKey.value.trim().length > 0
@@ -259,6 +277,7 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
       <!-- Navigation -->
       <div class="wizard-nav">
         <button v-if="step > 1" class="btn btn-secondary" @click="prevStep">上一步</button>
+        <button v-else class="btn btn-ghost" :disabled="loading" @click="skipSetup">跳过</button>
         <div class="spacer"></div>
         <button
           v-if="step < totalSteps"
@@ -544,6 +563,22 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-ghost:hover {
+  color: var(--text-secondary);
+  border-color: var(--text-muted);
 }
 
 .spin {
