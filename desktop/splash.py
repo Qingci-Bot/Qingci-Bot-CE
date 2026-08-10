@@ -4,8 +4,11 @@
 """
 
 import ctypes
+import logging
 import threading
 from ctypes import wintypes
+
+logger = logging.getLogger("qingci-bot.splash")
 
 # ── Windows API 常量 ──────────────────────────────────────────
 WS_POPUP = 0x80000000
@@ -25,6 +28,26 @@ user32 = ctypes.windll.user32
 gdi32 = ctypes.windll.gdi32
 kernel32 = ctypes.windll.kernel32
 
+# 全局引用：WINFUNCTYPE 回调与实例通信的唯一桥梁
+_splash_instance = None
+
+
+# ── 模块级窗口过程（非实例方法，避免 WINFUNCTYPE 绑定问题）────
+
+@ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, wintypes.UINT,
+                    wintypes.WPARAM, wintypes.LPARAM)
+def _wnd_proc(hwnd, msg, wparam, lparam):
+    if msg == 0x000F:  # WM_PAINT
+        if _splash_instance:
+            _splash_instance._on_paint(hwnd)
+        return 0
+    elif msg == 0x0002:  # WM_DESTROY
+        user32.PostQuitMessage(0)
+        return 0
+    return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+
+# ── SplashScreen ──────────────────────────────────────────────
 
 class SplashScreen:
     """纯 ctypes 原生 Windows 启动画面
@@ -37,18 +60,19 @@ class SplashScreen:
     """
 
     def __init__(self):
+        global _splash_instance
         self._hwnd = None
-        self._class_atom = None
         self._ready = threading.Event()
-        self._wndproc_ref = None  # 保持 WINFUNCTYPE 引用，防止 GC
+        _splash_instance = self
 
     # ── 公开 API ──────────────────────────────────────────────
 
     def show(self):
         """在后台线程显示启动画面，等待窗口创建完成"""
-        t = threading.Thread(target=self._run, daemon=True)
+        t = threading.Thread(target=self._run, name="splash", daemon=True)
         t.start()
-        self._ready.wait(timeout=3)
+        if not self._ready.wait(timeout=5):
+            logger.warning("启动画面窗口创建超时（5s），继续启动")
 
     def close(self):
         """关闭启动画面"""
@@ -58,28 +82,26 @@ class SplashScreen:
     # ── 内部实现 ──────────────────────────────────────────────
 
     def _run(self):
-        self._register_class()
-        self._create_window()
-        self._ready.set()
-        self._message_loop()
+        try:
+            self._create()
+            self._ready.set()
+            self._message_loop()
+        except Exception:
+            logger.exception("启动画面异常")
+        finally:
+            self._ready.set()
 
-    def _register_class(self):
+    def _create(self):
         module = kernel32.GetModuleHandleW(None)
 
-        self._wndproc_ref = ctypes.WINFUNCTYPE(
-            ctypes.c_long, wintypes.HWND, wintypes.UINT,
-            wintypes.WPARAM, wintypes.LPARAM
-        )(self._wnd_proc)
-
+        # 注册窗口类
         wc = wintypes.WNDCLASSW()
-        wc.lpfnWndProc = self._wndproc_ref
+        wc.lpfnWndProc = _wnd_proc
         wc.hInstance = module
         wc.hbrBackground = gdi32.CreateSolidBrush(BG_COLOR)
         wc.lpszClassName = "QingciBotSplash"
-        self._class_atom = user32.RegisterClassW(ctypes.byref(wc))
-
-    def _create_window(self):
-        module = kernel32.GetModuleHandleW(None)
+        if not user32.RegisterClassW(ctypes.byref(wc)):
+            raise OSError(f"RegisterClassW 失败: {ctypes.get_last_error()}")
 
         # 居中
         sw = user32.GetSystemMetrics(0)
@@ -88,6 +110,7 @@ class SplashScreen:
         x = (sw - w) // 2
         y = (sh - h) // 2
 
+        # 创建窗口
         self._hwnd = user32.CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             "QingciBotSplash",
@@ -96,6 +119,8 @@ class SplashScreen:
             x, y, w, h,
             None, None, module, None,
         )
+        if not self._hwnd:
+            raise OSError(f"CreateWindowExW 失败: {ctypes.get_last_error()}")
 
         user32.SetLayeredWindowAttributes(self._hwnd, 0, 240, LWA_ALPHA)
         user32.ShowWindow(self._hwnd, SW_SHOW)
@@ -106,15 +131,6 @@ class SplashScreen:
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
             user32.TranslateMessage(ctypes.byref(msg))
             user32.DispatchMessageW(ctypes.byref(msg))
-
-    def _wnd_proc(self, hwnd, msg, wparam, lparam):
-        if msg == 0x000F:  # WM_PAINT
-            self._on_paint(hwnd)
-            return 0
-        elif msg == 0x0002:  # WM_DESTROY
-            user32.PostQuitMessage(0)
-            return 0
-        return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
     def _on_paint(self, hwnd):
         ps = wintypes.PAINTSTRUCT()
