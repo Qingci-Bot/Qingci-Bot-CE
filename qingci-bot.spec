@@ -96,6 +96,8 @@ a = Analysis(
         'pystray',
         'pystray._win32',
         'PIL',
+        # desktop 启动画面（main.py 中条件导入，显式声明确保打包）
+        'desktop.splash',
         # desktop/main.py 中以模块名导入入口脚本
         'main',
     ],

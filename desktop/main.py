@@ -12,7 +12,7 @@ def run_desktop(args, splash=None):
     """启动桌面应用
 
     Args:
-        splash: SplashScreen 实例，传入后由后端就绪时关闭
+        splash: SplashScreen 实例，主窗口真正显示时（shown 事件）自动关闭
     """
     import webview
 
@@ -27,7 +27,7 @@ def run_desktop(args, splash=None):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(run_bot_and_api(args, splash=splash))
+            loop.run_until_complete(run_bot_and_api(args))
         except Exception:
             logger.exception("后端服务异常")
 
@@ -126,6 +126,12 @@ def run_desktop(args, splash=None):
             return False
 
         window.events.closing += _on_closing
+
+    # 主窗口真正显示时关闭启动画面（WinForms Shown 事件）。
+    # 不能在 webview.start() 之前关闭：start() 初始化 .NET GUI 需要数秒，
+    # 提前关闭会导致启动画面结束后有一段无界面的空窗期。
+    if splash:
+        window.events.shown += lambda: splash.close()
 
     webview.start(debug=False)
 

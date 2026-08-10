@@ -14,10 +14,10 @@
 - **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪（可选摘要压缩）；Web UI 按会话分组可视化查看 / 删除
 - **插件系统**：借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持优先级、权限控制、命令注册器、插件间依赖声明（require），向后兼容旧式 `on_message`
 - **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）
-- **增强能力**：AI 图片生成、轻量知识库（文件型 RAG）、会话摘要（历史裁剪）、Function Calling、MCP 服务器接入、定时任务调度器、LLM 用量统计
+- **增强能力**：AI 图片生成、轻量知识库（关键词 + LanceDB 向量检索，双模式）、会话摘要（历史裁剪）、Function Calling、MCP 服务器接入、定时任务调度器、LLM 用量统计
 - **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式），支持在线备份与消息 CSV 导出
 - **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理 / 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置
-- **桌面应用**：PyWebView 套壳 + 系统托盘（关闭窗口自动驻留后台），开机自启
+- **桌面应用**：PyWebView 套壳 + 系统托盘（关闭窗口自动驻留后台），开机自启；启动时显示即时加载画面，重型模块延迟导入，双击 exe 后无感知等待
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖；litellm 延迟导入，启动不加载重型依赖
 
 ---
@@ -37,10 +37,17 @@
 # 创建虚拟环境
 uv venv --python python3.12 .venv
 
-# 安装全部依赖（推荐：pyproject.toml 已声明所有依赖，含桌面与 MCP）
+# 安装核心依赖（运行项目所需）
 uv pip install -e . --python .venv\Scripts\python.exe
+
+# 安装开发依赖（含 pytest、pyinstaller 打包工具）
+uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 ```
 
+> `[dev]` 额外包含：
+> - `pytest` / `pytest-asyncio` — 运行测试
+> - `pyinstaller` — 打包为 exe（`.\build.ps1` 依赖此包）
+>
 > 若跳过 `pyproject.toml`，可手动安装核心依赖（桌面/MCP 可选）：
 >
 > ```bash
@@ -75,7 +82,7 @@ uv pip install -e . --python .venv\Scripts\python.exe
 
 在 LLBot 中添加反向 WebSocket 连接：
 
-- 地址：`ws://127.0.0.1:3001/ws`（端口默认 3001，需与 `config.yaml` 的 `onebot.port` 保持一致；`config.example.yaml` 中示例为 8888，以你的实际配置为准）
+- 地址：`ws://127.0.0.1:3001/ws`（端口默认 3001，需与 `config.yaml` 的 `onebot.port` 保持一致）
 - Access Token：留空或与 `config.yaml` 中 `onebot.access_token` 保持一致
 
 LLBot 会自动携带 OneBot v11 标准的 `X-Client-Role: universal` 和 `X-Self-ID` header 连接。
@@ -230,13 +237,17 @@ image:
   api_url: ''                      # 留空则按 litellm 默认路由
   api_key: ''                      # 留空则回退 llm.api_key
 rag:
-  enabled: false                   # 轻量知识库（默认关闭，文件型关键词检索）
-  embedding_model: ''              # 预留字段（当前为关键词检索，不使用向量）
+  enabled: false                   # 轻量知识库（默认关闭）
+  mode: keyword                    # 检索模式: keyword（关键词检索）/ vector（LanceDB 向量检索）
+  embedding_model: ''              # 向量模型（vector 模式使用，如 text-embedding-3-small）
+  embedding_api_url: ''            # 向量 API 地址（留空复用 llm.api_url）
+  embedding_api_key: ''            # 向量 API Key（留空复用 llm.api_key）
   top_k: 3                         # 检索返回的最相关分块数
   knowledge_dir: data/knowledge    # 知识库目录（相对项目根目录）
   chunk_size: 400                  # 文档分块大小（字符数）
   chunk_overlap: 50                # 相邻分块重叠字符数
   max_inject_chars: 800            # 注入 system_prompt 的参考资料长度上限
+  collection_name: qingci_knowledge # LanceDB 集合名（vector 模式使用）
 session_summary:
   enabled: false                   # 会话摘要（默认关闭；与 llm.enable_summary 等价）
   keep_recent_turns: 3             # 摘要时保留最近 N 轮原文
@@ -257,7 +268,7 @@ api_key: ''                        # API 鉴权密钥
 | `scheduler` | 定时任务调度器 | `enabled: true` | 调度器基座，由插件注册任务；无任务注册时零副作用 |
 | `alert` | 错误告警 | `enabled: false` | 冷却窗口内 ERROR 日志达到 `error_threshold` 条时向管理员发消息告警，带 `cooldown_minutes` 冷却 |
 | `image` | 图片生成 | `enabled: false` | `/image <提示词>`（或 `/画图`）命令；`image.api_key` 为空时回退 `llm.api_key`；成功后以 CQ 图片段回复 |
-| `rag` | 轻量知识库 | `enabled: false` | 文件型关键词检索（纯 Python 无重型依赖）；开启后对话自动注入检索到的参考资料；`/kb` 命令管理文档（add/list/search/remove/reload） |
+| `rag` | 轻量知识库 | `enabled: false` | 双模式：`keyword`（纯 Python 关键词检索，无重型依赖）/ `vector`（LanceDB 向量检索 + litellm embedding，语义更精准）；开启后对话自动注入检索到的参考资料；`/kb` 命令管理文档（add/list/search/remove/reload）。vector 模式的初始化步骤见 [ARCHITECTURE.md](./ARCHITECTURE.md#向量检索rag初始化) |
 | `session_summary` | 会话摘要 | `enabled: false` | 与 `llm.enable_summary` 等价，任一为 true 即启用；上下文超过条数/token 阈值时将较早消息摘要压缩，保留最近 N 轮原文 |
 | `log.usage_tracking` | LLM 用量入库 | `true` | 可退出的遥测：关闭后 chat/摘要/图片不再写 usage_logs，Dashboard 用量统计将为空 |
 | `llm.enable_tools` | Function Calling | `false` | 启用工具调用（内置 `get_current_time` / `random_quote`，可经 ToolRegistry 扩展）；`max_tool_rounds` 限制最大轮次（默认 5） |

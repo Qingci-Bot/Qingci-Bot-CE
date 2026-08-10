@@ -1,6 +1,7 @@
 """轻量启动画面 - 仅依赖 ctypes，零第三方库
 
-在 PyInstaller 解压/Python 导入重型模块期间显示，提供即时视觉反馈。
+使用 UpdateLayeredWindow 实现，不依赖 WM_PAINT / RegisterClassW，
+在 PyInstaller 解压/Python 导入重型模块期间提供即时视觉反馈。
 """
 
 import ctypes
@@ -15,42 +16,31 @@ WS_POPUP = 0x80000000
 WS_EX_LAYERED = 0x00080000
 WS_EX_TOPMOST = 0x00000008
 WS_EX_TOOLWINDOW = 0x00000080
-LWA_ALPHA = 0x00000002
-WM_CLOSE = 0x0010
+ULW_ALPHA = 0x00000002
 SW_SHOW = 5
 
 # 配色：暗色主题，与 Qingci-Bot UI 风格一致
-BG_COLOR = 0x001E1E2E       # 深藏青
-TITLE_COLOR = 0x00CDD6F4    # 亮薰衣草
-SUB_COLOR = 0x00A6ADC8      # 灰紫
+BG_COLOR = 0x001E1E2E       # 深藏青 (BGR)
+TITLE_COLOR = 0x00CDD6F4    # 亮薰衣草 (BGR) — 实际是 RGB(0xF4, 0xD6, 0xCD)
+SUB_COLOR = 0x00A6ADC8      # 灰紫 (BGR)
 
 user32 = ctypes.windll.user32
 gdi32 = ctypes.windll.gdi32
 kernel32 = ctypes.windll.kernel32
 
-# 全局引用：WINFUNCTYPE 回调与实例通信的唯一桥梁
-_splash_instance = None
 
+# ctypes.wintypes 未定义 BLENDFUNCTION，需手动声明（UpdateLayeredWindow 的混合参数）
+class BLENDFUNCTION(ctypes.Structure):
+    _fields_ = [
+        ("BlendOp", wintypes.BYTE),
+        ("BlendFlags", wintypes.BYTE),
+        ("SourceConstantAlpha", wintypes.BYTE),
+        ("AlphaFormat", wintypes.BYTE),
+    ]
 
-# ── 模块级窗口过程（非实例方法，避免 WINFUNCTYPE 绑定问题）────
-
-@ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, wintypes.UINT,
-                    wintypes.WPARAM, wintypes.LPARAM)
-def _wnd_proc(hwnd, msg, wparam, lparam):
-    if msg == 0x000F:  # WM_PAINT
-        if _splash_instance:
-            _splash_instance._on_paint(hwnd)
-        return 0
-    elif msg == 0x0002:  # WM_DESTROY
-        user32.PostQuitMessage(0)
-        return 0
-    return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
-
-
-# ── SplashScreen ──────────────────────────────────────────────
 
 class SplashScreen:
-    """纯 ctypes 原生 Windows 启动画面
+    """纯 ctypes 原生 Windows 启动画面（UpdateLayeredWindow 方案）
 
     用法:
         splash = SplashScreen()
@@ -59,11 +49,12 @@ class SplashScreen:
         splash.close()         # 关闭
     """
 
+    W, H = 360, 160
+
     def __init__(self):
-        global _splash_instance
         self._hwnd = None
         self._ready = threading.Event()
-        _splash_instance = self
+        self._running = True
 
     # ── 公开 API ──────────────────────────────────────────────
 
@@ -75,9 +66,14 @@ class SplashScreen:
             logger.warning("启动画面窗口创建超时（5s），继续启动")
 
     def close(self):
-        """关闭启动画面"""
+        """关闭启动画面（跨线程安全）"""
+        self._running = False
         if self._hwnd:
-            user32.PostMessageW(self._hwnd, WM_CLOSE, 0, 0)
+            # PostMessage 跨线程安全；DefWindowProc 处理 WM_CLOSE 时
+            # 会在窗口线程内调用 DestroyWindow，继而触发 WM_DESTROY →
+            # PostQuitMessage → GetMessage 返回 0，消息循环退出
+            user32.PostMessageW(self._hwnd, 0x0010, 0, 0)  # WM_CLOSE
+            self._hwnd = None
 
     # ── 内部实现 ──────────────────────────────────────────────
 
@@ -92,78 +88,103 @@ class SplashScreen:
             self._ready.set()
 
     def _create(self):
-        module = kernel32.GetModuleHandleW(None)
+        """创建分层窗口并渲染内容"""
+        # 1. 获取屏幕 DC
+        hdc_screen = user32.GetDC(None)
+        if not hdc_screen:
+            raise OSError("GetDC 失败")
 
-        # 注册窗口类
-        wc = wintypes.WNDCLASSW()
-        wc.lpfnWndProc = _wnd_proc
-        wc.hInstance = module
-        wc.hbrBackground = gdi32.CreateSolidBrush(BG_COLOR)
-        wc.lpszClassName = "QingciBotSplash"
-        if not user32.RegisterClassW(ctypes.byref(wc)):
-            raise OSError(f"RegisterClassW 失败: {ctypes.get_last_error()}")
+        try:
+            # 2. 创建内存 DC 与兼容位图
+            hdc_mem = gdi32.CreateCompatibleDC(hdc_screen)
+            if not hdc_mem:
+                raise OSError("CreateCompatibleDC 失败")
 
-        # 居中
-        sw = user32.GetSystemMetrics(0)
-        sh = user32.GetSystemMetrics(1)
-        w, h = 360, 160
-        x = (sw - w) // 2
-        y = (sh - h) // 2
+            bitmap = gdi32.CreateCompatibleBitmap(hdc_screen, self.W, self.H)
+            if not bitmap:
+                gdi32.DeleteDC(hdc_mem)
+                raise OSError("CreateCompatibleBitmap 失败")
 
-        # 创建窗口
-        self._hwnd = user32.CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-            "QingciBotSplash",
-            "",
-            WS_POPUP,
-            x, y, w, h,
-            None, None, module, None,
-        )
-        if not self._hwnd:
-            raise OSError(f"CreateWindowExW 失败: {ctypes.get_last_error()}")
+            old_bitmap = gdi32.SelectObject(hdc_mem, bitmap)
 
-        user32.SetLayeredWindowAttributes(self._hwnd, 0, 240, LWA_ALPHA)
-        user32.ShowWindow(self._hwnd, SW_SHOW)
-        user32.UpdateWindow(self._hwnd)
+            try:
+                # 3. 绘制背景
+                brush = gdi32.CreateSolidBrush(BG_COLOR)
+                rect = wintypes.RECT(0, 0, self.W, self.H)
+                user32.FillRect(hdc_mem, ctypes.byref(rect), brush)
+                gdi32.DeleteObject(brush)
+
+                gdi32.SetBkMode(hdc_mem, 1)  # TRANSPARENT
+
+                # 4. 绘制标题
+                gdi32.SetTextColor(hdc_mem, TITLE_COLOR)
+                font_title = gdi32.CreateFontW(
+                    38, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 0, 0, "Microsoft YaHei"
+                )
+                old_font = gdi32.SelectObject(hdc_mem, font_title)
+                tr = wintypes.RECT(0, 28, self.W, 82)
+                user32.DrawTextW(hdc_mem, "Qingci-Bot", -1, ctypes.byref(tr), 0x21)
+                gdi32.SelectObject(hdc_mem, old_font)
+                gdi32.DeleteObject(font_title)
+
+                # 5. 绘制副标题
+                gdi32.SetTextColor(hdc_mem, SUB_COLOR)
+                font_sub = gdi32.CreateFontW(
+                    20, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0, "Microsoft YaHei"
+                )
+                old_font = gdi32.SelectObject(hdc_mem, font_sub)
+                sr = wintypes.RECT(0, 82, self.W, 118)
+                user32.DrawTextW(hdc_mem, "正在启动...", -1, ctypes.byref(sr), 0x21)
+                gdi32.SelectObject(hdc_mem, old_font)
+                gdi32.DeleteObject(font_sub)
+
+                # 6. 居中坐标
+                sw = user32.GetSystemMetrics(0)
+                sh = user32.GetSystemMetrics(1)
+                x = (sw - self.W) // 2
+                y = (sh - self.H) // 2
+
+                # 7. 创建分层窗口（使用 Static 内置类，无需 RegisterClass）
+                module = kernel32.GetModuleHandleW(None)
+                self._hwnd = user32.CreateWindowExW(
+                    WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+                    "Static",
+                    "",
+                    WS_POPUP,
+                    x, y, self.W, self.H,
+                    None, None, module, None,
+                )
+                if not self._hwnd:
+                    raise OSError(f"CreateWindowExW 失败: {ctypes.get_last_error()}")
+
+                # 8. UpdateLayeredWindow：将内存位图渲染到分层窗口
+                pt_src = wintypes.POINT(0, 0)
+                pt_dst = wintypes.POINT(x, y)
+                size = wintypes.SIZE(self.W, self.H)
+                blend = BLENDFUNCTION()
+                blend.BlendOp = 0       # AC_SRC_OVER
+                blend.BlendFlags = 0
+                blend.SourceConstantAlpha = 240
+                blend.AlphaFormat = 0   # 位图无 alpha 通道，用 SourceConstantAlpha 控制整体透明度
+
+                user32.UpdateLayeredWindow(
+                    self._hwnd, hdc_screen,
+                    ctypes.byref(pt_dst), ctypes.byref(size),
+                    hdc_mem, ctypes.byref(pt_src),
+                    0, ctypes.byref(blend), ULW_ALPHA,
+                )
+
+                user32.ShowWindow(self._hwnd, SW_SHOW)
+            finally:
+                gdi32.SelectObject(hdc_mem, old_bitmap)
+                gdi32.DeleteObject(bitmap)
+                gdi32.DeleteDC(hdc_mem)
+        finally:
+            user32.ReleaseDC(None, hdc_screen)
 
     def _message_loop(self):
+        """消息循环：保持窗口存活直到被关闭"""
         msg = wintypes.MSG()
-        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+        while self._running and user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
             user32.TranslateMessage(ctypes.byref(msg))
             user32.DispatchMessageW(ctypes.byref(msg))
-
-    def _on_paint(self, hwnd):
-        ps = wintypes.PAINTSTRUCT()
-        hdc = user32.BeginPaint(hwnd, ctypes.byref(ps))
-
-        rect = wintypes.RECT()
-        user32.GetClientRect(hwnd, ctypes.byref(rect))
-        gdi32.SetBkMode(hdc, 1)  # TRANSPARENT
-
-        # 标题
-        gdi32.SetTextColor(hdc, TITLE_COLOR)
-        font_title = gdi32.CreateFontW(
-            38, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 0, 0, "Microsoft YaHei"
-        )
-        old = gdi32.SelectObject(hdc, font_title)
-        tr = wintypes.RECT()
-        tr.left, tr.top = rect.left, rect.top + 28
-        tr.right, tr.bottom = rect.right, rect.top + 82
-        user32.DrawTextW(hdc, "Qingci-Bot", -1, ctypes.byref(tr), 0x21)
-        gdi32.SelectObject(hdc, old)
-        gdi32.DeleteObject(font_title)
-
-        # 副标题
-        gdi32.SetTextColor(hdc, SUB_COLOR)
-        font_sub = gdi32.CreateFontW(
-            20, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0, "Microsoft YaHei"
-        )
-        old = gdi32.SelectObject(hdc, font_sub)
-        sr = wintypes.RECT()
-        sr.left, sr.top = rect.left, rect.top + 82
-        sr.right, sr.bottom = rect.right, rect.top + 118
-        user32.DrawTextW(hdc, "正在启动...", -1, ctypes.byref(sr), 0x21)
-        gdi32.SelectObject(hdc, old)
-        gdi32.DeleteObject(font_sub)
-
-        user32.EndPaint(hwnd, ctypes.byref(ps))

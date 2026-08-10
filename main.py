@@ -60,7 +60,7 @@ def parse_args():
 
 # ── 后端服务（重型导入延迟到函数内）───────────────────────────
 
-async def run_bot_and_api(args, splash=None):
+async def run_bot_and_api(args):
     """在同个事件循环中运行 Bot 和 API 服务"""
 
     # 重型导入：仅在需要启动后端时才加载
@@ -89,10 +89,6 @@ async def run_bot_and_api(args, splash=None):
         server = uvicorn.Server(config)
 
         logger.info(f"Web UI: http://{args.host}:{args.port}/ui")
-
-        # 后端就绪，关闭启动画面
-        if splash:
-            splash.close()
 
         await server.serve()
     except (asyncio.CancelledError, KeyboardInterrupt):
@@ -124,19 +120,21 @@ async def run_bot_and_api(args, splash=None):
 def main():
     args = parse_args()
 
-    # 结构化日志：config.bot.log_json=True 时切换 JSON 格式
-    apply_logging_from_config(args.config)
-
     if args.desktop:
-        # 桌面模式：在重型导入前先显示启动画面
+        # 桌面模式：在任何重型操作前先显示启动画面
+        # splash.py 仅依赖 ctypes + threading（标准库），极轻量
         splash = None
         try:
             from desktop.splash import SplashScreen
             splash = SplashScreen()
             splash.show()
         except Exception:
-            logger.warning("启动画面创建失败，跳过")
+            logger.warning("启动画面创建失败，跳过", exc_info=True)
 
+    # 结构化日志：config.bot.log_json=True 时切换 JSON 格式
+    apply_logging_from_config(args.config)
+
+    if args.desktop:
         from desktop.main import run_desktop
         run_desktop(args, splash)
         return
