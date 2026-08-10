@@ -8,8 +8,12 @@ import time
 logger = logging.getLogger("qingci-bot.desktop")
 
 
-def run_desktop(args):
-    """启动桌面应用"""
+def run_desktop(args, splash=None):
+    """启动桌面应用
+
+    Args:
+        splash: SplashScreen 实例，传入后由后端就绪时关闭
+    """
     import webview
 
     # 结构化日志：与 main 入口保持一致（幂等：log_json=False 时不做任何变更）
@@ -23,7 +27,7 @@ def run_desktop(args):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(run_bot_and_api(args))
+            loop.run_until_complete(run_bot_and_api(args, splash=splash))
         except Exception:
             logger.exception("后端服务异常")
 

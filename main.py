@@ -10,31 +10,22 @@
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
+
+# ── 早期环境设置 ──────────────────────────────────────────────
 
 # frozen windowed（console=False）兼容：此时 sys.stdout/stderr 为 None，
 # 任何 print / logging 写入都会抛异常且不可见。在最早期（任何第三方导入之前）
 # 兜底重定向到 os.devnull，一处修复覆盖所有 print/logging；console 模式不受影响。
 if getattr(sys, "frozen", False) and sys.stdout is None:
-    import os
-
     sys.stdout = sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
 # 跳过 litellm 启动时的远程 model cost map 拉取：无外网/慢网环境下
 # httpx.get(timeout=5) 会因 DNS 解析失败阻塞数秒，显著拖慢启动。
 # 直接使用包内本地备份（功能无影响），仅影响极个别新模型的计价信息。
-import os
-
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "true")
-
-import uvicorn
-
-from bot.core.bot import QingciBot, set_bot, clear_bot
-from bot.core.logformat import apply_logging_from_config
-from bot.paths import app_root
-from api.auth import set_config_path
-from api.server import create_app
 
 # 日志配置
 logging.basicConfig(
@@ -44,6 +35,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("qingci-bot.main")
 
+# ── 轻量级模块级导入（仅路径/日志工具，不触发重型依赖）───────
+from bot.paths import app_root  # noqa: E402 — 仅 sys + pathlib，极轻量
+from bot.core.logformat import apply_logging_from_config  # noqa: E402 — 仅 logging 工具
+
+
+# ── 命令行解析 ────────────────────────────────────────────────
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Qingci-Bot")
@@ -61,8 +58,17 @@ def parse_args():
     return args
 
 
-async def run_bot_and_api(args):
+# ── 后端服务（重型导入延迟到函数内）───────────────────────────
+
+async def run_bot_and_api(args, splash=None):
     """在同个事件循环中运行 Bot 和 API 服务"""
+
+    # 重型导入：仅在需要启动后端时才加载
+    import uvicorn  # noqa: E402
+    from bot.core.bot import QingciBot, set_bot, clear_bot  # noqa: E402
+    from api.auth import set_config_path  # noqa: E402
+    from api.server import create_app  # noqa: E402
+
     bot = QingciBot(args.config)
     set_bot(bot)
     server = None
@@ -83,6 +89,11 @@ async def run_bot_and_api(args):
         server = uvicorn.Server(config)
 
         logger.info(f"Web UI: http://{args.host}:{args.port}/ui")
+
+        # 后端就绪，关闭启动画面
+        if splash:
+            splash.close()
+
         await server.serve()
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("服务取消，开始清理...")
@@ -108,15 +119,26 @@ async def run_bot_and_api(args):
         logger.info("Qingci-Bot 已停止")
 
 
+# ── 入口 ──────────────────────────────────────────────────────
+
 def main():
     args = parse_args()
 
-    # 结构化日志：config.bot.log_json=True 时切换 JSON 格式，否则保持上方文本格式不变
+    # 结构化日志：config.bot.log_json=True 时切换 JSON 格式
     apply_logging_from_config(args.config)
 
     if args.desktop:
+        # 桌面模式：在重型导入前先显示启动画面
+        splash = None
+        try:
+            from desktop.splash import SplashScreen
+            splash = SplashScreen()
+            splash.show()
+        except Exception:
+            logger.warning("启动画面创建失败，跳过")
+
         from desktop.main import run_desktop
-        run_desktop(args)
+        run_desktop(args, splash)
         return
 
     try:
