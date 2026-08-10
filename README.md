@@ -268,6 +268,8 @@ api_key: ''                        # API 鉴权密钥
 ---
 
 > 插件开发、API 接口、前端开发、打包详见 [PLUGIN_DEV.md](./PLUGIN_DEV.md)
+>
+> 独立插件开发 SDK：[Plugins-Dev](https://atomgit.com/luoqingci/Plugins-Dev) — 零依赖插件开发工具包，无需克隆主项目即可开发插件
 
 ## 许可证
 
