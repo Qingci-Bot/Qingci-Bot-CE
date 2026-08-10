@@ -8,10 +8,11 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import ValidationError
 
 from bot.core.bot import get_bot as _get_bot, QingciBot
 from bot.core.broadcast import register_broker, unregister_broker
@@ -90,6 +91,51 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # ── 全局异常处理 ──────────────────────────────────────────
+    from fastapi import Request
+    from fastapi.responses import JSONResponse
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        """全局异常处理器：统一错误响应格式 + 日志记录"""
+        logger.error(
+            f"未处理的 API 异常: {type(exc).__name__}: {exc} "
+            f"path={request.url.path} method={request.method}",
+            exc_info=True,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "服务器内部错误",
+                "error_code": "INTERNAL_ERROR",
+                "error_type": type(exc).__name__,
+            },
+        )
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        """HTTP 异常统一响应格式"""
+        from fastapi import HTTPException as HTTPExc
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "detail": exc.detail,
+                "error_code": f"HTTP_{exc.status_code}",
+            },
+        )
+
+    @app.exception_handler(ValidationError)
+    async def validation_exception_handler(request: Request, exc: ValidationError):
+        """Pydantic 校验异常统一响应"""
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": "请求参数校验失败",
+                "error_code": "VALIDATION_ERROR",
+                "errors": exc.errors(),
+            },
+        )
 
     # 注册路由
     from api.routes import (

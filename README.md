@@ -40,15 +40,20 @@ uv venv --python python3.12 .venv
 # 安装核心依赖（运行项目所需）
 uv pip install -e . --python .venv\Scripts\python.exe
 
-# 安装开发依赖（含 pytest、pyinstaller 打包工具）
+# 安装开发依赖（含测试、构建、代码质量工具）
 uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 ```
 
-> `[dev]` 额外包含：
-> - `pytest` / `pytest-asyncio` — 运行测试
-> - `pyinstaller` — 打包为 exe（`.\build.ps1` 依赖此包）
+> 依赖分组说明：
 >
-> 若跳过 `pyproject.toml`，可手动安装核心依赖（桌面/MCP 可选）：
+> | 分组 | 安装命令 | 内容 |
+> |------|----------|------|
+> | 核心 | `uv pip install -e .` | 运行时依赖（FastAPI、litellm、OneBot 等） |
+> | `[test]` | `uv pip install -e ".[test]"` | pytest / pytest-asyncio / pytest-cov / httpx |
+> | `[build]` | `uv pip install -e ".[build]"` | pyinstaller（`.\build.ps1` 依赖） |
+> | `[dev]` | `uv pip install -e ".[dev]"` | 以上全部 + ruff / mypy（代码质量工具） |
+>
+> 若跳过 `pyproject.toml`，可手动安装核心依赖：
 >
 > ```bash
 > uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiosqlite \
@@ -78,7 +83,48 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 
 > **Web UI 未构建时**：若 `web/dist` 缺失或不完整，访问 `/` 会返回构建提示页（引导在 `web/` 目录执行 `npm install` 与 `npm run build`），API 服务本身仍正常可用。克隆仓库后首次启动前请先构建前端。
 
-## 3. 配置 LLBot
+## 3. 运行测试
+
+```bash
+# 运行全部测试（含覆盖率报告）
+pytest
+
+# 仅运行指定模块
+pytest tests/test_api.py
+pytest tests/test_config.py
+pytest tests/test_db.py
+```
+
+> 测试框架：pytest + pytest-asyncio + pytest-cov。覆盖率目标为 `bot` 和 `api` 模块，报告通过 `--cov-report=term-missing` 输出未覆盖行。
+
+## 4. 代码质量
+
+```bash
+# 代码风格检查
+ruff check .
+
+# 自动修复
+ruff check --fix .
+
+# 格式化检查
+ruff format --check .
+
+# 自动格式化
+ruff format .
+
+# 类型检查
+mypy bot api
+```
+
+> 推荐配置 [pre-commit](https://pre-commit.com/) hooks 在提交前自动检查：
+>
+> ```bash
+> pre-commit install
+> ```
+>
+> 配置文件 `.pre-commit-config.yaml` 已包含 ruff 格式检查和通用文件检查（YAML/TOML/JSON 语法、行尾空格、大文件等）。
+
+## 5. 配置 LLBot
 
 在 LLBot 中添加反向 WebSocket 连接：
 
@@ -87,7 +133,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 
 LLBot 会自动携带 OneBot v11 标准的 `X-Client-Role: universal` 和 `X-Self-ID` header 连接。
 
-## 4. 配置 LLM
+## 6. 配置 LLM
 
 在 Web UI 的「LLM 配置」页面填写 API 信息，或直接编辑 `config.yaml`：
 
@@ -256,6 +302,11 @@ session_summary:
   summary_max_tokens: 512          # 摘要生成单次回复最大 token
 log:
   usage_tracking: true             # LLM 用量入库（可退出的遥测；Dashboard 用量统计依赖该数据）
+  level: INFO                      # 日志级别：DEBUG / INFO / WARNING / ERROR
+  log_file_enabled: false          # 文件日志开关（默认关闭，仅控制台输出）
+  log_file_max_bytes: 10485760     # 单文件最大字节数（默认 10 MB）
+  log_file_backup_count: 5         # 保留备份数
+  log_dir: logs                    # 日志目录（相对项目根目录）
 api_key: ''                        # API 鉴权密钥
 ```
 
@@ -277,12 +328,21 @@ api_key: ''                        # API 鉴权密钥
 | `llm.provider` | 提供商联动 | `openai` | 切换 provider 自动带出预设 api_url/model（openai/deepseek/ollama/siliconflow/claude/gemini/custom 共 7 个）；`api_url` 非空统一走 OpenAI 兼容协议 |
 | `llm.timeout` / `llm.num_retries` | 请求超时与重试 | `60` / `2` | 单次 LLM 请求超时秒数与失败重试次数 |
 | `bot.log_json` | 结构化 JSON 日志 | `false` | 面向机器可读的日志采集场景 |
+| `log.log_file_enabled` | 文件日志轮转 | `false` | 启用后日志写入 `log_dir/qingci-bot.log`，按 `log_file_max_bytes` 大小轮转，保留 `log_file_backup_count` 个备份 |
 
 ---
 
 > 插件开发、API 接口、前端开发、打包详见 [PLUGIN_DEV.md](./PLUGIN_DEV.md)
 >
 > 独立插件开发 SDK：[Plugins-Dev](https://atomgit.com/luoqingci/Plugins-Dev) — 零依赖插件开发工具包，无需克隆主项目即可开发插件
+
+## 文档
+
+- [CHANGELOG.md](./CHANGELOG.md) — 版本变更记录
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — 贡献指南
+- [SECURITY.md](./SECURITY.md) — 安全策略与漏洞报告
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — 系统架构与技术栈
+- [PLUGIN_DEV.md](./PLUGIN_DEV.md) — 插件开发指南
 
 ## 许可证
 

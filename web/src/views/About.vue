@@ -15,7 +15,7 @@
       </div>
       <div class="about-section">
         <p><strong>Qingci-Bot</strong> 是一个基于 Python 的 QQ 机器人框架，对接 LLBot（OneBot 11 协议），支持 LLM 智能对话、Web UI 和桌面应用。</p>
-        <p>项目采用 <strong>GPLv3</strong> 开源许可，代码托管于 GitHub。</p>
+        <p>项目采用 <strong>GPLv3</strong> 开源许可，代码托管于 <a href="https://atomgit.com/luoqingci/Qingci-Bot" target="_blank" rel="noopener">AtomGit</a>。</p>
         <div class="feature-grid">
           <div class="feature-item">
             <span class="feature-icon">✦</span>

@@ -202,6 +202,21 @@ class LogConfig(BaseModel):
     # 用量统计依赖该数据；关闭后 chat/摘要等调用不再写 usage_logs。
     usage_tracking: bool = True
 
+    # 日志级别（DEBUG/INFO/WARNING/ERROR），默认 INFO
+    level: str = "INFO"
+
+    # 日志轮转：是否启用文件日志
+    log_file_enabled: bool = False
+
+    # 日志轮转：单文件最大字节数（默认 10 MB）
+    log_file_max_bytes: int = 10 * 1024 * 1024
+
+    # 日志轮转：保留备份数（默认 5）
+    log_file_backup_count: int = 5
+
+    # 日志目录（相对路径基于 app_root，默认 logs/）
+    log_dir: str = "logs"
+
 
 class RAGConfig(BaseModel):
     """知识库（RAG）配置（默认关闭）
