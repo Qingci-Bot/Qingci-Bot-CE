@@ -81,15 +81,25 @@ def _maybe_notify_bot(reload_llm: bool = True):
 
 
 _SENSITIVE_KEYS = {"api_key", "access_token"}
+# 敏感字段支持 key 后缀匹配（如 embedding_api_key），防止同类凭证漏脱敏
+_SENSITIVE_SUFFIXES = ("api_key", "access_token", "secret", "password", "token")
+
+
+def _is_sensitive_key(key: str) -> bool:
+    """判断字段名是否为敏感字段（精确匹配或后缀匹配）"""
+    if key in _SENSITIVE_KEYS:
+        return True
+    lower = key.lower()
+    return any(lower.endswith(s) for s in _SENSITIVE_SUFFIXES)
 
 
 def _mask_sensitive(data: dict) -> dict:
-    """递归脱敏敏感字段（api_key / access_token），返回副本"""
+    """递归脱敏敏感字段（api_key / access_token / 各类 *api_key / *token 等），返回副本"""
     masked = {}
     for k, v in data.items():
         if isinstance(v, dict):
             masked[k] = _mask_sensitive(v)
-        elif k in _SENSITIVE_KEYS and v:
+        elif _is_sensitive_key(k) and v:
             masked[k] = "***"
         else:
             masked[k] = v
@@ -389,11 +399,20 @@ async def complete_wizard(data: dict):
     """完成初始配置引导（免鉴权，仅首次使用）
 
     接受字段：provider, api_key, model, admin_qq, onebot_port
+    安全约束：仅当配置尚未完成（api_key 与 admin_users 均为空）时允许调用，
+    防止已配置后被未授权方篡改 LLM/管理员/端口配置。
     """
     async with _get_config_lock():
         try:
             cfg = _get_config_manager()
             current = cfg.to_dict()
+            configured_key = (cfg.config.api_key or "").strip()
+            configured_admins = cfg.bot.admin_users or []
+            if configured_key or configured_admins:
+                raise HTTPException(
+                    status_code=403,
+                    detail="配置已完成，向导仅限首次使用",
+                )
 
             provider = str(data.get("provider", "") or "deepseek").strip()
             api_key = str(data.get("api_key", "") or "").strip()

@@ -1,4 +1,4 @@
-from .base import PluginBase
+from .base import PluginBase, PluginStatus
 from .manager import PluginManager
 from .matcher import (
     Matcher,
@@ -39,6 +39,7 @@ from .rule import (
 __all__ = [
     # 基础
     "PluginBase",
+    "PluginStatus",
     "PluginManager",
     # Matcher
     "Matcher",

@@ -256,6 +256,7 @@ class AppConfig(BaseModel):
     session_summary: SessionSummaryConfig = SessionSummaryConfig()
     log: LogConfig = LogConfig()
     api_key: str = ""               # API 鉴权密钥，为空则不启用鉴权
+    plugins: dict = {}              # 插件级配置：plugins.<name>: { ... }
 
 
 # ============ 配置管理器 ============
@@ -330,21 +331,36 @@ class ConfigManager:
                 except yaml.YAMLError as e:
                     logger = logging.getLogger("qingci-bot.config")
                     logger.error(f"配置文件 YAML 格式错误: {e}")
+                    self._backup_corrupt_config()
                     self._config = AppConfig()
                     self.save()
                 except ValidationError as e:
                     logger = logging.getLogger("qingci-bot.config")
                     logger.error(f"配置字段验证失败: {e}")
+                    self._backup_corrupt_config()
                     self._config = AppConfig()
                     self.save()
                 except Exception as e:
                     logger = logging.getLogger("qingci-bot.config")
                     logger.error(f"配置文件解析失败，使用默认配置: {e}")
+                    self._backup_corrupt_config()
                     self._config = AppConfig()
                     self.save()
             else:
                 self.save()
             return self._config
+
+    def _backup_corrupt_config(self) -> None:
+        """配置损坏时先备份原文件，避免用户配置被默认值不可逆覆盖"""
+        try:
+            import shutil
+            bak = self._path.with_suffix(self._path.suffix + ".bak")
+            shutil.copy2(self._path, bak)
+            logging.getLogger("qingci-bot.config").warning(
+                f"损坏的配置文件已备份到 {bak}"
+            )
+        except OSError:
+            pass  # 备份失败不阻塞启动，仅记录
 
     def save(self):
         """保存配置到文件（原子写入）"""
@@ -397,3 +413,12 @@ class ConfigManager:
 
     def to_dict(self) -> dict:
         return self._config.model_dump()
+
+    def get_plugin_config(self, plugin_name: str) -> Optional[dict]:
+        """获取插件级配置（config.yaml 中 plugins.<name> 节）"""
+        with self._lock:
+            raw = self._config.model_dump()
+            plugins_section = raw.get("plugins", {})
+            if not isinstance(plugins_section, dict):
+                return None
+            return plugins_section.get(plugin_name)

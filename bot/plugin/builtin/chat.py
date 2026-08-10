@@ -279,7 +279,7 @@ class ChatPlugin(PluginBase):
         rag_cfg = self.config.rag
         if rag_cfg.enabled and self.knowledge_store is not None:
             try:
-                reference = self.knowledge_store.build_reference(
+                reference = await self.knowledge_store.build_reference_async(
                     message, rag_cfg.max_inject_chars
                 )
             except Exception:

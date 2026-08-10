@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """创建 FastAPI 应用"""
-    app = FastAPI(title="Qingci-Bot API", version="1.1.0", lifespan=lifespan)
+    app = FastAPI(title="Qingci-Bot API", version="1.2.0", lifespan=lifespan)
 
     # CORS：不使用 allow_credentials=True + allow_origins=["*"]（违反 CORS 规范）
     # 安全由 X-API-Key 鉴权保证，CORS 仅放开方法/头；
@@ -242,7 +242,11 @@ def create_app() -> FastAPI:
                     )
                     continue
                 # 调试会话固定为私聊 + 独立 user_id，避免污染真实对话
-                user_id = int(data.get("user_id") or 0) or 900000001
+                try:
+                    user_id = int(data.get("user_id") or 0) or 900000001
+                except (ValueError, TypeError):
+                    await ws.send_json({"type": "error", "text": "user_id 必须为数字"})
+                    continue
                 stream = bot.llm.chat_stream(
                     message=message, message_type="private", user_id=user_id
                 )

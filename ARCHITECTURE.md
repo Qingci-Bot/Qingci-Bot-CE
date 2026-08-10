@@ -51,7 +51,9 @@ Qingci-Bot/
 │   │   ├── scheduler.py       # 定时任务调度器
 │   │   ├── tasks.py           # 后台任务管理（防 GC + 停机等待）
 │   │   ├── alerter.py         # 错误告警器
-│   │   └── logformat.py       # 结构化 JSON 日志
+│   │   ├── logformat.py       # 结构化 JSON 日志
+│   │   ├── session_state.py   # 会话状态管理（TTL 键值存储）
+│   │   └── di.py              # 依赖注入容器（SINGLETON/TRANSIENT/SCOPED）
 │   ├── llm/
 │   │   ├── adapter.py         # LLM 适配器基类（支持 tools/images）
 │   │   ├── litellm_adapter.py # litellm 实现（100+ 提供商）
@@ -64,6 +66,9 @@ Qingci-Bot/
 │   │   ├── database.py        # 数据库仓储（基于 SQLModel）
 │   │   ├── engine.py          # 异步引擎 + 会话工厂（WAL 模式）
 │   │   └── models.py          # SQLModel 模型定义
+│   ├── testing/               # 插件测试工具（TestBot + 事件构造器，无需启动真实 Bot）
+│   │   ├── bot.py             # TestBot 轻量测试环境
+│   │   └── events.py          # OneBot v11 事件构造器
 │   └── plugin/
 │       ├── base.py            # 插件基类（支持 matchers 属性）
 │       ├── manager.py         # 插件管理器（热加载 + 模块级收集）
@@ -112,7 +117,7 @@ Qingci-Bot/
 | MCP | mcp (Model Context Protocol，stdio/HTTP) |
 | 数据库 | SQLModel + Alembic + aiosqlite (WAL 模式) |
 | 定时任务 | APScheduler |
-| 插件系统 | Matcher + Rule + Permission + require (借鉴 NoneBot2) |
+| 插件系统 | Matcher + Rule + Permission + require/export + 中间件 + 指标监控 (借鉴 NoneBot2) |
 | 前端 | Vue 3 + Vite + Pinia |
 | 桌面 | PyWebView + pystray |
 

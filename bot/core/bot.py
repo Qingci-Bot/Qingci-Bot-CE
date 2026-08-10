@@ -10,12 +10,14 @@ from ..db import Database
 from ..paths import app_root
 from .alerter import AlertHandler
 from .connection import OneBotConnection
+from .di import DIContainer
 from .dispatcher import MessageDispatcher, MessageContext
 from .filter import SensitiveFilter
 from .scheduler import BotScheduler
+from .session_state import SessionStateManager
 from .tasks import spawn_background_task
 from ..llm import LLMManager, ToolRegistry, register_builtin_tools
-from ..plugin import PluginManager
+from ..plugin import PluginManager, PluginStatus
 from ..rag import KnowledgeStore
 
 logger = logging.getLogger("qingci-bot")
@@ -46,6 +48,23 @@ class QingciBot:
             usage_tracking=self.config.log.usage_tracking,
         )
         self.plugin_manager = PluginManager()
+
+        # 依赖注入容器：集中管理所有服务实例
+        self.di = DIContainer()
+        # 会话状态：TTL 键值存储，用于多步骤对话、表单、临时缓存
+        self.session_state = SessionStateManager()
+
+        # 注册所有服务到 DI 容器（sync 兼容 __init__ 同步上下文）
+        self.di.register_sync(ConfigManager, self.config)
+        self.di.register_sync(Database, self.db)
+        self.di.register_sync(OneBotConnection, self.connection)
+        self.di.register_sync(LLMManager, self.llm)
+        self.di.register_sync(PluginManager, self.plugin_manager)
+        self.di.register_sync(MessageDispatcher, self.dispatcher)
+        self.di.register_sync(SessionStateManager, self.session_state)
+        self.di.register_sync(DIContainer, self.di)
+        # 注册自身（使插件可以注入 bot 引用）
+        self.di.register_sync(QingciBot, self)
 
         self._running = False
         self._started = False               # 是否已调用过 start()（含部分失败场景）
@@ -311,6 +330,8 @@ class QingciBot:
                 # 旧式回调 fallback（仅跳过注册了同类型事件 Matcher 的插件，
                 # 而非任一 Matcher——消息 Matcher 不应禁用其 notice/request 回调）
                 for plugin in list(self.plugin_manager.plugins.values()):
+                    if plugin.status != PluginStatus.LOADED:
+                        continue
                     if self._plugin_has_event_matcher(plugin, post_type):
                         continue
                     try:
@@ -339,6 +360,8 @@ class QingciBot:
                 return
 
             for plugin in list(self.plugin_manager.plugins.values()):
+                if plugin.status != PluginStatus.LOADED:
+                    continue
                 if self._plugin_has_event_matcher(plugin, "message"):
                     continue
                 try:
@@ -436,7 +459,8 @@ class QingciBot:
             "connected": self.connection.is_connected,
             "last_heartbeat": self.connection.last_heartbeat,
             "plugins": [
-                {"name": p.name, "version": p.version, "description": p.description}
+                {"name": p.name, "version": p.version, "description": p.description,
+                 "category": p.category, "status": p.status.value, "enabled": p.enabled}
                 for p in self.plugin_manager.plugins.values()
             ],
         }

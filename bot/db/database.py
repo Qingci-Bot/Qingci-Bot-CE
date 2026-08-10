@@ -210,7 +210,8 @@ class Database:
             stmt = (
                 select(SessionHistory)
                 .where(SessionHistory.session_key == session_key)
-                .order_by(SessionHistory.created_at.desc())
+                # id 兜底排序：避免 created_at 同毫秒时顺序不稳定
+                .order_by(SessionHistory.created_at.desc(), SessionHistory.id.desc())
                 .limit(limit)
             )
             rows = (await session.execute(stmt)).scalars().all()

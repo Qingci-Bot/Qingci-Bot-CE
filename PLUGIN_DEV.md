@@ -19,7 +19,7 @@ npm run build    # 构建生产版本到 web/dist/
 | LLM 配置 | `/config` | 提供商切换（联动 api_url/model）、模型列表拉取、人格管理、MCP 服务器配置、连接测试 |
 | 对话调试台 | `/lab` | 无需进入 QQ 即可流式测试 LLM 回复；独立会话 key，不污染真实对话（走 `/api/ws/chat`） |
 | 群配置 | `/groups` | 各群 Bot 开关与触发模式 |
-| 插件管理 | `/plugins` | 插件列表 / 详情 / 重载 / 加载外部插件 / 卸载 |
+| 插件管理 | `/plugins` | 插件列表 / 详情 / 重载 / 加载外部插件 / 卸载 / 禁用 / 启用 |
 | 消息日志 | `/logs` | 实时消息流 + 会话记录可视化（按会话分组查看/删除，支持清理与 CSV 导出） |
 | 系统设置 | `/settings` | 服务端/浏览器 API Key 配置 |
 | 登录 | `/login` | API Key 登录（服务端已配置 `api_key` 时显示） |
@@ -60,7 +60,7 @@ Qingci-Bot 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支�
 所有插件继承 `bot.plugin.base.PluginBase`：
 
 ```python
-from bot.plugin.base import PluginBase
+from bot.plugin.base import PluginBase, PluginStatus
 
 class MyPlugin(PluginBase):
     # 插件元信息（必填 name，其余可选）
@@ -68,7 +68,8 @@ class MyPlugin(PluginBase):
     version = "1.0.0"
     author = "YourName"
     description = "插件描述"
-    require = []            # 依赖的其他插件 name 列表（加载前自动先加载，见下文）
+    category = "tool"       # 插件分类：chat / admin / tool / fun / 自定义
+    require = []            # 依赖的其他插件 name 列表，支持 PEP 440 版本约束（如 "chat>=1.0,<2.0"）
 
     async def on_load(self):
         """插件加载时调用（必须实现）"""
@@ -80,9 +81,35 @@ class MyPlugin(PluginBase):
         """插件卸载时调用（必须实现）"""
         ...
 
+    async def on_disable(self):
+        """插件被禁用时调用（可选，用于停用定时任务等轻量清理）"""
+        pass
+
+    async def on_enable(self):
+        """插件被启用时调用（可选，用于恢复定时任务等）"""
+        pass
+
     # 旧式消息处理（新式插件可省略或返回 None）
     async def on_message(self, ctx: MessageContext) -> Optional[str]:
         return None
+```
+
+### 插件状态（PluginStatus）
+
+插件状态由 `PluginStatus` 枚举管理，替代原 `enabled` 布尔值：
+
+| 状态 | 值 | 说明 |
+|------|------|------|
+| `LOADING` | `"loading"` | 正在加载（on_load 执行中） |
+| `LOADED` | `"loaded"` | 已加载，正常运行 |
+| `DISABLED` | `"disabled"` | 已禁用，跳过事件分发 |
+| `ERROR` | `"error"` | 加载/运行出错 |
+| `UNLOADING` | `"unloading"` | 正在卸载（on_unload 执行中） |
+
+```python
+# 状态属性（只读）
+plugin.status        # PluginStatus.LOADED
+plugin.enabled       # bool，向后兼容：LOADING/LOADED 为 True
 ```
 
 ### 注入的依赖
@@ -99,7 +126,103 @@ class MyPlugin(PluginBase):
 | `self.scheduler` | `BotScheduler` | 定时任务调度器 |
 | `self.tool_registry` | `ToolRegistry` | Function Calling 工具注册表 |
 | `self.knowledge_store` | `KnowledgeStore` | 知识库（RAG 未启用时为 None） |
+| `self.session_state` | `SessionStateManager` | 会话状态（TTL 键值存储） |
 | `self.matchers` | `list[Matcher]` | Matcher 列表（在 `on_load` 中填充） |
+
+### 依赖注入容器（DI Container）
+
+框架内置轻量级 DI 容器 `bot.di`，按类型自动注入服务。插件只需声明类型注解即可：
+
+```python
+from bot.core.session_state import SessionStateManager
+
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+    # 声明类型注解后，框架自动注入
+    session_state: SessionStateManager
+    # 也支持 Optional[X] 类型
+    # db: Optional[Database] = None
+    # llm: Optional[LLMManager] = None
+```
+
+`PluginManager._init_plugin` 会先调用 `await bot.di.inject(plugin)` 按类型自动注入，再手动赋值兜底保证兼容。
+
+**注入特性：**
+- 支持 `Optional[X]` 类型注解（自动提取内部类型）
+- 不会覆盖已设置的非 None 属性值
+- 支持 `register_as(InterfaceType, instance)` 接口绑定
+
+**生命周期：**
+| 生命周期 | 说明 |
+|---------|------|
+| `SINGLETON` | 全局唯一实例（默认） |
+| `TRANSIENT` | 每次 resolve 创建新实例 |
+| `SCOPED` | 同一 scope 内返回同一实例 |
+
+### 会话状态（SessionState / TTL 键值存储）
+
+借鉴 NoneBot2 的 `session.state`，提供带过期时间的会话级临时键值存储，适用于多步骤对话、表单填写、等待确认等场景。
+
+**在 handler 中通过 `ctx.session_state` 使用：**
+
+```python
+async def _handle_register(self, ctx: MatcherContext) -> str:
+    step = ctx.session_state.get("step", "start")
+
+    if step == "start":
+        ctx.session_state.set("step", "waiting_name", ttl=300)
+        return "请输入你的名字："
+
+    if step == "waiting_name":
+        ctx.session_state.set("name", ctx.plain_text, ttl=300)
+        ctx.session_state.set("step", "waiting_age", ttl=300)
+        return f"你好 {ctx.plain_text}，请输入你的年龄："
+
+    if step == "waiting_age":
+        name = ctx.session_state.get("name")
+        return f"注册完成！{name}，{ctx.plain_text}岁"
+```
+
+**在插件中通过 `self.session_state` 使用：**
+
+```python
+# 按用户/群聊隔离
+self.session_state.set("last_command", "ping", user_id=123, ttl=60)
+last = self.session_state.get("last_command", user_id=123)
+
+# 群聊共享状态
+self.session_state.set("banned_keywords", ["广告"], group_id=456)
+```
+
+**会话键规则：**
+| 场景 | 会话键 |
+|------|--------|
+| 私聊 | `private:{user_id}` |
+| 群聊+用户 | `group:{group_id}:{user_id}` |
+| 群聊共享 | `group:{group_id}` |
+| 自定义 | `custom_key` 参数 |
+
+**API 速查：**
+| 方法 | 说明 |
+|------|------|
+| `get(key, default)` | 获取值，过期自动删除 |
+| `set(key, value, ttl=0)` | 设置值，ttl=0 永不过期 |
+| `pop(key, default)` | 获取并删除键 |
+| `expire(key, ttl)` | 为已有键设置过期时间 |
+| `ttl(key)` | 获取键剩余过期时间（秒） |
+| `delete(key)` | 删除键 |
+| `clear()` | 清空当前会话状态 |
+| `keys()` | 返回所有有效键 |
+| `items()` | 返回所有有效键值对 |
+| `count()` | 获取有效键数量 |
+
+**SessionStateManager 全局操作（需 await）：**
+| 方法 | 说明 |
+|------|------|
+| `await stats()` | 获取统计信息（会话数、键数） |
+| `await remove_session(user_id=...)` | 显式删除会话 |
+| `await serialize()` | 序列化所有会话状态 |
+| `await deserialize(data)` | 从序列化数据恢复 |
 
 ### 插件依赖（require）
 
@@ -120,6 +243,106 @@ class MyPlugin(PluginBase):
 
 - 依赖已注册则跳过；未注册时尝试加载 `bot.plugin.builtin.<name>` 模块
 - 依赖缺失或形成循环依赖时插件加载失败（报错并保持旧插件生效）
+
+**PEP 440 版本约束：**
+
+```python
+require = ["chat>=1.0,<2.0"]   # 依赖 chat 插件 1.x 版本
+require = ["admin>=1.1"]        # 依赖 admin 插件 1.1 及以上
+require = ["knowledge"]         # 无版本约束
+```
+
+### 插件级配置（plugin_config）
+
+插件可通过定义 `Config` 内嵌类声明配置项，框架自动从 `config.yaml` 的 `plugins.<name>` 节加载：
+
+```python
+from pydantic import BaseModel
+
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+
+    class Config(BaseModel):
+        greeting: str = "你好"
+        max_length: int = 100
+
+    async def on_load(self):
+        # self.plugin_config 已自动加载，类型为 Config 实例
+        greeting = self.plugin_config.greeting
+        ...
+```
+
+`config.yaml` 对应配置：
+
+```yaml
+plugins:
+  my_plugin:
+    greeting: "Hello"
+    max_length: 200
+```
+
+### 插件导出/导入（export / require）
+
+插件间可通过 `export()` / `get_exports()` 暴露和调用服务接口：
+
+```python
+# 提供方（chat 插件）
+class ChatPlugin(PluginBase):
+    name = "chat"
+    async def on_load(self):
+        self.export("get_history", self.get_history)
+        self.export("clear_history", self.clear_history)
+
+# 消费方（依赖 chat 插件）
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+    require = ["chat"]
+    async def on_load(self):
+        chat = self.get_exports("chat")  # 获取导出字典
+        history = await chat["get_history"](user_id=123)
+```
+
+> 注意：获取导出使用 `get_exports()` 方法，`require` 仅作为类属性声明依赖（两者原本重名，已拆分）。
+
+### 插件级中间件（register_before / register_after）
+
+每个插件可注册 handler 前置/后置钩子，拦截或修改 handler 返回值：
+
+```python
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+
+    async def on_load(self):
+        # 前置钩子：返回非 None 时拦截，跳过 handler
+        self.register_before(self._before_handler)
+        # 后置钩子：可修改 handler 返回值
+        self.register_after(self._after_handler)
+
+    async def _before_handler(self, matcher, ctx):
+        # 记录日志、限流检查等
+        return None  # None 表示不拦截
+
+    async def _after_handler(self, matcher, ctx, result):
+        # 追加签名、脱敏过滤等
+        return result
+```
+
+### 插件元数据发现（plugin.json）
+
+在插件目录下放置 `plugin.json` 文件，无需导入模块即可发现插件元信息：
+
+```json
+{
+  "name": "my_plugin",
+  "version": "1.0.0",
+  "author": "YourName",
+  "description": "插件描述",
+  "category": "tool",
+  "require": ["chat>=1.0"]
+}
+```
+
+框架提供 `GET /api/plugin/discover/metadata` API 扫描所有 `plugin.json`。
 
 ### Matcher / Rule / Permission
 
@@ -362,6 +585,59 @@ class PingPongPlugin(PluginBase):
         return None
 ```
 
+### 插件测试工具（bot.testing）
+
+框架内置 `bot.testing` 包，无需启动真实 Bot 即可用 pytest 模拟消息事件、加载插件、断言回复。插件作者可在自己项目中编写：
+
+```python
+# tests/test_my_plugin.py
+import pytest
+from bot.testing import TestBot, private_message, group_message
+
+@pytest.fixture
+def bot():
+    return TestBot()  # 轻量测试环境（默认 10001 为管理员）
+
+async def test_ping(bot):
+    await bot.load_plugin("my_plugin")  # 模块路径，须可 import
+    reply = await bot.send(private_message("/ping"))
+    assert reply == "pong"
+
+async def test_group_and_permission(bot):
+    await bot.load_plugin("my_plugin")
+    reply = await bot.send(group_message("/admin", user_id=99999, group_id=20001))
+    assert reply is None  # 非管理员被权限拦截
+```
+
+**TestBot 常用 API：**
+
+| 方法/属性 | 说明 |
+|---------|------|
+| `await load_plugin(module_path)` | 加载插件模块（完整链路：依赖解析 + on_load） |
+| `await send(event)` | 发送事件，返回 Bot 回复（str），无回复返回 None |
+| `await send_private(text, user_id=10001)` | 发送私聊消息 |
+| `await send_group(text, user_id, group_id)` | 发送群聊消息 |
+| `sent_messages` | 插件主动发送的所有消息 `[(type, target, text)]` |
+| `api_calls` | 插件调用过的所有 OneBot API `[(action, params)]` |
+| `get_plugin(name)` | 获取已加载插件实例 |
+| `await cleanup()` | 卸载插件并清空会话状态 |
+
+**事件构造器：**
+
+| 函数 | 说明 |
+|------|------|
+| `private_message(text, user_id=10001, at_bot=False)` | 私聊消息 |
+| `group_message(text, user_id=10001, group_id=20001, at_bot=False)` | 群聊消息 |
+| `make_message_event(text, ...)` | 通用消息事件（支持 images、sender 等） |
+| `make_notice_event(notice_type, ...)` | 通知事件（如 `group_increase`） |
+| `make_request_event(request_type, ...)` | 请求事件（如 `friend` / `group`） |
+
+**特性：**
+- 完整走 Dispatcher 调度链路（Matcher + 旧式 `on_message` 回退），与生产行为一致
+- 会话状态（`ctx.session_state`）、依赖注入、插件级配置均可用
+- 默认 `FakeConfig` 的 `admin_users=[10001]`，可传入自定义 config 覆盖
+- 插件主动发送的消息记录在 `sent_messages`，便于断言
+
 ### 调度顺序
 
 1. Bot 收到消息 → Dispatcher 解析为 `MessageContext`
@@ -493,6 +769,8 @@ plugins/
 ### 注意事项
 
 - `on_load` 和 `on_unload` 是 `@abstractmethod`，**必须实现**（可以是 `pass`）
+- `on_disable` 和 `on_enable` 是可选钩子：禁用/启用不触发 `on_load`/`on_unload`，仅做轻量清理（如停用/恢复定时任务）
+- 插件被禁用后，实例保留在内存中，Matcher 和旧式回调均不触发，API 返回的 `enabled` 字段反映当前状态
 - 插件中不要使用阻塞操作（如 `time.sleep`），用 `asyncio.sleep` 代替
 - `on_message` 返回空字符串 `""` 也会被当作回复发送，不需要回复时返回 `None`
 - 插件可通过 `self.config` 修改配置，但需调用 `self.config.save()` 持久化
@@ -542,11 +820,15 @@ plugins/
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| GET | `` | 是 | 获取插件列表 |
+| GET | `` | 是 | 获取插件列表（含状态、分类） |
 | GET | `/{name}` | 是 | 获取插件详情 |
 | POST | `/{name}/reload` | 是 | 重载插件 |
 | POST | `/load` | 是 | 加载外部插件（仅允许 `plugins.*` / `bot.plugin.builtin.*` 白名单前缀） |
 | DELETE | `/{name}` | 是 | 卸载插件（内置插件 chat/admin/help/imagegen/knowledge 不可卸载） |
+| POST | `/{name}/disable` | 是 | 禁用插件（保留实例，跳过事件分发） |
+| POST | `/{name}/enable` | 是 | 启用插件（恢复事件分发） |
+| GET | `/{name}/metrics` | 是 | 获取插件执行指标（调用次数、平均耗时、错误率） |
+| GET | `/discover/metadata` | 是 | 无导入发现：扫描 plugins/ 目录中的 plugin.json 元数据 |
 
 ### 消息日志与用量 `/api/log`
 

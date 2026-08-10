@@ -10,7 +10,6 @@
 rag.enabled 关闭时 knowledge_store 为 None，命令统一提示未启用。
 """
 
-import asyncio
 import logging
 
 from ..base import PluginBase
@@ -61,12 +60,12 @@ class KnowledgePlugin(PluginBase):
         if action == "list":
             return self._kb_list(store)
         if action == "search":
-            return self._kb_search(store, rest)
+            return await self._kb_search(store, rest)
         if action == "remove":
-            return self._kb_remove(store, rest.strip())
+            return await self._kb_remove(store, rest.strip())
         if action == "reload":
-            # 同步重建索引丢到线程池，避免阻塞事件循环
-            count = await asyncio.to_thread(store.reload)
+            # 异步重建索引（vector 后端 embedding 为 IO 操作，直接 await）
+            count = await store.reload_async()
             return f"知识库已重新索引，共 {count} 个分块。"
         return "格式: /kb add|list|search|remove|reload ..."
 
@@ -77,7 +76,7 @@ class KnowledgePlugin(PluginBase):
             return "格式: /kb add <名称> <内容>"
         name, content = parts[0].strip(), parts[1].strip()
         try:
-            path = store.add_document(name, content)
+            path = await store.add_document_async(name, content)
         except ValueError as e:
             return f"添加失败：{e}"
         except OSError:
@@ -94,12 +93,12 @@ class KnowledgePlugin(PluginBase):
         lines = [f"{d['name']}（{d['chunks']} 块）" for d in docs]
         return f"知识库文档（{len(docs)} 篇）:\n" + "\n".join(lines)
 
-    def _kb_search(self, store, query: str) -> str:
+    async def _kb_search(self, store, query: str) -> str:
         """/kb search <关键词>"""
         query = query.strip()
         if not query:
             return "格式: /kb search <关键词>"
-        hits = store.search(query)
+        hits = await store.search_async(query)
         if not hits:
             return "未检索到相关知识。"
         lines = []
@@ -109,11 +108,11 @@ class KnowledgePlugin(PluginBase):
             lines.append(f"{i}. [《{chunk.source}》] {text}")
         return "检索结果:\n" + "\n".join(lines)
 
-    def _kb_remove(self, store, name: str) -> str:
+    async def _kb_remove(self, store, name: str) -> str:
         """/kb remove <名称>"""
         if not name:
             return "格式: /kb remove <名称>"
-        if store.remove_document(name):
+        if await store.remove_document_async(name):
             logger.info(f"知识库删除文档: {name}")
             return f"已删除知识文档《{name}》。"
         return f"未找到文档《{name}》。"

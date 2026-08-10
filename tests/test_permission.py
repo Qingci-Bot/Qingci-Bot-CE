@@ -67,8 +67,10 @@ class TestBuiltinPermissions:
 
     async def test_group_member(self):
         bot = FakeBot()
-        assert await check(GROUP_MEMBER([10, 20]), make_ctx(group_id=10), bot)
-        assert not await check(GROUP_MEMBER([10, 20]), make_ctx(group_id=30), bot)
+        assert await check(GROUP_MEMBER([10, 20]), make_ctx(group_id=10, message_type="group"), bot)
+        assert not await check(GROUP_MEMBER([10, 20]), make_ctx(group_id=30, message_type="group"), bot)
+        # 私聊消息不匹配群成员权限（即使 group_id 命中）
+        assert not await check(GROUP_MEMBER([10, 20]), make_ctx(group_id=10, message_type="private"), bot)
 
 
 class TestPermissionComposition:

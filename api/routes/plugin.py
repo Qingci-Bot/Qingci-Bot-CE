@@ -49,7 +49,7 @@ def _get_bot_instance():
 
 @router.get("", dependencies=[Depends(require_auth)])
 async def list_plugins():
-    """获取插件列表"""
+    """获取插件列表（含状态、分类）"""
     bot = _get_bot_instance()
     plugins = []
     for name, plugin in bot.plugin_manager.plugins.items():
@@ -58,6 +58,9 @@ async def list_plugins():
             "version": plugin.version,
             "author": plugin.author,
             "description": plugin.description,
+            "category": plugin.category,
+            "status": plugin.status.value,
+            "enabled": plugin.enabled,
         })
     return plugins
 
@@ -74,6 +77,10 @@ async def get_plugin(name: str):
         "version": plugin.version,
         "author": plugin.author,
         "description": plugin.description,
+        "category": plugin.category,
+        "status": plugin.status.value,
+        "enabled": plugin.enabled,
+        "require": plugin.require,
     }
 
 
@@ -122,3 +129,43 @@ async def unload_plugin(name: str, request: Request):
     await bot.plugin_manager.unload(name)
     await record_audit("plugin_unload", f"卸载插件: {name}", request)
     return {"message": f"插件 {name} 已卸载"}
+
+
+@router.post("/{name}/disable", dependencies=[Depends(require_auth)])
+async def disable_plugin(name: str, request: Request):
+    """禁用插件（保留实例，跳过事件分发）"""
+    bot = _get_bot_instance()
+    if not bot.plugin_manager.get(name):
+        raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
+    await bot.plugin_manager.disable(name)
+    await record_audit("plugin_disable", f"禁用插件: {name}", request)
+    return {"message": f"插件 {name} 已禁用"}
+
+
+@router.post("/{name}/enable", dependencies=[Depends(require_auth)])
+async def enable_plugin(name: str, request: Request):
+    """启用插件（恢复事件分发）"""
+    bot = _get_bot_instance()
+    if not bot.plugin_manager.get(name):
+        raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
+    await bot.plugin_manager.enable(name)
+    await record_audit("plugin_enable", f"启用插件: {name}", request)
+    return {"message": f"插件 {name} 已启用"}
+
+
+@router.get("/{name}/metrics", dependencies=[Depends(require_auth)])
+async def get_plugin_metrics(name: str):
+    """获取插件执行指标"""
+    bot = _get_bot_instance()
+    if not bot.plugin_manager.get(name):
+        raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
+    return bot.plugin_manager.get_metrics(name)
+
+
+@router.get("/discover/metadata", dependencies=[Depends(require_auth)])
+async def discover_plugins_metadata():
+    """无导入发现：扫描 plugins/ 目录中的 plugin.json 元数据"""
+    from bot.paths import app_root
+    bot = _get_bot_instance()
+    directory = app_root() / "plugins"
+    return bot.plugin_manager.discover_metadata(directory)

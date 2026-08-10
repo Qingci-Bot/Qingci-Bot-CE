@@ -102,44 +102,38 @@ class MessageDispatcher:
             return None, False
 
         for matcher in matchers:
-            # 每次匹配用全新的 MatcherContext（避免 rule 修改污染后续）
             mctx = MatcherContext.from_message_context(ctx, bot=bot, plugin=None, matcher=matcher)
 
-            # 找到所属插件
             if matcher.owner:
                 plugin = bot.plugin_manager.get(matcher.owner)
                 if plugin is None:
-                    continue  # 插件已卸载
+                    continue
                 mctx.plugin = plugin
 
             try:
-                # 事件类型检查
                 if matcher.event_type != "message":
                     continue
 
-                # 权限检查
                 if not await matcher.permission.check(bot, event, mctx):
                     continue
 
-                # 规则检查（可能修改 mctx.command/args/match）
                 if not await matcher.rule.check(bot, event, mctx):
                     continue
 
-                # 匹配成功，执行 handler
                 mctx.matcher = matcher
-                result = matcher.handler(mctx)
-                if hasattr(result, "__await__"):
-                    result = await result
 
-                # 一次性（temp）匹配器：执行后自动移除，避免重复响应
-                if matcher.temp:
-                    bot.plugin_manager.remove_temp_matcher(matcher)
+                # 执行 handler（含指标 + 中间件）
+                try:
+                    result = await self._execute_handler(bot, matcher, mctx)
+                finally:
+                    # temp 一次性匹配器：无论 handler 成功/异常都移除，
+                    # 避免失败后反复匹配刷错
+                    if matcher.temp:
+                        bot.plugin_manager.remove_temp_matcher(matcher)
 
-                # handler 返回非 None = 有回复，停止分发
                 if result is not None:
                     return result, True
 
-                # block=True 则停止后续 Matcher 与旧式回调（即使 handler 返回 None）
                 if matcher.block:
                     return None, True
 
@@ -148,7 +142,6 @@ class MessageDispatcher:
                     f"Matcher 执行异常: owner={matcher.owner}, "
                     f"handler={getattr(matcher.handler, '__name__', repr(matcher.handler))}"
                 )
-                # 异常不应触发 block 语义，继续执行后续 Matcher
                 continue
 
         return None, False
@@ -176,22 +169,88 @@ class MessageDispatcher:
                     continue
 
                 mctx.matcher = matcher
-                result = matcher.handler(mctx)
-                if hasattr(result, "__await__"):
-                    result = await result
-                # 一次性（temp）匹配器：执行后自动移除
-                if matcher.temp:
-                    bot.plugin_manager.remove_temp_matcher(matcher)
+
+                # 执行 handler（含指标）
+                try:
+                    result = await self._execute_handler(bot, matcher, mctx)
+                finally:
+                    if matcher.temp:
+                        bot.plugin_manager.remove_temp_matcher(matcher)
                 if result is not None:
                     return result, True
                 if matcher.block:
                     return None, True
             except Exception:
                 logger.exception(f"事件 Matcher 执行异常: owner={matcher.owner}")
-                # 异常不应触发 block 语义，继续执行后续 Matcher
                 continue
 
         return None, False
+
+    async def _execute_handler(self, bot: "QingciBot", matcher, mctx) -> Optional[str]:
+        """执行单个 Matcher handler（含指标记录 + 插件级中间件）"""
+        plugin = mctx.plugin
+        start = time.perf_counter()
+        is_error = False
+
+        # 初始化 session_state（异步获取会话状态）
+        from ..core.session_state import SessionState
+        if mctx.session_state is None and bot.session_state is not None:
+            mctx.session_state = await bot.session_state.get_session(
+                user_id=mctx.user_id,
+                group_id=mctx.group_id,
+                message_type=mctx.message_type,
+            )
+        elif mctx.session_state is None:
+            mctx.session_state = SessionState()
+
+        try:
+            # 插件级 before_handler 中间件
+            if plugin is not None:
+                for before_fn in plugin._before_handlers:
+                    try:
+                        intercept = before_fn(matcher, mctx)
+                        if hasattr(intercept, "__await__"):
+                            intercept = await intercept
+                        if intercept is not None:
+                            # 中间件拦截，返回拦截值作为回复
+                            bot.plugin_manager.record_metric(
+                                matcher, (time.perf_counter() - start) * 1000
+                            )
+                            return str(intercept)
+                    except Exception:
+                        logger.exception(
+                            f"插件 {plugin.name} before_handler 异常: "
+                            f"{getattr(before_fn, '__name__', repr(before_fn))}"
+                        )
+
+            # 执行 handler
+            result = matcher.handler(mctx)
+            if hasattr(result, "__await__"):
+                result = await result
+
+            # 插件级 after_handler 中间件
+            if plugin is not None:
+                for after_fn in plugin._after_handlers:
+                    try:
+                        modified = after_fn(matcher, mctx, result)
+                        if hasattr(modified, "__await__"):
+                            modified = await modified
+                        if modified is not None:
+                            result = modified
+                    except Exception:
+                        logger.exception(
+                            f"插件 {plugin.name} after_handler 异常: "
+                            f"{getattr(after_fn, '__name__', repr(after_fn))}"
+                        )
+
+            return result
+
+        except Exception:
+            is_error = True
+            raise
+        finally:
+            elapsed = (time.perf_counter() - start) * 1000
+            bot.plugin_manager.record_metric(matcher, elapsed, is_error=is_error)
 
     def _parse_message(self, event: dict) -> MessageContext:
         """解析消息内容，提取 CQ 码"""

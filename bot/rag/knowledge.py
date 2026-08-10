@@ -488,6 +488,21 @@ class VectorKnowledgeStore:
         self.reload_sync()
         return path
 
+    async def add_document_async(self, name: str, content: str) -> Path:
+        """新增文档（异步版：事件循环内直接 await，避免 reload_sync 死锁）"""
+        safe = self._safe_name(name)
+        if not safe:
+            raise ValueError("文档名仅支持中文/字母/数字/下划线/短横线，长度 1-32")
+        if not content.strip():
+            raise ValueError("文档内容不能为空")
+        self._root.mkdir(parents=True, exist_ok=True)
+        path = self._root / f"{safe}.txt"
+        if path.exists():
+            raise ValueError(f"文档已存在: {safe}")
+        path.write_text(content.strip(), encoding="utf-8")
+        await self.reload()
+        return path
+
     def remove_document(self, name: str) -> bool:
         """删除文档并重建索引，返回是否删除成功"""
         safe = self._safe_name(name)
@@ -506,6 +521,27 @@ class VectorKnowledgeStore:
             if path.is_file():
                 path.unlink()
                 self.reload_sync()
+                return True
+        return False
+
+    async def remove_document_async(self, name: str) -> bool:
+        """删除文档并重建索引（异步版：事件循环内直接 await）"""
+        safe = self._safe_name(name)
+        if not safe:
+            logger.warning(f"拒绝非法文档名删除请求: {name!r}")
+            return False
+        root = self._root.resolve()
+        for suffix in self.SUPPORTED_SUFFIXES:
+            path = self._root / f"{safe}{suffix}"
+            try:
+                if not path.resolve().is_relative_to(root):
+                    logger.warning(f"路径穿越拦截: {path}")
+                    continue
+            except OSError:
+                continue
+            if path.is_file():
+                path.unlink()
+                await self.reload()
                 return True
         return False
 
@@ -601,14 +637,54 @@ class KnowledgeStore:
     def search(self, query: str, top_k: Optional[int] = None) -> list[KnowledgeChunk]:
         return self._backend.search(query, top_k)
 
+    async def search_async(self, query: str, top_k: Optional[int] = None) -> list[KnowledgeChunk]:
+        """异步检索（vector 后端在事件循环内直接 await，避免同步包装死锁）"""
+        backend = self._backend
+        if isinstance(backend, VectorKnowledgeStore):
+            return await backend._search_async(query, top_k)
+        return backend.search(query, top_k)
+
     def build_reference(self, query: str, max_chars: int) -> str:
         return self._backend.build_reference(query, max_chars)
+
+    async def build_reference_async(self, query: str, max_chars: int) -> str:
+        """异步构造参考资料（vector 后端使用，避免事件循环内死锁）"""
+        hits = await self.search_async(query)
+        if not hits or max_chars <= 0:
+            return ""
+        parts: list[str] = []
+        total = 0
+        for chunk in hits:
+            header = f"[来源《{chunk.source}》]"
+            need = len(header) + len(chunk.text) + 1
+            if total + need > max_chars:
+                remaining = max_chars - total - len(header) - 4
+                if remaining >= 40:
+                    parts.append(header + chunk.text[:remaining] + "...")
+                break
+            parts.append(header + chunk.text)
+            total += need
+        return "\n".join(parts)
 
     def add_document(self, name: str, content: str) -> Path:
         return self._backend.add_document(name, content)
 
+    async def add_document_async(self, name: str, content: str) -> Path:
+        """异步新增文档（vector 后端使用，避免 reload 死锁）"""
+        backend = self._backend
+        if isinstance(backend, VectorKnowledgeStore):
+            return await backend.add_document_async(name, content)
+        return backend.add_document(name, content)
+
     def remove_document(self, name: str) -> bool:
         return self._backend.remove_document(name)
+
+    async def remove_document_async(self, name: str) -> bool:
+        """异步删除文档（vector 后端使用）"""
+        backend = self._backend
+        if isinstance(backend, VectorKnowledgeStore):
+            return await backend.remove_document_async(name)
+        return backend.remove_document(name)
 
     def list_documents(self) -> list[dict]:
         return self._backend.list_documents()

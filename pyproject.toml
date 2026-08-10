@@ -1,6 +1,6 @@
 [project]
 name = "qingci-bot"
-version = "1.1.0"
+version = "1.2.0"
 description = "QQ Bot 框架，对接 LLBot (OneBot 11)，支持 LLM 对话、Web UI 和 Desktop UI"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"

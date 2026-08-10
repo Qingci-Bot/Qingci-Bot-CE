@@ -183,8 +183,22 @@ class SplashScreen:
             user32.ReleaseDC(None, hdc_screen)
 
     def _message_loop(self):
-        """消息循环：保持窗口存活直到被关闭"""
+        """消息循环：保持窗口存活直到被关闭
+
+        注意：必须先 Translate/Dispatch 再检查 self._running，
+        否则 close() 置 _running=False 后 WM_CLOSE 永远不会被派发，
+        窗口将残留屏幕。DispatchMessage 处理 WM_CLOSE → DefWindowProc →
+        DestroyWindow → WM_DESTROY → PostQuitMessage → GetMessage 返回 0。
+        """
         msg = wintypes.MSG()
-        while self._running and user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+        while True:
+            ret = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+            if ret <= 0:
+                break  # 收到 WM_QUIT 或错误，退出循环
             user32.TranslateMessage(ctypes.byref(msg))
             user32.DispatchMessageW(ctypes.byref(msg))
+            if not self._running:
+                # close() 已请求关闭：主动向窗口发送 WM_CLOSE 让其走销毁链
+                if self._hwnd:
+                    user32.PostMessageW(self._hwnd, 0x0010, 0, 0)  # WM_CLOSE
+                break

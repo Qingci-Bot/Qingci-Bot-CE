@@ -7,7 +7,7 @@
 - block/priority 语义
 """
 
-from bot.plugin.base import PluginBase
+from bot.plugin.base import PluginBase, PluginStatus
 from bot.plugin.matcher import MatcherContext, on_command, on_message
 from bot.plugin.rule import keyword
 
@@ -43,6 +43,7 @@ def make_event(plain_text="", message_type="private", user_id=10001):
 
 def register_plugin(bot, plugin):
     """将测试插件注册进 bot 的 PluginManager（模拟 _init_plugin 后的状态）"""
+    plugin._status = PluginStatus.LOADED
     for m in plugin.matchers or []:
         if not m.owner:
             m.owner = plugin.name

@@ -114,8 +114,17 @@ class Message(list):
         elif isinstance(item, Message):
             for seg in item:
                 super().append(seg)
-        else:
+        elif isinstance(item, (list, tuple)):
+            # Message([seg1, seg2]) / Message((seg1, seg2)) 展平追加
+            for seg in item:
+                self.append(seg)
+        elif isinstance(item, MessageSegment):
             super().append(item)
+        else:
+            raise TypeError(
+                f"Message 只接受 MessageSegment / str / Message / 列表，"
+                f"收到 {type(item).__name__}"
+            )
 
     def __str__(self) -> str:
         return "".join(str(seg) for seg in self)

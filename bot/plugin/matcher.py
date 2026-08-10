@@ -28,7 +28,7 @@ temp 一次性匹配器：temp=True 的 Matcher 在匹配执行后自动从所�
 import logging
 import re
 from dataclasses import dataclass, field, fields, replace
-from typing import Callable, Optional, TYPE_CHECKING, Union
+from typing import Any, Callable, Optional, TYPE_CHECKING, Union
 
 from ..core.dispatcher import MessageContext
 from .permission import EVERYONE, Permission
@@ -59,6 +59,8 @@ class MatcherContext(MessageContext):
     command: str = ""
     args: str = ""
     match: Optional["re.Match[str]"] = None
+    # session_state 由 MessageDispatcher._execute_handler 异步初始化
+    session_state: Optional[Any] = field(default=None, repr=False)
 
     @classmethod
     def from_message_context(
@@ -84,7 +86,7 @@ class MatcherContext(MessageContext):
         )
 
 
-@dataclass
+@dataclass(eq=False)
 class Matcher:
     """事件匹配器
 

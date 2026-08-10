@@ -209,10 +209,17 @@ async def get_session_messages(
 
 @router.delete("/sessions/one", dependencies=[Depends(require_auth)])
 async def delete_session(key: str = Query(..., min_length=1), request: Request = None):
-    """删除指定会话（清空其历史）"""
+    """删除指定会话（清空其历史）
+
+    必须经 LLMManager 清除：仅删 DB 会遗留内存缓存，
+    导致下次对话继续使用"已删除"的历史（历史复活）。
+    """
     bot = _get_bot_instance()
     try:
-        await bot.db.clear_sessions(session_key=key)
+        if bot.llm is not None:
+            await bot.llm.clear_session_by_key(key)
+        else:
+            await bot.db.clear_sessions(session_key=key)
     except Exception:
         logger.exception("删除会话失败")
         raise HTTPException(status_code=500, detail="删除会话失败，详见服务端日志")

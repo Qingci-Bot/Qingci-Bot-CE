@@ -57,6 +57,10 @@ class LLMManager:
         # 注意：锁随 session 创建，clear_session 不弹出锁以保护进行中的 chat
         # 长期运行的 bot 可能累积大量锁，未来可引入 LRU 淘汰
         self._locks: dict[str, asyncio.Lock] = {}
+        # 全局重载锁：串行化 reload/clear 对 _locks 的快照与 _sessions 的清空。
+        # 若无此锁，reload 遍历 _locks.keys() 快照期间并发 chat 会新建会话锁，
+        # 轻则 dict 并发修改报错，重则新建会话逃过 reload 的清空（内存历史残留）
+        self._reload_lock = asyncio.Lock()
         # Function Calling 工具注册表（enable_tools 且非 None 时启用）
         self._tool_registry: Optional["ToolRegistry"] = None
         # MCP 桥接器（enable_tools + mcp_servers 配置时由 setup_mcp_tools 创建）
@@ -99,37 +103,40 @@ class LLMManager:
         summary_config 非 None 时同步更新会话摘要配置；
         usage_tracking 非 None 时同步更新用量入库开关。
         """
-        # 获取所有现有会话锁（持有到方法结束）
-        # 统一按 key 字典序加锁，与其他多锁路径保持一致，消除理论死锁
-        locks = [self._locks[k] for k in sorted(self._locks.keys())]
-        acquired: list[asyncio.Lock] = []
-        for lock in locks:
-            await lock.acquire()
-            acquired.append(lock)
-        try:
-            old_model = self._config.model
-            self._config = config
-            if summary_config is not None:
-                self._summary_config = summary_config
-            if usage_tracking is not None:
-                self._usage_tracking = usage_tracking
-            # 模型可能已切换，旧 token 计数不再可靠，整体清空重建
-            self._token_cache.clear()
-            self._tools_support_cache = None
-            if self._adapter is not None:
-                try:
-                    await self._adapter.close()
-                except Exception:
-                    logger.exception(f"关闭旧适配器失败: model={old_model}")
-            self._adapter = None
-            self._sessions.clear()
-            self._loaded_sessions.clear()
-            # 重建适配器
-            self._adapter = self._create_adapter()
-            logger.info("LLM 配置已重载")
-        finally:
-            for lock in acquired:
-                lock.release()
+        # 全局重载锁保护快照：期间不会新建会话锁，保证
+        # _locks.keys() 快照与 _sessions 清空的一致性（见 __init__ 注释）
+        async with self._reload_lock:
+            # 获取所有现有会话锁（持有到方法结束）
+            # 统一按 key 字典序加锁，与其他多锁路径保持一致，消除理论死锁
+            locks = [self._locks[k] for k in sorted(self._locks.keys())]
+            acquired: list[asyncio.Lock] = []
+            for lock in locks:
+                await lock.acquire()
+                acquired.append(lock)
+            try:
+                old_model = self._config.model
+                self._config = config
+                if summary_config is not None:
+                    self._summary_config = summary_config
+                if usage_tracking is not None:
+                    self._usage_tracking = usage_tracking
+                # 模型可能已切换，旧 token 计数不再可靠，整体清空重建
+                self._token_cache.clear()
+                self._tools_support_cache = None
+                if self._adapter is not None:
+                    try:
+                        await self._adapter.close()
+                    except Exception:
+                        logger.exception(f"关闭旧适配器失败: model={old_model}")
+                self._adapter = None
+                self._sessions.clear()
+                self._loaded_sessions.clear()
+                # 重建适配器
+                self._adapter = self._create_adapter()
+                logger.info("LLM 配置已重载")
+            finally:
+                for lock in acquired:
+                    lock.release()
 
     async def close(self):
         """关闭 LLM 管理器，释放资源"""
@@ -156,10 +163,46 @@ class LLMManager:
         return f"group:{group_id}:{user_id}"
 
     def _get_lock(self, key: str) -> asyncio.Lock:
-        """获取会话级锁"""
+        """获取会话级锁（同步内部方法，需在 reload 锁保护下调用）"""
         if key not in self._locks:
             self._locks[key] = asyncio.Lock()
         return self._locks[key]
+
+    async def _get_session_lock(self, key: str) -> asyncio.Lock:
+        """获取会话锁（受全局重载锁保护）
+
+        通过 reload 锁串行化 _locks 字典的读写，避免与 reload 遍历
+        _locks.keys() 快照并发修改导致异常，也保证 reload 快照后
+        新建的会话锁不会逃过其 _sessions 清空。
+        """
+        async with self._reload_lock:
+            return self._get_lock(key)
+
+    async def _clear_one(self, key: str) -> None:
+        """清除单个会话（内存 + DB），调用方须持有该会话锁
+
+        在锁内同步清除内存与 DB，避免清除期间新的 chat 从 DB 重载出
+        尚未删除的历史（内存与 DB 分裂导致历史"复活"）。
+        """
+        self._sessions.pop(key, None)
+        self._loaded_sessions.discard(key)
+        if self._db is not None:
+            try:
+                await self._db.clear_sessions(key)
+            except Exception:
+                logger.exception(
+                    f"清除 DB 会话失败: key={key}, model={self._config.model}"
+                )
+
+    async def clear_session_by_key(self, key: str) -> None:
+        """按 session key 清除单个会话（供 API 路由等外部调用）
+
+        与 clear_session 走同一加锁路径并同步清空内存与 DB，
+        避免仅删 DB 导致内存历史在下次对话时被继续使用（"复活"）。
+        """
+        lock = await self._get_session_lock(key)
+        async with lock:
+            await self._clear_one(key)
 
     async def _ensure_session_loaded(self, key: str):
         """懒加载：首次访问某会话时从 DB 读取历史"""
@@ -392,24 +435,18 @@ class LLMManager:
         if message_type:
             key = self._session_key(message_type, group_id, user_id)
             # 获取会话锁后再清理，避免与进行中的 chat 竞态
-            lock = self._get_lock(key)
+            lock = await self._get_session_lock(key)
             async with lock:
-                self._sessions.pop(key, None)
-                self._loaded_sessions.discard(key)
+                await self._clear_one(key)
             # 注意：不弹出 _locks[key]，避免进行中的 chat 丢失锁保护
-            # 异步清除 DB
-            if self._db is not None:
-                try:
-                    await self._db.clear_sessions(key)
-                except Exception:
-                    logger.exception(
-                        f"清除 DB 会话失败: key={key}, model={self._config.model}"
-                    )
         else:
-            # 清除全部：获取所有锁（按 key 字典序，与 reload 加锁顺序一致）
-            keys = sorted(self._sessions.keys())
-            for k in keys:
-                lock = self._get_lock(k)
+            # 清除全部：在 reload 锁内快照（期间不会新建会话锁），
+            # 然后按 key 字典序逐个加锁清理
+            async with self._reload_lock:
+                items = [
+                    (k, self._get_lock(k)) for k in sorted(self._sessions.keys())
+                ]
+            for k, lock in items:
                 async with lock:
                     self._sessions.pop(k, None)
                     self._loaded_sessions.discard(k)
@@ -443,6 +480,7 @@ class LLMManager:
         # 清理上次注册的 MCP 工具（防重复 start 残留）
         if self._tool_registry is not None:
             self._tool_registry.unregister_by_prefix("mcp_")
+        bridge = None
         try:
             from .mcp import MCPBridge
             bridge = MCPBridge()
@@ -450,12 +488,11 @@ class LLMManager:
             if connected and self._tool_registry is not None:
                 count = await bridge.register_tools(self._tool_registry)
                 self._mcp = bridge
+                bridge = None  # 转移所有权，不再在 finally 中关闭
                 logger.info(
                     f"MCP 工具初始化完成: {count} 个（服务器: "
-                    f"{', '.join(bridge.connected_servers)}）"
+                    f"{', '.join(self._mcp.connected_servers)}）"
                 )
-            else:
-                await bridge.close()
         except Exception:
             logger.exception("MCP 工具初始化失败")
             if self._mcp is not None:
@@ -464,6 +501,13 @@ class LLMManager:
                 except Exception:
                     logger.exception("关闭 MCP 桥接器失败")
                 self._mcp = None
+        finally:
+            # 连接成功但注册失败 / 连接失败等场景，关闭本次新建的 bridge
+            if bridge is not None:
+                try:
+                    await bridge.close()
+                except Exception:
+                    logger.exception("关闭未注册的 MCP 桥接器失败")
 
     @property
     def tool_registry(self) -> Optional["ToolRegistry"]:
@@ -626,7 +670,7 @@ class LLMManager:
             source: 用量来源标记（chat/tool/summary/image），供后续功能复用
         """
         key = self._session_key(message_type, group_id, user_id)
-        lock = self._get_lock(key)
+        lock = await self._get_session_lock(key)
         async with lock:
             await self._ensure_session_loaded(key)
 
@@ -773,7 +817,7 @@ class LLMManager:
         stream_options 才能拿到 usage，待后续批次单独处理。
         """
         key = self._session_key(message_type, group_id, user_id)
-        lock = self._get_lock(key)
+        lock = await self._get_session_lock(key)
         async with lock:
             await self._ensure_session_loaded(key)
 

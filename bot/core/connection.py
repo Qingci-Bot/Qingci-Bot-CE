@@ -297,16 +297,23 @@ class OneBotConnection:
 
     @property
     def is_connected(self) -> bool:
-        """是否有 OneBot 客户端连接"""
+        """是否有 OneBot 客户端连接（API 或事件通道任一在线即视为已连接）
+
+        aiocqhttp 分别维护 _wsr_api_clients（API 客户端）与
+        _wsr_event_clients（事件客户端）；仅连事件通道的实现端
+        （如仅上报不调 API）也应视为已连接。
+        """
         if not self._running:
             return False
         try:
             # 优先用公开属性，回退到内部属性
-            clients = getattr(self._bot, "_wsr_api_clients", None)
-            if clients is None:
-                # 尝试通过 server_app 检查
-                clients = getattr(self._bot, "wsr_api_clients", None)
-            return bool(clients)
+            api_clients = getattr(self._bot, "_wsr_api_clients", None)
+            if api_clients is None:
+                api_clients = getattr(self._bot, "wsr_api_clients", None)
+            event_clients = getattr(self._bot, "_wsr_event_clients", None)
+            if event_clients is None:
+                event_clients = getattr(self._bot, "wsr_event_clients", None)
+            return bool(api_clients) or bool(event_clients)
         except Exception:
             return False
 

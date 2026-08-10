@@ -6,7 +6,7 @@
 - PRIVATE: 私聊
 - GROUP: 群聊
 - USER(user_ids): 指定用户
-- GROUP_MEMBER(group_ids): 指定群成员
+- GROUP_MEMBER(group_ids): 指定群的成员（仅群聊消息）
 
 权限检查基于 event + ctx，返回 bool。
 """
@@ -125,6 +125,11 @@ def USER(user_ids: Union[int, list[int]]) -> Permission:
 
 
 def GROUP_MEMBER(group_ids: Union[int, list[int]]) -> Permission:
-    """指定群成员可用"""
+    """指定群的成员可用（仅群聊消息生效）
+
+    参数为群号列表；私聊消息一律不匹配。
+    """
     ids = [group_ids] if isinstance(group_ids, int) else list(group_ids)
-    return Permission(lambda bot, event, ctx: ctx.group_id in ids)
+    return Permission(
+        lambda bot, event, ctx: ctx.message_type == "group" and ctx.group_id in ids
+    )
