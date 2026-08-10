@@ -32,6 +32,22 @@ npm run build    # 构建生产版本到 web/dist/
 > 模板文件涵盖所有功能（命令/前缀/关键词/通知/请求/定时任务/Function Calling），附详细中文注释。
 > 最小示例见 `plugins/hello.py`（15 行代码，开箱即用）。
 
+### 命名规范
+
+| 项目 | 规范 | 示例 |
+|------|------|------|
+| 文件名 | 小写英文 + 下划线，与 `name` 一致，**不能以 `_` 开头** | `chat.py`、`my_plugin.py` |
+| 类名 | `{Name}Plugin` 帕斯卡命名 | `ChatPlugin`、`HelloPlugin` |
+| `name` 属性 | 小写英文 + 下划线，插件唯一标识，**必填** | `"chat"`、`"my_plugin"` |
+
+**硬性约束：**
+- 文件名以 `_` 开头（如 `_template.py`）的文件会被跳过，不会加载
+- 每个 `.py` 文件只能定义 **1 个** `PluginBase` 子类，多个会报错
+- 插件类必须定义在模块内，不能从其他模块 `import` 进来
+- `name` 不能与其他已加载插件重名
+
+---
+
 Qingci-Bot 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持两种开发方式：
 
 - **新式（推荐）**：用 `on_command`/`on_message` 等装饰器注册 Matcher，配合 Rule 规则匹配和 Permission 权限控制
