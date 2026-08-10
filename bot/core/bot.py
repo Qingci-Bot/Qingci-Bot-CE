@@ -48,6 +48,7 @@ class QingciBot:
         self.plugin_manager = PluginManager()
 
         self._running = False
+        self._started = False               # 是否已调用过 start()（含部分失败场景）
         self._pending_tasks: set[asyncio.Task[Any]] = set()
         # 事件处理并发信号量：限制同时执行的事件数，洪峰时超出部分排队等待
         self._event_sem = asyncio.Semaphore(_EVENT_CONCURRENCY)
@@ -98,6 +99,7 @@ class QingciBot:
 
     async def start(self) -> None:
         """启动 Bot"""
+        self._started = True
         logger.info("Qingci-Bot 启动中...")
         await self.db.connect()
         await self.plugin_manager.load_builtin(self)
@@ -120,7 +122,10 @@ class QingciBot:
                 logger.exception("清理数据库失败")
             raise
 
-        # 连接就绪后启动调度器与错误告警；失败时连同连接/插件/数据库一并回滚
+        # 连接就绪后立即标记运行状态，避免事件到达时被 _handle_event 静默丢弃
+        self._running = True
+
+        # 启动调度器与错误告警；失败时连同连接/插件/数据库一并回滚
         try:
             if self.config.scheduler.enabled:
                 self.scheduler.start()
@@ -128,6 +133,7 @@ class QingciBot:
                 self._alert_handler = AlertHandler()
                 self._alert_handler.attach(logger, self.connection, self.config)
         except (Exception, asyncio.CancelledError):
+            self._running = False
             logger.exception("调度器/告警启动失败，回滚已启动资源")
             self._detach_alert_handler()
             try:
@@ -148,18 +154,12 @@ class QingciBot:
                 logger.exception("清理数据库失败")
             raise
 
-        self._running = True
         logger.info("Qingci-Bot 启动成功")
 
     async def stop(self) -> None:
         """停止 Bot"""
-        if (
-            not self._running
-            and not self.connection.is_connected
-            and not self.plugin_manager.plugins
-        ):
-            # 完全未启动或资源已全部清理，无需停止
-            # 注意：部分启动（如 start 超时被取消）后插件仍已加载，需继续清理
+        if not self._started:
+            # 从未调用过 start()，无需清理
             return
         logger.info("Qingci-Bot 停止中...")
         self._running = False

@@ -5,6 +5,28 @@ All notable changes to Qingci-Bot will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-08-10
+
+### Added
+- 依赖分组：`[test]` / `[build]` / `[dev]` 三级拆分，按需安装
+- 代码质量工具：ruff（代码风格）、mypy（类型检查）、pre-commit hooks
+- 测试用例：API 端点、配置管理、数据库操作（pytest + pytest-cov）
+- 文档：CHANGELOG.md、CONTRIBUTING.md、SECURITY.md
+- 前端工程化：ESLint + Prettier 配置
+- 全局 API 异常处理器（统一错误响应格式）
+- 日志轮转：按文件大小轮转，保留最近 N 个备份（`log.log_file_enabled` 等配置）
+- 模块级 Logger（`logging.getLogger("qingci-bot.xxx")`）
+
+### Changed
+- README 大幅更新：依赖表格、测试/代码质量章节、文档链接集中管理
+- 开发依赖安装命令从 `pip` 改为 `uv pip`，虚拟环境创建统一用 `uv venv`
+
+### Fixed
+- 启动窗口期事件丢失：`_running` 标志提前到 `connection.start()` 后立即设置
+- `stop()` 部分清理遗漏：新增 `_started` 标志，部分启动失败时仍正常清理资源
+- `LLMManager.reload()` 锁获取中断风险：用 `acquired` 列表追踪已获取锁
+- `chat_with_tools()` 空指针防御：`registry` 为 None 时跳过工具执行
+
 ## [1.0.0] - 2026-08-10
 
 ### Added
@@ -28,4 +50,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 完全离线运行（无 CDN 依赖）
 - 一键打包为 Windows EXE（PyInstaller）
 
+[1.1.0]: https://atomgit.com/luoqingci/Qingci-Bot/releases/tag/v1.1.0
 [1.0.0]: https://atomgit.com/luoqingci/Qingci-Bot/releases/tag/v1.0.0

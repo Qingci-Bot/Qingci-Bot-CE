@@ -102,8 +102,10 @@ class LLMManager:
         # 获取所有现有会话锁（持有到方法结束）
         # 统一按 key 字典序加锁，与其他多锁路径保持一致，消除理论死锁
         locks = [self._locks[k] for k in sorted(self._locks.keys())]
+        acquired: list[asyncio.Lock] = []
         for lock in locks:
             await lock.acquire()
+            acquired.append(lock)
         try:
             old_model = self._config.model
             self._config = config
@@ -126,7 +128,7 @@ class LLMManager:
             self._adapter = self._create_adapter()
             logger.info("LLM 配置已重载")
         finally:
-            for lock in locks:
+            for lock in acquired:
                 lock.release()
 
     async def close(self):
@@ -572,6 +574,10 @@ class LLMManager:
                 name = self._tool_call_field(func, "name", "") or ""
                 raw_args = self._tool_call_field(func, "arguments", "{}") or "{}"
                 tc_id = self._tool_call_field(tc, "id", "") or ""
+                # 防御：registry 为 None 时不应进入工具执行（如 LLM 意外返回 tool_calls）
+                if registry is None:
+                    logger.warning(f"跳过工具调用（registry 未就绪）: name={name}")
+                    break
                 try:
                     arguments = json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args)
                     if not isinstance(arguments, dict):
