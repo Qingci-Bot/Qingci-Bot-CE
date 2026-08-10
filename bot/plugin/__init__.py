@@ -33,6 +33,7 @@ from .rule import (
     is_private,
     is_group,
     keyword,
+    rate_limit,
 )
 
 __all__ = [

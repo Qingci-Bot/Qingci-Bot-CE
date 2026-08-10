@@ -208,7 +208,7 @@ class RAGConfig(BaseModel):
 
     支持两种检索模式：
     - keyword: 纯 Python 关键词检索，无外部依赖，适合小规模文档
-    - vector:  ChromaDB 向量检索 + litellm embedding，语义匹配更精准
+    - vector:  LanceDB 向量检索 + litellm embedding，语义匹配更精准
     """
     model_config = {"extra": "ignore"}
 
@@ -222,7 +222,7 @@ class RAGConfig(BaseModel):
     chunk_size: int = 400               # 文档分块大小（字符数）
     chunk_overlap: int = 50             # 相邻分块重叠字符数
     max_inject_chars: int = 800         # 注入 system_prompt 的参考资料长度上限（字符）
-    collection_name: str = "qingci_knowledge"  # ChromaDB 集合名（vector 模式使用）
+    collection_name: str = "qingci_knowledge"  # LanceDB 集合名（vector 模式使用）
 
 
 class AppConfig(BaseModel):

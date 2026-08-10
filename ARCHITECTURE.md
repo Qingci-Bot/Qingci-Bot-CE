@@ -268,4 +268,4 @@ Qingci-Bot 启动后会自动监测 LLBot 的 WebSocket 连接状态。若 LLBot
 - **优雅降级**：断连期间 Web UI 与 API 服务正常可用，Bot 状态显示为"未连接"
 - **重连成功**：自动恢复消息收发，已加载插件与配置保持不变
 
-相关配置见 `config.yaml` 的 `onebot.reconnect` 节（可选，默认启用）。
+断连监控与重连回调内置于 `bot/core/connection.py`，无需额外配置。

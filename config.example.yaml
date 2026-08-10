@@ -14,7 +14,7 @@ bot:
   log_json: false
 onebot:
   host: 127.0.0.1
-  port: 8888
+  port: 3001
   access_token: ''            # OneBot 接入令牌，留空则不校验
 llm:
   provider: deepseek          # openai / deepseek / ollama / siliconflow / claude / gemini / custom
@@ -55,12 +55,16 @@ image:
   api_key: ''
 rag:
   enabled: false
-  embedding_model: ''
+  mode: keyword               # keyword / vector
+  embedding_model: ''          # 向量模型（vector 模式使用）
+  embedding_api_url: ''        # 向量 API 地址（留空复用 llm.api_url）
+  embedding_api_key: ''        # 向量 API Key（留空复用 llm.api_key）
   top_k: 3
   knowledge_dir: data/knowledge
   chunk_size: 400
   chunk_overlap: 50
   max_inject_chars: 800
+  collection_name: qingci_knowledge
 session_summary:
   enabled: false
   keep_recent_turns: 3
