@@ -47,6 +47,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 修复 `is_connected` 仅检测 API 通道：事件通道连接也视为已连接
 - 修复对话调试 WebSocket 收到非法 `user_id` 导致连接异常断开
 
+## [1.2.1] - 2026-08-11
+
+### Fixed
+- 修复 `request` Matcher 审批结果（True/False）被丢弃，导致加好友/加群审批永不执行
+- 修复 `chat()` 被取消时用户消息不回滚，导致内存与数据库残留孤立消息
+- 修复连接监控回调 `awaitable` 判断使用 `asyncio.iscoroutine()` 无法识别 Future/Task，改用 `inspect.isawaitable()`
+
 ## [1.1.0] - 2026-08-10
 
 ### Added
@@ -92,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 完全离线运行（无 CDN 依赖）
 - 一键打包为 Windows EXE（PyInstaller）
 
+[1.2.1]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.1
 [1.2.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.0
 [1.1.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.1.0
 [1.0.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.0.0
