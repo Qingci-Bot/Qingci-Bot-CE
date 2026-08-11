@@ -1,4 +1,4 @@
-# Qingci-Bot 插件开发指南
+# Qingci-Bot CE 插件开发指南
 
 ## 前端开发
 
@@ -48,7 +48,7 @@ npm run build    # 构建生产版本到 web/dist/
 
 ---
 
-Qingci-Bot 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持两种开发方式：
+Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持两种开发方式：
 
 - **新式（推荐）**：用 `on_command`/`on_message` 等装饰器注册 Matcher，配合 Rule 规则匹配和 Permission 权限控制
 - **旧式（兼容）**：重写 `on_message` 方法，返回回复文本
@@ -882,7 +882,7 @@ plugins/
 
 ## 打包为 exe
 
-使用 PyInstaller 将 Qingci-Bot 打包为 Windows 可执行程序（onedir 模式）。
+使用 PyInstaller 将 Qingci-Bot CE 打包为 Windows 可执行程序（onedir 模式）。
 
 ### 构建
 

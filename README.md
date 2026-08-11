@@ -236,7 +236,7 @@ api_key: your-secret-key
 
 ```yaml
 bot:
-  name: Qingci-Bot
+  name: Qingci-Bot CE
   admin_users: [123456789]        # 管理员 QQ 号列表
   trigger_mode: at                 # 触发方式: at / keyword / always
   trigger_keywords: ["/bot", "/ai"] # keyword 模式的触发词

@@ -1,10 +1,10 @@
-# Qingci-Bot 架构
+# Qingci-Bot CE 架构
 
 ## 系统架构
 
 ```
 ┌──────────┐   OneBot 11 WS   ┌──────────────────────────────────────────┐   HTTP/WS   ┌──────────┐
-│  LLBot   │ ◄──────────────► │            Qingci-Bot                   │ ◄─────────► │  Web UI  │
+│  LLBot   │ ◄──────────────► │            Qingci-Bot CE                │ ◄─────────► │  Web UI  │
 │ (协议层)  │  收发消息/事件    │  ┌──────────────────────────────────┐   │   API 推送   │  (管理端)  │
 └──────────┘                  │  │ aiocqhttp (反向 WS 服务端)        │   │            └──────────┘
                               │  ├──────────────────────────────────┤   │
@@ -21,7 +21,7 @@
 
 ### 数据流
 
-1. **LLBot**（QQ 协议端）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot
+1. **LLBot**（QQ 协议端）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot CE
 2. **aiocqhttp** 解析事件，分发至 **Dispatcher**
 3. **Dispatcher** 按 priority 调度 **PluginManager** 中的 Matcher，匹配 Rule/Permission 后执行 handler
 4. 未匹配则回退到旧式 `on_message`；内置 chat 插件调用 **LLMManager** 生成回复
@@ -267,7 +267,7 @@ alembic upgrade head
 
 ### LLBot 断连恢复
 
-Qingci-Bot 启动后会自动监测 LLBot 的 WebSocket 连接状态。若 LLBot 异常退出或重启：
+Qingci-Bot CE 启动后会自动监测 LLBot 的 WebSocket 连接状态。若 LLBot 异常退出或重启：
 
 - **自动重连**：检测到断连后，以指数退避策略（初始 1s，上限 60s）自动尝试重连，无需手动干预
 - **优雅降级**：断连期间 Web UI 与 API 服务正常可用，Bot 状态显示为"未连接"
