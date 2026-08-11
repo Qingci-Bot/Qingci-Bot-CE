@@ -749,6 +749,24 @@ class LLMManager:
                         ),
                         name="save_usage",
                     )
+            except asyncio.CancelledError:
+                # 调用被取消：同样回滚刚加入的用户消息，保持内存与 DB 一致，
+                # 再重新抛出（与 chat_stream 的取消语义一致）
+                logger.warning(
+                    f"LLM 调用被取消，回滚用户消息: key={key}, model={self._config.model}"
+                )
+                if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
+                    self._sessions[key].pop()
+                    db_saved = await _wait_user_saved()
+                    if db_saved:
+                        try:
+                            await self._db.delete_last_session(key, "user")
+                        except Exception:
+                            logger.exception(
+                                f"回滚用户消息失败: key={key}, "
+                                f"model={self._config.model}"
+                            )
+                raise
             except Exception as e:
                 logger.error(
                     f"LLM 调用失败: {e}, key={key}, model={self._config.model}"

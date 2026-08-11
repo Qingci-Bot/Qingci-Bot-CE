@@ -18,6 +18,7 @@ OneBot 实现端（如 LLBot/NapCat）需连接 ws://host:port/ws。
 """
 
 import asyncio
+import inspect
 import logging
 import time
 from typing import Callable, Optional
@@ -133,7 +134,7 @@ class OneBotConnection:
                     for cb in self._on_disconnect_callbacks:
                         try:
                             res = cb()
-                            if asyncio.iscoroutine(res):
+                            if inspect.isawaitable(res):
                                 await res
                         except Exception:
                             logger.exception("断连回调执行异常")
@@ -142,7 +143,7 @@ class OneBotConnection:
                     for cb in self._on_reconnect_callbacks:
                         try:
                             res = cb()
-                            if asyncio.iscoroutine(res):
+                            if inspect.isawaitable(res):
                                 await res
                         except Exception:
                             logger.exception("重连回调执行异常")

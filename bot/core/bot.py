@@ -324,8 +324,14 @@ class QingciBot:
 
             if post_type != "message":
                 matcher_reply, matcher_blocked = await self.dispatcher._run_event_matchers(self, event, ctx)
-                if matcher_reply is not None or matcher_blocked:
-                    # Matcher 已处理或被 block，跳过旧式回调
+                if matcher_reply is not None:
+                    # request Matcher 返回 bool 表示审批结果（True 同意 / False 拒绝）。
+                    # 与旧式 on_request 的审批语义对齐：非空结果即执行审批。
+                    if post_type == "request" and isinstance(matcher_reply, (bool, int)):
+                        await self._handle_request_approval(event, bool(matcher_reply))
+                    return
+                if matcher_blocked:
+                    # Matcher 已匹配但未返回结果，跳过旧式回调
                     return
                 # 旧式回调 fallback（仅跳过注册了同类型事件 Matcher 的插件，
                 # 而非任一 Matcher——消息 Matcher 不应禁用其 notice/request 回调）
