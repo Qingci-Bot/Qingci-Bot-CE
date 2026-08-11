@@ -10,7 +10,7 @@
 
 ### 报告 Bug
 
-1. 在 [Issues](https://atomgit.com/luoqingci/Qingci-Bot/issues) 中搜索是否已有相同问题
+1. 在 [Issues](https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/issues) 中搜索是否已有相同问题
 2. 如果没有，创建新 Issue，包含：
    - 清晰的问题描述
    - 复现步骤
@@ -40,8 +40,8 @@
 
 ```bash
 # 克隆仓库
-git clone https://atomgit.com/luoqingci/Qingci-Bot.git
-cd Qingci-Bot
+git clone https://atomgit.com/Qingci-Bot/Qingci-Bot-CE.git
+cd Qingci-Bot-CE
 
 # 创建虚拟环境
 uv venv
@@ -82,7 +82,7 @@ pyinstaller qingci-bot.spec
 ## 项目结构
 
 ```
-Qingci-Bot/
+Qingci-Bot-CE/
 ├── api/            # FastAPI 接口层
 ├── bot/            # Bot 核心逻辑
 │   ├── core/       # 生命周期、连接、调度

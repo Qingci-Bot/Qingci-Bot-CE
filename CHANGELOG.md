@@ -92,6 +92,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 完全离线运行（无 CDN 依赖）
 - 一键打包为 Windows EXE（PyInstaller）
 
-[1.2.0]: https://atomgit.com/luoqingci/Qingci-Bot/releases/tag/v1.2.0
-[1.1.0]: https://atomgit.com/luoqingci/Qingci-Bot/releases/tag/v1.1.0
-[1.0.0]: https://atomgit.com/luoqingci/Qingci-Bot/releases/tag/v1.0.0
+[1.2.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.0
+[1.1.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.1.0
+[1.0.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.0.0

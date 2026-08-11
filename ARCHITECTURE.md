@@ -31,7 +31,7 @@
 ## 项目结构
 
 ```
-Qingci-Bot/
+Qingci-Bot-CE/
 ├── main.py                    # 统一入口
 ├── pyproject.toml
 ├── alembic.ini                # Alembic 迁移配置
