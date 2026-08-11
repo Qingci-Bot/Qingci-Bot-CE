@@ -124,7 +124,7 @@ class BotConfig(BaseModel):
     """Bot 基础配置"""
     model_config = {"extra": "ignore"}
 
-    name: str = "Qingci-Bot"
+    name: str = "Qingci-Bot CE"
     admin_users: list[int] = []         # 管理员 QQ 号
     trigger_mode: Literal["at", "keyword", "always"] = "at"  # 触发方式
     trigger_keywords: list[str] = ["/bot", "/ai"]

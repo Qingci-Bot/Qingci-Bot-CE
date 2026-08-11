@@ -21,7 +21,7 @@ class AdminPlugin(PluginBase):
 
     name = "admin"
     version = "2.0.0"
-    author = "Qingci-Bot"
+    author = "Qingci-Bot CE"
     description = "管理命令插件：开关、清除对话、状态查询（Matcher API）"
 
     # LLM 可用性缓存（避免每次 /status 都消耗 token）

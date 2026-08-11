@@ -18,7 +18,7 @@ class HelpPlugin(PluginBase):
 
     name = "help"
     version = "1.0.0"
-    author = "Qingci-Bot"
+    author = "Qingci-Bot CE"
     description = "显示可用命令列表"
     category = "tool"
 

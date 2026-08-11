@@ -150,7 +150,7 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
   <div class="wizard-page">
     <div class="wizard-card">
       <div class="wizard-header">
-        <div class="wizard-logo">Qingci-Bot</div>
+        <div class="wizard-logo">Qingci-Bot CE</div>
         <div class="wizard-subtitle">首次配置引导</div>
         <div class="wizard-progress">
           <div class="progress-bar">

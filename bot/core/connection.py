@@ -14,7 +14,7 @@ OneBotConnection 作为外观层，保持与旧 API 兼容：
 - is_connected / last_heartbeat 状态查询
 
 OneBot 实现端（如 LLBot/NapCat）需连接 ws://host:port/ws。
-断连时 Qingci-Bot Web UI 与 API 保持可用，LLBot 重连后自动恢复消息收发。
+断连时 Qingci-Bot CE Web UI 与 API 保持可用，LLBot 重连后自动恢复消息收发。
 """
 
 import asyncio

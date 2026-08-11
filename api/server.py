@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """创建 FastAPI 应用"""
-    app = FastAPI(title="Qingci-Bot API", version="1.2.0", lifespan=lifespan)
+    app = FastAPI(title="Qingci-Bot CE API", version="1.2.0", lifespan=lifespan)
 
     # CORS：不使用 allow_credentials=True + allow_origins=["*"]（违反 CORS 规范）
     # 安全由 X-API-Key 鉴权保证，CORS 仅放开方法/头；
@@ -314,7 +314,7 @@ def create_app() -> FastAPI:
             return RedirectResponse(url="/ui")
     else:
         build_hint = (
-            "<h1>Qingci-Bot Web UI 未构建</h1>"
+            "<h1>Qingci-Bot CE Web UI 未构建</h1>"
             "<p>请在项目根目录执行以下命令构建 Web 界面：</p>"
             "<pre>cd web\nnpm install\nnpm run build</pre>"
         )

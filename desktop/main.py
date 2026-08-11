@@ -52,7 +52,7 @@ def run_desktop(args, splash=None):
 
     # 创建窗口
     window = webview.create_window(
-        title="Qingci-Bot",
+        title="Qingci-Bot CE",
         url=url,
         width=1100,
         height=750,
@@ -79,7 +79,7 @@ def run_desktop(args, splash=None):
         # 方案 1：通过 ctypes 向窗口发送 WM_CLOSE（跨线程安全）
         try:
             import ctypes
-            hwnd = ctypes.windll.user32.FindWindowW(None, "Qingci-Bot")
+            hwnd = ctypes.windll.user32.FindWindowW(None, "Qingci-Bot CE")
             if hwnd:
                 ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
                 return

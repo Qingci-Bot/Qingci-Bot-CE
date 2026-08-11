@@ -1,6 +1,6 @@
-# Qingci-Bot build script (PyInstaller onedir)
+# Qingci-Bot CE build script (PyInstaller onedir)
 # Usage: .\build.ps1
-# Output: dist\qingci-bot\qingci-bot.exe
+# Output: dist\qingci-bot-ce\qingci-bot-ce.exe
 #
 # config.yaml and data\ inside the output folder are treated as user data:
 # they are stashed before the build and restored afterwards, never overwritten.
@@ -11,7 +11,7 @@ Set-Location $Root
 
 $Python  = Join-Path $Root ".venv\Scripts\python.exe"
 $DistDir = Join-Path $Root "dist"
-$AppDir  = Join-Path $DistDir "qingci-bot"
+$AppDir  = Join-Path $DistDir "qingci-bot-ce"
 $Stash   = Join-Path $DistDir ".user-stash"
 
 if (-not (Test-Path $Python)) {
@@ -32,7 +32,7 @@ if (Test-Path (Join-Path $AppDir "data")) {
 
 # ---------- [1/4] PyInstaller build ----------
 Write-Host "==> [1/4] PyInstaller build (first run takes 3-10 min)..." -ForegroundColor Cyan
-& $Python -m PyInstaller --noconfirm --clean qingci-bot.spec
+& $Python -m PyInstaller --noconfirm --clean qingci-bot-ce.spec
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed with exit code $LASTEXITCODE" }
 
 # ---------- [2/4] copy Web UI ----------
@@ -79,8 +79,8 @@ if (Test-Path $Stash) {
 Write-Host ""
 Write-Host "Build finished: $AppDir" -ForegroundColor Green
 Write-Host "Run:"
-Write-Host "  .\dist\qingci-bot\qingci-bot.exe                # Bot + API"
-Write-Host "  .\dist\qingci-bot\qingci-bot.exe --no-bot       # API/Web UI only"
-Write-Host "  .\dist\qingci-bot\qingci-bot.exe --port 8080    # custom port"
+Write-Host "  .\dist\qingci-bot-ce\qingci-bot-ce.exe                # Bot + API"
+Write-Host "  .\dist\qingci-bot-ce\qingci-bot-ce.exe --no-bot       # API/Web UI only"
+Write-Host "  .\dist\qingci-bot-ce\qingci-bot-ce.exe --port 8080    # custom port"
 Write-Host "Then open http://127.0.0.1:8080/ui/"
 Write-Host "Note: keep config.yaml and data\ next to the exe; do not move the exe alone."

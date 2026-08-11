@@ -24,7 +24,7 @@ class KnowledgePlugin(PluginBase):
 
     name = "knowledge"
     version = "1.0.0"
-    author = "Qingci-Bot"
+    author = "Qingci-Bot CE"
     description = "轻量知识库管理：文档增删、检索与索引"
 
     async def on_load(self):

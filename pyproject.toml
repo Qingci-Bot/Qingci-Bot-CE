@@ -1,5 +1,5 @@
 [project]
-name = "qingci-bot"
+name = "qingci-bot-ce"
 version = "1.2.0"
 description = "QQ Bot 框架，对接 LLBot (OneBot 11)，支持 LLM 对话、Web UI 和 Desktop UI"
 requires-python = ">=3.10"
@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.scripts]
-qingci-bot = "main:main"
+qingci-bot-ce = "main:main"
 
 [project.optional-dependencies]
 test = [
@@ -39,7 +39,7 @@ build = [
     "pyinstaller>=6.0",
 ]
 dev = [
-    "qingci-bot[test,build]",
+    "qingci-bot-ce[test,build]",
     "ruff>=0.8",
     "mypy>=1.0",
 ]

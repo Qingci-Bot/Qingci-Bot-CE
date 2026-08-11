@@ -256,7 +256,7 @@ async def main():
     skip_tables = set(t.strip() for t in args.skip_tables.split(",") if t.strip())
 
     print("=" * 60)
-    print("  Qingci-Bot SQLite → PostgreSQL 迁移工具")
+    print("  Qingci-Bot CE SQLite → PostgreSQL 迁移工具")
     print("=" * 60)
     print(f"  SQLite:    {sqlite_path}")
     print(f"  PG URL:    {args.pg_url}")
@@ -323,7 +323,7 @@ async def main():
     print("下一步:")
     print("  1. 修改 bot/db/engine.py 中的连接串为 PostgreSQL")
     print("  2. 移除 SQLite 专用 PRAGMA 设置")
-    print("  3. 重启 Qingci-Bot 验证数据完整性")
+    print("  3. 重启 Qingci-Bot CE 验证数据完整性")
 
 
 if __name__ == "__main__":

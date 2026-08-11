@@ -19,7 +19,7 @@ WS_EX_TOOLWINDOW = 0x00000080
 ULW_ALPHA = 0x00000002
 SW_SHOW = 5
 
-# 配色：暗色主题，与 Qingci-Bot UI 风格一致
+# 配色：暗色主题，与 Qingci-Bot CE UI 风格一致
 BG_COLOR = 0x001E1E2E       # 深藏青 (BGR)
 TITLE_COLOR = 0x00CDD6F4    # 亮薰衣草 (BGR) — 实际是 RGB(0xF4, 0xD6, 0xCD)
 SUB_COLOR = 0x00A6ADC8      # 灰紫 (BGR)
@@ -123,7 +123,7 @@ class SplashScreen:
                 )
                 old_font = gdi32.SelectObject(hdc_mem, font_title)
                 tr = wintypes.RECT(0, 28, self.W, 82)
-                user32.DrawTextW(hdc_mem, "Qingci-Bot", -1, ctypes.byref(tr), 0x21)
+                user32.DrawTextW(hdc_mem, "Qingci-Bot CE", -1, ctypes.byref(tr), 0x21)
                 gdi32.SelectObject(hdc_mem, old_font)
                 gdi32.DeleteObject(font_title)
 

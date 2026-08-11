@@ -45,7 +45,7 @@ class SystemTray:
                 pystray.MenuItem("退出", self._exit),
             )
 
-            self._icon = pystray.Icon("qingci-bot", image, "Qingci-Bot", menu)
+            self._icon = pystray.Icon("qingci-bot-ce", image, "Qingci-Bot CE", menu)
             self._icon.run()
         except ImportError:
             logger.warning("pystray 未安装，跳过托盘图标")

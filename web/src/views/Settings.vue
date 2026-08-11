@@ -38,7 +38,7 @@ function resetForm() {
   const onebot = store.config.onebot || {}
   Object.assign(form, {
     bot: {
-      name: bot.name || 'Qingci-Bot',
+      name: bot.name || 'Qingci-Bot CE',
       trigger_mode: bot.trigger_mode || 'at',
       trigger_keywords: (bot.trigger_keywords || []).join(', '),
       admin_users: (bot.admin_users || []).join(', '),
@@ -213,7 +213,7 @@ async function saveConfigJson() {
       <div class="form-grid">
         <div class="form-group">
           <label>Bot 名称</label>
-          <input v-model="form.bot.name" type="text" placeholder="Qingci-Bot">
+          <input v-model="form.bot.name" type="text" placeholder="Qingci-Bot CE">
         </div>
         <div class="form-group">
           <label>触发模式</label>

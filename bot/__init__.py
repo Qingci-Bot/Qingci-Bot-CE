@@ -1,1 +1,1 @@
-# Qingci-Bot - QQ Bot Framework
+# Qingci-Bot CE - QQ Bot Framework

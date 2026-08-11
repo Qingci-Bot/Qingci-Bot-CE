@@ -1,4 +1,4 @@
-"""Qingci-Bot 插件开发模板（完整版）
+"""Qingci-Bot CE 插件开发模板（完整版）
 
 将此文件复制为 plugins/your_plugin.py 即可开始开发。
 以 _ 开头的文件不会被自动加载，可放心保留此模板。

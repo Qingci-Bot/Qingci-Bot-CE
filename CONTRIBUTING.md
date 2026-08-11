@@ -1,6 +1,6 @@
-# Contributing to Qingci-Bot
+# Contributing to Qingci-Bot-CE
 
-感谢你对 Qingci-Bot 的关注！欢迎任何形式的贡献。
+感谢你对 Qingci-Bot-CE 的关注！欢迎任何形式的贡献。
 
 ## 行为准则
 
@@ -100,7 +100,7 @@ Qingci-Bot-CE/
 
 ## 插件开发
 
-请参考 [Plugins-Dev](https://atomgit.com/luoqingci/Plugins-Dev) 独立开发仓库。
+请参考 [Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) 独立开发仓库。
 
 ## 许可证
 

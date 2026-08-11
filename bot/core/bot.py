@@ -27,7 +27,7 @@ _EVENT_CONCURRENCY = 16
 
 
 class QingciBot:
-    """Qingci-Bot 主类"""
+    """Qingci-Bot CE 主类"""
 
     def __init__(self, config_path: Optional[str] = None):
         path = Path(config_path) if config_path else None
@@ -119,7 +119,7 @@ class QingciBot:
     async def start(self) -> None:
         """启动 Bot"""
         self._started = True
-        logger.info("Qingci-Bot 启动中...")
+        logger.info("Qingci-Bot CE 启动中...")
         await self.db.connect()
         await self.plugin_manager.load_builtin(self)
         # 加载外部插件目录（app_root/plugins/，exe 打包后同样生效）
@@ -173,14 +173,14 @@ class QingciBot:
                 logger.exception("清理数据库失败")
             raise
 
-        logger.info("Qingci-Bot 启动成功")
+        logger.info("Qingci-Bot CE 启动成功")
 
     async def stop(self) -> None:
         """停止 Bot"""
         if not self._started:
             # 从未调用过 start()，无需清理
             return
-        logger.info("Qingci-Bot 停止中...")
+        logger.info("Qingci-Bot CE 停止中...")
         self._running = False
 
         # 先停止接收新事件
@@ -236,7 +236,7 @@ class QingciBot:
         except (Exception, asyncio.CancelledError):
             logger.exception("数据库关闭异常")
 
-        logger.info("Qingci-Bot 已停止")
+        logger.info("Qingci-Bot CE 已停止")
 
     def _detach_alert_handler(self) -> None:
         """卸载错误告警处理器（幂等）"""

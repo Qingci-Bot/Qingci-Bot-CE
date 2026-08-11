@@ -1,4 +1,4 @@
-"""Qingci-Bot 最小示例插件
+"""Qingci-Bot CE 最小示例插件
 
 将此文件复制到 plugins/ 目录即可自动加载。
 发送 /hello 或 "你好" 测试。
@@ -17,7 +17,7 @@ class HelloPlugin(PluginBase):
 
     name = "hello"
     version = "1.0.0"
-    author = "Qingci-Bot"
+    author = "Qingci-Bot CE"
     description = "一个简单的问候插件"
 
     async def on_load(self):

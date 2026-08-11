@@ -1,9 +1,9 @@
-# Qingci-Bot 配置模板
+# Qingci-Bot CE 配置模板
 # 复制为 config.yaml 后按需修改；敏感字段（api_key / access_token）默认留空。
 # 注意：config.yaml 已被 .gitignore 忽略，不会随代码提交，避免密钥泄露。
 
 bot:
-  name: Qingci-Bot
+  name: Qingci-Bot CE
   admin_users: []            # 管理员 QQ 号列表，如 [123456789]
   trigger_mode: at            # at / keyword / always
   trigger_keywords:

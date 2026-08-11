@@ -221,7 +221,7 @@ class PluginManager:
         if not init_file.exists():
             try:
                 init_file.write_text(
-                    "# Qingci-Bot 外部插件目录\n"
+                    "# Qingci-Bot CE 外部插件目录\n"
                     "# 将 .py 插件文件放入此目录即可自动加载\n",
                     encoding="utf-8",
                 )

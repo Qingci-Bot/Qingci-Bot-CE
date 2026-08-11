@@ -1,4 +1,4 @@
-"""Qingci-Bot 统一入口
+"""Qingci-Bot CE 统一入口
 
 用法:
     python main.py                  # 启动 Bot + API 服务
@@ -43,7 +43,7 @@ from bot.core.logformat import apply_logging_from_config  # noqa: E402 — 仅 l
 # ── 命令行解析 ────────────────────────────────────────────────
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Qingci-Bot")
+    parser = argparse.ArgumentParser(description="Qingci-Bot CE")
     parser.add_argument("--no-bot", action="store_true", help="仅启动 API 服务")
     parser.add_argument("--desktop", action="store_true", help="启动桌面应用")
     parser.add_argument("--port", type=int, default=8080, help="API 端口")
@@ -112,7 +112,7 @@ async def run_bot_and_api(args):
             except (Exception, asyncio.CancelledError):
                 logger.exception("Bot 停止异常")
         clear_bot()
-        logger.info("Qingci-Bot 已停止")
+        logger.info("Qingci-Bot CE 已停止")
 
 
 # ── 入口 ──────────────────────────────────────────────────────

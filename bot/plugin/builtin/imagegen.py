@@ -22,7 +22,7 @@ class ImageGenPlugin(PluginBase):
 
     name = "imagegen"
     version = "1.0.0"
-    author = "Qingci-Bot"
+    author = "Qingci-Bot CE"
     description = "AI 绘图"
 
     async def on_load(self):

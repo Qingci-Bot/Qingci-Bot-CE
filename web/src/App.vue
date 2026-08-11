@@ -55,7 +55,7 @@ onUnmounted(() => {
     <template v-else>
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <div class="title">Qingci-Bot</div>
+        <div class="title">Qingci-Bot CE</div>
         <span class="subtitle">QQ Bot Framework</span>
       </div>
       <nav class="sidebar-nav">
@@ -84,7 +84,7 @@ onUnmounted(() => {
     <main class="main-content">
       <header class="topbar">
         <div class="left">
-          <span class="breadcrumb">Qingci-Bot</span>
+          <span class="breadcrumb">Qingci-Bot CE</span>
           <span style="color: var(--text-muted);">/</span>
           <span class="breadcrumb" style="color: var(--text-primary);">
             {{ navItems.find(n => n.path === route.path)?.name || '仪表盘' }}

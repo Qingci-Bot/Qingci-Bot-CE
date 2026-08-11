@@ -135,7 +135,7 @@ class ChatPlugin(PluginBase):
 
     name = "chat"
     version = "2.0.0"
-    author = "Qingci-Bot"
+    author = "Qingci-Bot CE"
     description = "LLM 智能对话插件"
 
     async def on_load(self):

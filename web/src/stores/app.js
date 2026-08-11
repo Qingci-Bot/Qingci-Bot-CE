@@ -28,7 +28,7 @@ function authHeaders(extra = {}) {
 // 默认值逐项与后端 bot/config.py 的模型定义保持一致
 const defaultConfig = {
   bot: {
-    name: 'Qingci-Bot',
+    name: 'Qingci-Bot CE',
     admin_users: [],
     trigger_mode: 'at',
     trigger_keywords: ['/bot', '/ai'],

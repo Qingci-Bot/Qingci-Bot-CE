@@ -1,13 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Qingci-Bot PyInstaller 打包配置（onedir 模式）
+"""Qingci-Bot CE PyInstaller 打包配置（onedir 模式）
 
 产物结构：
-    dist/qingci-bot/
-        qingci-bot.exe        # 主程序（windowed，无控制台窗口）
-        _internal/            # Python 运行时与依赖
-        web/dist/             # Web UI（构建脚本复制，不打包进 exe）
-        config.yaml           # 用户配置（构建脚本复制，不打包进 exe）
-        data/                 # SQLite 数据、备份、词库（运行时生成）
+    dist/qingci-bot-ce/
+        qingci-bot-ce.exe        # 主程序（windowed，无控制台窗口）
+        _internal/               # Python 运行时与依赖
+        web/dist/                # Web UI（构建脚本复制，不打包进 exe）
+        config.yaml              # 用户配置（构建脚本复制，不打包进 exe）
+        data/                    # SQLite 数据、备份、词库（运行时生成）
 
 可写资源与静态资源均按"exe 所在目录"相对路径读取（见 bot/paths.py），
 因此不通过 datas 打进包内，由 build.ps1 复制到产物目录分发。
@@ -121,7 +121,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='qingci-bot',
+    name='qingci-bot-ce',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -136,5 +136,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name='qingci-bot',
+    name='qingci-bot-ce',
 )

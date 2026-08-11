@@ -147,7 +147,7 @@ class AlertHandler(logging.Handler):
         """向全部管理员私聊发送告警文案"""
         if self._connection is None or not self._admin_users:
             return
-        text = f"[Qingci-Bot 错误告警] 近期累计 {count} 条 ERROR，最近一条: {summary}"
+        text = f"[Qingci-Bot CE 错误告警] 近期累计 {count} 条 ERROR，最近一条: {summary}"
         for user_id in self._admin_users:
             self._send_private(user_id, text)
 
