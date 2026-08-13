@@ -260,11 +260,20 @@ class LiteLLMAdapter(LLMAdapter):
         except Exception as e:
             err_type = type(e).__name__
             self.last_error = f"{err_type}: {e}"
-            if isinstance(e, litellm.AuthenticationError):
+            # 防御：_get_litellm() 导入失败时局部变量 litellm 未绑定，
+            # 直接引用会二次抛 NameError；改用模块级 _litellm 安全取值。
+            # 分类仅用于日志措辞，任何取值失败都不影响失败判定。
+            try:
+                auth_err = getattr(_litellm, "AuthenticationError", ())
+                timeout_err = getattr(_litellm, "Timeout", ())
+                conn_err = getattr(_litellm, "APIConnectionError", ())
+            except AttributeError:
+                auth_err = timeout_err = conn_err = ()
+            if isinstance(e, auth_err):
                 logger.warning(f"LLM 可用性检查失败（鉴权错误 {err_type}）: {e}")
-            elif isinstance(e, (litellm.Timeout, asyncio.TimeoutError)):
+            elif isinstance(e, (timeout_err, asyncio.TimeoutError)):
                 logger.warning(f"LLM 可用性检查超时（{err_type}）: {e}")
-            elif isinstance(e, (litellm.APIConnectionError, OSError)):
+            elif isinstance(e, (conn_err, OSError)):
                 logger.warning(f"LLM 可用性检查失败（网络错误 {err_type}）: {e}")
             else:
                 logger.warning(f"LLM 可用性检查失败（{err_type}）: {e}")

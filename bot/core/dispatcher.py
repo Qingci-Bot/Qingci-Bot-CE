@@ -213,9 +213,8 @@ class MessageDispatcher:
                             intercept = await intercept
                         if intercept is not None:
                             # 中间件拦截，返回拦截值作为回复
-                            bot.plugin_manager.record_metric(
-                                matcher, (time.perf_counter() - start) * 1000
-                            )
+                            # 指标不在此记录：由下方 finally 统一记录一次，
+                            # 避免同一 Matcher 执行被计数两次
                             return str(intercept)
                     except Exception:
                         logger.exception(
