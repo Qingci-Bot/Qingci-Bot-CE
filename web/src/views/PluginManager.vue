@@ -10,6 +10,11 @@ const loading = ref('')
 const activeCategory = ref('all')
 const expandedMetrics = ref('')
 
+// 插件管理页面抽屉
+const drawerOpen = ref(false)
+const drawerPlugin = ref(null)
+const drawerPage = ref(null)
+
 onMounted(() => {
   store.fetchStatus()
 })
@@ -24,8 +29,25 @@ const filteredPlugins = computed(() => {
   return store.plugins.filter(p => (p.category || '未分类') === activeCategory.value)
 })
 
+const drawerUrl = computed(() => {
+  if (!drawerPlugin.value) return ''
+  return `/api/plugin-data/${drawerPlugin.value.name}/`
+})
+
 const statusLabel = (s) => ({ loading: '加载中', loaded: '已加载', disabled: '已禁用', error: '错误', unloading: '卸载中' }[s] || s)
 const statusClass = (s) => ({ loaded: 'green', loading: 'yellow', disabled: 'gray', error: 'red', unloading: 'yellow' }[s] || 'gray')
+
+function openDrawer(plugin, page) {
+  drawerPlugin.value = plugin
+  drawerPage.value = page
+  drawerOpen.value = true
+}
+
+function closeDrawer() {
+  drawerOpen.value = false
+  drawerPlugin.value = null
+  drawerPage.value = null
+}
 
 async function reload(name) {
   loading.value = name
@@ -196,6 +218,15 @@ async function toggleMetrics(name) {
                      @change="toggleEnabled(plugin)" :disabled="loading === plugin.name">
               <span class="slider round"></span>
             </label>
+            <button
+              v-if="plugin.pages && plugin.pages.length > 0"
+              v-for="page in plugin.pages"
+              :key="page.title"
+              class="btn btn-accent btn-sm"
+              @click="openDrawer(plugin, page)"
+            >
+              <span>{{ page.icon || '◇' }}</span> {{ page.title }}
+            </button>
             <button class="btn btn-secondary btn-sm" :disabled="loading === plugin.name" @click="reload(plugin.name)">
               <span :class="{ spin: loading === plugin.name }">↻</span> 重载
             </button>
@@ -211,6 +242,31 @@ async function toggleMetrics(name) {
         </div>
       </transition>
     </div>
+
+    <!-- 插件管理页面抽屉 -->
+    <Teleport to="body">
+      <transition name="drawer">
+        <div v-if="drawerOpen" class="drawer-overlay" @click.self="closeDrawer">
+          <div class="drawer-panel">
+            <div class="drawer-header">
+              <div class="drawer-title">
+                <span>{{ drawerPage?.icon || '◇' }}</span>
+                <span>{{ drawerPlugin?.name }} - {{ drawerPage?.title }}</span>
+              </div>
+              <button class="drawer-close" @click="closeDrawer">✕</button>
+            </div>
+            <div class="drawer-body">
+              <iframe
+                :src="drawerUrl"
+                class="drawer-iframe"
+                sandbox="allow-scripts allow-same-origin allow-forms"
+                title="插件管理页面"
+              ></iframe>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
@@ -344,5 +400,90 @@ async function toggleMetrics(name) {
 .toast-enter-from, .toast-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+/* 插件管理页面抽屉 */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+.drawer-panel {
+  width: min(90vw, 900px);
+  height: 100%;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
+}
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.drawer-close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.drawer-close:hover {
+  color: var(--text-primary);
+  border-color: var(--border-active);
+  background: rgba(255, 255, 255, 0.05);
+}
+.drawer-body {
+  flex: 1;
+  overflow: hidden;
+}
+.drawer-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--bg-primary);
+}
+
+/* 抽屉过渡动画 */
+.drawer-enter-active,
+.drawer-leave-active {
+  transition: opacity 0.25s ease;
+}
+.drawer-enter-active .drawer-panel,
+.drawer-leave-active .drawer-panel {
+  transition: transform 0.25s ease;
+}
+.drawer-enter-from,
+.drawer-leave-to {
+  opacity: 0;
+}
+.drawer-enter-from .drawer-panel {
+  transform: translateX(100%);
+}
+.drawer-leave-to .drawer-panel {
+  transform: translateX(100%);
 }
 </style>

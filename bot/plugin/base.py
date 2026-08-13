@@ -91,10 +91,15 @@ class PluginBase(ABC):
     _before_handlers: list[Any]
     _after_handlers: list[Any]
 
+    # 插件 Web 管理页面注册表
+    # 每项: {"title": str, "icon": str, "static_dir": str}
+    _pages: list[dict[str, str]]
+
     def __init__(self):
         self._exports = {}
         self._before_handlers = []
         self._after_handlers = []
+        self._pages = []
         self._status = PluginStatus.LOADING
 
     # ---- 状态 ----
@@ -136,6 +141,40 @@ class PluginBase(ABC):
         if dep is None:
             raise RuntimeError(f"依赖插件 {plugin_name} 未加载")
         return dep._exports
+
+    # ---- Web 管理页面 ----
+
+    def register_page(self, title: str, icon: str = "◇", static_dir: str = "") -> None:
+        """注册插件的 Web 管理页面（在 on_load 中调用）
+
+        插件需提供预构建的静态文件目录（含 index.html），
+        框架自动挂载到 /api/plugin-data/{plugin_name}/ 并提供入口。
+
+        Args:
+            title: 页面标题，显示在插件管理页的按钮上
+            icon: 图标字符，可选
+            static_dir: 静态文件目录的绝对路径，默认自动探测插件模块同级的 web/ 目录
+        """
+        import os
+        if not static_dir:
+            # 自动探测：插件类所在模块同级的 web/ 目录
+            module_file = getattr(type(self), "__module__", None)
+            if module_file:
+                import importlib
+                try:
+                    mod = importlib.import_module(module_file)
+                    mod_path = getattr(mod, "__file__", None)
+                    if mod_path:
+                        candidate = os.path.join(os.path.dirname(mod_path), "web")
+                        if os.path.isdir(candidate):
+                            static_dir = candidate
+                except Exception:
+                    pass
+        self._pages.append({
+            "title": title,
+            "icon": icon,
+            "static_dir": static_dir,
+        })
 
     # ---- 中间件 ----
 

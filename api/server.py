@@ -78,7 +78,12 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """创建 FastAPI 应用"""
-    app = FastAPI(title="Qingci-Bot CE API", version="1.2.1", lifespan=lifespan)
+    app = FastAPI(title="Qingci-Bot CE API", version="1.3.0", lifespan=lifespan)
+
+    # 注入 FastAPI 应用到 PluginManager（供插件注册 Web 管理页面）
+    bot = get_bot()
+    if bot is not None and hasattr(bot, "plugin_manager"):
+        bot.plugin_manager.set_web_app(app)
 
     # CORS：不使用 allow_credentials=True + allow_origins=["*"]（违反 CORS 规范）
     # 安全由 X-API-Key 鉴权保证，CORS 仅放开方法/头；

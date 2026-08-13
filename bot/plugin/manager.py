@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import json
 import logging
+import os
 import pkgutil
 import re
 import sys
@@ -84,6 +85,10 @@ class PluginManager:
         self._metrics: dict[str, dict[Matcher, MatcherMetrics]] = {}
         # plugin.json 预取缓存: module_path -> metadata dict
         self._metadata_cache: dict[str, dict] = {}
+        # Web 管理页面注册信息: plugin_name -> [{"title": ..., "icon": ..., "static_dir": ...}]
+        self._plugin_pages: dict[str, list[dict]] = {}
+        # FastAPI 应用引用（由 create_app 后注入）
+        self._web_app = None
 
     @property
     def plugins(self) -> dict[str, PluginBase]:
@@ -149,6 +154,59 @@ class PluginManager:
                 "last_call_time": m.last_call_time,
             })
         return result
+
+    # ---- Web 管理页面 ----
+
+    def set_web_app(self, app) -> None:
+        """注入 FastAPI 应用引用（由 create_app 后调用），并挂载已注册的插件页面"""
+        self._web_app = app
+        self._mount_all_plugin_pages()
+
+    def _mount_all_plugin_pages(self) -> None:
+        """挂载所有已注册插件的静态文件目录"""
+        if self._web_app is None:
+            return
+        from fastapi.staticfiles import StaticFiles
+        for plugin_name, pages in self._plugin_pages.items():
+            for page in pages:
+                static_dir = page.get("static_dir", "")
+                if static_dir and os.path.isdir(static_dir):
+                    mount_path = f"/api/plugin-data/{plugin_name}"
+                    # 避免重复挂载
+                    if not any(
+                        r.path == mount_path
+                        for r in self._web_app.routes
+                        if hasattr(r, "path")
+                    ):
+                        try:
+                            self._web_app.mount(
+                                mount_path,
+                                StaticFiles(directory=static_dir, html=True),
+                                name=f"plugin-static-{plugin_name}",
+                            )
+                            logger.info(
+                                f"插件 {plugin_name} 管理页面已挂载: {mount_path} -> {static_dir}"
+                            )
+                        except Exception:
+                            logger.exception(
+                                f"挂载插件 {plugin_name} 管理页面失败: {static_dir}"
+                            )
+
+    def get_plugin_pages(self, name: str) -> list[dict]:
+        """获取指定插件的管理页面注册信息（不含 static_dir）"""
+        pages = self._plugin_pages.get(name, [])
+        return [{"title": p["title"], "icon": p["icon"]} for p in pages]
+
+    def _collect_plugin_pages(self, plugin: PluginBase) -> None:
+        """从插件实例收集已注册的 Web 管理页面"""
+        if plugin._pages:
+            self._plugin_pages[plugin.name] = list(plugin._pages)
+            if self._web_app is not None:
+                self._mount_all_plugin_pages()
+
+    def _remove_plugin_pages(self, name: str) -> None:
+        """移除插件的 Web 管理页面注册"""
+        self._plugin_pages.pop(name, None)
 
     # ---- 元数据发现 ----
 
@@ -489,6 +547,8 @@ class PluginManager:
                     logger.exception(f"清理插件 {name} 定时任务异常")
             # 清理指标
             self._metrics.pop(name, None)
+            # 清理 Web 管理页面注册
+            self._remove_plugin_pages(name)
             logger.info(f"插件已卸载: {name}")
         self._invalidate_matchers_cache()
 
@@ -582,6 +642,8 @@ class PluginManager:
         plugin.matchers = plugin.matchers or []
         plugin._status = PluginStatus.LOADING
         await plugin.on_load()
+        # 收集插件注册的 Web 管理页面
+        self._collect_plugin_pages(plugin)
 
     # ---- 关闭 ----
 

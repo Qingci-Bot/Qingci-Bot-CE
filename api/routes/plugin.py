@@ -49,7 +49,7 @@ def _get_bot_instance():
 
 @router.get("", dependencies=[Depends(require_auth)])
 async def list_plugins():
-    """获取插件列表（含状态、分类）"""
+    """获取插件列表（含状态、分类、Web 管理页面）"""
     bot = _get_bot_instance()
     plugins = []
     for name, plugin in bot.plugin_manager.plugins.items():
@@ -61,6 +61,7 @@ async def list_plugins():
             "category": plugin.category,
             "status": plugin.status.value,
             "enabled": plugin.enabled,
+            "pages": bot.plugin_manager.get_plugin_pages(plugin.name),
         })
     return plugins
 
