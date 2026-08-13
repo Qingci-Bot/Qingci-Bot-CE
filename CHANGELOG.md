@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - 插件 Web 管理页面：`register_page(title, icon, static_dir)` 方法，插件可在 `on_load` 中注册管理页面入口；框架自动挂载插件静态文件到 `/api/plugin-data/{name}/`；前端插件管理页展示「管理」按钮，点击后右侧抽屉 iframe 加载
 - 插件目录结构：`load_external_dir()` 支持目录型插件（`plugins/<name>/__init__.py`），可含 `web/` 子目录和 `plugin.json`；同名时目录型优先于文件型
+- 命令管理：`Matcher.disabled` 字段支持禁用单个命令；`GET /api/command/conflicts` 列出所有命令并标记冲突；`PUT /api/command/{owner}/{command}` 支持禁用/启用/调整优先级；前端插件管理页新增「命令管理」Tab，冲突行红色高亮
 
 ### Changed
 - 内置插件全部转为目录结构：`admin/`、`chat/`、`help/`、`imagegen/`、`knowledge/`

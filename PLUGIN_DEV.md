@@ -841,6 +841,29 @@ plugins/
 | `set_group_ban` | `group_id`, `user_id`, `duration` | 禁言 |
 | `group_poke` | `group_id`, `user_id` | 戳一戳 |
 
+### 命令管理
+
+多个插件可能注册同名命令（如两个插件都注册 `/help`），调度时优先级高的胜出，其余被静默覆盖。框架提供命令管理能力，可在 WebUI 中查看冲突、禁用单条命令或调整优先级。
+
+**命令冲突检测：**
+
+插件管理页 →「命令管理」Tab 列出所有已注册命令。冲突命令行红色高亮 + ⚠ 标记，一目了然。
+
+**禁用单条命令：**
+
+点击「禁用」按钮，该命令不再参与调度，但插件其余功能不受影响。相当于在不卸载插件的前提下关闭某个命令。
+
+**调整优先级：**
+
+直接修改表格中的优先级数字，回车生效。优先级越小越先执行，范围为 0–100。
+
+**API 端点：**
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/command/conflicts` | 列出所有命令及冲突信息 |
+| PUT | `/api/command/{owner}/{command}` | 更新命令状态（`disabled` / `priority`） |
+
 ### 注意事项
 
 - `on_load` 和 `on_unload` 是 `@abstractmethod`，**必须实现**（可以是 `pass`）
@@ -904,6 +927,13 @@ plugins/
 | POST | `/{name}/enable` | 是 | 启用插件（恢复事件分发） |
 | GET | `/{name}/metrics` | 是 | 获取插件执行指标（调用次数、平均耗时、错误率） |
 | GET | `/discover/metadata` | 是 | 无导入发现：扫描 plugins/ 目录中的 plugin.json 元数据 |
+
+### 命令管理 `/api/command`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | `/conflicts` | 是 | 列出所有已注册命令，自动标记同名冲突 |
+| PUT | `/{owner}/{command}` | 是 | 更新命令：`disabled`（bool）禁用/启用，`priority`（int 0–100）调整优先级 |
 
 ### 消息日志与用量 `/api/log`
 
