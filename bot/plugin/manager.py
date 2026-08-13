@@ -250,10 +250,13 @@ class PluginManager:
             return False
 
     async def load_external_dir(self, bot, directory: Optional[Path] = None) -> int:
-        """扫描并加载外部插件目录（plugins/ 下的 .py 文件）
+        """扫描并加载外部插件目录
 
-        源码模式与 frozen（exe）模式均支持：exe 所在目录下创建
-        plugins/ 目录，放入 .py 文件即可自动加载。
+        支持两种插件形态：
+        1. 目录型（推荐）：plugins/<name>/__init__.py，可含 web/、plugin.json
+        2. 文件型（兼容）：plugins/<name>.py
+
+        同名的目录型优先于文件型。
 
         Args:
             bot: Bot 实例
@@ -275,24 +278,47 @@ class PluginManager:
         except OSError:
             logger.warning(f"无法创建插件目录: {directory}，跳过外部插件加载")
             return 0
+
+        # 确保 plugins/__init__.py 存在（目录型和文件型都需要）
         init_file = directory / "__init__.py"
         if not init_file.exists():
             try:
                 init_file.write_text(
                     "# Qingci-Bot CE 外部插件目录\n"
-                    "# 将 .py 插件文件放入此目录即可自动加载\n",
+                    "# 将插件包（目录）或 .py 文件放入此目录即可自动加载\n",
                     encoding="utf-8",
                 )
             except OSError:
                 logger.warning(f"无法写入 {init_file}，跳过外部插件加载")
                 return 0
 
-        count = 0
+        # 收集需要加载的插件名（目录型优先）
+        plugins_to_load: list[str] = []
+        dir_names: set[str] = set()
+
+        # 1. 扫描目录型插件（含 __init__.py 或 plugin.json 的目录）
+        for subdir in sorted(directory.iterdir()):
+            if not subdir.is_dir() or subdir.name.startswith("_") or subdir.name.startswith("."):
+                continue
+            if (subdir / "__init__.py").is_file() or (subdir / "plugin.json").is_file():
+                plugins_to_load.append(subdir.name)
+                dir_names.add(subdir.name)
+
+        # 2. 扫描文件型插件（未被目录型覆盖的 .py 文件）
         for py_file in sorted(directory.glob("*.py")):
             if py_file.name.startswith("_"):
                 continue
             module_name = py_file.stem
-            module_path = f"plugins.{module_name}"
+            if module_name not in dir_names:
+                plugins_to_load.append(module_name)
+
+        # 加载
+        count = 0
+        for module_name in plugins_to_load:
+            if module_name in dir_names:
+                module_path = f"plugins.{module_name}"
+            else:
+                module_path = f"plugins.{module_name}"
             try:
                 ok = await self.load_external(module_path, bot)
                 if ok:

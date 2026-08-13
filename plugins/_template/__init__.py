@@ -1,10 +1,17 @@
 """Qingci-Bot CE 插件开发模板（完整版）
 
-将此文件复制为 plugins/your_plugin.py 即可开始开发。
-以 _ 开头的文件不会被自动加载，可放心保留此模板。
+将 plugins/_template/ 目录复制为 plugins/your_plugin/ 即可开始开发。
+以 _ 开头的目录不会被自动加载，可放心保留此模板。
+
+推荐目录结构：
+  plugins/your_plugin/
+    ├── __init__.py      # 插件入口（必需）
+    ├── plugin.json       # 元数据（可选，替代类属性）
+    └── web/              # Web 管理页面（可选）
+        └── index.html
 
 ====== 快速上手 ======
-1. 复制此文件: cp plugins/_template.py plugins/my_plugin.py
+1. 复制目录: cp -r plugins/_template plugins/my_plugin
 2. 修改类名和 name 属性
 3. 在 on_load 中注册 Matcher
 4. 重启 Bot 或通过 Web UI 插件管理热重载

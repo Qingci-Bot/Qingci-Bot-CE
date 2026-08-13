@@ -1,6 +1,6 @@
 """Qingci-Bot CE 最小示例插件
 
-将此文件复制到 plugins/ 目录即可自动加载。
+将 plugins/hello/ 目录放入 plugins/ 即可自动加载。
 发送 /hello 或 "你好" 测试。
 """
 
