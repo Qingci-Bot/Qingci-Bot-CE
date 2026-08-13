@@ -5,6 +5,7 @@ from .log import router as log_router  # noqa: F401
 from .group import router as group_router  # noqa: F401
 from .auth import router as auth_router  # noqa: F401
 from .backup import router as backup_router  # noqa: F401
+from .command import router as command_router  # noqa: F401
 
 __all__ = [
     "bot_router",
@@ -14,4 +15,5 @@ __all__ = [
     "group_router",
     "auth_router",
     "backup_router",
+    "command_router",
 ]

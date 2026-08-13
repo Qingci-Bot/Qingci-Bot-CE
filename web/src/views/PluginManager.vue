@@ -9,6 +9,11 @@ const modulePath = ref('')
 const loading = ref('')
 const activeCategory = ref('all')
 const expandedMetrics = ref('')
+const activeTab = ref('plugins')  // 'plugins' | 'commands'
+
+// 命令管理
+const commands = ref([])
+const commandLoading = ref('')
 
 // 插件管理页面抽屉
 const drawerOpen = ref(false)
@@ -123,6 +128,56 @@ async function toggleMetrics(name) {
     expandedMetrics.value = ''
   }
 }
+
+async function fetchCommands() {
+  try {
+    commands.value = await store.apiFetch('/api/command/conflicts')
+  } catch (e) {
+    showToast('error', `获取命令列表失败：${e.message}`)
+  }
+}
+
+async function toggleCommand(cmd) {
+  commandLoading.value = `${cmd.plugin}/${cmd.command}`
+  try {
+    const body = { disabled: !cmd.disabled }
+    const res = await store.apiFetch(`/api/command/${encodeURIComponent(cmd.plugin)}/${encodeURIComponent(cmd.command)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    cmd.disabled = res.disabled
+    showToast('success', `命令 ${cmd.plugin}/${cmd.command} 已${cmd.disabled ? '禁用' : '启用'}`)
+  } catch (e) {
+    showToast('error', `操作失败：${e.message}`)
+  } finally {
+    commandLoading.value = ''
+  }
+}
+
+async function updatePriority(cmd, newPriority) {
+  const val = parseInt(newPriority)
+  if (isNaN(val) || val < 0 || val > 100) return
+  commandLoading.value = `${cmd.plugin}/${cmd.command}`
+  try {
+    const res = await store.apiFetch(`/api/command/${encodeURIComponent(cmd.plugin)}/${encodeURIComponent(cmd.command)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priority: val }),
+    })
+    cmd.priority = res.priority
+    showToast('success', `优先级已更新为 ${val}`)
+  } catch (e) {
+    showToast('error', `更新失败：${e.message}`)
+  } finally {
+    commandLoading.value = ''
+  }
+}
+
+function switchTab(tab) {
+  activeTab.value = tab
+  if (tab === 'commands') fetchCommands()
+}
 </script>
 
 <template>
@@ -132,6 +187,20 @@ async function toggleMetrics(name) {
   </div>
 
   <div class="page-body">
+    <!-- Tab 导航 -->
+    <div class="main-tabs">
+      <button
+        :class="['main-tab-btn', { active: activeTab === 'plugins' }]"
+        @click="switchTab('plugins')"
+      >插件管理</button>
+      <button
+        :class="['main-tab-btn', { active: activeTab === 'commands' }]"
+        @click="switchTab('commands')"
+      >命令管理</button>
+    </div>
+
+    <!-- 插件管理 Tab -->
+    <template v-if="activeTab === 'plugins'">
     <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">加载外部插件</div>
@@ -267,6 +336,79 @@ async function toggleMetrics(name) {
         </div>
       </transition>
     </Teleport>
+    </template>
+
+    <!-- 命令管理 Tab -->
+    <template v-if="activeTab === 'commands'">
+      <div class="card fade-in">
+        <div class="card-header">
+          <div class="card-title">已注册命令</div>
+          <span class="text-muted" style="font-size: 12px;">共 {{ commands.length }} 条</span>
+        </div>
+        <div v-if="commands.length === 0" class="empty-state">
+          <div class="icon">◇</div>
+          <div>暂无命令</div>
+        </div>
+        <div v-else class="command-table-wrap">
+          <table class="command-table">
+            <thead>
+              <tr>
+                <th>命令</th>
+                <th>插件</th>
+                <th>事件</th>
+                <th>优先级</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(cmd, idx) in commands" :key="idx"
+                :class="{ 'conflict-row': cmd.has_conflict }">
+                <td>
+                  <span class="cmd-name">/{{ cmd.command }}</span>
+                  <span v-if="cmd.has_conflict" class="conflict-badge" title="存在同名命令冲突">⚠</span>
+                </td>
+                <td>
+                  <span class="tag tag-accent" style="font-size: 11px;">{{ cmd.plugin }}</span>
+                </td>
+                <td>
+                  <span class="tag tag-purple" style="font-size: 11px;">{{ cmd.event_type }}</span>
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    class="priority-input"
+                    :value="cmd.priority"
+                    min="0" max="100"
+                    @change="updatePriority(cmd, ($event.target).value)"
+                  />
+                </td>
+                <td>
+                  <span :class="['status-tag', cmd.disabled ? 'status-off' : 'status-on']">
+                    {{ cmd.disabled ? '已禁用' : '启用' }}
+                  </span>
+                </td>
+                <td>
+                  <button
+                    class="btn btn-sm"
+                    :class="cmd.disabled ? 'btn-success' : 'btn-warning'"
+                    :disabled="commandLoading === `${cmd.plugin}/${cmd.command}`"
+                    @click="toggleCommand(cmd)"
+                  >
+                    {{ cmd.disabled ? '启用' : '禁用' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <transition name="toast">
+        <div v-if="toast.show" class="toast" :class="toast.type" style="margin-top: 16px;">
+          {{ toast.message }}
+        </div>
+      </transition>
+    </template>
   </div>
 </template>
 
@@ -486,4 +628,104 @@ async function toggleMetrics(name) {
 .drawer-leave-to .drawer-panel {
   transform: translateX(100%);
 }
+
+/* 主 Tab 导航 */
+.main-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border-color);
+}
+.main-tab-btn {
+  padding: 10px 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.main-tab-btn:hover { color: var(--text-primary); }
+.main-tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* 命令管理表格 */
+.command-table-wrap {
+  overflow-x: auto;
+}
+.command-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.command-table th, .command-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+.command-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.command-table td { color: var(--text-secondary); }
+.command-table .conflict-row {
+  background: rgba(248, 113, 113, 0.08);
+}
+.command-table .conflict-row td:first-child {
+  border-left: 3px solid var(--danger);
+}
+.cmd-name {
+  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.conflict-badge {
+  margin-left: 6px;
+  font-size: 14px;
+  color: var(--danger);
+  cursor: help;
+}
+.priority-input {
+  width: 52px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: rgba(0,0,0,0.2);
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: center;
+  font-family: inherit;
+}
+.priority-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.status-tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.status-on { background: rgba(52, 211, 153, 0.15); color: var(--success); }
+.status-off { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+.btn-warning {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+.btn-warning:hover { background: rgba(248, 113, 113, 0.25); }
+.btn-success {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--success);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+.btn-success:hover { background: rgba(52, 211, 153, 0.25); }
 </style>

@@ -101,13 +101,15 @@ class PluginManager:
         """收集所有已启用插件的 Matcher（用于调度），结果已按优先级升序排序
 
         约定：priority 越小越先执行。返回缓存副本，防止调用方污染缓存。
-        仅 LOADED 状态的插件参与调度。
+        仅 LOADED 状态的插件参与调度，disabled 的 Matcher 被跳过。
         """
         if self._cached_matchers is None:
             result = []
             for plugin in self._plugins.values():
                 if plugin.matchers and plugin.status == PluginStatus.LOADED:
-                    result.extend(plugin.matchers)
+                    for m in plugin.matchers:
+                        if not m.disabled:
+                            result.append(m)
             self._cached_matchers = sorted(result, key=lambda m: m.priority)
         return list(self._cached_matchers)
 
