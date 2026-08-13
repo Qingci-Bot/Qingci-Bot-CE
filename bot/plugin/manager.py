@@ -148,7 +148,7 @@ class PluginManager:
                 "handler": handler_name,
                 "event_type": matcher.event_type,
                 "priority": matcher.priority,
-                "description": matcher.description,
+                "description": (matcher.meta or {}).get("description", ""),
                 "call_count": m.call_count,
                 "avg_time_ms": round(m.avg_time_ms, 2),
                 "total_time_ms": round(m.total_time_ms, 2),
@@ -317,10 +317,7 @@ class PluginManager:
         # 加载
         count = 0
         for module_name in plugins_to_load:
-            if module_name in dir_names:
-                module_path = f"plugins.{module_name}"
-            else:
-                module_path = f"plugins.{module_name}"
+            module_path = f"plugins.{module_name}"
             try:
                 ok = await self.load_external(module_path, bot)
                 if ok:
@@ -511,6 +508,9 @@ class PluginManager:
                         f"被 {module.__name__} 替换）"
                     )
                 self._plugins[plugin.name] = plugin
+                # 重载场景下 unload 已清除页面注册，需重新收集
+                # （若插件没有页面，_plugin_pages 保持为空即可）
+                self._collect_plugin_pages(plugin)
             except BaseException:
                 try:
                     await plugin.on_unload()

@@ -42,7 +42,7 @@ async def list_commands():
 
     # 收集所有 Matcher（含 disabled），按命令名分组
     commands: dict[str, list[dict]] = {}
-    for plugin in pm.all_plugins():
+    for plugin in pm.plugins.values():
         for m in plugin.matchers:
             cmd = m.meta.get("command") if m.meta else None
             if not cmd:
@@ -81,7 +81,7 @@ async def update_command(owner: str, command: str, body: CommandUpdate, request:
     pm = bot.plugin_manager
 
     updated = False
-    for plugin in pm.all_plugins():
+    for plugin in pm.plugins.values():
         for m in plugin.matchers:
             if m.owner != owner or m.meta.get("command") != command:
                 continue
