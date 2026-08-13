@@ -48,6 +48,37 @@ npm run build    # 构建生产版本到 web/dist/
 - `name` 不能与其他已加载插件重名
 - 单文件 `.py` 插件仍兼容，但推荐使用目录结构
 
+### 目录结构要求
+
+框架通过扫描 `plugins/` 目录识别插件。**目录型插件**（推荐）和**文件型插件**（兼容）的判断规则：
+
+| 形态 | 识别条件 | 入口 |
+|------|----------|------|
+| 目录型 | 目录内存在 `__init__.py` **或** `plugin.json` | `__init__.py`（必须含 `PluginBase` 子类） |
+| 文件型 | `plugins/<name>.py` | 文件本身 |
+
+**同名优先**：若 `plugins/chat/` 和 `plugins/chat.py` 同时存在，目录型优先，文件型被忽略。
+
+**目录型插件结构：**
+
+```
+plugins/my_plugin/          # 目录名 = 插件名（不能以 _ 或 . 开头）
+├── __init__.py              # 必需：插件入口，含 PluginBase 子类
+├── plugin.json              # 可选：元数据（替代类属性 name/version/author 等）
+├── utils.py                 # 可选：插件内部模块
+└── web/                     # 可选：Web 管理页面静态文件
+    ├── index.html           # 入口页面（register_page 自动加载）
+    ├── style.css
+    └── app.js
+```
+
+**硬性要求：**
+- 目录名不能以 `_` 或 `.` 开头，否则跳过加载
+- `__init__.py` 必须存在，且其中定义**恰好 1 个** `PluginBase` 子类
+- 插件类必须直接定义在 `__init__.py` 中，不能从子模块 `import` 导入
+- 若 `__init__.py` 不存在但 `plugin.json` 存在，目录被识别为插件但加载会失败（缺少入口）
+- 其他 `.py` 文件（如 `utils.py`）可自由存放，不会被解析为独立插件
+
 ---
 
 Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持两种开发方式：
