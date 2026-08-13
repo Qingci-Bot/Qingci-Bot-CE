@@ -47,6 +47,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 修复 `is_connected` 仅检测 API 通道：事件通道连接也视为已连接
 - 修复对话调试 WebSocket 收到非法 `user_id` 导致连接异常断开
 
+## [1.3.0] - 2026-08-13
+
+### Added
+- 插件 Web 管理页面：`register_page(title, icon, static_dir)` 方法，插件可在 `on_load` 中注册管理页面入口；框架自动挂载插件静态文件到 `/api/plugin-data/{name}/`；前端插件管理页展示「管理」按钮，点击后右侧抽屉 iframe 加载
+- 插件目录结构：`load_external_dir()` 支持目录型插件（`plugins/<name>/__init__.py`），可含 `web/` 子目录和 `plugin.json`；同名时目录型优先于文件型
+
+### Changed
+- 内置插件全部转为目录结构：`admin/`、`chat/`、`help/`、`imagegen/`、`knowledge/`
+- 外部插件示例和模板转为目录结构：`hello/`、`_template/`
+- 插件 API 列表接口追加 `pages` 字段
+
+### Fixed
+- 修复 `check_availability` 在 litellm 导入失败时引用未绑定局部变量导致 `NameError` 二次崩溃
+- 修复中间件拦截 Matcher 时指标重复计数
+
 ## [1.2.1] - 2026-08-11
 
 ### Fixed
@@ -99,6 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 完全离线运行（无 CDN 依赖）
 - 一键打包为 Windows EXE（PyInstaller）
 
+[1.3.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.3.0
 [1.2.1]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.1
 [1.2.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.0
 [1.1.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.1.0

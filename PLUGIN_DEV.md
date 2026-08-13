@@ -28,23 +28,25 @@ npm run build    # 构建生产版本到 web/dist/
 
 ## 插件开发
 
-> **快速开始**：复制 `plugins/_template.py` 为 `plugins/my_plugin.py` 即可开始开发。
-> 模板文件涵盖所有功能（命令/前缀/关键词/通知/请求/定时任务/Function Calling），附详细中文注释。
-> 最小示例见 `plugins/hello.py`（15 行代码，开箱即用）。
+> **快速开始**：复制 `plugins/_template/` 目录为 `plugins/my_plugin/` 即可开始开发。
+> 模板目录涵盖所有功能（命令/前缀/关键词/通知/请求/定时任务/Function Calling），附详细中文注释。
+> 最小示例见 `plugins/hello/`（15 行代码，开箱即用）。
 
 ### 命名规范
 
 | 项目 | 规范 | 示例 |
 |------|------|------|
-| 文件名 | 小写英文 + 下划线，与 `name` 一致，**不能以 `_` 开头** | `chat.py`、`my_plugin.py` |
+| 目录名 | 小写英文 + 下划线，与 `name` 一致，**不能以 `_` 开头** | `chat/`、`my_plugin/` |
+| 入口文件 | 目录下的 `__init__.py` | `chat/__init__.py` |
 | 类名 | `{Name}Plugin` 帕斯卡命名 | `ChatPlugin`、`HelloPlugin` |
 | `name` 属性 | 小写英文 + 下划线，插件唯一标识，**必填** | `"chat"`、`"my_plugin"` |
 
 **硬性约束：**
-- 文件名以 `_` 开头（如 `_template.py`）的文件会被跳过，不会加载
-- 每个 `.py` 文件只能定义 **1 个** `PluginBase` 子类，多个会报错
-- 插件类必须定义在模块内，不能从其他模块 `import` 进来
+- 目录名以 `_` 开头（如 `_template/`）会被跳过，不会加载
+- 每个插件包只能定义 **1 个** `PluginBase` 子类，多个会报错
+- 插件类必须定义在 `__init__.py` 模块内，不能从其他模块 `import` 进来
 - `name` 不能与其他已加载插件重名
+- 单文件 `.py` 插件仍兼容，但推荐使用目录结构
 
 ---
 
@@ -343,6 +345,40 @@ class MyPlugin(PluginBase):
 ```
 
 框架提供 `GET /api/plugin/discover/metadata` API 扫描所有 `plugin.json`。
+
+### Web 管理页面（register_page）
+
+插件可注册自带的 Web 管理页面，入口自动显示在「插件管理」页面的插件卡片上，点击后右侧滑出抽屉 iframe 加载。
+
+```python
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+
+    async def on_load(self):
+        # 注册管理页面（static_dir 可选，默认自动探测插件目录下的 web/ 子目录）
+        self.register_page("群排行", icon="📊", static_dir="/path/to/web/dist")
+        self.register_page("成员管理", icon="👤")
+```
+
+**参数说明：**
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `title` | `str` | 页面标题，显示在按钮上 |
+| `icon` | `str` | 图标字符，可选，默认 `◇` |
+| `static_dir` | `str` | 静态文件目录的绝对路径，可选。省略时自动探测插件 `__init__.py` 同级的 `web/` 目录 |
+
+**推荐目录结构：**
+```
+plugins/my_plugin/
+├── __init__.py
+├── plugin.json
+└── web/               # ← register_page 自动探测此目录
+    ├── index.html      # 入口页面
+    ├── style.css
+    └── app.js
+```
+
+**静态文件挂载：** 框架自动将 `web/` 目录挂载到 `/api/plugin-data/{plugin_name}/`，前端通过 iframe 加载。插件页面需预构建为纯静态 HTML/CSS/JS，不依赖框架前端构建链。
 
 ### Matcher / Rule / Permission
 
@@ -730,17 +766,25 @@ self.bot.register_post_hook(post_hook)
 
 **方式一：外部目录自动加载（推荐）**
 
-将 `.py` 插件文件放入项目根目录的 `plugins/` 文件夹中，Bot 启动时自动扫描加载。无需手动操作，源码运行和 exe 打包均支持。
+将插件包（目录）放入项目根目录的 `plugins/` 文件夹中，Bot 启动时自动扫描加载。无需手动操作，源码运行和 exe 打包均支持。
 
 ```
 plugins/
 ├── __init__.py        # 包标记（自动创建）
-├── _template.py       # 完整模板（以 _ 开头，不会被加载）
-├── hello.py           # 最小示例
-└── my_plugin.py       # 你的插件 → 自动加载
+├── _template/         # 完整模板（以 _ 开头，不会被加载）
+│   ├── __init__.py
+│   └── plugin.json
+├── hello/             # 最小示例
+│   └── __init__.py
+└── my_plugin/         # 你的插件 → 自动加载
+    ├── __init__.py    # 插件入口（必需）
+    ├── plugin.json    # 元数据（可选）
+    └── web/           # Web 管理页面（可选）
+        └── index.html
 ```
 
-> 以 `_` 开头的文件（如 `_template.py`）不会被自动加载，可放心保留模板。
+> 以 `_` 开头的目录（如 `_template/`）不会被自动加载，可放心保留模板。
+> 单文件 `.py` 插件仍兼容，但同名时目录型优先于文件型。
 
 **方式二：Web UI 加载**
 
@@ -820,7 +864,7 @@ plugins/
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| GET | `` | 是 | 获取插件列表（含状态、分类） |
+| GET | `` | 是 | 获取插件列表（含状态、分类、Web 管理页面入口） |
 | GET | `/{name}` | 是 | 获取插件详情 |
 | POST | `/{name}/reload` | 是 | 重载插件 |
 | POST | `/load` | 是 | 加载外部插件（仅允许 `plugins.*` / `bot.plugin.builtin.*` 白名单前缀） |
