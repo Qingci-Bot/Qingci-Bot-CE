@@ -76,27 +76,40 @@ npm run format    # 代码格式化
 
 ```bash
 uv pip install -e ".[build]"
-pyinstaller qingci-bot.spec
+pyinstaller qingci-bot-ce.spec
 ```
 
 ## 项目结构
 
 ```
 Qingci-Bot-CE/
-├── api/            # FastAPI 接口层
-├── bot/            # Bot 核心逻辑
-│   ├── core/       # 生命周期、连接、调度
-│   ├── llm/        # LLM 管理、适配器、工具调用
-│   ├── plugin/     # 插件系统
-│   ├── db/         # 数据库 ORM 与仓储
-│   ├── rag/        # 知识库检索
-│   └── config.py   # 配置管理
-├── web/            # Vue 3 前端
-├── desktop/        # 桌面应用
-├── plugins/        # 内置插件
-├── tests/          # 测试
-└── scripts/        # 工具脚本
+├── main.py           # 后端入口
+├── api/              # FastAPI 接口层
+│   ├── server.py     # 应用装配与路由挂载
+│   ├── auth.py       # 鉴权 / 审计横切逻辑
+│   └── routes/       # REST 路由（auth/bot/config/group/log/plugin/...）
+├── bot/              # Bot 核心逻辑
+│   ├── core/         # 生命周期、连接、调度、分发、DI、事件总线、会话状态
+│   ├── plugin/       # 插件系统（含 builtin/ 内置插件）
+│   ├── llm/          # LLM 管理、适配器、工具调用（Function Calling / MCP）
+│   ├── db/           # 数据库 ORM、仓储与迁移
+│   ├── rag/          # 知识库检索
+│   ├── testing/      # TestBot 测试沙箱
+│   ├── config.py     # 配置管理
+│   ├── i18n.py       # 国际化翻译器
+│   └── paths.py      # 路径解析（app_root 等）
+├── web/              # Vue 3 前端（src/ 下 views/stores/router/composables/styles）
+├── desktop/          # 桌面应用（窗口、托盘、启动页）
+├── plugins/          # 外部插件目录（_template 为插件模板，hello 为示例）
+├── migrations/       # Alembic 数据库迁移
+├── tests/            # pytest 测试（plugin_pkg/ 为测试插件）
+├── scripts/          # 工具脚本（如 SQLite→PostgreSQL 迁移）
+└── docs/             # 规范文档（结构 / 编码约定）
 ```
+
+### 产物归属约定
+
+本仓库是 `Qingci-Bot` 根目录下的子项目之一。**所有运行产物（缓存、构建产物、egg-info 等）必须产生在本目录内**，不得写入外层根目录，避免污染其他子项目。缓存目录已在 `.gitignore` 中忽略，无需提交。
 
 ## 插件开发
 

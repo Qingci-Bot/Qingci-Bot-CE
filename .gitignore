@@ -1,6 +1,8 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 *.egg-info/
@@ -11,6 +13,7 @@ data/
 node_modules/
 web/dist/
 .venv/
+venv/
 .env
 *.log
 .vscode/
@@ -18,3 +21,4 @@ web/dist/
 web/.env*
 *.bak-*
 config.yaml
+.DS_Store
