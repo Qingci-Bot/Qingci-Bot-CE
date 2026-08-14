@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+- 同步 `ARCHITECTURE.md`、`docs/PROJECT_STRUCTURE.md` 的目录树与当前实现：修正 PyInstaller spec 文件名（`qingci-bot-ce.spec`）、`bot/core/` 补 `event_bus.py`、`bot/plugin/` 补 `ratelimit.py`/`llm_tool.py`/`watcher.py`、`builtin/` 与 `plugins/` 由单文件改为目录结构；`PLUGIN_DEV.md` 修正 spec 文件名引用
+
+## [1.4.0] - 2026-08-14
+
 ### Added
 - 参数级依赖注入：Matcher handler 参数按签名自动解析注入（`MatcherContext`、`Bot`、DI 服务），支持 `Depends(...)` 显式声明与类型注解自动注入
 - 全局生命周期钩子：插件可覆写 `on_startup` / `on_shutdown` / `on_bot_connect` / `on_metaevent`，在 Bot 启动/停止、LLBot 连接建立、元事件到达时获得通知（异常隔离）
@@ -137,6 +142,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 完全离线运行（无 CDN 依赖）
 - 一键打包为 Windows EXE（PyInstaller）
 
+[1.4.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.4.0
 [1.3.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.3.0
 [1.2.1]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.1
 [1.2.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.0

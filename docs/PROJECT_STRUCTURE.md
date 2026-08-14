@@ -33,23 +33,42 @@ Qingci-Bot-CE/
 │   ├── audit.py            # 登录/操作审计
 │   └── routes/             # REST 路由：auth/backup/bot/command/config/group/log/plugin
 ├── bot/                    # Bot 核心逻辑（纯 Python 包）
-│   ├── core/               # 生命周期与调度：bot/connection/dispatcher/event_bus/di/
-│   │                       #   scheduler/session_state/filter/alerter/tasks/broadcast/message/logformat
+│   ├── core/               # 生命周期与调度：bot/connection/dispatcher/event_bus/
+│   │                       #   di/scheduler/session_state/filter/alerter/tasks/
+│   │                       #   broadcast/message/logformat
 │   ├── plugin/             # 插件系统
 │   │   ├── base.py         # PluginBase 基类
 │   │   ├── manager.py      # 插件加载/卸载/依赖/元数据
 │   │   ├── matcher.py      # Matcher 与匹配器工厂
-│   │   ├── rule.py / permission.py / llm_tool.py / watcher.py / i18n 等
+│   │   ├── rule.py         # Rule 规则系统
+│   │   ├── permission.py   # Permission 权限
+│   │   ├── ratelimit.py    # RateLimiter 限流
+│   │   ├── llm_tool.py     # @llm_tool 插件级 LLM 工具声明
+│   │   ├── watcher.py      # 插件自动热重载监听
 │   │   └── builtin/        # 内置插件：admin/chat/help/imagegen/knowledge
 │   ├── llm/                # LLM 管理、适配器、工具调用（Function Calling / MCP）
+│   │   ├── manager.py      # LLMManager
+│   │   ├── adapter.py      # 适配器基类
+│   │   ├── litellm_adapter.py
+│   │   ├── mcp.py          # MCP 工具接入
+│   │   └── tools.py        # 工具注册
 │   ├── db/                 # SQLModel ORM、仓储、会话管理
+│   │   ├── database.py     # Database 会话/仓储
+│   │   ├── engine.py       # 数据库引擎
+│   │   └── models.py       # ORM 模型
 │   ├── rag/                # 知识库检索（关键词 + 向量）
-│   ├── testing/            # TestBot 测试沙箱（events / bot）
+│   │   └── knowledge.py    # KnowledgeStore
+│   ├── testing/            # TestBot 测试沙箱
+│   │   ├── bot.py          # TestBot
+│   │   └── events.py       # 事件工厂
 │   ├── config.py           # ConfigManager（config.yaml 加载与校验）
 │   ├── i18n.py             # 国际化翻译器
 │   ├── paths.py            # 路径解析（app_root / data_dir 等）
 │   └── __init__.py
 ├── web/                    # Vue 3 前端
+│   ├── index.html          # 入口 HTML
+│   ├── vite.config.js      # Vite 配置
+│   ├── package.json        # npm 依赖与脚本
 │   └── src/
 │       ├── views/          # 页面级组件
 │       ├── stores/         # Pinia 状态
@@ -59,10 +78,13 @@ Qingci-Bot-CE/
 ├── desktop/                # 桌面应用壳（main/splash/tray + 图标资源）
 ├── plugins/                # 外部插件目录（运行时加载）
 │   ├── _template/          # 插件模板（下划线前缀 = 非正式/模板，不参与加载）
+│   │   └── plugin.json     # 插件元数据模板
 │   └── hello/              # 示例插件
 ├── migrations/             # Alembic 数据库迁移
+│   └── versions/           # 版本迁移脚本
 ├── tests/                  # pytest 测试
-│   └── plugin_pkg/         # 测试用插件包
+│   ├── test_*.py           # 按被测模块命名
+│   └── plugin_pkg/         # 测试用插件包（dep/di/p1/p2 等）
 ├── scripts/                # 一次性/运维脚本（如 SQLite→PostgreSQL 迁移）
 ├── docs/                   # 规范文档（本文档 + CODING_STANDARDS.md）
 ├── build.ps1               # Windows 构建脚本
@@ -70,7 +92,7 @@ Qingci-Bot-CE/
 ├── pyproject.toml          # 依赖、ruff/mypy/pytest 配置
 ├── alembic.ini             # 迁移配置
 ├── .pre-commit-config.yaml # pre-commit 钩子
-└── README.md / ARCHITECTURE.md / PLUGIN_DEV.md / CONTRIBUTING.md / CHANGELOG.md / SECURITY.md
+└── README.md / ARCHITECTURE.md / PLUGIN_DEV.md / CONTRIBUTING.md / CHANGELOG.md / SECURITY.md / LICENSE
 ```
 
 ## 3. 各目录职责与归属原则

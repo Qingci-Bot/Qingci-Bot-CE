@@ -1347,4 +1347,4 @@ dist\qingci-bot\
 - 首次运行若缺少数据库会自动建表（SQLModel create_all）；`config.yaml` 缺失时会自动生成默认配置。
 - 重新执行 `build.ps1` 不会覆盖产物目录中已有的 `config.yaml` 与 `data\`（脚本会先暂存后还原）。
 - `--desktop` 桌面模式依赖系统 WebView2 运行时（pywebview EdgeChromium 后端），未安装的系统可能无法打开窗口。
-- 如需无控制台窗口模式，将 `qingci-bot.spec` 中 `console=True` 改为 `False` 后重新构建。
+- 如需无控制台窗口模式，将 `qingci-bot-ce.spec` 中 `console=True` 改为 `False` 后重新构建。

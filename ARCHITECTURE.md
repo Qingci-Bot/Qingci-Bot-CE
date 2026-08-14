@@ -38,7 +38,7 @@ Qingci-Bot-CE/
 ├── config.example.yaml        # 配置模板（脱敏，复制为 config.yaml）
 ├── config.yaml                # 配置文件（首次运行自动生成，已被 .gitignore 忽略）
 ├── build.ps1                  # PyInstaller 打包脚本
-├── qingci-bot.spec            # PyInstaller 打包配置
+├── qingci-bot-ce.spec         # PyInstaller 打包配置
 ├── bot/
 │   ├── config.py              # 配置管理（Pydantic 模型）
 │   ├── core/
@@ -53,6 +53,7 @@ Qingci-Bot-CE/
 │   │   ├── alerter.py         # 错误告警器
 │   │   ├── logformat.py       # 结构化 JSON 日志
 │   │   ├── session_state.py   # 会话状态管理（TTL 键值存储）
+│   │   ├── event_bus.py       # 跨插件事件总线（发布-订阅）
 │   │   └── di.py              # 依赖注入容器（SINGLETON/TRANSIENT/SCOPED）
 │   ├── llm/
 │   │   ├── adapter.py         # LLM 适配器基类（支持 tools/images）
@@ -70,21 +71,27 @@ Qingci-Bot-CE/
 │   │   ├── bot.py             # TestBot 轻量测试环境
 │   │   └── events.py          # OneBot v11 事件构造器
 │   └── plugin/
-│       ├── base.py            # 插件基类（支持 matchers 属性）
+│       ├── base.py            # 插件基类（支持 matchers 属性、生命周期钩子、i18n/data_dir）
 │       ├── manager.py         # 插件管理器（热加载 + 模块级收集）
-│       ├── matcher.py         # Matcher + MatcherContext + 工厂函数
-│       ├── rule.py            # 规则系统（startswith/command/regex 等）
+│       ├── matcher.py         # Matcher + MatcherContext + 工厂函数（on_command 等）
+│       ├── rule.py            # 规则系统（startswith/command/subcommand/regex 等）
 │       ├── permission.py      # 权限系统（SUPERUSER/PRIVATE/GROUP 等）
-│       └── builtin/           # 内置插件
-│           ├── chat.py        # LLM 对话（Matcher API）
-│           ├── admin.py       # 管理命令（含 /filter /group）
-│           ├── help.py        # /help 命令（按权限列出可用命令）
-│           ├── imagegen.py    # AI 绘图（/image 命令）
-│           └── knowledge.py   # 知识库管理（/kb 命令）
+│       ├── ratelimit.py       # RateLimiter 限流
+│       ├── llm_tool.py        # @llm_tool 插件级 LLM 工具声明
+│       ├── watcher.py         # 插件自动热重载监听
+│       └── builtin/           # 内置插件（目录结构）
+│           ├── chat/          # LLM 对话（Matcher API）
+│           ├── admin/         # 管理命令（含 /filter /group）
+│           ├── help/          # /help 命令（按权限列出可用命令）
+│           ├── imagegen/      # AI 绘图（/image 命令）
+│           └── knowledge/     # 知识库管理（/kb 命令）
 ├── plugins/                   # 外部插件目录（Bot 启动时自动扫描加载）
 │   ├── __init__.py
-│   ├── _template.py           # 插件开发模板（以 _ 开头，不自动加载）
-│   └── hello.py               # 最小示例插件
+│   ├── _template/             # 插件开发模板（以 _ 开头，不自动加载）
+│   │   ├── __init__.py
+│   │   └── plugin.json        # 插件元数据模板
+│   └── hello/                 # 最小示例插件
+│       └── __init__.py
 ├── migrations/                # Alembic 迁移脚本
 │   ├── env.py                 # 异步迁移环境
 │   └── versions/              # 迁移版本
