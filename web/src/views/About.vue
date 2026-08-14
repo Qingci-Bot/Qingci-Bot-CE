@@ -152,7 +152,7 @@
         <div class="version-grid">
           <div class="version-item">
             <span class="version-label">Qingci-Bot CE</span>
-            <span class="version-value">1.2.0</span>
+            <span class="version-value">1.4.0</span>
           </div>
           <div class="version-item">
             <span class="version-label">许可证</span>
