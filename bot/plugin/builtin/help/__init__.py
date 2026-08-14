@@ -7,8 +7,8 @@
 
 import logging
 
-from ..base import PluginBase
-from ..matcher import MatcherContext, on_command
+from ...base import PluginBase
+from ...matcher import MatcherContext, on_command
 
 logger = logging.getLogger("qingci-bot.plugin.help")
 

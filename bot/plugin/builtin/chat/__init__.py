@@ -14,10 +14,10 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import cast
 
-from ..base import PluginBase
-from ..matcher import MatcherContext, on_command, on_message
-from ..permission import Permission
-from ..rule import Rule, rate_limit
+from ...base import PluginBase
+from ...matcher import MatcherContext, on_command, on_message
+from ...permission import Permission
+from ...rule import Rule, rate_limit
 
 logger = logging.getLogger("qingci-bot.plugin.chat")
 
@@ -320,7 +320,7 @@ class ChatPlugin(PluginBase):
 
         # 实时广播（独立于数据库）
         try:
-            from ...core.broadcast import broadcast_message
+            from ....core.broadcast import broadcast_message
 
             now = datetime.now(timezone.utc).isoformat()
             await broadcast_message(

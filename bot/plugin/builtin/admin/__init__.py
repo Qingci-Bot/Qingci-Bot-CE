@@ -9,9 +9,9 @@ import asyncio
 import logging
 import time
 
-from ..base import PluginBase
-from ..matcher import MatcherContext, on_command
-from ..permission import SUPERUSER
+from ...base import PluginBase
+from ...matcher import MatcherContext, on_command
+from ...permission import SUPERUSER
 
 logger = logging.getLogger("qingci-bot.plugin.admin")
 

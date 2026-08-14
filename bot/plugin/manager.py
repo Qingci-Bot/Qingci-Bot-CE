@@ -21,6 +21,10 @@ from .matcher import Matcher, begin_module_collection, end_module_collection
 
 logger = logging.getLogger("qingci-bot.plugin.manager")
 
+# 内置插件显式清单（PyInstaller 打包后 pkgutil 无法扫描 PYZ 归档内模块，
+# 需回退到显式清单加载；新增内置插件时同步更新此处与 qingci-bot-ce.spec 的 hiddenimports）
+_BUILTIN_PLUGINS: tuple[str, ...] = ("admin", "chat", "help", "imagegen", "knowledge")
+
 
 @dataclass
 class MatcherMetrics:
@@ -308,18 +312,33 @@ class PluginManager:
     # ---- 加载 ----
 
     async def load_builtin(self, bot) -> None:
-        """加载内置插件"""
+        """加载内置插件
+
+        优先通过 pkgutil 扫描 builtin 包目录（源码模式，可自动发现新插件）；
+        PyInstaller 打包后该目录在文件系统中不存在（模块打入 PYZ 归档），
+        pkgutil 扫描落空时回退到显式清单（与 qingci-bot-ce.spec 的 hiddenimports 保持一致）。
+        """
         from . import builtin
 
-        pkg_path = Path(builtin.__path__[0])
-        for module_info in pkgutil.iter_modules([str(pkg_path)]):
-            if module_info.name.startswith("_"):
-                continue
-            full_path = f"bot.plugin.builtin.{module_info.name}"
+        names: list[str] = []
+        try:
+            pkg_path = Path(builtin.__path__[0])
+            for module_info in pkgutil.iter_modules([str(pkg_path)]):
+                if module_info.name.startswith("_"):
+                    continue
+                names.append(module_info.name)
+        except Exception:
+            logger.debug("pkgutil 扫描内置插件失败，使用显式清单", exc_info=True)
+
+        if not names:
+            names = list(_BUILTIN_PLUGINS)
+
+        for name in names:
+            full_path = f"bot.plugin.builtin.{name}"
             try:
                 await self._load_or_reload(full_path, bot)
             except Exception:
-                logger.exception(f"加载内置插件失败: {module_info.name}")
+                logger.exception(f"加载内置插件失败: {name}")
 
     async def load_external(self, module_path: str, bot) -> bool:
         """加载外部插件"""

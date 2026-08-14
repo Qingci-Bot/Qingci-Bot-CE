@@ -127,3 +127,31 @@ def _make_matcher(owner: str, priority: int):
     m = Matcher(handler=handler, priority=priority, block=False)
     m.owner = owner
     return m
+
+
+async def test_load_builtin_scans_directory(bot):
+    """源码模式：load_builtin 通过 pkgutil 扫描 builtin 包目录加载全部内置插件"""
+    pm = bot.plugin_manager
+    await pm.load_builtin(bot)
+
+    names = {p.name for p in pm.plugins.values()}
+    assert names == {"admin", "chat", "help", "imagegen", "knowledge"}
+    # 各插件 matcher 均已注册且 owner 补齐
+    assert all(m.owner in names for m in pm.all_matchers())
+
+
+async def test_load_builtin_fallback_when_dir_missing(bot, monkeypatch):
+    """打包环境：builtin 目录不可扫描时，回退到显式清单加载
+
+    PyInstaller 打包后模块在 PYZ 归档内，文件系统扫描返回空；
+    此处 mock pkgutil.iter_modules 返回空，验证回退 _BUILTIN_PLUGINS。
+    """
+    import pkgutil
+
+    from bot.plugin.manager import _BUILTIN_PLUGINS
+
+    monkeypatch.setattr(pkgutil, "iter_modules", lambda *a, **k: iter([]))
+    pm = bot.plugin_manager
+    await pm.load_builtin(bot)
+    names = {p.name for p in pm.plugins.values()}
+    assert names == set(_BUILTIN_PLUGINS)

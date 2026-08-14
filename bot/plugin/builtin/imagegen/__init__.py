@@ -10,10 +10,10 @@
 import logging
 from typing import cast
 
-from ...core.tasks import spawn_background_task
-from ..base import PluginBase
-from ..matcher import MatcherContext, on_command
-from ..rule import rate_limit
+from ....core.tasks import spawn_background_task
+from ...base import PluginBase
+from ...matcher import MatcherContext, on_command
+from ...rule import rate_limit
 
 logger = logging.getLogger("qingci-bot.plugin.imagegen")
 
@@ -110,6 +110,6 @@ class ImageGenPlugin(PluginBase):
             except Exception:
                 logger.warning("提交图片生成用量记录失败", exc_info=True)
 
-        from ...core.dispatcher import MessageDispatcher
+        from ....core.dispatcher import MessageDispatcher
 
         return cast(str, MessageDispatcher.build_cq_image(url))

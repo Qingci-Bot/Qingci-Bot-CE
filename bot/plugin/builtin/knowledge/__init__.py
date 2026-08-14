@@ -12,9 +12,9 @@ rag.enabled 关闭时 knowledge_store 为 None，命令统一提示未启用。
 
 import logging
 
-from ..base import PluginBase
-from ..matcher import MatcherContext, on_command
-from ..permission import SUPERUSER
+from ...base import PluginBase
+from ...matcher import MatcherContext, on_command
+from ...permission import SUPERUSER
 
 logger = logging.getLogger("qingci-bot.plugin.knowledge")
 

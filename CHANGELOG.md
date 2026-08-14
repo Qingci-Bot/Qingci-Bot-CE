@@ -5,7 +5,11 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.4.1] - 2026-08-14
+
+### Fixed
+- 修复内置插件（`bot/plugin/builtin/*`）从单文件迁移到目录结构后相对导入层级错误（`from ..base` → `from ...base` 等），导致内置插件在源码与打包产物中均无法加载
+- `load_builtin` 增加显式内置插件清单回退：PyInstaller 打包后 `pkgutil.iter_modules` 无法扫描 PYZ 归档内模块，扫描落空时按 `_BUILTIN_PLUGINS` 清单加载（与 `qingci-bot-ce.spec` 的 hiddenimports 保持一致）
 
 ### Docs
 - 同步 `ARCHITECTURE.md`、`docs/PROJECT_STRUCTURE.md` 的目录树与当前实现：修正 PyInstaller spec 文件名（`qingci-bot-ce.spec`）、`bot/core/` 补 `event_bus.py`、`bot/plugin/` 补 `ratelimit.py`/`llm_tool.py`/`watcher.py`、`builtin/` 与 `plugins/` 由单文件改为目录结构；`PLUGIN_DEV.md` 修正 spec 文件名引用
