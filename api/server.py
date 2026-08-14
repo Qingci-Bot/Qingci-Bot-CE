@@ -6,20 +6,20 @@ import logging
 import secrets
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
-from bot.core.bot import get_bot as _get_bot, QingciBot
-from bot.core.broadcast import register_broker, unregister_broker
 from api.auth import _get_configured_api_key
+from bot.core.bot import QingciBot
+from bot.core.bot import get_bot as _get_bot
+from bot.core.broadcast import register_broker, unregister_broker
 
 
-def get_bot() -> Optional[QingciBot]:
+def get_bot() -> QingciBot | None:
     try:
         return _get_bot()
     except RuntimeError:
@@ -43,7 +43,7 @@ async def _send_to_all_ws(data: str) -> None:
         *[ws.send_text(data) for ws in clients],
         return_exceptions=True,
     )
-    for ws, result in zip(clients, results):
+    for ws, result in zip(clients, results, strict=False):
         if isinstance(result, Exception):
             _ws_clients.discard(ws)
 
@@ -121,7 +121,6 @@ def create_app() -> FastAPI:
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
         """HTTP 异常统一响应格式"""
-        from fastapi import HTTPException as HTTPExc
         return JSONResponse(
             status_code=exc.status_code,
             content={
@@ -143,11 +142,18 @@ def create_app() -> FastAPI:
         )
 
     # 注册路由
-    from api.routes import (
-        bot_router, config_router, plugin_router, log_router,
-        group_router, auth_router, backup_router, command_router,
-    )
     from api.audit import router as audit_router
+    from api.routes import (
+        auth_router,
+        backup_router,
+        bot_router,
+        command_router,
+        config_router,
+        group_router,
+        log_router,
+        plugin_router,
+    )
+
     app.include_router(bot_router, prefix="/api/bot", tags=["Bot"])
     app.include_router(config_router, prefix="/api/config", tags=["Config"])
     app.include_router(plugin_router, prefix="/api/plugin", tags=["Plugin"])
@@ -243,9 +249,7 @@ def create_app() -> FastAPI:
                     await ws.send_json({"type": "error", "text": "消息不能为空"})
                     continue
                 if bot is None or not bot.is_running or bot.llm is None:
-                    await ws.send_json(
-                        {"type": "error", "text": "Bot 未运行，请先在顶部启动 Bot"}
-                    )
+                    await ws.send_json({"type": "error", "text": "Bot 未运行，请先在顶部启动 Bot"})
                     continue
                 # 调试会话固定为私聊 + 独立 user_id，避免污染真实对话
                 try:
@@ -284,7 +288,7 @@ def create_app() -> FastAPI:
         index_path = os.path.join(web_dir, "index.html")
         if os.path.exists(index_path):
             try:
-                with open(index_path, "r", encoding="utf-8") as f:
+                with open(index_path, encoding="utf-8") as f:
                     index_html = f.read()
                 # 校验 index.html 引用的资源是否都存在。
                 # 要求：存在应用挂载点 + 至少一个本地资源引用 + 引用全部存在，

@@ -12,12 +12,11 @@ block=False（即使匹配也不阻止后续 Matcher，但返回回复会停止�
 import logging
 from collections import OrderedDict
 from datetime import datetime, timezone
-from typing import Optional
+from typing import cast
 
 from ..base import PluginBase
 from ..matcher import MatcherContext, on_command, on_message
 from ..permission import Permission
-from ..ratelimit import RateLimiter
 from ..rule import Rule, rate_limit
 
 logger = logging.getLogger("qingci-bot.plugin.chat")
@@ -27,7 +26,7 @@ logger = logging.getLogger("qingci-bot.plugin.chat")
 # 使用 OrderedDict 实现 LRU（容量上限 512），防止群数无限增长时缓存无界膨胀。
 # 管理命令 / API 写入群配置后调用 invalidate_group_config_cache 失效。
 _GROUP_CONFIG_CACHE_MAX = 512
-_group_config_cache: "OrderedDict[int, Optional[dict]]" = OrderedDict()
+_group_config_cache: "OrderedDict[int, dict | None]" = OrderedDict()
 
 # 会话级人格覆盖缓存：{session_key: persona_name}
 # 与群配置缓存同理使用 OrderedDict 做 LRU，防止长期运行无界膨胀。
@@ -35,7 +34,7 @@ _PERSONA_OVERRIDE_MAX = 512
 _persona_override: "OrderedDict[str, str]" = OrderedDict()
 
 
-def invalidate_group_config_cache(group_id: Optional[int] = None) -> None:
+def invalidate_group_config_cache(group_id: int | None = None) -> None:
     """失效群配置缓存；group_id 为 None 时全部失效"""
     if group_id is None:
         _group_config_cache.clear()
@@ -43,7 +42,7 @@ def invalidate_group_config_cache(group_id: Optional[int] = None) -> None:
         _group_config_cache.pop(group_id, None)
 
 
-async def _get_cached_group_config(bot, group_id: int) -> Optional[dict]:
+async def _get_cached_group_config(bot, group_id: int) -> dict | None:
     """获取群配置（缓存优先，miss 查 DB；LRU 淘汰最久未访问项）"""
     if group_id in _group_config_cache:
         # 命中：移到尾部标记为最近使用
@@ -107,7 +106,7 @@ def chat_trigger() -> Rule:
         if mode == "keyword":
             for kw in cfg.trigger_keywords:
                 if ctx.plain_text.startswith(kw):
-                    ctx.args = ctx.plain_text[len(kw):].strip()
+                    ctx.args = ctx.plain_text[len(kw) :].strip()
                     return True
             return False
 
@@ -139,14 +138,7 @@ class ChatPlugin(PluginBase):
     description = "LLM 智能对话插件"
 
     async def on_load(self):
-        # 惰性创建限流器并挂到 bot（守卫：核心层后续批次若已创建则不重复）
-        bot = self.bot
-        if bot is not None and getattr(bot, "rate_limiter", None) is None:
-            rl_cfg = bot.config.rate_limit
-            bot.rate_limiter = RateLimiter(
-                daily_limit=rl_cfg.daily_limit,
-                cooldown_seconds=rl_cfg.cooldown_seconds,
-            )
+        # 限流器由核心层按配置创建（bot.rate_limiter），此处不再自建
         logger.info("聊天插件已加载")
         # 人格命令：priority=1 高于聊天 Matcher（50），block=True 阻止后续
         # Matcher 将 /persona 当作普通消息送给 LLM
@@ -163,8 +155,8 @@ class ChatPlugin(PluginBase):
             on_message(
                 rule=chat_trigger() & rate_limit(),
                 permission=chat_permission(),
-                priority=50,   # 低优先级，让管理命令先执行
-                block=False,   # 不阻止后续 Matcher（返回回复时 Dispatcher 自动停止）
+                priority=50,  # 低优先级，让管理命令先执行
+                block=False,  # 不阻止后续 Matcher（返回回复时 Dispatcher 自动停止）
             )(self._handle_chat)
         )
 
@@ -188,7 +180,7 @@ class ChatPlugin(PluginBase):
         if len(_persona_override) > _PERSONA_OVERRIDE_MAX:
             _persona_override.popitem(last=False)
 
-    def _resolve_persona_prompt(self, ctx: MatcherContext) -> Optional[str]:
+    def _resolve_persona_prompt(self, ctx: MatcherContext) -> str | None:
         """解析当前会话生效的人格 prompt（会话级覆盖 > 默认人格 > None）
 
         返回 None 表示使用 LLMConfig.system_prompt。
@@ -206,10 +198,10 @@ class ChatPlugin(PluginBase):
             return None
         for p in llm_cfg.personas:
             if p.name == name and p.system_prompt:
-                return p.system_prompt
+                return cast(str, p.system_prompt)
         return None
 
-    async def _handle_persona(self, ctx: MatcherContext) -> Optional[str]:
+    async def _handle_persona(self, ctx: MatcherContext) -> str | None:
         """处理 /persona 命令：查看 / 列表 / 切换 / 重置"""
         args = ctx.args.strip()
         key = self._session_key(ctx)
@@ -218,17 +210,12 @@ class ChatPlugin(PluginBase):
 
         if not args:
             cur = _persona_override.get(key) or llm_cfg.default_persona or "默认"
-            return (
-                f"当前人格：{cur}\n"
-                "发送 /persona 列表 查看全部，/persona 重置 恢复默认。"
-            )
+            return f"当前人格：{cur}\n发送 /persona 列表 查看全部，/persona 重置 恢复默认。"
 
         if args in ("列表", "list", "ls"):
             if not personas:
                 return "当前未配置人格，请在 WebUI「LLM 配置」中管理。"
-            lines = [
-                f"默认人格：{llm_cfg.default_persona or '（使用默认 system_prompt）'}"
-            ]
+            lines = [f"默认人格：{llm_cfg.default_persona or '（使用默认 system_prompt）'}"]
             for name, p in personas.items():
                 lines.append(f"- {name}：{p.description or '（无描述）'}")
             return "\n".join(lines)
@@ -243,7 +230,7 @@ class ChatPlugin(PluginBase):
         self._set_persona_override(key, args)
         return f"已切换为「{args}」人格。"
 
-    async def _handle_chat(self, ctx: MatcherContext) -> Optional[str]:
+    async def _handle_chat(self, ctx: MatcherContext) -> str | None:
         """处理聊天消息：调用 LLM + 保存记录 + 实时广播"""
         message = ctx.args
         if not message:
@@ -258,10 +245,7 @@ class ChatPlugin(PluginBase):
         )
         exempt = False
         if need_filter:
-            exempt = (
-                filter_cfg.exempt_admins
-                and ctx.user_id in self.config.bot.admin_users
-            )
+            exempt = filter_cfg.exempt_admins and ctx.user_id in self.config.bot.admin_users
             if not exempt:
                 hit = self.bot.sensitive_filter.check(message)
                 if hit:
@@ -287,9 +271,7 @@ class ChatPlugin(PluginBase):
                 reference = ""
             if reference:
                 system_prompt = (
-                    base_prompt
-                    + "\n\n以下是知识库中的参考资料，仅在相关时参考作答：\n"
-                    + reference
+                    base_prompt + "\n\n以下是知识库中的参考资料，仅在相关时参考作答：\n" + reference
                 )
 
         # 调用 LLM
@@ -313,50 +295,57 @@ class ChatPlugin(PluginBase):
         group_id = ctx.group_id if ctx.message_type == "group" and ctx.group_id else None
         if self.db:
             try:
-                await self.db.save_messages_batch([
-                    {
-                        "message_id": ctx.message_id,
-                        "user_id": ctx.user_id,
-                        "group_id": group_id,
-                        "content": message,
-                        "message_type": ctx.message_type,
-                        "role": "user",
-                    },
-                    {
-                        "message_id": f"{ctx.message_id}_reply",
-                        "user_id": ctx.self_id,
-                        "group_id": group_id,
-                        "content": reply,
-                        "message_type": ctx.message_type,
-                        "role": "assistant",
-                    },
-                ])
+                await self.db.save_messages_batch(
+                    [
+                        {
+                            "message_id": ctx.message_id,
+                            "user_id": ctx.user_id,
+                            "group_id": group_id,
+                            "content": message,
+                            "message_type": ctx.message_type,
+                            "role": "user",
+                        },
+                        {
+                            "message_id": f"{ctx.message_id}_reply",
+                            "user_id": ctx.self_id,
+                            "group_id": group_id,
+                            "content": reply,
+                            "message_type": ctx.message_type,
+                            "role": "assistant",
+                        },
+                    ]
+                )
             except Exception:
                 logger.exception("保存消息记录失败")
 
         # 实时广播（独立于数据库）
         try:
             from ...core.broadcast import broadcast_message
+
             now = datetime.now(timezone.utc).isoformat()
-            await broadcast_message({
-                "message_id": ctx.message_id,
-                "user_id": ctx.user_id,
-                "group_id": group_id,
-                "content": message,
-                "message_type": ctx.message_type,
-                "role": "user",
-                "created_at": now,
-            })
-            await broadcast_message({
-                "message_id": f"{ctx.message_id}_reply",
-                "user_id": ctx.self_id,
-                "group_id": group_id,
-                "content": reply,
-                "message_type": ctx.message_type,
-                "role": "assistant",
-                "created_at": now,
-            })
+            await broadcast_message(
+                {
+                    "message_id": ctx.message_id,
+                    "user_id": ctx.user_id,
+                    "group_id": group_id,
+                    "content": message,
+                    "message_type": ctx.message_type,
+                    "role": "user",
+                    "created_at": now,
+                }
+            )
+            await broadcast_message(
+                {
+                    "message_id": f"{ctx.message_id}_reply",
+                    "user_id": ctx.self_id,
+                    "group_id": group_id,
+                    "content": reply,
+                    "message_type": ctx.message_type,
+                    "role": "assistant",
+                    "created_at": now,
+                }
+            )
         except Exception:
             logger.exception("广播消息失败")
 
-        return reply
+        return cast(str, reply)

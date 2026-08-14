@@ -8,12 +8,13 @@
 """
 
 from bot.plugin.base import PluginBase, PluginStatus
-from bot.plugin.matcher import MatcherContext, on_command, on_message
+from bot.plugin.matcher import Matcher, MatcherContext, Rule, on_command, on_message
 from bot.plugin.rule import keyword
 
 
 class RecordingPlugin(PluginBase):
     """记录 handler 调用痕迹的测试插件"""
+
     name = "recording"
     version = "1.0.0"
 
@@ -55,6 +56,7 @@ def register_plugin(bot, plugin):
 async def run(bot, plain_text, message_type="private", user_id=10001):
     """dispatch + run_matchers 完整链路，返回 (reply, blocked)"""
     from bot.core.dispatcher import MessageDispatcher
+
     dispatcher = MessageDispatcher()
     event = make_event(plain_text, message_type, user_id)
     ctx = dispatcher.dispatch(event)
@@ -200,3 +202,84 @@ class TestTempMatcherAutoRemove:
         reply, _ = await run(bot, "/silent")
         assert reply is None
         assert m not in plugin.matchers
+
+
+class TestEventMatcherTypePreservation:
+    """验证事件 Matcher（request/notice）的返回值类型保留
+
+    修复：request Matcher 返回的 bool 审批结果不应被 str() 化，
+    否则 bot.py 的 isinstance(result, (bool, int)) 判断会失败，
+    导致审批被静默丢弃。
+    """
+
+    @staticmethod
+    def make_request_event(request_type: str = "friend", user_id: int = 20001, comment: str = ""):
+        """构造 OneBot v11 请求事件"""
+        return {
+            "post_type": "request",
+            "request_type": request_type,
+            "user_id": user_id,
+            "comment": comment,
+            "flag": "test-flag-1",
+            "self_id": 20002,
+        }
+
+    @staticmethod
+    def make_event_matcher(handler, event_type: str):
+        """构造指定事件类型的 Matcher（无公开工厂，直接构建）"""
+        return Matcher(
+            handler=handler,
+            rule=Rule(),  # 空规则 = 恒匹配
+            priority=1,
+            block=True,
+            event_type=event_type,
+        )
+
+    async def test_request_matcher_bool_approved(self, bot):
+        plugin = RecordingPlugin()
+
+        async def handler(ctx: MatcherContext):
+            return True  # 审批通过
+
+        plugin.matchers = [self.make_event_matcher(handler, "request")]
+        register_plugin(bot, plugin)
+
+        event = self.make_request_event()
+        ctx = bot.dispatcher.dispatch(event)
+        reply, _ = await bot.dispatcher._run_event_matchers(bot, event, ctx)
+
+        # 修复前：reply 是 "True"（字符串），approve 被静默丢弃
+        # 修复后：reply 是 True（bool），可被正确识别
+        assert reply is True, f"reply 应保留 bool 类型 True，实际为 {type(reply)}: {reply!r}"
+
+    async def test_request_matcher_bool_rejected(self, bot):
+        plugin = RecordingPlugin()
+
+        async def handler(ctx: MatcherContext):
+            return False  # 拒绝审批
+
+        plugin.matchers = [self.make_event_matcher(handler, "request")]
+        register_plugin(bot, plugin)
+
+        event = self.make_request_event()
+        ctx = bot.dispatcher.dispatch(event)
+        reply, _ = await bot.dispatcher._run_event_matchers(bot, event, ctx)
+
+        assert reply is False, f"reply 应保留 bool 类型 False，实际为 {type(reply)}: {reply!r}"
+
+    async def test_notice_matcher_string_unchanged(self, bot):
+        """notice 事件也应保留原始类型（但通常返回 str，确保不退化）"""
+        plugin = RecordingPlugin()
+
+        async def handler(ctx: MatcherContext):
+            return "已处理"
+
+        plugin.matchers = [self.make_event_matcher(handler, "notice")]
+        register_plugin(bot, plugin)
+
+        event = {"post_type": "notice", "notice_type": "notify", "user_id": 10001, "self_id": 20002}
+        ctx = bot.dispatcher.dispatch(event)
+        reply, _ = await bot.dispatcher._run_event_matchers(bot, event, ctx)
+
+        assert reply == "已处理"
+        assert isinstance(reply, str)

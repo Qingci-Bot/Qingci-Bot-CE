@@ -5,7 +5,7 @@
 
 import asyncio
 import logging
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 logger = logging.getLogger("qingci-bot.broadcast")
 
@@ -33,7 +33,7 @@ async def broadcast_message(message: dict) -> None:
         *[broker(message) for broker in brokers],
         return_exceptions=True,
     )
-    for broker, result in zip(brokers, results):
+    for broker, result in zip(brokers, results, strict=False):
         if isinstance(result, Exception):
             logger.warning(
                 f"广播 broker 失败: {getattr(broker, '__name__', repr(broker))}: {result}"

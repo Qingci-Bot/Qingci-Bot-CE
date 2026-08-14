@@ -26,13 +26,18 @@ import logging
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, cast
 
 from ..core.di import DIContainer
-from ..core.dispatcher import MessageDispatcher, MessageContext
+from ..core.dispatcher import MessageDispatcher
+from ..core.event_bus import EventBus
 from ..core.session_state import SessionStateManager
+from ..llm.tools import ToolRegistry
 from ..plugin.base import PluginStatus
 from ..plugin.manager import PluginManager
+
+if TYPE_CHECKING:
+    from ..core.bot import QingciBot
 
 logger = logging.getLogger("qingci-bot.testing")
 
@@ -53,7 +58,7 @@ class FakeConfig:
         self.rag = SimpleNamespace(enabled=False)
         self.plugins_config: dict[str, dict] = {}
 
-    def get_plugin_config(self, plugin_name: str) -> Optional[dict]:
+    def get_plugin_config(self, plugin_name: str) -> dict | None:
         """获取插件级配置（与 ConfigManager.get_plugin_config 一致）"""
         return self.plugins_config.get(plugin_name)
 
@@ -70,8 +75,21 @@ class FakeConnection:
         self.sent: list[tuple[str, int, str]] = []
         # [(message_type, target_id, message), ...]
         self.api_calls: list[tuple[str, dict]] = []
+        self._api_call_hooks: list[Any] = []
 
-    async def call_api(self, action: str, params: Optional[dict] = None, timeout: float = 30) -> dict:
+    def on_api_call(self, handler) -> None:
+        """注册平台接口调用钩子（与 OneBotConnection.on_api_call 对齐）"""
+        if handler not in self._api_call_hooks:
+            self._api_call_hooks.append(handler)
+
+    async def call_api(self, action: str, params: dict | None = None, timeout: float = 30) -> dict:
+        params = params or {}
+        for hook in list(self._api_call_hooks):
+            modified = hook(action, dict(params))
+            if hasattr(modified, "__await__"):
+                modified = await modified
+            if modified is not None:
+                params = modified
         self.api_calls.append((action, params or {}))
         return {}
 
@@ -99,7 +117,7 @@ class TestBot:
     行为一致；连接与配置为最小 Fake 实现。
     """
 
-    def __init__(self, config: Optional[Any] = None, self_id: int = DEFAULT_SELF_ID):
+    def __init__(self, config: Any | None = None, self_id: int = DEFAULT_SELF_ID):
         self.self_id = self_id
         self.config = config or FakeConfig()
 
@@ -107,12 +125,15 @@ class TestBot:
         self.dispatcher = MessageDispatcher()
         self.session_state = SessionStateManager()
         self.connection = FakeConnection()
+        self.event_bus = EventBus()
+        self.tool_registry = ToolRegistry()
 
         # DI 容器：与真实 Bot 一致注册核心服务
         self.di = DIContainer()
         self.di.register_sync(PluginManager, self.plugin_manager)
         self.di.register_sync(MessageDispatcher, self.dispatcher)
         self.di.register_sync(SessionStateManager, self.session_state)
+        self.di.register_sync(EventBus, self.event_bus)
         self.di.register_sync(DIContainer, self.di)
         self.di.register_sync(TestBot, self)
 
@@ -120,11 +141,24 @@ class TestBot:
         self.db = None
         self.llm = None
         self.scheduler = None
-        self.tool_registry = None
         self.knowledge_store = None
         self.sensitive_filter = None
 
+        # Matcher 运行前钩子（run_preprocessor），与真实 Bot 对齐
+        self._matcher_preprocessors: list[Any] = []
+
         self._running = True  # 模拟已启动，事件可被处理
+
+    # ---- 钩子注册 ----
+
+    def add_matcher_preprocessor(self, fn) -> None:
+        """注册 Matcher 运行前钩子（与 QingciBot.add_matcher_preprocessor 对齐）"""
+        if fn not in self._matcher_preprocessors:
+            self._matcher_preprocessors.append(fn)
+
+    def register_api_hook(self, fn) -> None:
+        """注册平台接口调用钩子（转发到 connection.on_api_call）"""
+        self.connection.on_api_call(fn)
 
     # ---- 插件加载 ----
 
@@ -144,7 +178,7 @@ class TestBot:
 
     # ---- 事件发送 ----
 
-    async def send(self, event: dict) -> Optional[str]:
+    async def send(self, event: dict) -> str | None:
         """发送事件并返回 Bot 的回复（str），无回复返回 None
 
         完整走 Dispatcher 调度链路：dispatch → run_matchers →
@@ -154,7 +188,9 @@ class TestBot:
         post_type = ctx.post_type or event.get("post_type", "")
 
         if post_type != "message":
-            reply, blocked = await self.dispatcher._run_event_matchers(self, event, ctx)
+            reply, blocked = await self.dispatcher._run_event_matchers(
+                cast("QingciBot", self), event, ctx
+            )
             if reply is not None or blocked:
                 return reply
             # 旧式回调
@@ -167,7 +203,7 @@ class TestBot:
                     await plugin.on_request(event)
             return None
 
-        reply, blocked = await self.dispatcher.run_matchers(self, event, ctx)
+        reply, blocked = await self.dispatcher.run_matchers(cast("QingciBot", self), event, ctx)
         if reply is not None:
             return reply
         if blocked:
@@ -187,17 +223,27 @@ class TestBot:
                 logger.exception(f"插件 {plugin.name} on_message 异常")
         return None
 
-    async def send_private(self, text: str, user_id: int = 10001, *, at_bot: bool = False) -> Optional[str]:
+    async def send_private(
+        self, text: str, user_id: int = 10001, *, at_bot: bool = False
+    ) -> str | None:
         """发送私聊消息"""
         from .events import private_message
-        return await self.send(private_message(text, user_id=user_id, self_id=self.self_id, at_bot=at_bot))
 
-    async def send_group(self, text: str, user_id: int = 10001, group_id: int = 20001, *, at_bot: bool = False) -> Optional[str]:
+        return await self.send(
+            private_message(text, user_id=user_id, self_id=self.self_id, at_bot=at_bot)
+        )
+
+    async def send_group(
+        self, text: str, user_id: int = 10001, group_id: int = 20001, *, at_bot: bool = False
+    ) -> str | None:
         """发送群聊消息"""
         from .events import group_message
-        return await self.send(group_message(
-            text, user_id=user_id, group_id=group_id, self_id=self.self_id, at_bot=at_bot
-        ))
+
+        return await self.send(
+            group_message(
+                text, user_id=user_id, group_id=group_id, self_id=self.self_id, at_bot=at_bot
+            )
+        )
 
     # ---- 断言辅助 ----
 

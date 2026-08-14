@@ -1,12 +1,16 @@
+# mypy: disable-error-code="attr-defined,union-attr,arg-type,operator"
 """数据库仓储层 - 基于 SQLModel + AsyncSession
 
 保留旧 Database 类的公开 API，内部改用 SQLModel ORM 实现。
 新增 sessions 相关方法为 LLM 会话持久化（Step 2）做准备。
+
+说明：SQLModel 的字段被 mypy 推断为普通 Python 类型（如 datetime/bool），
+因此 `Message.created_at.desc()` 这类 SQLAlchemy 列访问会产生误报；
+SQLModel 0.0.39 不支持 Mapped 注解，故按文件禁用相关错误码。
 """
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import delete, func, select
@@ -20,7 +24,7 @@ logger = logging.getLogger("qingci-bot.db")
 class Database:
     """SQLite 数据库仓储类"""
 
-    def __init__(self, path: Optional[str] = None):
+    def __init__(self, path: str | None = None):
         # path 参数保留为兼容签名，实际路径由 engine.py 统一管理
         pass
 
@@ -41,7 +45,7 @@ class Database:
         user_id: int,
         content: str,
         message_type: str = "group",
-        group_id: Optional[int] = None,
+        group_id: int | None = None,
         role: str = "user",
     ) -> None:
         """保存一条消息记录"""
@@ -93,7 +97,7 @@ class Database:
     async def get_history(
         self,
         user_id: int,
-        group_id: Optional[int] = None,
+        group_id: int | None = None,
         limit: int = 20,
     ) -> list[dict]:
         """获取对话历史（按时间正序返回最近 limit 条）"""
@@ -119,8 +123,8 @@ class Database:
     async def search_messages(
         self,
         keyword: str = "",
-        user_id: Optional[int] = None,
-        group_id: Optional[int] = None,
+        user_id: int | None = None,
+        group_id: int | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict]:
@@ -135,11 +139,7 @@ class Database:
                 stmt = stmt.where(Message.user_id == user_id)
             if group_id is not None:
                 stmt = stmt.where(Message.group_id == group_id)
-            stmt = (
-                stmt.order_by(Message.created_at.desc())
-                .limit(limit)
-                .offset(offset)
-            )
+            stmt = stmt.order_by(Message.created_at.desc()).limit(limit).offset(offset)
             rows = (await session.execute(stmt)).scalars().all()
             return [row.model_dump() for row in rows]
 
@@ -152,9 +152,9 @@ class Database:
 
     async def clear_messages(
         self,
-        user_id: Optional[int] = None,
-        group_id: Optional[int] = None,
-        before_days: Optional[int] = None,
+        user_id: int | None = None,
+        group_id: int | None = None,
+        before_days: int | None = None,
     ) -> int:
         """按条件清理消息记录，返回删除条数。
 
@@ -217,13 +217,11 @@ class Database:
             rows = (await session.execute(stmt)).scalars().all()
             return [row.model_dump() for row in reversed(rows)]
 
-    async def clear_sessions(self, session_key: Optional[str] = None) -> None:
+    async def clear_sessions(self, session_key: str | None = None) -> None:
         """清除会话历史：指定 key 清除单会话，None 清除全部"""
         async with get_session_factory()() as session:
             if session_key:
-                stmt = delete(SessionHistory).where(
-                    SessionHistory.session_key == session_key
-                )
+                stmt = delete(SessionHistory).where(SessionHistory.session_key == session_key)
             else:
                 stmt = delete(SessionHistory)
             await session.execute(stmt)
@@ -308,18 +306,20 @@ class Database:
                     user_id = int(parts[2])
             except (ValueError, TypeError):
                 pass  # 无法解析的 key 保持 0，仅展示原始 key
-            result.append({
-                "session_key": key,
-                "message_count": r.message_count,
-                "last_active": r.last_active.isoformat() if r.last_active else None,
-                "user_id": user_id,
-                "group_id": group_id,
-            })
+            result.append(
+                {
+                    "session_key": key,
+                    "message_count": r.message_count,
+                    "last_active": r.last_active.isoformat() if r.last_active else None,
+                    "user_id": user_id,
+                    "group_id": group_id,
+                }
+            )
         return result
 
     # ============ 插件配置 ============
 
-    async def get_plugin_config(self, key: str) -> Optional[str]:
+    async def get_plugin_config(self, key: str) -> str | None:
         """读取插件配置"""
         async with get_session_factory()() as session:
             stmt = select(PluginConfig).where(PluginConfig.key == key)
@@ -330,9 +330,7 @@ class Database:
         """写入插件配置（upsert）"""
         async with get_session_factory()() as session:
             existing = (
-                await session.execute(
-                    select(PluginConfig).where(PluginConfig.key == key)
-                )
+                await session.execute(select(PluginConfig).where(PluginConfig.key == key))
             ).scalar_one_or_none()
             if existing:
                 existing.value = value
@@ -348,13 +346,11 @@ class Database:
 
     # ============ 群粒度配置 ============
 
-    async def get_group_config(self, group_id: int) -> Optional[dict]:
+    async def get_group_config(self, group_id: int) -> dict | None:
         """获取群配置（未配置时返回 None）"""
         async with get_session_factory()() as session:
             row = (
-                await session.execute(
-                    select(GroupConfig).where(GroupConfig.group_id == group_id)
-                )
+                await session.execute(select(GroupConfig).where(GroupConfig.group_id == group_id))
             ).scalar_one_or_none()
             return row.model_dump(mode="json") if row else None
 
@@ -362,7 +358,7 @@ class Database:
         self,
         group_id: int,
         enabled: bool,
-        trigger_mode: Optional[str] = None,
+        trigger_mode: str | None = None,
     ) -> None:
         """新增或更新群配置
 
@@ -372,9 +368,7 @@ class Database:
         """
         async with get_session_factory()() as session:
             existing = (
-                await session.execute(
-                    select(GroupConfig).where(GroupConfig.group_id == group_id)
-                )
+                await session.execute(select(GroupConfig).where(GroupConfig.group_id == group_id))
             ).scalar_one_or_none()
             if existing:
                 existing.enabled = enabled
@@ -399,10 +393,10 @@ class Database:
         """列出所有已配置的群（按 group_id 升序）"""
         async with get_session_factory()() as session:
             rows = (
-                await session.execute(
-                    select(GroupConfig).order_by(GroupConfig.group_id)
-                )
-            ).scalars().all()
+                (await session.execute(select(GroupConfig).order_by(GroupConfig.group_id)))
+                .scalars()
+                .all()
+            )
             return [row.model_dump(mode="json") for row in rows]
 
     # ============ 用量统计 ============
@@ -483,11 +477,6 @@ class Database:
     async def get_messages_batch(self, after_id: int = 0, limit: int = 1000) -> list[dict]:
         """按 id 游标分批获取消息（用于 CSV 流式导出）"""
         async with get_session_factory()() as session:
-            stmt = (
-                select(Message)
-                .where(Message.id > after_id)
-                .order_by(Message.id)
-                .limit(limit)
-            )
+            stmt = select(Message).where(Message.id > after_id).order_by(Message.id).limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [row.model_dump(mode="json") for row in rows]

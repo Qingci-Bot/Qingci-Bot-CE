@@ -2,14 +2,15 @@
 
 import enum
 from abc import ABC, abstractmethod
-from typing import Any, Optional, TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Optional
 
 from ..core.dispatcher import MessageContext
 
 if TYPE_CHECKING:
+    from ..config import ConfigManager
     from ..core.bot import QingciBot
     from ..core.connection import OneBotConnection
-    from ..config import ConfigManager
     from ..db.database import Database
     from ..llm.manager import LLMManager
     from .matcher import Matcher
@@ -17,11 +18,12 @@ if TYPE_CHECKING:
 
 class PluginStatus(str, enum.Enum):
     """插件状态枚举"""
-    LOADING = "loading"       # 正在加载（on_load 执行中）
-    LOADED = "loaded"         # 已加载，正常运行
-    DISABLED = "disabled"     # 已禁用，跳过事件分发
-    ERROR = "error"           # 加载/运行出错
-    UNLOADING = "unloading"   # 正在卸载（on_unload 执行中）
+
+    LOADING = "loading"  # 正在加载（on_load 执行中）
+    LOADED = "loaded"  # 已加载，正常运行
+    DISABLED = "disabled"  # 已禁用，跳过事件分发
+    ERROR = "error"  # 加载/运行出错
+    UNLOADING = "unloading"  # 正在卸载（on_unload 执行中）
 
 
 class PluginBase(ABC):
@@ -69,16 +71,17 @@ class PluginBase(ABC):
     llm: Optional["LLMManager"] = None
 
     # 可选依赖引用（由 PluginManager 注入，允许为 None）
-    scheduler: Optional[Any] = None
-    tool_registry: Optional[Any] = None
-    knowledge_store: Optional[Any] = None
-    session_state: Optional[Any] = None  # TTL 会话状态存储
+    scheduler: Any | None = None
+    tool_registry: Any | None = None
+    knowledge_store: Any | None = None
+    session_state: Any | None = None  # TTL 会话状态存储
+    event_bus: Any | None = None  # 跨插件事件总线（发布-订阅）
 
     # Matcher 列表（由 PluginManager 初始化，新式插件在 on_load 中填充）
-    matchers: Optional[list["Matcher"]] = None
+    matchers: list["Matcher"] | None = None
 
     # 插件级配置（由 PluginManager 从 config.yaml 加载）
-    plugin_config: Optional[Any] = None
+    plugin_config: Any | None = None
 
     # 导出注册表（插件间服务接口）
     _exports: dict[str, Any]
@@ -101,6 +104,26 @@ class PluginBase(ABC):
         self._after_handlers = []
         self._pages = []
         self._status = PluginStatus.LOADING
+        # 国际化：插件可声明 i18n/<locale>.json 翻译资源，self._ = self.i18n.t
+        from ..i18n import I18n
+
+        self.i18n = I18n("zh-CN")
+        self._ = self.i18n.t
+
+    # ---- 数据目录 ----
+
+    @property
+    def data_dir(self) -> Path:
+        """插件专属数据目录（自动创建，建议用于持久化文件数据）
+
+        路径约定：app_root()/data/plugins/<name>/，卸载不删除，
+        供插件存储运行时数据（缓存、导出文件等）。
+        """
+        from ..paths import app_root
+
+        d = app_root() / "data" / "plugins" / self.name
+        d.mkdir(parents=True, exist_ok=True)
+        return d
 
     # ---- 状态 ----
 
@@ -156,11 +179,13 @@ class PluginBase(ABC):
             static_dir: 静态文件目录的绝对路径，默认自动探测插件模块同级的 web/ 目录
         """
         import os
+
         if not static_dir:
             # 自动探测：插件类所在模块同级的 web/ 目录
             module_file = getattr(type(self), "__module__", None)
             if module_file:
                 import importlib
+
                 try:
                     mod = importlib.import_module(module_file)
                     mod_path = getattr(mod, "__file__", None)
@@ -170,11 +195,13 @@ class PluginBase(ABC):
                             static_dir = candidate
                 except Exception:
                     pass
-        self._pages.append({
-            "title": title,
-            "icon": icon,
-            "static_dir": static_dir,
-        })
+        self._pages.append(
+            {
+                "title": title,
+                "icon": icon,
+                "static_dir": static_dir,
+            }
+        )
 
     # ---- 中间件 ----
 
@@ -200,22 +227,52 @@ class PluginBase(ABC):
         """插件卸载时调用"""
         ...
 
-    async def on_message(self, ctx: MessageContext) -> Optional[str]:
+    async def on_message(self, ctx: MessageContext) -> str | None:
         """处理消息事件，返回回复文本或 None"""
         return None
 
     async def on_notice(self, event: dict) -> None:
         """处理通知事件"""
-        pass
+        return None
 
-    async def on_request(self, event: dict) -> Optional[bool]:
+    async def on_request(self, event: dict) -> bool | None:
         """处理请求事件（加群/加好友），返回 True 同意 / False 拒绝 / None 忽略"""
         return None
 
     async def on_disable(self):
         """插件被禁用时调用（可选覆写，用于停用定时任务等轻量清理）"""
-        pass
+        return None
 
     async def on_enable(self):
         """插件被启用时调用（可选覆写，用于恢复定时任务等）"""
-        pass
+        return None
+
+    # ---- 全局生命周期钩子（可选覆写，默认空实现） ----
+
+    async def on_startup(self):
+        """Bot 启动完成后调用（所有插件加载完毕、连接就绪后）
+
+        用于连接数据库、注册后台任务等耗时初始化。异常隔离，不影响启动。
+        """
+        return None
+
+    async def on_shutdown(self):
+        """Bot 停止时调用（在插件 on_unload 之前）
+
+        用于释放 on_startup 中申请的资源。异常隔离。
+        """
+        return None
+
+    async def on_bot_connect(self):
+        """有 QQ 会话（LLBot）连接到反向 WebSocket 时调用
+
+        初始连接与重连均触发，用于初始化会话相关资源。
+        """
+        return None
+
+    async def on_metaevent(self, event: dict) -> bool | None:
+        """处理元事件（生命周期，如 heartbeat / connect / enable）
+
+        返回 True 表示已消费该事件（与 on_request 的审批语义对齐）。
+        """
+        return None

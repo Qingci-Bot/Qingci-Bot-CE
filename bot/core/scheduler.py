@@ -11,7 +11,8 @@ import functools
 import inspect
 import logging
 import types
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -37,7 +38,7 @@ class BotScheduler:
     @property
     def running(self) -> bool:
         """调度器是否正在运行"""
-        return self._scheduler.running
+        return bool(self._scheduler.running)
 
     def start(self) -> None:
         """启动调度器（幂等：已运行时直接返回）"""
@@ -158,12 +159,14 @@ class BotScheduler:
     def _wrap_func(func: Callable[..., Any], job_id: str) -> Callable[..., Any]:
         """包装任务函数：捕获任务异常仅记日志，防止异常传播拖垮调度器"""
         if inspect.iscoroutinefunction(func):
+
             @functools.wraps(func)
             async def _async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 try:
                     return await func(*args, **kwargs)
                 except Exception:
                     logger.exception(f"定时任务执行异常: {job_id}")
+
             return _async_wrapper
 
         @functools.wraps(func)
@@ -172,4 +175,5 @@ class BotScheduler:
                 return func(*args, **kwargs)
             except Exception:
                 logger.exception(f"定时任务执行异常: {job_id}")
+
         return _sync_wrapper

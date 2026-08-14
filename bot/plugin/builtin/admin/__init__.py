@@ -35,31 +35,41 @@ class AdminPlugin(PluginBase):
         # 注册 Matcher（handler 为 self 的方法，可访问 self.config/self.llm 等）
         self.matchers.append(
             on_command(
-                "clear", permission=SUPERUSER, priority=1,
+                "clear",
+                permission=SUPERUSER,
+                priority=1,
                 description="清除当前会话的对话历史",
             )(self._cmd_clear)
         )
         self.matchers.append(
             on_command(
-                "status", permission=SUPERUSER, priority=1,
+                "status",
+                permission=SUPERUSER,
+                priority=1,
                 description="查看 Bot 运行状态",
             )(self._cmd_status)
         )
         self.matchers.append(
             on_command(
-                ("blacklist", "黑名单"), permission=SUPERUSER, priority=1,
+                ("blacklist", "黑名单"),
+                permission=SUPERUSER,
+                priority=1,
                 description="黑名单管理: /blacklist add/remove <QQ号>",
             )(self._cmd_blacklist)
         )
         self.matchers.append(
             on_command(
-                "filter", permission=SUPERUSER, priority=1,
+                "filter",
+                permission=SUPERUSER,
+                priority=1,
                 description="敏感词过滤开关: /filter on|off|reload",
             )(self._cmd_filter)
         )
         self.matchers.append(
             on_command(
-                "group", permission=SUPERUSER, priority=1,
+                "group",
+                permission=SUPERUSER,
+                priority=1,
                 description="当前群 Bot 开关: /group on|off",
             )(self._cmd_group)
         )
@@ -210,6 +220,7 @@ class AdminPlugin(PluginBase):
                 return "保存群配置失败，请稍后再试。"
         # 失效 chat 插件的群配置缓存，使变更立即生效
         from .chat import invalidate_group_config_cache
+
         invalidate_group_config_cache(ctx.group_id)
         return f"本群 Bot 已{'开启' if enabled else '关闭'}。"
 
@@ -217,4 +228,3 @@ class AdminPlugin(PluginBase):
         """异步保存配置（加锁防止并发写）"""
         async with self._config_lock:
             await asyncio.to_thread(self.config.save)
-

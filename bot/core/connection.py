@@ -8,7 +8,8 @@
 
 OneBotConnection 作为外观层，保持与旧 API 兼容：
 - on_event(handler) 注册事件处理器
-- on_disconnect / on_reconnect 注册连接状态回调
+- on_disconnect / on_reconnect / on_connect 注册连接状态回调
+- on_metaevent(handler) 注册元事件回调（heartbeat/lifecycle，旁路分发）
 - call_api(action, params) 调用 OneBot API
 - send_msg / send_group_msg / send_private_msg 便捷方法
 - is_connected / last_heartbeat 状态查询
@@ -21,7 +22,7 @@ import asyncio
 import inspect
 import logging
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from aiocqhttp import CQHttp
 
@@ -45,16 +46,20 @@ class OneBotConnection:
             access_token=self.access_token or None,
             api_timeout_sec=30,
         )
-        self._server_task: Optional[asyncio.Task] = None
+        self._server_task: asyncio.Task | None = None
         self._running = False
         self._event_handlers: list[Callable] = []
         self._last_heartbeat = 0.0
 
         # 连接状态监控
         self._was_connected = False
-        self._monitor_task: Optional[asyncio.Task] = None
+        self._monitor_task: asyncio.Task | None = None
         self._on_disconnect_callbacks: list[Callable] = []
         self._on_reconnect_callbacks: list[Callable] = []
+        self._on_connect_callbacks: list[Callable] = []
+        self._on_metaevent_callbacks: list[Callable] = []
+        # 平台接口调用钩子（on_calling_api）：每次 call_api 前触发
+        self._api_call_hooks: list[Callable] = []
 
         # 注册 aiocqhttp 事件转发
         self._register_aiocqhttp_hooks()
@@ -78,14 +83,16 @@ class OneBotConnection:
 
         @self._bot.on_meta_event
         async def _on_meta(event):
-            # 心跳更新
+            # 心跳：更新心跳时间并通知元事件回调（不进入事件总线，避免洪峰任务堆积）
             if event.get("meta_event_type") == "heartbeat":
                 self._last_heartbeat = time.time()
                 logger.debug(f"心跳: {event.get('status', {})}")
+                await self._trigger_callbacks(self._on_metaevent_callbacks, event)
                 return
             # 生命周期事件（连接建立）
             if event.get("meta_event_type") == "lifecycle":
                 logger.info(f"LLBot 生命周期事件: {event.get('sub_type', '')}")
+            await self._trigger_callbacks(self._on_metaevent_callbacks, event)
             await self._dispatch_event(event)
 
     def on_event(self, handler: Callable) -> None:
@@ -121,6 +128,62 @@ class OneBotConnection:
         if handler not in self._on_reconnect_callbacks:
             self._on_reconnect_callbacks.append(handler)
 
+    def on_connect(self, handler: Callable) -> None:
+        """注册连接建立回调（async callable，初始连接与重连均触发）
+
+        用于触发插件级 on_bot_connect 生命周期钩子。
+        """
+        if handler not in self._on_connect_callbacks:
+            self._on_connect_callbacks.append(handler)
+
+    def on_metaevent(self, handler: Callable) -> None:
+        """注册元事件回调（async callable，heartbeat / lifecycle 等元事件触发）
+
+        元事件不进入事件总线（避免洪峰任务堆积），仅通过本回调旁路分发，
+        用于触发插件级 on_metaevent 生命周期钩子。
+        """
+        if handler not in self._on_metaevent_callbacks:
+            self._on_metaevent_callbacks.append(handler)
+
+    def on_api_call(self, handler: Callable) -> None:
+        """注册平台接口调用钩子（on_calling_api）
+
+        每次 call_api 前触发。签名：
+            async (api_name, params) -> Optional[dict]
+        返回新 params 时替换原参数；返回 None 保持原样；抛异常则阻止该次
+        API 调用。用于横切鉴权、参数改写、审计。注册自动去重。
+        """
+        if handler not in self._api_call_hooks:
+            self._api_call_hooks.append(handler)
+
+    async def _trigger_api_call_hooks(self, action: str, params: dict) -> dict:
+        """执行平台接口调用钩子，返回最终 params（可被钩子改写）
+
+        单个钩子异常隔离（记录后继续下一个）；但钩子主动 raise（鉴权拒绝）
+        会上抛，从而阻止该次 API 调用。
+        """
+        for hook in list(self._api_call_hooks):
+            try:
+                modified = hook(action, dict(params))
+                if inspect.isawaitable(modified):
+                    modified = await modified
+                if modified is not None:
+                    params = modified
+            except Exception:
+                logger.exception(f"平台接口调用钩子异常: {action}")
+                raise
+        return params
+
+    async def _trigger_callbacks(self, callbacks: list[Callable], *args) -> None:
+        """执行回调列表（异常隔离，支持 async/普通 callable）"""
+        for cb in list(callbacks):
+            try:
+                res = cb(*args)
+                if inspect.isawaitable(res):
+                    await res
+            except Exception:
+                logger.exception("连接回调执行异常")
+
     async def _monitor_connection(self) -> None:
         """后台任务：监控连接状态变化并触发回调"""
         while self._running:
@@ -128,25 +191,14 @@ class OneBotConnection:
                 connected = self.is_connected
                 if not connected and self._was_connected:
                     logger.warning(
-                        "LLBot 连接已断开（WebSocket 客户端全部离开），"
-                        "Web UI 与 API 仍可用"
+                        "LLBot 连接已断开（WebSocket 客户端全部离开），Web UI 与 API 仍可用"
                     )
-                    for cb in self._on_disconnect_callbacks:
-                        try:
-                            res = cb()
-                            if inspect.isawaitable(res):
-                                await res
-                        except Exception:
-                            logger.exception("断连回调执行异常")
+                    await self._trigger_callbacks(self._on_disconnect_callbacks)
                 elif connected and not self._was_connected:
                     logger.info("LLBot 已重新连接，恢复消息收发")
-                    for cb in self._on_reconnect_callbacks:
-                        try:
-                            res = cb()
-                            if inspect.isawaitable(res):
-                                await res
-                        except Exception:
-                            logger.exception("重连回调执行异常")
+                    await self._trigger_callbacks(self._on_reconnect_callbacks)
+                    # 初始连接与重连均触发 on_connect（插件级 on_bot_connect）
+                    await self._trigger_callbacks(self._on_connect_callbacks)
                 self._was_connected = connected
             except Exception:
                 logger.exception("连接状态监控异常")
@@ -224,6 +276,8 @@ class OneBotConnection:
         self._event_handlers.clear()
         self._on_disconnect_callbacks.clear()
         self._on_reconnect_callbacks.clear()
+        self._on_connect_callbacks.clear()
+        self._on_metaevent_callbacks.clear()
         # 关闭 Quart server
         try:
             if self._server_task and not self._server_task.done():
@@ -243,19 +297,25 @@ class OneBotConnection:
 
     # ============ API 调用 ============
 
-    async def call_api(self, action: str, params: Optional[dict] = None, timeout: float = 30) -> dict:
+    async def call_api(self, action: str, params: dict | None = None, timeout: float = 30) -> dict:
         """调用 OneBot API
 
         返回 API 响应中的 data 字段（aiocqhttp 已自动解包）。
+        调用前触发 on_calling_api 钩子（可改写参数或阻止调用）。
         """
+        params = params or {}
+        if self._api_call_hooks:
+            params = await self._trigger_api_call_hooks(action, params) or {}
+        if not isinstance(params, dict):
+            params = {}
         try:
             result = await asyncio.wait_for(
-                self._bot.call_action(action, **(params or {})),
+                self._bot.call_action(action, **params),
                 timeout=timeout,
             )
             return result if isinstance(result, dict) else {"data": result}
         except asyncio.TimeoutError:
-            raise TimeoutError(f"API 调用超时: {action}")
+            raise TimeoutError(f"API 调用超时: {action}") from None
         except Exception as e:
             logger.error(f"API 调用失败 {action}: {e}")
             raise
@@ -264,17 +324,23 @@ class OneBotConnection:
 
     async def send_private_msg(self, user_id: int, message: str) -> dict:
         """发送私聊消息"""
-        return await self.call_api("send_private_msg", {
-            "user_id": user_id,
-            "message": message,
-        })
+        return await self.call_api(
+            "send_private_msg",
+            {
+                "user_id": user_id,
+                "message": message,
+            },
+        )
 
     async def send_group_msg(self, group_id: int, message: str) -> dict:
         """发送群聊消息"""
-        return await self.call_api("send_group_msg", {
-            "group_id": group_id,
-            "message": message,
-        })
+        return await self.call_api(
+            "send_group_msg",
+            {
+                "group_id": group_id,
+                "message": message,
+            },
+        )
 
     async def send_msg(self, message_type: str, target_id: int, message: str) -> dict:
         """发送消息"""
@@ -289,10 +355,13 @@ class OneBotConnection:
         return await self.call_api("get_group_info", {"group_id": group_id})
 
     async def get_group_member_info(self, group_id: int, user_id: int) -> dict:
-        return await self.call_api("get_group_member_info", {
-            "group_id": group_id,
-            "user_id": user_id,
-        })
+        return await self.call_api(
+            "get_group_member_info",
+            {
+                "group_id": group_id,
+                "user_id": user_id,
+            },
+        )
 
     # ============ 状态 ============
 

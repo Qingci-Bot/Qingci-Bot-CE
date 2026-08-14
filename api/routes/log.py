@@ -7,12 +7,12 @@ import csv
 import io
 import logging
 
-from fastapi import APIRouter, Query, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
-from bot.core.bot import get_bot as _get_bot
-from api.auth import require_auth
 from api.audit import record_audit
+from api.auth import require_auth
+from bot.core.bot import get_bot as _get_bot
 
 logger = logging.getLogger("qingci-bot.api.log")
 
@@ -21,8 +21,13 @@ router = APIRouter()
 
 # CSV 导出列与分批大小（id 游标分页，避免一次性载入全表）
 _EXPORT_COLUMNS = (
-    "message_id", "user_id", "group_id", "content",
-    "message_type", "role", "created_at",
+    "message_id",
+    "user_id",
+    "group_id",
+    "content",
+    "message_type",
+    "role",
+    "created_at",
 )
 _EXPORT_BATCH_SIZE = 1000
 
@@ -31,7 +36,7 @@ def _get_bot_instance():
     try:
         return _get_bot()
     except RuntimeError:
-        raise HTTPException(status_code=503, detail="Bot 未初始化，请先启动 Bot 服务")
+        raise HTTPException(status_code=503, detail="Bot 未初始化，请先启动 Bot 服务") from None
 
 
 @router.get("/messages", dependencies=[Depends(require_auth)])
@@ -109,7 +114,7 @@ async def get_usage_stats(days: int = Query(default=30, ge=1, le=365)):
     try:
         daily = await bot.db.get_usage_stats(days=days)
     except Exception:
-        raise HTTPException(status_code=500, detail="查询用量统计失败，详见服务端日志")
+        raise HTTPException(status_code=500, detail="查询用量统计失败，详见服务端日志") from None
     summary = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "total_tokens": 0}
     for row in daily:
         row["total_tokens"] = row["prompt_tokens"] + row["completion_tokens"]
@@ -139,9 +144,7 @@ async def export_messages():
         after_id = 0
         while True:
             try:
-                rows = await bot.db.get_messages_batch(
-                    after_id=after_id, limit=_EXPORT_BATCH_SIZE
-                )
+                rows = await bot.db.get_messages_batch(after_id=after_id, limit=_EXPORT_BATCH_SIZE)
             except Exception:
                 # 流已开始输出时无法再改状态码，仅中止并记日志
                 logger.exception("导出消息分批查询失败")
@@ -188,7 +191,7 @@ async def list_sessions():
         sessions = await bot.db.list_sessions()
     except Exception:
         logger.exception("查询会话列表失败")
-        raise HTTPException(status_code=500, detail="查询会话列表失败，详见服务端日志")
+        raise HTTPException(status_code=500, detail="查询会话列表失败，详见服务端日志") from None
     return {"sessions": sessions}
 
 
@@ -203,12 +206,12 @@ async def get_session_messages(
         messages = await bot.db.get_sessions(key, limit=limit)
     except Exception:
         logger.exception("查询会话消息失败")
-        raise HTTPException(status_code=500, detail="查询会话消息失败，详见服务端日志")
+        raise HTTPException(status_code=500, detail="查询会话消息失败，详见服务端日志") from None
     return {"session_key": key, "messages": messages}
 
 
 @router.delete("/sessions/one", dependencies=[Depends(require_auth)])
-async def delete_session(key: str = Query(..., min_length=1), request: Request = None):
+async def delete_session(key: str = Query(..., min_length=1), request: Request = None) -> dict:  # type: ignore[assignment]  # FastAPI 自动注入请求对象，用于审计日志提取 client_ip
     """删除指定会话（清空其历史）
 
     必须经 LLMManager 清除：仅删 DB 会遗留内存缓存，
@@ -222,6 +225,6 @@ async def delete_session(key: str = Query(..., min_length=1), request: Request =
             await bot.db.clear_sessions(session_key=key)
     except Exception:
         logger.exception("删除会话失败")
-        raise HTTPException(status_code=500, detail="删除会话失败，详见服务端日志")
+        raise HTTPException(status_code=500, detail="删除会话失败，详见服务端日志") from None
     await record_audit("delete_session", f"删除会话 {key}", request)
     return {"message": f"会话 {key} 已删除"}

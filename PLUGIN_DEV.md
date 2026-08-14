@@ -95,14 +95,15 @@ Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，�
 ```python
 from bot.plugin.base import PluginBase, PluginStatus
 
+
 class MyPlugin(PluginBase):
     # 插件元信息（必填 name，其余可选）
     name = "my_plugin"
     version = "1.0.0"
     author = "YourName"
     description = "插件描述"
-    category = "tool"       # 插件分类：chat / admin / tool / fun / 自定义
-    require = []            # 依赖的其他插件 name 列表，支持 PEP 440 版本约束（如 "chat>=1.0,<2.0"）
+    category = "tool"  # 插件分类：chat / admin / tool / fun / 自定义
+    require = []  # 依赖的其他插件 name 列表，支持 PEP 440 版本约束（如 "chat>=1.0,<2.0"）
 
     async def on_load(self):
         """插件加载时调用（必须实现）"""
@@ -141,8 +142,8 @@ class MyPlugin(PluginBase):
 
 ```python
 # 状态属性（只读）
-plugin.status        # PluginStatus.LOADED
-plugin.enabled       # bool，向后兼容：LOADING/LOADED 为 True
+plugin.status  # PluginStatus.LOADED
+plugin.enabled  # bool，向后兼容：LOADING/LOADED 为 True
 ```
 
 ### 注入的依赖
@@ -160,7 +161,10 @@ plugin.enabled       # bool，向后兼容：LOADING/LOADED 为 True
 | `self.tool_registry` | `ToolRegistry` | Function Calling 工具注册表 |
 | `self.knowledge_store` | `KnowledgeStore` | 知识库（RAG 未启用时为 None） |
 | `self.session_state` | `SessionStateManager` | 会话状态（TTL 键值存储） |
+| `self.event_bus` | `EventBus` | 跨插件事件总线（发布-订阅） |
 | `self.matchers` | `list[Matcher]` | Matcher 列表（在 `on_load` 中填充） |
+| `self.i18n` | `I18n` | 国际化翻译器（`self._ = self.i18n.t`） |
+| `self.data_dir` | `Path` | 插件专属数据目录（自动创建） |
 
 ### 依赖注入容器（DI Container）
 
@@ -168,6 +172,7 @@ plugin.enabled       # bool，向后兼容：LOADING/LOADED 为 True
 
 ```python
 from bot.core.session_state import SessionStateManager
+
 
 class MyPlugin(PluginBase):
     name = "my_plugin"
@@ -191,6 +196,293 @@ class MyPlugin(PluginBase):
 | `SINGLETON` | 全局唯一实例（默认） |
 | `TRANSIENT` | 每次 resolve 创建新实例 |
 | `SCOPED` | 同一 scope 内返回同一实例 |
+
+### handler 参数级依赖注入（Depends）
+
+Matcher handler 的**参数**也支持依赖注入：框架按函数签名自动解析参数，将 `MatcherContext`、`Bot` 实例及 DI 容器中的服务注入到调用位置，无需手动从 `ctx` 或 `self` 取。
+
+```python
+from bot.core.di import Depends
+from bot.core.session_state import SessionStateManager
+from bot.plugin.matcher import MatcherContext, on_command
+
+
+@on_command("stats")
+async def stats(
+    ctx: MatcherContext,                       # 混合上下文（自动注入）
+    state: SessionStateManager = Depends(SessionStateManager),  # Depends 显式声明
+    bot: QingciBot = None,                     # 类型注解自动解析
+):
+    ...
+```
+
+**参数解析规则（按顺序）：**
+1. 注解为 `MatcherContext` 类型，或参数名为 `ctx`/`match` → 注入匹配上下文
+2. 默认值为 `Depends(...)` → 按其依赖解析（支持类型 / 可调用依赖）
+3. 注解为 `Bot` 类型 → 注入 `bot` 实例
+4. 注解可在 DI 容器解析 → 从容器注入
+5. 其余带默认值参数 → 使用默认值
+6. 其余参数 → 视为上下文（向后兼容）
+
+`Depends` 支持 `use_cache=True`（默认）缓存解析结果；可调用依赖的返回值会自动等待 `await`。
+
+### 插件数据目录（data_dir）
+
+每个插件拥有专属数据目录 `app_root()/data/plugins/<name>/`，用于持久化运行时数据（缓存、导出文件等）。目录自动创建，卸载插件不删除。
+
+```python
+async def on_load(self):
+    # 写入持久化数据
+    (self.data_dir / "cache.json").write_text('{"key": "value"}', encoding="utf-8")
+```
+
+### 全局生命周期钩子
+
+插件可覆写以下钩子，在 Bot 与连接的关键节点获得通知（全部为可选，异常隔离，不影响主流程）：
+
+| 钩子 | 触发时机 | 说明 |
+|------|----------|------|
+| `on_startup()` | Bot 启动完成、所有插件加载完毕后 | 连接数据库、注册后台任务等耗时初始化 |
+| `on_shutdown()` | Bot 停止时（在 `on_unload` 之前） | 释放 `on_startup` 中申请的资源 |
+| `on_bot_connect()` | 有 QQ 会话（LLBot）连接到反向 WebSocket | 初始连接与重连均触发，用于初始化会话资源 |
+| `on_metaevent(event)` | 元事件到达（heartbeat / lifecycle 等） | 返回 `True` 表示已消费 |
+
+```python
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+
+    async def on_startup(self):
+        # 连接建立后台任务、预热缓存等
+        pass
+
+    async def on_bot_connect(self):
+        # LLBot 连接上时向管理员打招呼
+        pass
+
+    async def on_shutdown(self):
+        # 释放 on_startup 申请的资源
+        pass
+```
+
+### 事件总线（EventBus / 跨插件事件广播）
+
+事件总线提供发布-订阅式跨插件事件广播，让插件间**无需显式依赖**即可协作（区别于 `export`/`require` 的服务式调用）。插件通过注入的 `self.event_bus` 使用：
+
+```python
+# 订阅方：关注某事件的插件
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+
+    async def on_load(self):
+        await self.event_bus.subscribe("order.created", self._on_order_created)
+
+    async def _on_order_created(self, event_type: str, data: dict) -> None:
+        # 收到其他插件发布的事件
+        order_id = data.get("order_id")
+        ...
+
+
+# 发布方：在 handler 中发布事件
+@on_command("order")
+async def order(ctx: MatcherContext) -> str:
+    await ctx.plugin.event_bus.publish("order.created", order_id=123, amount=99)
+    return "订单已创建"
+```
+
+**API 速查：**
+| 方法 | 说明 |
+|------|------|
+| `await subscribe(event_type, handler)` | 订阅事件；handler 为 `async (event_type, data) -> None`，也支持 sync |
+| `await unsubscribe(event_type, handler)` | 取消订阅 |
+| `await publish(event_type, **data)` | 发布事件，异步通知所有订阅者（异常隔离，单个订阅者异常不影响其他） |
+| `subscribe_sync(event_type, handler)` | 同步订阅（非 async 上下文使用） |
+| `has_subscribers(event_type)` | 是否有订阅者 |
+| `await clear()` | 清空所有订阅 |
+
+- 订阅 `"*"` 接收所有事件（通配）
+- 事件 `data` 为 dict，`publish` 的关键字参数即为其内容
+- 事件总线已注入 DI 容器（`EventBus` 类型），handler 参数级 DI 中可按 `Depends(EventBus)` 或类型注解获取
+- 插件卸载时需自行 `unsubscribe`（或依赖 `EventBus` 常驻实例的引用）
+
+### 插件级 LLM 工具声明（@llm_tool）
+
+插件可用 `@llm_tool` 装饰器直接注册 Function Calling 工具，让插件参与 LLM 推理，构建「LLM 原生插件」。工具在插件加载时自动注册到全局 `ToolRegistry`，卸载时自动注销。
+
+```python
+from bot.plugin.llm_tool import llm_tool
+
+
+# 简写：描述取函数 docstring，参数由调用方/模型推断
+@llm_tool(description="查询城市天气")
+def get_weather(city: str = "北京") -> str:
+    return f"{city}: 晴 25°C"
+
+
+# 完整：显式声明标准 JSON Schema 参数
+@llm_tool(
+    name="sum",
+    description="计算两个整数之和",
+    parameters={
+        "type": "object",
+        "properties": {
+            "a": {"type": "integer", "description": "加数"},
+            "b": {"type": "integer", "description": "加数"},
+        },
+        "required": ["a", "b"],
+    },
+)
+def add(a: int, b: int) -> int:
+    return a + b
+```
+
+- 工具注册名自动加插件名前缀（`<plugin>_<工具名>`），避免跨插件冲突；如上方 `get_weather` 在 `weather` 插件中注册为 `weather_get_weather`
+- 需在插件的 `__init__.py` 模块中使用（模块级装饰器，随插件加载收集）
+- 插件卸载时框架自动从 `ToolRegistry` 注销其全部工具
+- 工具实际参与调用需 `config.yaml` 中 `llm.enable_tools` 开启
+
+### 指令系统增强（别名 / 子指令 / 类型化参数）
+
+`on_command` 新增三个能力，更灵活地组织命令：
+
+**命令别名（aliases）：** 同一命令多个触发词，`ctx.command` 为实际命中的词。
+
+```python
+@on_command("weather", aliases=("天气", "tq"))
+async def weather(ctx: MatcherContext) -> str:
+    return f"查询天气：{ctx.args}"
+# /weather 北京 与 天气 北京 均触发
+```
+
+**子指令（subcommands）：** 将一组相关命令组织到父指令下，父指令不含子指令时匹配，`"父 子 [参数]"` 路由到对应子指令 handler。
+
+```python
+@on_command("admin", subcommands={
+    "ban": _ban,
+    "unban": _unban,
+})
+async def admin(ctx: MatcherContext) -> str:
+    return "子指令: ban/unban"
+
+async def _ban(ctx: MatcherContext) -> str:
+    return f"已封禁 {ctx.args}"   # ctx.args 为子指令后的剩余参数
+```
+父指令自动排除已声明的子指令（不会拦截 `admin ban xx`），子指令消息必然命中对应子指令 Matcher。
+
+**类型化参数（args_schema）：** 按空白切分 `ctx.args` 并按类型转换，结果注入 handler 同名形参。类型转换失败保留原字符串，不崩溃。
+
+```python
+@on_command("weather", args_schema={"city": str, "days": int})
+async def weather(ctx: MatcherContext, city: str = "", days: int = 1) -> str:
+    return f"{city}: {days} 天预报"
+# /weather 北京 3 -> city="北京"（str），days=3（int），输出 "北京: 3 天预报"
+```
+
+三个能力可自由组合。
+
+### 插件级配置 UI（Config schema 自动生成）
+
+插件定义 `Config` 内嵌类（pydantic `BaseModel`）后，框架自动将其导出为 JSON Schema，Web「插件管理」页据此**自动渲染配置表单**，无需编写任何前端代码。
+
+```python
+from pydantic import BaseModel
+
+
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+
+    class Config(BaseModel):
+        greeting: str = "你好"
+        max_length: int = 100
+        verbose: bool = False
+```
+
+- 字段的 `default` / `description` / `required` 自动映射到表单（必填字段带 `*`，布尔渲染为开关，整数渲染为数字输入框）
+- 保存后写入 `config.yaml` 的 `plugins.<name>` 节，并即时应用到 `self.plugin_config`
+- 未定义 `Config` 时返回 `None`，前端不显示配置按钮
+- 相关 API：`GET /api/plugin/{name}/config`（获取 schema + 当前值）、`PUT /api/plugin/{name}/config`（更新）
+
+### 自动热重载（PluginWatcher）
+
+开发期监听外部插件目录（`plugins/`）的 `.py` 文件变更并自动重载对应插件，改代码无需手动重载。生产环境建议关闭。
+
+```yaml
+# config.yaml
+hot_reload:
+  enabled: true     # 默认 false
+  interval: 2.0     # 轮询间隔（秒）
+```
+
+- 按文件 mtime 检测变更与新增，命中已加载插件时自动 `reload`
+- 重载失败时旧插件保持生效，不影响运行
+- 监听目录为 `app_root()/plugins/`，目录型（`__init__.py`）与文件型（`.py`）插件均支持
+
+### 细粒度事件处理钩子（run_preprocessor / on_calling_api）
+
+除事件级钩子与插件级 `before/after_handler` 外，框架提供两个更细粒度的全局钩子，用于跨插件横切逻辑：
+
+**Matcher 运行前钩子（run_preprocessor）：** 在 Matcher 匹配成功、handler 运行前触发，用于横切鉴权、审计、改写上下文。通过注入的 `bot` 注册：
+
+```python
+@on_command("admin")
+async def admin(ctx: MatcherContext) -> str:
+    return "管理指令"
+
+
+# 在插件 on_load 中注册（或直接调用 ctx.bot.add_matcher_preprocessor）
+async def check_admin(bot, matcher, mctx) -> str | None:
+    if not is_admin(mctx.user_id):
+        return "无权限执行此指令"   # 返回非 None 即拦截该 Matcher
+    return None                    # 返回 None 则放行
+
+
+bot.add_matcher_preprocessor(check_admin)  # 此处的 bot 为注入的 Bot 实例
+```
+
+- 钩子签名 `async (bot, matcher, mctx) -> str | None`（也支持 sync）；返回非 None 作为拦截回复并停止整个分发链
+- 仅在规则/权限匹配成功后触发；未命中任何 Matcher 的事件不触发
+- 单个钩子异常隔离（记录后继续下一个），不影响主链路
+- 与事件级 `register_pre_hook`（事件级别、调度前）和插件级 `register_before`（插件内、handler 前）三级钩子互补
+
+**平台接口调用钩子（on_calling_api）：** 每次 Bot 调用 OneBot API 前触发，用于横切鉴权、参数改写、审计。通过 `bot.register_api_hook(fn)`（或 `connection.on_api_call(fn)`）注册：
+
+```python
+bot.register_api_hook(check_api)
+
+async def check_api(api_name: str, params: dict) -> dict | None:
+    if api_name == "send_group_msg":
+        params["message"] = f"[审计] {params['message']}"   # 改写参数
+        return params
+    if api_name == "set_group_ban":
+        raise PermissionError("禁止执行禁言")                 # 抛异常阻止调用
+    return None                                             # 保持原样
+```
+
+- 钩子签名 `async (api_name, params) -> dict | None`；返回新 params 替换原参数，返回 None 保持原样，抛异常则阻止该次 API 调用
+- 覆盖所有经 `OneBotConnection.call_api` 的调用（含 `send_*`/`get_*` 便捷方法）
+
+### 国际化（i18n）
+
+插件可声明多语言翻译资源，通过 `self.i18n` / `self._` 使用。翻译文件约定为插件目录下的 `i18n/<locale>.json`：
+
+```
+plugins/my_plugin/
+├── __init__.py
+└── i18n/
+    ├── zh-CN.json    # {"hello": "你好，{name}"}
+    └── en-US.json    # {"hello": "Hello, {name}"}
+```
+
+```python
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+
+    async def on_message(self, ctx) -> str | None:
+        return self._("hello", name=ctx.plain_text)  # 等价 self.i18n.t(...)
+```
+
+- 全局语言由 `config.yaml` 的 `lang` 字段控制（默认 `zh-CN`），Bot 启动时自动应用到所有插件
+- 未命中的 key 原样返回，便于发现缺失资源而不崩溃
+- 支持 `{placeholder}` 格式化；`self.i18n.load_dir()` 也可手动加载翻译目录
 
 ### 会话状态（SessionState / TTL 键值存储）
 
@@ -264,9 +556,10 @@ self.session_state.set("banned_keywords", ["广告"], group_id=456)
 ```python
 from bot.plugin.base import PluginBase
 
+
 class MyPlugin(PluginBase):
     name = "my_plugin"
-    require = ["admin"]   # 依赖 admin 插件（内置插件名或已加载插件名）
+    require = ["admin"]  # 依赖 admin 插件（内置插件名或已加载插件名）
 
     async def on_load(self):
         # 通过 bot 获取依赖插件实例，调用其公开方法
@@ -280,9 +573,9 @@ class MyPlugin(PluginBase):
 **PEP 440 版本约束：**
 
 ```python
-require = ["chat>=1.0,<2.0"]   # 依赖 chat 插件 1.x 版本
-require = ["admin>=1.1"]        # 依赖 admin 插件 1.1 及以上
-require = ["knowledge"]         # 无版本约束
+require = ["chat>=1.0,<2.0"]  # 依赖 chat 插件 1.x 版本
+require = ["admin>=1.1"]  # 依赖 admin 插件 1.1 及以上
+require = ["knowledge"]  # 无版本约束
 ```
 
 ### 插件级配置（plugin_config）
@@ -291,6 +584,7 @@ require = ["knowledge"]         # 无版本约束
 
 ```python
 from pydantic import BaseModel
+
 
 class MyPlugin(PluginBase):
     name = "my_plugin"
@@ -322,14 +616,17 @@ plugins:
 # 提供方（chat 插件）
 class ChatPlugin(PluginBase):
     name = "chat"
+
     async def on_load(self):
         self.export("get_history", self.get_history)
         self.export("clear_history", self.clear_history)
+
 
 # 消费方（依赖 chat 插件）
 class MyPlugin(PluginBase):
     name = "my_plugin"
     require = ["chat"]
+
     async def on_load(self):
         chat = self.get_exports("chat")  # 获取导出字典
         history = await chat["get_history"](user_id=123)
@@ -424,7 +721,7 @@ plugins/my_plugin/
 | 函数 | 说明 |
 |------|------|
 | `on_message(rule, permission, priority, block, temp)` | 通用消息匹配器 |
-| `on_command(cmd, rule, permission, priority, block, temp)` | 命令匹配器（自动解析参数到 `ctx.args`） |
+| `on_command(cmd, rule, permission, priority, block, temp, aliases, subcommands, args_schema)` | 命令匹配器（自动解析参数到 `ctx.args`；支持别名 / 子指令 / 类型化参数） |
 | `on_startswith(prefix, ...)` | 前缀匹配器 |
 | `on_keyword(keywords, ...)` | 关键词匹配器 |
 | `on_notice(rule, priority, block, temp)` | 通知事件匹配器 |
@@ -433,9 +730,7 @@ plugins/my_plugin/
 **一次性匹配器（temp=True）**：匹配执行后自动从所属插件移除，适用于"等待下一次对话"等只应触发一次的场景，例如"输入数字确认操作"：
 
 ```python
-self.matchers.append(
-    on_command("confirm", temp=True)(self._confirm)
-)
+self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 ```
 
 **内置 Rule：** `startswith` / `endswith` / `fullmatch` / `contains` / `regex` / `command` / `to_me` / `is_private` / `is_group` / `keyword` / `rate_limit`
@@ -466,14 +761,13 @@ from bot.plugin.base import PluginBase
 from bot.plugin.matcher import on_command, MatcherContext
 from bot.plugin.permission import SUPERUSER
 
+
 class MyPlugin(PluginBase):
     name = "my_plugin"
 
     async def on_load(self):
         # 注册 Matcher，handler 为 self 的方法
-        self.matchers.append(
-            on_command("ping", permission=SUPERUSER)(self._handle_ping)
-        )
+        self.matchers.append(on_command("ping", permission=SUPERUSER)(self._handle_ping))
 
     async def _handle_ping(self, ctx: MatcherContext) -> str:
         return "pong!"
@@ -486,6 +780,7 @@ class MyPlugin(PluginBase):
 
 ```python
 from bot.plugin.matcher import on_command, MatcherContext
+
 
 @on_command("ping")
 async def ping_handler(ctx: MatcherContext) -> str:
@@ -500,6 +795,7 @@ from bot.plugin.base import PluginBase
 from bot.plugin.matcher import on_command, MatcherContext
 from bot.plugin.permission import SUPERUSER
 
+
 class GreetPlugin(PluginBase):
     name = "greet"
     version = "1.0.0"
@@ -507,9 +803,7 @@ class GreetPlugin(PluginBase):
 
     async def on_load(self):
         # /greet <名字> -> 你好，<名字>！
-        self.matchers.append(
-            on_command("greet", permission=SUPERUSER)(self._greet)
-        )
+        self.matchers.append(on_command("greet", permission=SUPERUSER)(self._greet))
 
     async def on_unload(self):
         pass
@@ -527,15 +821,14 @@ from bot.plugin.base import PluginBase
 from bot.plugin.matcher import on_startswith, MatcherContext
 from bot.plugin.rule import is_group  # 仅群聊触发
 
+
 class TranslatorPlugin(PluginBase):
     name = "translator"
     version = "1.0.0"
     description = "中英互译（前缀 翻译 触发，仅群聊）"
 
     async def on_load(self):
-        self.matchers.append(
-            on_startswith("翻译", rule=is_group())(self._translate)
-        )
+        self.matchers.append(on_startswith("翻译", rule=is_group())(self._translate))
 
     async def on_unload(self):
         pass
@@ -563,6 +856,7 @@ from bot.plugin.base import PluginBase
 from bot.plugin.matcher import on_message, MatcherContext
 from bot.plugin.rule import regex, keyword
 
+
 class ReminderPlugin(PluginBase):
     name = "reminder"
     version = "1.0.0"
@@ -570,13 +864,9 @@ class ReminderPlugin(PluginBase):
 
     async def on_load(self):
         # 匹配 "提醒我 X 点 Y 分"
-        self.matchers.append(
-            on_message(rule=regex(r"提醒我.*?(\d+)点(\d+)分"))(self._set_reminder)
-        )
+        self.matchers.append(on_message(rule=regex(r"提醒我.*?(\d+)点(\d+)分"))(self._set_reminder))
         # 匹配包含 "提醒" 关键词
-        self.matchers.append(
-            on_message(rule=keyword("提醒"))(self._hint)
-        )
+        self.matchers.append(on_message(rule=keyword("提醒"))(self._hint))
 
     async def on_unload(self):
         pass
@@ -598,15 +888,14 @@ from bot.plugin.base import PluginBase
 from bot.plugin.matcher import on_notice, MatcherContext
 from bot.plugin.rule import Rule
 
+
 class WelcomePlugin(PluginBase):
     name = "welcome"
     version = "1.0.0"
     description = "新人入群欢迎"
 
     async def on_load(self):
-        self.matchers.append(
-            on_notice()(self._on_group_increase)
-        )
+        self.matchers.append(on_notice()(self._on_group_increase))
 
     async def on_unload(self):
         pass
@@ -635,6 +924,7 @@ from typing import Optional
 from bot.plugin.base import PluginBase
 from bot.core.dispatcher import MessageContext
 
+
 class PingPongPlugin(PluginBase):
     name = "pingpong"
     version = "1.0.0"
@@ -661,14 +951,17 @@ class PingPongPlugin(PluginBase):
 import pytest
 from bot.testing import TestBot, private_message, group_message
 
+
 @pytest.fixture
 def bot():
     return TestBot()  # 轻量测试环境（默认 10001 为管理员）
+
 
 async def test_ping(bot):
     await bot.load_plugin("my_plugin")  # 模块路径，须可 import
     reply = await bot.send(private_message("/ping"))
     assert reply == "pong"
+
 
 async def test_group_and_permission(bot):
     await bot.load_plugin("my_plugin")
@@ -723,9 +1016,11 @@ async def test_group_and_permission(bot):
 # block=True（默认）匹配后停止后续 Matcher
 # block=False 允许后续 Matcher 继续匹配
 
+
 @on_command("ping", priority=1, block=True)
 async def ping(ctx: MatcherContext) -> str:
     return "pong"
+
 
 @on_message(rule=keyword("天气"), priority=10, block=False)
 async def weather_log(ctx: MatcherContext) -> None:
@@ -782,10 +1077,12 @@ Bot 提供全局前置 / 后置钩子，用于横切统计、审计、预处理�
 async def pre_hook(event, ctx):
     return None
 
+
 # 后置钩子：async (event, ctx, reply) -> None
 # 在消息回复发送后触发（reply 为最终回复或 None）
 async def post_hook(event, ctx, reply):
     pass
+
 
 self.bot.register_pre_hook(pre_hook)
 self.bot.register_post_hook(post_hook)
@@ -824,6 +1121,19 @@ plugins/
 **方式三：内置插件**
 
 将插件文件放入 `bot/plugin/builtin/` 目录，Bot 启动时自动加载。
+
+**方式四：在线安装（install）**
+
+通过代码调用 `PluginManager.install(bot, source)` 可从远程/本地来源安装插件到 `plugins/` 目录并自动加载：
+
+```python
+# 支持：git 仓库、HTTP 归档 URL、本地目录或 zip/tar 归档
+ok = await bot.plugin_manager.install(bot, "https://github.com/user/my_plugin/archive/refs/heads/main.zip")
+ok = await bot.plugin_manager.install(bot, "git+https://github.com/user/my_plugin.git", name="my_plugin")
+ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin")
+```
+
+安装流程：拉取到 `plugins/<name>/` → 自动安装 `requirements.txt`（或 `plugin.json` 的 `requirements` 字段）声明的 Python 依赖 → 加载插件。来源支持 git 仓库、HTTP 指向 zip/tar 的归档、本地目录或归档文件。
 
 ### 常用 OneBot API
 
@@ -926,6 +1236,8 @@ plugins/
 | POST | `/{name}/disable` | 是 | 禁用插件（保留实例，跳过事件分发） |
 | POST | `/{name}/enable` | 是 | 启用插件（恢复事件分发） |
 | GET | `/{name}/metrics` | 是 | 获取插件执行指标（调用次数、平均耗时、错误率） |
+| GET | `/{name}/config` | 是 | 获取插件配置 JSON Schema 与当前值（用于自动渲染配置表单） |
+| PUT | `/{name}/config` | 是 | 更新插件配置（写入 config.yaml 并应用到插件实例） |
 | GET | `/discover/metadata` | 是 | 无导入发现：扫描 plugins/ 目录中的 plugin.json 元数据 |
 
 ### 命令管理 `/api/command`

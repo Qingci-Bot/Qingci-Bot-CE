@@ -7,8 +7,6 @@
 - 管理员权限命令
 """
 
-from typing import Optional
-
 from bot.plugin.base import PluginBase
 from bot.plugin.matcher import MatcherContext, on_command, on_message
 from bot.plugin.permission import SUPERUSER
@@ -20,19 +18,11 @@ class EchoPlugin(PluginBase):
     description = "测试工具示例插件"
 
     async def on_load(self):
-        self.matchers.append(
-            on_command("ping")(self._ping)
-        )
-        self.matchers.append(
-            on_command("register")(self._register)
-        )
+        self.matchers.append(on_command("ping")(self._ping))
+        self.matchers.append(on_command("register")(self._register))
         # 会话续接：处于注册流程中时，任意文本进入下一步
-        self.matchers.append(
-            on_message(priority=5, block=True)(self._register_continue)
-        )
-        self.matchers.append(
-            on_command("notify", permission=SUPERUSER)(self._notify)
-        )
+        self.matchers.append(on_message(priority=5, block=True)(self._register_continue))
+        self.matchers.append(on_command("notify", permission=SUPERUSER)(self._notify))
 
     async def on_unload(self):
         pass
@@ -40,7 +30,7 @@ class EchoPlugin(PluginBase):
     async def _ping(self, ctx: MatcherContext) -> str:
         return "pong"
 
-    async def _register_continue(self, ctx: MatcherContext) -> Optional[str]:
+    async def _register_continue(self, ctx: MatcherContext) -> str | None:
         """注册流程续接：step 非 start 时处理输入文本"""
         step = ctx.session_state.get("step", "start")
         if step == "start":

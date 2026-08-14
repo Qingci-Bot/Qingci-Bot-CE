@@ -14,7 +14,6 @@
 import logging
 import re
 from pathlib import Path
-from typing import Optional, Union
 
 logger = logging.getLogger("qingci-bot.filter")
 
@@ -22,11 +21,11 @@ logger = logging.getLogger("qingci-bot.filter")
 class SensitiveFilter:
     """敏感词过滤器"""
 
-    def __init__(self, words_file: Union[str, Path]):
+    def __init__(self, words_file: str | Path):
         self._words_file = Path(words_file)
         self._words: list[str] = []
         # 预编译的合并正则，空词库时为 None
-        self._pattern: Optional[re.Pattern] = None
+        self._pattern: re.Pattern[str] | None = None
         self.reload()
 
     @property
@@ -63,11 +62,9 @@ class SensitiveFilter:
         else:
             self._pattern = None
             # 空词库时过滤形同虚设，明确提示维护人员补充词库
-            logger.warning(
-                f"敏感词库为空，过滤不会生效，请编辑 {self._words_file}"
-            )
+            logger.warning(f"敏感词库为空，过滤不会生效，请编辑 {self._words_file}")
 
-    def check(self, text: str) -> Optional[str]:
+    def check(self, text: str) -> str | None:
         """检测文本中的敏感词，返回首个命中词；无命中或空词库返回 None"""
         if self._pattern is None or not text:
             return None

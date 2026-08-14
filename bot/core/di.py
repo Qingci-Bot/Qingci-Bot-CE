@@ -22,28 +22,178 @@
 """
 
 import asyncio
+import inspect
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Optional, Union, get_origin, get_args
+from typing import Any, Union, cast, get_args, get_origin
 
 logger = logging.getLogger("qingci-bot.di")
 
 
+class Depends:
+    """handler 参数依赖声明
+
+    用于在 Matcher handler 中显式声明依赖，按需解析：
+        async def handler(ctx, db: Database = Depends(Database)):
+            ...
+    """
+
+    def __init__(self, dependency: Any = None, *, use_cache: bool = True):
+        self.dependency = dependency
+        self.use_cache = use_cache
+
+
+async def resolve_handler_args(
+    func,
+    *,
+    context,
+    bot,
+    container,
+) -> tuple[list, dict]:
+    """解析函数参数，返回 (位置参数, 关键字参数)，供 handler 注入调用
+
+    注入规则（按参数优先级）：
+    1. 参数注解为 context 类型，或参数名为 ctx/match → 传入匹配上下文
+    2. 参数默认值为 Depends(...) → 按其依赖解析
+    3. 参数注解为 bot 类型 → 传入 bot
+    4. 参数注解可在容器中解析 → 从容器注入
+    5. 其余参数有默认值 → 使用默认值
+    6. 其余 → 传入匹配上下文（向后兼容，视作上下文参数）
+    """
+    sig = inspect.signature(func)
+    positional: list = []
+    kwargs: dict = {}
+    ctx_type = type(context)
+
+    # 命令参数类型化解析（on_command 的 args_schema，供 handler 按名注入）
+    parsed_args: dict = {}
+    matcher = getattr(context, "matcher", None)
+    schema = (getattr(matcher, "meta", None) or {}).get("args_schema") if matcher else None
+    if schema:
+        parsed_args = _parse_command_args(schema, getattr(context, "args", ""))
+
+    for name, param in sig.parameters.items():
+        if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+            continue
+        ann = param.annotation
+
+        # 1. 匹配上下文
+        if ann is not inspect.Parameter.empty and ann is ctx_type:
+            positional.append(context)
+            continue
+        if name in ("ctx", "match"):
+            positional.append(context)
+            continue
+
+        # 2. Depends 显式依赖
+        if isinstance(param.default, Depends):
+            kwargs[name] = await _resolve_depends(
+                param.default, container=container, bot=bot, context=context
+            )
+            continue
+
+        # 3. bot 实例
+        if ann is not inspect.Parameter.empty and _matches_bot(ann, bot):
+            kwargs[name] = bot
+            continue
+
+        # 4. 容器可解析类型
+        if ann is not inspect.Parameter.empty:
+            svc = await container.resolve(ann)
+            if svc is not None:
+                kwargs[name] = svc
+                continue
+
+        # 5. 命令参数（args_schema 类型化解析）
+        if name in parsed_args:
+            kwargs[name] = parsed_args[name]
+            continue
+
+        # 6. 默认值
+        if param.default is not inspect.Parameter.empty:
+            kwargs[name] = param.default
+            continue
+
+        # 7. 兜底：视为上下文
+        positional.append(context)
+
+    return positional, kwargs
+
+
+def _parse_command_args(schema: dict, text: str) -> dict:
+    """按空白切分命令参数并按 schema 类型转换
+
+    类型转换失败时保留原始字符串，避免参数错误导致 handler 崩溃。
+    """
+    result: dict = {}
+    tokens = text.split()
+    for i, (name, typ) in enumerate(schema.items()):
+        if i >= len(tokens):
+            break
+        raw = tokens[i]
+        if typ is str:
+            result[name] = raw
+            continue
+        try:
+            result[name] = typ(raw)
+        except (ValueError, TypeError):
+            result[name] = raw
+    return result
+
+
+async def _resolve_depends(dep: Depends, *, container, bot, context) -> Any:
+    """解析 Depends 依赖"""
+    target = dep.dependency
+    if target is None:
+        raise RuntimeError("Depends 依赖为空")
+    if isinstance(target, type):
+        svc = await container.resolve(target)
+        if svc is not None:
+            return svc
+        if _matches_bot(target, bot):
+            return bot
+        if target is type(context) or isinstance(context, target):
+            return context
+        raise RuntimeError(f"依赖 {target.__name__} 未注册")
+    if callable(target):
+        args, kwargs = await resolve_handler_args(
+            target, context=context, bot=bot, container=container
+        )
+        res = target(*args, **kwargs)
+        if hasattr(res, "__await__"):
+            res = await res
+        return res
+    return target
+
+
+def _matches_bot(ann: Any, bot: Any) -> bool:
+    """判断类型注解是否匹配 bot 实例"""
+    if ann is type(bot):
+        return True
+    try:
+        return isinstance(bot, ann)
+    except TypeError:
+        return False
+
+
 class ServiceLifetime(str, Enum):
     """服务生命周期"""
-    SINGLETON = "singleton"   # 单例（默认）：注册后始终返回同一实例
-    TRANSIENT = "transient"   # 瞬时：每次 resolve 创建新实例
-    SCOPED = "scoped"         # 作用域：同一 scope 内返回同一实例
+
+    SINGLETON = "singleton"  # 单例（默认）：注册后始终返回同一实例
+    TRANSIENT = "transient"  # 瞬时：每次 resolve 创建新实例
+    SCOPED = "scoped"  # 作用域：同一 scope 内返回同一实例
 
 
 @dataclass
 class ServiceDescriptor:
     """服务描述符"""
+
     service_type: type
     lifetime: ServiceLifetime = ServiceLifetime.SINGLETON
-    instance: Optional[Any] = None          # SINGLETON / SCOPED 实例
-    factory: Optional[Callable] = None       # TRANSIENT 工厂
+    instance: Any | None = None  # SINGLETON / SCOPED 实例
+    factory: Callable | None = None  # TRANSIENT 工厂
     # 接口绑定：注册时 service_type 是实际类型，但也可通过 bound_types 解析
     bound_types: set[type] = field(default_factory=set)
 
@@ -138,7 +288,7 @@ class DIContainer:
 
     # ---- 解析 ----
 
-    async def resolve(self, service_type: type) -> Optional[Any]:
+    async def resolve(self, service_type: type) -> Any | None:
         """按类型解析服务"""
         async with self._lock:
             desc = self._services.get(service_type)
@@ -261,7 +411,7 @@ class DIContainer:
 
     # ---- 内部解析 ----
 
-    async def _resolve_locked(self, service_type: type) -> Optional[Any]:
+    async def _resolve_locked(self, service_type: type) -> Any | None:
         """内部解析（调用前需持有锁）"""
         desc = self._services.get(service_type)
         if desc is None:
@@ -284,7 +434,7 @@ class DIContainer:
 
         return None
 
-    def _resolve_sync(self, service_type: type) -> Optional[Any]:
+    def _resolve_sync(self, service_type: type) -> Any | None:
         """同步解析（内部使用）"""
         desc = self._services.get(service_type)
         if desc is None:
@@ -321,8 +471,7 @@ class DIContainer:
                 {
                     "type": desc.service_type.__name__,
                     "lifetime": desc.lifetime.value,
-                    "available": desc.instance is not None
-                        or desc.factory is not None,
+                    "available": desc.instance is not None or desc.factory is not None,
                 }
                 for desc in self._services.values()
             ]
@@ -341,5 +490,5 @@ class DIContainer:
         if origin is Union:
             args = [a for a in get_args(tp) if a is not type(None)]
             if len(args) == 1:
-                return args[0]
+                return cast(type, args[0])
         return tp

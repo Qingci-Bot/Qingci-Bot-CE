@@ -8,8 +8,9 @@
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Optional
+from typing import Any
 
 
 @dataclass
@@ -23,9 +24,10 @@ class ChatResult:
         tool_calls: 模型返回的 tool_calls 原始列表（OpenAI tools 格式），
             未调用工具时为 None
     """
+
     content: str
-    usage: Optional[dict] = None
-    tool_calls: Optional[list] = None
+    usage: dict | None = None
+    tool_calls: list | None = None
 
 
 class LLMAdapter(ABC):
@@ -35,11 +37,11 @@ class LLMAdapter(ABC):
     async def chat(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 2048,
         temperature: float = 0.7,
-        tools: Optional[list[dict]] = None,
-        images: Optional[list[str]] = None,
+        tools: list[dict] | None = None,
+        images: list[str] | None = None,
         **kwargs,
     ) -> str:
         """同步聊天（返回完整回复文本）
@@ -58,11 +60,11 @@ class LLMAdapter(ABC):
     async def chat_detail(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 2048,
         temperature: float = 0.7,
-        tools: Optional[list[dict]] = None,
-        images: Optional[list[str]] = None,
+        tools: list[dict] | None = None,
+        images: list[str] | None = None,
         **kwargs,
     ) -> ChatResult:
         """同步聊天（返回完整结果，含 usage 与 tool_calls）
@@ -86,7 +88,7 @@ class LLMAdapter(ABC):
     def chat_stream(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 2048,
         temperature: float = 0.7,
         **kwargs,

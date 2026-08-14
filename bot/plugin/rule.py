@@ -17,7 +17,7 @@
 
 import logging
 import re
-from typing import Callable, Union
+from collections.abc import Callable
 
 from ..core.dispatcher import MessageContext
 
@@ -27,7 +27,7 @@ logger = logging.getLogger("qingci-bot.rule")
 class Rule:
     """规则对象，支持 & | ~ 组合"""
 
-    def __init__(self, checker: Callable = None):
+    def __init__(self, checker: Callable | None = None):
         # checker: async (bot, event, ctx) -> bool
         self._checkers: list[Callable] = []
         if checker is not None:
@@ -89,6 +89,7 @@ class Rule:
         """NOT 组合：取反"""
         rule = Rule()
         original_checkers = self._checkers[:]
+
         async def _not_checker(bot, event, ctx):
             for c in original_checkers:
                 r = c(bot, event, ctx)
@@ -97,13 +98,15 @@ class Rule:
                 if not r:
                     return True
             return False
+
         rule._checkers = [_not_checker]
         return rule
 
 
 # ============ 内置规则工厂 ============
 
-def startswith(prefix: Union[str, tuple[str, ...]]) -> Rule:
+
+def startswith(prefix: str | tuple[str, ...]) -> Rule:
     """前缀匹配
 
     匹配后自动从 plain_text 中去除前缀，写入 ctx.args。
@@ -114,20 +117,20 @@ def startswith(prefix: Union[str, tuple[str, ...]]) -> Rule:
         text = ctx.plain_text
         for p in prefixes:
             if text.startswith(p):
-                ctx.args = text[len(p):].strip()
+                ctx.args = text[len(p) :].strip()
                 return True
         return False
 
     return Rule(_check)
 
 
-def endswith(suffix: Union[str, tuple[str, ...]]) -> Rule:
+def endswith(suffix: str | tuple[str, ...]) -> Rule:
     """后缀匹配"""
     suffixes = (suffix,) if isinstance(suffix, str) else tuple(suffix)
     return Rule(lambda bot, event, ctx: any(ctx.plain_text.endswith(s) for s in suffixes))
 
 
-def fullmatch(text: Union[str, tuple[str, ...]]) -> Rule:
+def fullmatch(text: str | tuple[str, ...]) -> Rule:
     """完全匹配"""
     texts = (text,) if isinstance(text, str) else tuple(text)
     return Rule(lambda bot, event, ctx: ctx.plain_text in texts)
@@ -138,7 +141,7 @@ def contains(keyword: str) -> Rule:
     return Rule(lambda bot, event, ctx: keyword in ctx.plain_text)
 
 
-def regex(pattern: Union[str, re.Pattern], flags: int = 0) -> Rule:
+def regex(pattern: str | re.Pattern, flags: int = 0) -> Rule:
     """正则匹配
 
     匹配后将 Match 对象存入 ctx.match。
@@ -155,7 +158,7 @@ def regex(pattern: Union[str, re.Pattern], flags: int = 0) -> Rule:
     return Rule(_check)
 
 
-def command(cmd: Union[str, tuple[str, ...]]) -> Rule:
+def command(cmd: str | tuple[str, ...]) -> Rule:
     """命令匹配
 
     支持别名（传入 tuple）。命令前缀自动处理（/ 或无前缀均可）。
@@ -181,7 +184,7 @@ def command(cmd: Union[str, tuple[str, ...]]) -> Rule:
                 return True
             if text_for_match.startswith(c + " "):
                 ctx.command = c
-                ctx.args = text_for_match[len(c):].strip()
+                ctx.args = text_for_match[len(c) :].strip()
                 return True
             # 不支持命令直接连参数无空格（如 /ping123 不匹配 ping）
         return False
@@ -189,10 +192,39 @@ def command(cmd: Union[str, tuple[str, ...]]) -> Rule:
     return Rule(_check)
 
 
+def subcommand(parent: str, sub: str) -> Rule:
+    """子指令匹配
+
+    需与 command(parent) 组合使用（AND）。匹配形式 "parent sub [args]"。
+    匹配后：
+    - ctx.subcommand: 子指令名
+    - ctx.command:   "parent sub"
+    - ctx.args:      子指令后的剩余参数（已 strip）
+    """
+
+    def _check(bot, event, ctx):
+        args = getattr(ctx, "args", "")
+        if args == sub:
+            ctx.subcommand = sub
+            ctx.command = f"{ctx.command} {sub}".strip()
+            ctx.args = ""
+            return True
+        if args.startswith(sub + " "):
+            ctx.subcommand = sub
+            ctx.command = f"{ctx.command} {sub}".strip()
+            ctx.args = args[len(sub) :].strip()
+            return True
+        return False
+
+    return Rule(_check)
+
+
 def to_me() -> Rule:
     """@ 机器人或私聊"""
+
     def _check(bot, event, ctx):
         return ctx.is_at_bot or ctx.message_type == "private"
+
     return Rule(_check)
 
 

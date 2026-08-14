@@ -5,12 +5,12 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from bot.core.bot import get_bot as _get_bot
-from api.auth import require_auth
 from api.audit import record_audit
+from api.auth import require_auth
+from bot.core.bot import get_bot as _get_bot
 
 logger = logging.getLogger("qingci-bot.api.command")
 
@@ -19,6 +19,7 @@ router = APIRouter()
 
 class CommandUpdate(BaseModel):
     """命令更新请求体"""
+
     disabled: bool | None = Field(None, description="是否禁用该命令")
     priority: int | None = Field(None, description="优先级（越小越先执行）", ge=0, le=100)
 
@@ -27,7 +28,7 @@ def _get_bot_instance():
     try:
         return _get_bot()
     except RuntimeError:
-        raise HTTPException(status_code=503, detail="Bot 未初始化，请先启动 Bot 服务")
+        raise HTTPException(status_code=503, detail="Bot 未初始化，请先启动 Bot 服务") from None
 
 
 @router.get("/conflicts", dependencies=[Depends(require_auth)])
@@ -59,7 +60,7 @@ async def list_commands():
 
     # 构建响应：标记冲突
     result = []
-    for cmd, entries in sorted(commands.items()):
+    for _cmd, entries in sorted(commands.items()):
         has_conflict = len(entries) > 1
         for e in entries:
             e["has_conflict"] = has_conflict
@@ -80,7 +81,6 @@ async def update_command(owner: str, command: str, body: CommandUpdate, request:
     bot = _get_bot_instance()
     pm = bot.plugin_manager
 
-    updated = False
     for plugin in pm.plugins.values():
         for m in plugin.matchers:
             if m.owner != owner or m.meta.get("command") != command:
@@ -89,7 +89,6 @@ async def update_command(owner: str, command: str, body: CommandUpdate, request:
                 m.disabled = body.disabled
             if body.priority is not None:
                 m.priority = body.priority
-            updated = True
             pm._invalidate_matchers_cache()
             action = "禁用" if body.disabled else ("启用" if body.disabled is False else "更新")
             await record_audit(
@@ -97,7 +96,9 @@ async def update_command(owner: str, command: str, body: CommandUpdate, request:
                 f"{action}命令 {owner}/{command} priority={body.priority}",
                 request,
             )
-            logger.info(f"命令已更新: {owner}/{command} disabled={body.disabled} priority={body.priority}")
+            logger.info(
+                f"命令已更新: {owner}/{command} disabled={body.disabled} priority={body.priority}"
+            )
             return {
                 "command": command,
                 "plugin": owner,

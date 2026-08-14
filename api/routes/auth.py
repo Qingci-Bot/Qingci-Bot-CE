@@ -14,8 +14,8 @@ import time
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
-from api.auth import _get_configured_api_key
 from api.audit import record_audit
+from api.auth import _get_configured_api_key
 
 logger = logging.getLogger("qingci-bot.api.routes.auth")
 
@@ -23,9 +23,9 @@ router = APIRouter()
 
 # ============ 登录防暴力限流（进程内字典，重启清零） ============
 
-_LOGIN_FAIL_LIMIT = 5          # 连续失败次数阈值
-_LOGIN_COOLDOWN_SECONDS = 60   # 达阈后的冷却时间（秒）
-_MAX_TRACKED_IPS = 256         # 记录表容量保护上限
+_LOGIN_FAIL_LIMIT = 5  # 连续失败次数阈值
+_LOGIN_COOLDOWN_SECONDS = 60  # 达阈后的冷却时间（秒）
+_MAX_TRACKED_IPS = 256  # 记录表容量保护上限
 
 # 来源 IP -> [连续失败次数, 最近失败时间戳]
 _login_failures: dict[str, list] = {}
@@ -40,8 +40,7 @@ def _purge_expired_login_failures() -> None:
     """清理已解除冷却的记录，防止字典无限增长"""
     now = time.time()
     expired = [
-        ip for ip, (_, last) in _login_failures.items()
-        if now - last >= _LOGIN_COOLDOWN_SECONDS
+        ip for ip, (_, last) in _login_failures.items() if now - last >= _LOGIN_COOLDOWN_SECONDS
     ]
     for ip in expired:
         _login_failures.pop(ip, None)
@@ -75,6 +74,7 @@ def _record_login_failure(ip: str) -> None:
 
 class LoginRequest(BaseModel):
     """登录请求体"""
+
     api_key: str
 
 

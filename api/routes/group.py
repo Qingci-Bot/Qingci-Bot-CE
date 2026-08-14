@@ -7,14 +7,13 @@
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from bot.core.bot import get_bot as _get_bot
-from api.auth import require_auth
 from api.audit import record_audit
+from api.auth import require_auth
+from bot.core.bot import get_bot as _get_bot
 
 logger = logging.getLogger("qingci-bot.api.group")
 
@@ -41,9 +40,10 @@ def _require_bot():
 
 class GroupConfigUpdate(BaseModel):
     """群配置更新请求体（字段均可选，未提供时保留原值）"""
-    enabled: Optional[bool] = None
+
+    enabled: bool | None = None
     # None 表示跟随全局；显式传 null 可清除群级覆盖
-    trigger_mode: Optional[str] = None
+    trigger_mode: str | None = None
 
 
 @router.get("/list", dependencies=[Depends(require_auth)])
@@ -60,7 +60,7 @@ async def list_group_configs():
             groups = await bot.db.list_group_configs()
         except Exception:
             logger.exception("查询群配置列表失败")
-            raise HTTPException(status_code=500, detail="查询群配置失败，详见服务端日志")
+            raise HTTPException(status_code=500, detail="查询群配置失败，详见服务端日志") from None
     return {"defaults": defaults, "groups": groups}
 
 
@@ -72,7 +72,7 @@ async def get_group_config(group_id: int):
         row = await bot.db.get_group_config(group_id)
     except Exception:
         logger.exception(f"查询群配置失败: group_id={group_id}")
-        raise HTTPException(status_code=500, detail="查询群配置失败，详见服务端日志")
+        raise HTTPException(status_code=500, detail="查询群配置失败，详见服务端日志") from None
     if row is None:
         return {
             "group_id": group_id,
@@ -95,11 +95,7 @@ async def update_group_config(group_id: int, payload: GroupConfigUpdate, request
         )
     try:
         existing = await bot.db.get_group_config(group_id) or {}
-        enabled = (
-            payload.enabled
-            if payload.enabled is not None
-            else existing.get("enabled", True)
-        )
+        enabled = payload.enabled if payload.enabled is not None else existing.get("enabled", True)
         # 显式传 trigger_mode（含 null）时覆盖；未传时保留原值
         if "trigger_mode" in payload.model_fields_set:
             trigger_mode = payload.trigger_mode
@@ -110,11 +106,12 @@ async def update_group_config(group_id: int, payload: GroupConfigUpdate, request
         raise
     except Exception:
         logger.exception(f"更新群配置失败: group_id={group_id}")
-        raise HTTPException(status_code=500, detail="更新群配置失败，详见服务端日志")
+        raise HTTPException(status_code=500, detail="更新群配置失败，详见服务端日志") from None
 
     # 失效 chat 插件的群配置缓存，使变更立即生效
     try:
         from bot.plugin.builtin.chat import invalidate_group_config_cache
+
         invalidate_group_config_cache(group_id)
     except Exception:
         logger.exception("失效群配置缓存失败")

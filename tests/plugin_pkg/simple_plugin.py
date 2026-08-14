@@ -16,12 +16,8 @@ class SimplePlugin(PluginBase):
     description = "测试插件"
 
     async def on_load(self):
-        self.matchers.append(
-            on_command("ping")(self._ping)
-        )
-        self.matchers.append(
-            on_message(rule=keyword("天气"))(self._weather)
-        )
+        self.matchers.append(on_command("ping")(self._ping))
+        self.matchers.append(on_message(rule=keyword("天气"))(self._weather))
 
     async def on_unload(self):
         pass

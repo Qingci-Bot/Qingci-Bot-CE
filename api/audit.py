@@ -6,19 +6,18 @@
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from bot.core.bot import get_bot as _get_bot
 from api.auth import require_auth
+from bot.core.bot import get_bot as _get_bot
 
 logger = logging.getLogger("qingci-bot.api.audit")
 
 router = APIRouter()
 
 
-async def record_audit(action: str, detail: str, request: Optional[Request] = None) -> None:
+async def record_audit(action: str, detail: str, request: Request | None = None) -> None:
     """写入一条审计日志（尽力而为，失败仅记日志）
 
     Args:
@@ -33,6 +32,7 @@ async def record_audit(action: str, detail: str, request: Optional[Request] = No
         # 直接经 session 工厂写入，不依赖 Bot 实例是否已初始化
         from bot.db.engine import get_session_factory
         from bot.db.models import AuditLog
+
         async with get_session_factory()() as session:
             session.add(AuditLog(action=action, detail=detail, client_ip=client_ip))
             await session.commit()
@@ -46,10 +46,10 @@ async def get_audit_logs(limit: int = Query(default=100, ge=1, le=1000)):
     try:
         bot = _get_bot()
     except RuntimeError:
-        raise HTTPException(status_code=503, detail="Bot 未初始化")
+        raise HTTPException(status_code=503, detail="Bot 未初始化") from None
     try:
         logs = await bot.db.get_audit_logs(limit=limit)
     except Exception:
         logger.exception("查询审计日志失败")
-        raise HTTPException(status_code=500, detail="查询审计日志失败，详见服务端日志")
+        raise HTTPException(status_code=500, detail="查询审计日志失败，详见服务端日志") from None
     return {"logs": logs}

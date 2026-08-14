@@ -14,7 +14,6 @@ import logging
 import sys
 import time
 from collections import deque
-from typing import Optional
 
 from .tasks import spawn_background_task
 
@@ -46,14 +45,14 @@ class AlertHandler(logging.Handler):
 
     def __init__(self):
         super().__init__(level=logging.ERROR)
-        self._connection = None          # OneBotConnection（attach 时注入）
+        self._connection = None  # OneBotConnection（attach 时注入）
         self._admin_users: list[int] = []
         self._threshold: int = 5
         self._cooldown_seconds: float = 600.0
-        self._error_times: deque = deque()   # 窗口内错误时间戳
+        self._error_times: deque = deque()  # 窗口内错误时间戳
         self._last_summary: str = ""
         self._last_alert_ts: float = 0.0
-        self._attached_logger: Optional[logging.Logger] = None
+        self._attached_logger: logging.Logger | None = None
 
     # ============ 挂载 / 卸载 ============
 

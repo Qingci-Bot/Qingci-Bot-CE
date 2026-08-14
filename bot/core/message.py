@@ -17,15 +17,17 @@ reply / forward），统一 CQ 码转义，替代手写 CQ 码字符串拼接。
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Union
+from typing import Union
 
 # CQ 码值转义：& 与 , 转义后 OneBot 实现端解析时还原
-_CQ_VALUE_TRANS = str.maketrans({
-    "&": "&amp;",
-    ",": "&#44;",
-    "[": "&#91;",
-    "]": "&#93;",
-})
+_CQ_VALUE_TRANS = str.maketrans(
+    {
+        "&": "&amp;",
+        ",": "&#44;",
+        "[": "&#91;",
+        "]": "&#93;",
+    }
+)
 
 
 def cq_escape(value) -> str:
@@ -48,7 +50,7 @@ class MessageSegment:
         return MessageSegment("text", {"text": content})
 
     @staticmethod
-    def at(qq: Union[int, str]) -> "MessageSegment":
+    def at(qq: int | str) -> "MessageSegment":
         """@ 某人"""
         return MessageSegment("at", {"qq": qq})
 
@@ -78,7 +80,7 @@ class MessageSegment:
         return MessageSegment("video", {"file": file})
 
     @staticmethod
-    def reply(message_id: Union[str, int]) -> "MessageSegment":
+    def reply(message_id: str | int) -> "MessageSegment":
         """回复指定消息"""
         return MessageSegment("reply", {"id": message_id})
 
@@ -97,7 +99,7 @@ class MessageSegment:
         return "".join(parts)
 
 
-class Message(list):
+class Message(list[MessageSegment]):
     """消息段列表：支持混合追加、字符串化、提取纯文本
 
     可直接 `str(message)` 得到 OneBot 可发送的 CQ 码字符串。
@@ -122,8 +124,7 @@ class Message(list):
             super().append(item)
         else:
             raise TypeError(
-                f"Message 只接受 MessageSegment / str / Message / 列表，"
-                f"收到 {type(item).__name__}"
+                f"Message 只接受 MessageSegment / str / Message / 列表，收到 {type(item).__name__}"
             )
 
     def __str__(self) -> str:
@@ -131,11 +132,9 @@ class Message(list):
 
     def extract_plain_text(self) -> str:
         """提取纯文本（仅 text 段内容拼接后 strip）"""
-        return "".join(
-            seg.data.get("text", "") for seg in self if seg.type == "text"
-        ).strip()
+        return "".join(seg.data.get("text", "") for seg in self if seg.type == "text").strip()
 
-    def get(self, seg_type: str) -> Optional[MessageSegment]:
+    def get(self, seg_type: str) -> MessageSegment | None:
         """取第一个指定类型的段，不存在返回 None"""
         for seg in self:
             if seg.type == seg_type:

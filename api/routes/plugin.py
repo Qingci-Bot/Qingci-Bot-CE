@@ -3,18 +3,19 @@
 import logging
 import re
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from bot.core.bot import get_bot as _get_bot
-from api.auth import require_auth
 from api.audit import record_audit
+from api.auth import require_auth
+from bot.core.bot import get_bot as _get_bot
 
 logger = logging.getLogger("qingci-bot.api.plugin")
 
 
 class LoadPluginRequest(BaseModel):
     """加载外部插件请求体（类型非法时由 FastAPI 返回 422）"""
+
     module_path: str = Field(..., description="插件模块路径，如 plugins.my_plugin")
 
 
@@ -34,17 +35,14 @@ def _is_safe_module_path(module_path: str) -> bool:
         return False
     if not re.match(r"^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$", module_path):
         return False
-    return any(
-        module_path.startswith(prefix)
-        for prefix in _ALLOWED_MODULE_PREFIXES
-    )
+    return any(module_path.startswith(prefix) for prefix in _ALLOWED_MODULE_PREFIXES)
 
 
 def _get_bot_instance():
     try:
         return _get_bot()
     except RuntimeError:
-        raise HTTPException(status_code=503, detail="Bot 未初始化，请先启动 Bot 服务")
+        raise HTTPException(status_code=503, detail="Bot 未初始化，请先启动 Bot 服务") from None
 
 
 @router.get("", dependencies=[Depends(require_auth)])
@@ -52,17 +50,19 @@ async def list_plugins():
     """获取插件列表（含状态、分类、Web 管理页面）"""
     bot = _get_bot_instance()
     plugins = []
-    for name, plugin in bot.plugin_manager.plugins.items():
-        plugins.append({
-            "name": plugin.name,
-            "version": plugin.version,
-            "author": plugin.author,
-            "description": plugin.description,
-            "category": plugin.category,
-            "status": plugin.status.value,
-            "enabled": plugin.enabled,
-            "pages": bot.plugin_manager.get_plugin_pages(plugin.name),
-        })
+    for _name, plugin in bot.plugin_manager.plugins.items():
+        plugins.append(
+            {
+                "name": plugin.name,
+                "version": plugin.version,
+                "author": plugin.author,
+                "description": plugin.description,
+                "category": plugin.category,
+                "status": plugin.status.value,
+                "enabled": plugin.enabled,
+                "pages": bot.plugin_manager.get_plugin_pages(plugin.name),
+            }
+        )
     return plugins
 
 
@@ -97,7 +97,7 @@ async def reload_plugin(name: str, request: Request):
         return {"message": f"插件 {name} 已重载"}
     except Exception:
         logger.exception(f"插件 {name} 重载失败")
-        raise HTTPException(status_code=500, detail="插件操作失败，详见服务端日志")
+        raise HTTPException(status_code=500, detail="插件操作失败，详见服务端日志") from None
 
 
 @router.post("/load", dependencies=[Depends(require_auth)])
@@ -163,10 +163,43 @@ async def get_plugin_metrics(name: str):
     return bot.plugin_manager.get_metrics(name)
 
 
+@router.get("/{name}/config", dependencies=[Depends(require_auth)])
+async def get_plugin_config_schema(name: str):
+    """获取插件配置 JSON Schema 与当前值（用于自动渲染配置表单）"""
+    bot = _get_bot_instance()
+    if not bot.plugin_manager.get(name):
+        raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
+    return {
+        "name": name,
+        "schema": bot.plugin_manager.get_config_schema(name),
+        "values": bot.plugin_manager.get_config_values(name),
+    }
+
+
+class UpdatePluginConfigRequest(BaseModel):
+    """更新插件配置请求体"""
+
+    values: dict = Field(default_factory=dict, description="新配置值")
+
+
+@router.put("/{name}/config", dependencies=[Depends(require_auth)])
+async def update_plugin_config(name: str, data: UpdatePluginConfigRequest, request: Request):
+    """更新插件配置：写入 config.yaml 并应用到插件实例"""
+    bot = _get_bot_instance()
+    if not bot.plugin_manager.get(name):
+        raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
+    ok = await bot.plugin_manager.update_config(name, data.values, bot)
+    if not ok:
+        raise HTTPException(status_code=400, detail=f"插件 {name} 配置更新失败")
+    await record_audit("plugin_config_update", f"更新插件 {name} 配置", request)
+    return bot.plugin_manager.get_config_values(name)
+
+
 @router.get("/discover/metadata", dependencies=[Depends(require_auth)])
 async def discover_plugins_metadata():
     """无导入发现：扫描 plugins/ 目录中的 plugin.json 元数据"""
     from bot.paths import app_root
+
     bot = _get_bot_instance()
     directory = app_root() / "plugins"
     return bot.plugin_manager.discover_metadata(directory)

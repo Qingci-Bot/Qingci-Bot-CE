@@ -12,7 +12,8 @@ provider 映射规则：
 
 import asyncio
 import logging
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from .adapter import ChatResult, LLMAdapter
 
@@ -92,11 +93,11 @@ class LiteLLMAdapter(LLMAdapter):
     def _build_kwargs(
         self,
         messages: list[dict],
-        system_prompt: Optional[str],
+        system_prompt: str | None,
         max_tokens: int,
         temperature: float,
-        tools: Optional[list[dict]] = None,
-        images: Optional[list[str]] = None,
+        tools: list[dict] | None = None,
+        images: list[str] | None = None,
         stream: bool = False,
         **extra,
     ) -> dict[str, Any]:
@@ -138,11 +139,11 @@ class LiteLLMAdapter(LLMAdapter):
     async def chat_detail(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 2048,
         temperature: float = 0.7,
-        tools: Optional[list[dict]] = None,
-        images: Optional[list[str]] = None,
+        tools: list[dict] | None = None,
+        images: list[str] | None = None,
         **kwargs,
     ) -> ChatResult:
         try:
@@ -164,7 +165,7 @@ class LiteLLMAdapter(LLMAdapter):
             raise
 
         # 提取 token 用量（服务未提供时保持 None）
-        usage: Optional[dict] = None
+        usage: dict | None = None
         raw_usage = getattr(response, "usage", None)
         if raw_usage is not None:
             usage = {
@@ -187,11 +188,11 @@ class LiteLLMAdapter(LLMAdapter):
     async def chat(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 2048,
         temperature: float = 0.7,
-        tools: Optional[list[dict]] = None,
-        images: Optional[list[str]] = None,
+        tools: list[dict] | None = None,
+        images: list[str] | None = None,
         **kwargs,
     ) -> str:
         # 包装 chat_detail：对外签名与异常行为保持不变，仅返回文本
@@ -209,7 +210,7 @@ class LiteLLMAdapter(LLMAdapter):
     async def chat_stream(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 2048,
         temperature: float = 0.7,
         **kwargs,

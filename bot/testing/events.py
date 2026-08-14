@@ -7,8 +7,6 @@
     event = group_message("你好", user_id=10001, group_id=20001, at_bot=True)
 """
 
-from typing import Optional
-
 
 def make_message_event(
     text: str = "",
@@ -18,9 +16,9 @@ def make_message_event(
     message_type: str = "private",
     self_id: int = 20002,
     at_bot: bool = False,
-    images: Optional[list[str]] = None,
-    message_id: Optional[str] = None,
-    sender: Optional[dict] = None,
+    images: list[str] | None = None,
+    message_id: str | None = None,
+    sender: dict | None = None,
 ) -> dict:
     """构造一条 OneBot v11 消息事件
 
@@ -49,7 +47,8 @@ def make_message_event(
             "message_type": "group",
             "sub_type": "normal",
             "group_id": group_id,
-            "sender": sender or {
+            "sender": sender
+            or {
                 "user_id": user_id,
                 "nickname": f"user-{user_id}",
                 "card": "",
@@ -82,7 +81,7 @@ def private_message(
     user_id: int = 10001,
     self_id: int = 20002,
     at_bot: bool = False,
-    images: Optional[list[str]] = None,
+    images: list[str] | None = None,
 ) -> dict:
     """构造私聊消息事件"""
     return make_message_event(
@@ -102,7 +101,7 @@ def group_message(
     group_id: int = 20001,
     self_id: int = 20002,
     at_bot: bool = False,
-    images: Optional[list[str]] = None,
+    images: list[str] | None = None,
 ) -> dict:
     """构造群聊消息事件"""
     return make_message_event(

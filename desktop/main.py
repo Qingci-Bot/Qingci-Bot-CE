@@ -18,6 +18,7 @@ def run_desktop(args, splash=None):
 
     # 结构化日志：与 main 入口保持一致（幂等：log_json=False 时不做任何变更）
     from bot.core.logformat import apply_logging_from_config
+
     apply_logging_from_config(args.config)
 
     # 在后台线程启动 Bot + API
@@ -36,6 +37,7 @@ def run_desktop(args, splash=None):
 
     # 轮询等待 API 启动
     import httpx
+
     url = f"http://{args.host}:{args.port}"
     for _ in range(30):
         try:
@@ -79,6 +81,7 @@ def run_desktop(args, splash=None):
         # 方案 1：通过 ctypes 向窗口发送 WM_CLOSE（跨线程安全）
         try:
             import ctypes
+
             hwnd = ctypes.windll.user32.FindWindowW(None, "Qingci-Bot CE")
             if hwnd:
                 ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
@@ -94,10 +97,12 @@ def run_desktop(args, splash=None):
     try:
         # 提前验证托盘依赖可用，决定是否启用"关闭即驻留后台"行为
         import importlib.util
+
         if importlib.util.find_spec("pystray") is None:
             raise ImportError("pystray 未安装")
 
         from desktop.tray import SystemTray
+
         tray = SystemTray(
             on_show=lambda: (window.show(), window.restore()),
             on_exit=_trigger_exit,

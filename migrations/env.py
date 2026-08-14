@@ -10,11 +10,10 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-
-from alembic import context
 
 # 确保项目根目录在 sys.path 中
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -83,9 +82,7 @@ def run_migrations_online() -> None:
         asyncio.run(run_async_migrations())
         return
     # 已在事件循环中，调用方应直接 await run_async_migrations()
-    raise RuntimeError(
-        "迁移在运行中的事件循环内被触发，请直接 await run_async_migrations()"
-    )
+    raise RuntimeError("迁移在运行中的事件循环内被触发，请直接 await run_async_migrations()")
 
 
 if context.is_offline_mode():

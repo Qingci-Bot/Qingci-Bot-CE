@@ -13,8 +13,8 @@ import inspect
 import json
 import logging
 import random
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Optional
 
 logger = logging.getLogger("qingci-bot.llm.tools")
 
@@ -59,9 +59,9 @@ class ToolRegistry:
 
     def tool(
         self,
-        name: Optional[str] = None,
+        name: str | None = None,
         description: str = "",
-        parameters: Optional[dict] = None,
+        parameters: dict | None = None,
     ) -> Callable:
         """装饰器形式的注册入口
 
@@ -69,6 +69,7 @@ class ToolRegistry:
             @registry.tool(description="...", parameters={...})
             def my_tool(arg: str) -> str: ...
         """
+
         def decorator(func: Callable) -> Callable:
             self.register(
                 name=name or func.__name__,
@@ -77,6 +78,7 @@ class ToolRegistry:
                 handler=func,
             )
             return func
+
         return decorator
 
     def unregister(self, name: str) -> bool:
@@ -103,8 +105,7 @@ class ToolRegistry:
     def list_tools(self) -> list[dict]:
         """列出工具元信息（不含 handler），供管理命令展示"""
         return [
-            {"name": name, "description": spec["description"]}
-            for name, spec in self._tools.items()
+            {"name": name, "description": spec["description"]} for name, spec in self._tools.items()
         ]
 
     def get_openai_tools(self) -> list[dict]:
@@ -123,7 +124,7 @@ class ToolRegistry:
 
     # ============ 执行 ============
 
-    async def execute(self, name: str, arguments: Optional[dict] = None) -> str:
+    async def execute(self, name: str, arguments: dict | None = None) -> str:
         """执行工具并返回字符串结果
 
         任何异常（工具不存在、参数不匹配、执行错误）均被捕获，

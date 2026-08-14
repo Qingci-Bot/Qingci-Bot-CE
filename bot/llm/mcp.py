@@ -10,6 +10,7 @@ ToolRegistry，复用现有 Function Calling 循环（chat_with_tools）。
 
 import json
 import logging
+from typing import Any
 
 logger = logging.getLogger("qingci-bot.llm.mcp")
 
@@ -19,7 +20,7 @@ class MCPBridge:
 
     def __init__(self):
         # (server_name, ClientSession) 列表，close 时统一释放
-        self._sessions: list[tuple[str, object]] = []
+        self._sessions: list[tuple[str, Any]] = []
         # 底层传输上下文（stdio_client / streamablehttp_client），用于关闭
         self._transports: list = []
         self._connected_servers: list[str] = []
@@ -39,9 +40,7 @@ class MCPBridge:
                 count = await self._connect_one(cfg)
                 if count > 0:
                     total += 1
-                    logger.info(
-                        f"MCP 服务器已连接: {cfg.name}（{count} 个工具）"
-                    )
+                    logger.info(f"MCP 服务器已连接: {cfg.name}（{count} 个工具）")
             except Exception:
                 logger.exception(f"MCP 服务器连接失败: {cfg.name}")
         return total
@@ -68,12 +67,10 @@ class MCPBridge:
                 from mcp.client.streamable_http import streamablehttp_client
 
                 transport = streamablehttp_client(cfg.url)
-                read, write = await transport.__aenter__()
+                read, write, _ = await transport.__aenter__()
                 session = await ClientSession(read, write).__aenter__()
             else:
-                logger.warning(
-                    f"MCP 服务器 {cfg.name} 未配置 command 或 url，跳过"
-                )
+                logger.warning(f"MCP 服务器 {cfg.name} 未配置 command 或 url，跳过")
                 return 0
 
             await session.initialize()
@@ -114,7 +111,7 @@ class MCPBridge:
                     continue
                 description = getattr(tool, "description", "") or ""
                 schema = getattr(tool, "inputSchema", None)
-                if hasattr(schema, "model_dump"):  # pydantic v2 模型
+                if schema is not None and hasattr(schema, "model_dump"):  # pydantic v2 模型
                     schema = schema.model_dump()
                 schema = schema or {"type": "object", "properties": {}}
                 registry.register(

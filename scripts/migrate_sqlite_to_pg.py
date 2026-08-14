@@ -23,7 +23,6 @@ import logging
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 # 添加项目根目录到 sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -116,11 +115,12 @@ async def read_sqlite_tables(sqlite_path: Path) -> dict[str, list[dict]]:
 
 async def create_pg_tables(pg_url: str):
     """在 PostgreSQL 中创建表结构"""
+    # 导入所有模型以注册到 SQLModel.metadata
+    import importlib
+
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlmodel import SQLModel
 
-    # 导入所有模型以注册到 SQLModel.metadata
-    import importlib
     importlib.import_module("bot.db.models")
 
     engine = create_async_engine(pg_url, echo=False)
@@ -180,7 +180,7 @@ async def migrate_table(
 
         # 分批写入
         for i in range(0, len(rows), BATCH_SIZE):
-            batch = rows[i:i + BATCH_SIZE]
+            batch = rows[i : i + BATCH_SIZE]
             async with engine.begin() as conn:
                 for row in batch:
                     # 处理 datetime 字符串 → Python datetime
@@ -253,7 +253,7 @@ async def main():
     if not sqlite_path.is_absolute():
         sqlite_path = PROJECT_ROOT / sqlite_path
 
-    skip_tables = set(t.strip() for t in args.skip_tables.split(",") if t.strip())
+    skip_tables = {t.strip() for t in args.skip_tables.split(",") if t.strip()}
 
     print("=" * 60)
     print("  Qingci-Bot CE SQLite → PostgreSQL 迁移工具")
@@ -286,10 +286,7 @@ async def main():
     tables_to_migrate = [t for t in TABLE_ORDER if t in all_tables and t not in skip_tables]
     non_empty = await check_pg_tables_empty(args.pg_url, tables_to_migrate)
     if non_empty and not args.force:
-        logger.error(
-            f"以下 PG 表已有数据: {non_empty}。"
-            "使用 --force 追加迁移，或清空目标表后重试"
-        )
+        logger.error(f"以下 PG 表已有数据: {non_empty}。使用 --force 追加迁移，或清空目标表后重试")
         sys.exit(1)
 
     # 3. 创建表结构

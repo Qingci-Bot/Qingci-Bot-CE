@@ -35,14 +35,21 @@ self.tool_registry - Function Calling 工具注册表（可能为 None）
 self.knowledge_store - 知识库（可能为 None）
 """
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 
 from bot.plugin.base import PluginBase
-from bot.plugin.matcher import MatcherContext, on_command, on_message, on_startswith, on_keyword, on_notice, on_request
-from bot.plugin.permission import Permission, EVERYONE, SUPERUSER, ADMIN, PRIVATE, GROUP, USER
-from bot.plugin.rule import Rule, command, startswith, keyword, regex, to_me, is_private, is_group, rate_limit
+from bot.plugin.matcher import (
+    MatcherContext,
+    on_command,
+    on_keyword,
+    on_message,
+    on_notice,
+    on_request,
+    on_startswith,
+)
+from bot.plugin.permission import SUPERUSER
+from bot.plugin.rule import command, is_private
 
 logger = logging.getLogger("qingci-bot.plugin.template")
 
@@ -252,6 +259,7 @@ class TemplatePlugin(PluginBase):
     async def _tool_get_time(self, timezone_offset: int = 8) -> str:
         """LLM 可调用的工具：获取当前时间"""
         from datetime import timedelta
+
         tz = timezone(timedelta(hours=timezone_offset))
         now = datetime.now(tz)
         return now.strftime("%Y-%m-%d %H:%M:%S")
@@ -266,6 +274,7 @@ class TemplatePlugin(PluginBase):
 
 # ========== 模块级装饰器（可选）==========
 # 也可在模块顶层用装饰器注册，PluginManager 加载时自动收集
+
 
 @on_command("status", description="查看状态")
 async def status_handler(ctx: MatcherContext) -> str:

@@ -1,11 +1,12 @@
 """API 端点测试（使用 FastAPI TestClient）"""
 
-import pytest
-from fastapi.testclient import TestClient
-from pathlib import Path
-import tempfile
 import os
+import tempfile
+from pathlib import Path
+
+import pytest
 import yaml
+from fastapi.testclient import TestClient
 
 # 确保测试加载时不会触发真实 Bot 启动
 os.environ.setdefault("QINGCI_TEST", "1")
@@ -59,9 +60,7 @@ def test_config():
             "log_file_enabled": False,
         },
     }
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", delete=False, encoding="utf-8"
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         yaml.dump(config, f)
         path = f.name
     yield path
@@ -75,9 +74,11 @@ def test_config():
 def client(test_config):
     """创建测试客户端"""
     from api.auth import set_config_path
+
     set_config_path(Path(test_config))
 
     from api.server import create_app
+
     app = create_app()
     with TestClient(app) as c:
         yield c

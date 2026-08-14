@@ -36,11 +36,11 @@ logging.basicConfig(
 logger = logging.getLogger("qingci-bot.main")
 
 # ── 轻量级模块级导入（仅路径/日志工具，不触发重型依赖）───────
-from bot.paths import app_root  # noqa: E402 — 仅 sys + pathlib，极轻量
 from bot.core.logformat import apply_logging_from_config  # noqa: E402 — 仅 logging 工具
-
+from bot.paths import app_root  # noqa: E402 — 仅 sys + pathlib，极轻量
 
 # ── 命令行解析 ────────────────────────────────────────────────
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Qingci-Bot CE")
@@ -48,7 +48,9 @@ def parse_args():
     parser.add_argument("--desktop", action="store_true", help="启动桌面应用")
     parser.add_argument("--port", type=int, default=8080, help="API 端口")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="API 监听地址")
-    parser.add_argument("--config", type=str, default=str(app_root() / "config.yaml"), help="配置文件路径")
+    parser.add_argument(
+        "--config", type=str, default=str(app_root() / "config.yaml"), help="配置文件路径"
+    )
     args = parser.parse_args()
     # UX：frozen windowed 下双击（无任何参数）没有控制台也没有窗口，
     # 用户感知为"点了没反应"；此时默认启用桌面模式提供可见窗口。
@@ -60,14 +62,16 @@ def parse_args():
 
 # ── 后端服务（重型导入延迟到函数内）───────────────────────────
 
+
 async def run_bot_and_api(args):
     """在同个事件循环中运行 Bot 和 API 服务"""
 
     # 重型导入：仅在需要启动后端时才加载
     import uvicorn  # noqa: E402
-    from bot.core.bot import QingciBot, set_bot, clear_bot  # noqa: E402
+
     from api.auth import set_config_path  # noqa: E402
     from api.server import create_app  # noqa: E402
+    from bot.core.bot import QingciBot, clear_bot, set_bot  # noqa: E402
 
     bot = QingciBot(args.config)
     set_bot(bot)
@@ -117,6 +121,7 @@ async def run_bot_and_api(args):
 
 # ── 入口 ──────────────────────────────────────────────────────
 
+
 def main():
     args = parse_args()
 
@@ -126,6 +131,7 @@ def main():
         splash = None
         try:
             from desktop.splash import SplashScreen
+
             splash = SplashScreen()
             splash.show()
         except Exception:
@@ -136,6 +142,7 @@ def main():
 
     if args.desktop:
         from desktop.main import run_desktop
+
         run_desktop(args, splash)
         return
 

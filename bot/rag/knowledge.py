@@ -11,7 +11,6 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("qingci-bot.rag")
 
@@ -30,15 +29,16 @@ def tokenize(text: str) -> list[str]:
         if len(run) == 1:
             tokens.append(run)
         else:
-            tokens.extend(run[i:i + 2] for i in range(len(run) - 1))
+            tokens.extend(run[i : i + 2] for i in range(len(run) - 1))
     return tokens
 
 
 @dataclass
 class KnowledgeChunk:
     """知识库分块"""
-    source: str                       # 来源文档名（不含扩展名）
-    text: str                         # 分块原文
+
+    source: str  # 来源文档名（不含扩展名）
+    text: str  # 分块原文
     tf: Counter = field(default_factory=Counter)  # 词频（keyword 模式检索打分用）
 
 
@@ -108,7 +108,7 @@ class KeywordKnowledgeStore:
         step = self._chunk_size - self._chunk_overlap
         pieces: list[str] = []
         for start in range(0, len(text), step):
-            piece = text[start:start + self._chunk_size].strip()
+            piece = text[start : start + self._chunk_size].strip()
             if piece:
                 pieces.append(piece)
             if start + self._chunk_size >= len(text):
@@ -117,7 +117,7 @@ class KeywordKnowledgeStore:
 
     # ============ 检索 ============
 
-    def search(self, query: str, top_k: Optional[int] = None) -> list[KnowledgeChunk]:
+    def search(self, query: str, top_k: int | None = None) -> list[KnowledgeChunk]:
         """关键词检索：返回得分最高的 top_k 个分块（无命中返回空列表）"""
         q_tokens = tokenize(query)
         if not q_tokens or not self._chunks:
@@ -199,15 +199,9 @@ class KeywordKnowledgeStore:
             docs[chunk.source] = docs.get(chunk.source, 0) + 1
         if self._root.exists():
             for path in self._root.iterdir():
-                if (
-                    path.suffix.lower() in self.SUPPORTED_SUFFIXES
-                    and path.is_file()
-                ):
+                if path.suffix.lower() in self.SUPPORTED_SUFFIXES and path.is_file():
                     docs.setdefault(path.stem, 0)
-        return [
-            {"name": name, "chunks": count}
-            for name, count in sorted(docs.items())
-        ]
+        return [{"name": name, "chunks": count} for name, count in sorted(docs.items())]
 
     @staticmethod
     def _safe_name(name: str) -> str:
@@ -266,6 +260,7 @@ class VectorKnowledgeStore:
         """获取 LanceDB 连接（懒加载）"""
         if self._db is None:
             import lancedb
+
             self._db_path.mkdir(parents=True, exist_ok=True)
             self._db = lancedb.connect(str(self._db_path))
         return self._db
@@ -280,12 +275,15 @@ class VectorKnowledgeStore:
             except Exception:
                 # 表不存在，创建空表
                 import pyarrow as pa
-                schema = pa.schema([
-                    pa.field("id", pa.string()),
-                    pa.field("vector", pa.list_(pa.float32(), list_size=-1)),
-                    pa.field("text", pa.string()),
-                    pa.field("source", pa.string()),
-                ])
+
+                schema = pa.schema(
+                    [
+                        pa.field("id", pa.string()),
+                        pa.field("vector", pa.list_(pa.float32(), list_size=-1)),
+                        pa.field("text", pa.string()),
+                        pa.field("source", pa.string()),
+                    ]
+                )
                 self._table = db.create_table(table_name, schema=schema)
         return self._table
 
@@ -294,6 +292,7 @@ class VectorKnowledgeStore:
     async def _embed(self, texts: list[str]) -> list[list[float]]:
         """使用 litellm 将文本列表转为向量"""
         from ..llm.litellm_adapter import _get_litellm
+
         litellm = _get_litellm()
 
         kwargs: dict = {"model": self._embedding_model, "input": texts}
@@ -310,6 +309,7 @@ class VectorKnowledgeStore:
     async def reload(self) -> int:
         """（重新）索引知识库目录下所有文档，返回分块总数"""
         import uuid
+
         import pyarrow as pa
 
         chunks: list[dict] = []  # [{id, text, source}, ...]
@@ -325,11 +325,13 @@ class VectorKnowledgeStore:
                     logger.exception(f"读取知识文件失败: {path.name}")
                     continue
                 for piece in self._chunk_text(text):
-                    chunks.append({
-                        "id": str(uuid.uuid4()),
-                        "text": piece,
-                        "source": path.stem,
-                    })
+                    chunks.append(
+                        {
+                            "id": str(uuid.uuid4()),
+                            "text": piece,
+                            "source": path.stem,
+                        }
+                    )
 
         if not chunks:
             # 重建空表
@@ -355,12 +357,14 @@ class VectorKnowledgeStore:
         # 构建 Arrow 表并写入
         ids = [c["id"] for c in chunks]
         sources = [c["source"] for c in chunks]
-        table = pa.table({
-            "id": pa.array(ids, type=pa.string()),
-            "vector": pa.array(embeddings, type=pa.list_(pa.float32())),
-            "text": pa.array(texts, type=pa.string()),
-            "source": pa.array(sources, type=pa.string()),
-        })
+        table = pa.table(
+            {
+                "id": pa.array(ids, type=pa.string()),
+                "vector": pa.array(embeddings, type=pa.list_(pa.float32())),
+                "text": pa.array(texts, type=pa.string()),
+                "source": pa.array(sources, type=pa.string()),
+            }
+        )
 
         db = self._get_db()
         table_name = self._collection_name
@@ -373,19 +377,20 @@ class VectorKnowledgeStore:
 
         doc_count = len(set(sources))
         logger.info(
-            f"向量知识库索引完成: 目录={self._root}, "
-            f"文档 {doc_count} 篇, 分块 {len(chunks)} 个"
+            f"向量知识库索引完成: 目录={self._root}, 文档 {doc_count} 篇, 分块 {len(chunks)} 个"
         )
         return len(chunks)
 
     def reload_sync(self) -> int:
         """同步版 reload（供初始化时使用）"""
         import asyncio
+
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(self.reload())
         import concurrent.futures
+
         future = asyncio.run_coroutine_threadsafe(self.reload(), loop)
         try:
             return future.result(timeout=60)
@@ -401,7 +406,7 @@ class VectorKnowledgeStore:
         step = self._chunk_size - self._chunk_overlap
         pieces: list[str] = []
         for start in range(0, len(text), step):
-            piece = text[start:start + self._chunk_size].strip()
+            piece = text[start : start + self._chunk_size].strip()
             if piece:
                 pieces.append(piece)
             if start + self._chunk_size >= len(text):
@@ -410,14 +415,16 @@ class VectorKnowledgeStore:
 
     # ============ 检索 ============
 
-    def search(self, query: str, top_k: Optional[int] = None) -> list[KnowledgeChunk]:
+    def search(self, query: str, top_k: int | None = None) -> list[KnowledgeChunk]:
         """向量检索（同步包装，供 build_reference 调用）"""
         import asyncio
+
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(self._search_async(query, top_k))
         import concurrent.futures
+
         future = asyncio.run_coroutine_threadsafe(self._search_async(query, top_k), loop)
         try:
             return future.result(timeout=30)
@@ -425,7 +432,7 @@ class VectorKnowledgeStore:
             logger.error("向量检索超时（30s）")
             return []
 
-    async def _search_async(self, query: str, top_k: Optional[int] = None) -> list[KnowledgeChunk]:
+    async def _search_async(self, query: str, top_k: int | None = None) -> list[KnowledgeChunk]:
         """异步向量检索"""
         limit = top_k or self._top_k
         tbl = self._get_table()
@@ -446,10 +453,12 @@ class VectorKnowledgeStore:
 
         chunks: list[KnowledgeChunk] = []
         for row in results:
-            chunks.append(KnowledgeChunk(
-                source=row.get("source", "unknown"),
-                text=row.get("text", ""),
-            ))
+            chunks.append(
+                KnowledgeChunk(
+                    source=row.get("source", "unknown"),
+                    text=row.get("text", ""),
+                )
+            )
         return chunks
 
     def build_reference(self, query: str, max_chars: int) -> str:
@@ -561,10 +570,7 @@ class VectorKnowledgeStore:
             for path in self._root.iterdir():
                 if path.suffix.lower() in self.SUPPORTED_SUFFIXES and path.is_file():
                     docs.setdefault(path.stem, 0)
-        return [
-            {"name": name, "chunks": count}
-            for name, count in sorted(docs.items())
-        ]
+        return [{"name": name, "chunks": count} for name, count in sorted(docs.items())]
 
     @staticmethod
     def _safe_name(name: str) -> str:
@@ -591,6 +597,7 @@ class KnowledgeStore:
         collection_name: str = "qingci_knowledge",
     ):
         self._mode = mode
+        self._backend: KeywordKnowledgeStore | VectorKnowledgeStore
         if mode == "vector":
             self._backend = VectorKnowledgeStore(
                 root=root,
@@ -634,10 +641,10 @@ class KnowledgeStore:
             return await backend.reload()
         return backend.reload()
 
-    def search(self, query: str, top_k: Optional[int] = None) -> list[KnowledgeChunk]:
+    def search(self, query: str, top_k: int | None = None) -> list[KnowledgeChunk]:
         return self._backend.search(query, top_k)
 
-    async def search_async(self, query: str, top_k: Optional[int] = None) -> list[KnowledgeChunk]:
+    async def search_async(self, query: str, top_k: int | None = None) -> list[KnowledgeChunk]:
         """异步检索（vector 后端在事件循环内直接 await，避免同步包装死锁）"""
         backend = self._backend
         if isinstance(backend, VectorKnowledgeStore):

@@ -6,7 +6,6 @@
 """
 
 import threading
-from typing import Optional
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
@@ -19,8 +18,8 @@ from ..paths import app_root
 
 DB_PATH = app_root() / "data" / "qingci-bot.db"
 
-_engine: Optional[AsyncEngine] = None
-_session_factory: Optional[sessionmaker] = None
+_engine: AsyncEngine | None = None
+_session_factory: sessionmaker | None = None
 _engine_lock = threading.Lock()
 _session_factory_lock = threading.Lock()
 
@@ -78,6 +77,7 @@ async def init_db():
     # 确保所有模型被导入，以便 SQLModel.metadata 能发现它们。
     # 用 importlib 显式导入：pyflakes 会把副作用导入误报为未使用
     import importlib
+
     importlib.import_module("bot.db.models")
 
     engine = get_engine()

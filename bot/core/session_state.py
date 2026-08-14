@@ -13,9 +13,9 @@
 """
 
 import asyncio
-import time
 import logging
-from typing import Any, Optional
+import time
+from typing import Any
 
 logger = logging.getLogger("qingci-bot.session_state")
 
@@ -84,7 +84,7 @@ class SessionState:
         self._cleanup()
         return [(k, v) for k, (v, _) in self._data.items()]
 
-    def ttl(self, key: str) -> Optional[float]:
+    def ttl(self, key: str) -> float | None:
         """获取键的剩余过期时间（秒），不存在返回 None，永不过期返回 -1"""
         entry = self._data.get(key)
         if entry is None:
@@ -111,10 +111,7 @@ class SessionState:
     def _cleanup(self) -> None:
         """清理过期条目"""
         now = time.monotonic()
-        expired = [
-            k for k, (_, exp) in self._data.items()
-            if exp > 0 and now > exp
-        ]
+        expired = [k for k, (_, exp) in self._data.items() if exp > 0 and now > exp]
         for k in expired:
             del self._data[k]
 
@@ -173,9 +170,7 @@ class SessionStateManager:
         custom_key: str = "",
     ) -> SessionState:
         """获取或创建会话状态"""
-        key = self._session_key(
-            user_id, group_id, message_type=message_type, custom_key=custom_key
-        )
+        key = self._session_key(user_id, group_id, message_type=message_type, custom_key=custom_key)
         async with self._lock:
             # 先清理过期会话，避免误删本次即将创建/返回的会话
             self._maybe_cleanup_locked()
@@ -184,8 +179,7 @@ class SessionStateManager:
                     self._cleanup_expired_locked()
                     if len(self._states) >= self._max_sessions:
                         logger.warning(
-                            f"会话数已达上限 {self._max_sessions}，"
-                            f"无法创建新会话: {key}"
+                            f"会话数已达上限 {self._max_sessions}，无法创建新会话: {key}"
                         )
                         return SessionState()
                 self._states[key] = SessionState()
@@ -201,9 +195,7 @@ class SessionStateManager:
         custom_key: str = "",
     ) -> bool:
         """显式删除会话，返回是否成功删除"""
-        key = self._session_key(
-            user_id, group_id, message_type=message_type, custom_key=custom_key
-        )
+        key = self._session_key(user_id, group_id, message_type=message_type, custom_key=custom_key)
         async with self._lock:
             if key in self._states:
                 del self._states[key]
@@ -223,9 +215,7 @@ class SessionStateManager:
         message_type: str = "",
     ) -> Any:
         """获取状态值"""
-        session = await self.get_session(
-            user_id, group_id, message_type=message_type
-        )
+        session = await self.get_session(user_id, group_id, message_type=message_type)
         return session.get(key, default)
 
     async def set(
@@ -239,9 +229,7 @@ class SessionStateManager:
         message_type: str = "",
     ) -> None:
         """设置状态值"""
-        session = await self.get_session(
-            user_id, group_id, message_type=message_type
-        )
+        session = await self.get_session(user_id, group_id, message_type=message_type)
         session.set(key, value, ttl)
 
     async def delete(
@@ -253,9 +241,7 @@ class SessionStateManager:
         message_type: str = "",
     ) -> None:
         """删除状态值"""
-        session = await self.get_session(
-            user_id, group_id, message_type=message_type
-        )
+        session = await self.get_session(user_id, group_id, message_type=message_type)
         session.delete(key)
 
     async def clear(
@@ -266,9 +252,7 @@ class SessionStateManager:
         message_type: str = "",
     ) -> None:
         """清空会话状态"""
-        session = await self.get_session(
-            user_id, group_id, message_type=message_type
-        )
+        session = await self.get_session(user_id, group_id, message_type=message_type)
         session.clear()
 
     # ---- 全局清理 ----
@@ -306,9 +290,7 @@ class SessionStateManager:
             result = {}
             for key, state in self._states.items():
                 state._cleanup()
-                data = {
-                    k: v for k, (v, exp) in state._data.items() if exp == 0
-                }
+                data = {k: v for k, (v, exp) in state._data.items() if exp == 0}
                 if data:
                     result[key] = data
             return result
@@ -357,8 +339,7 @@ class SessionStateManager:
 
         if removed_sessions > 0:
             logger.debug(
-                f"会话状态清理: {removed_sessions} 个空会话移除, "
-                f"{len(self._states)} 个活跃会话"
+                f"会话状态清理: {removed_sessions} 个空会话移除, {len(self._states)} 个活跃会话"
             )
 
     def _cleanup_expired_locked(self) -> None:

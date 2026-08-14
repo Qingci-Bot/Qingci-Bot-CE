@@ -1,7 +1,8 @@
 """后台任务统一管理：保存引用防止被 GC 提前回收，完成时记录异常日志"""
+
 import asyncio
 import logging
-from typing import Coroutine
+from collections.abc import Coroutine
 
 logger = logging.getLogger("qingci-bot.tasks")
 

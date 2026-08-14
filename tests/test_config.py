@@ -58,9 +58,7 @@ def config_file():
             "log_file_enabled": False,
         },
     }
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", delete=False, encoding="utf-8"
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         yaml.dump(config, f)
         path = f.name
     yield path

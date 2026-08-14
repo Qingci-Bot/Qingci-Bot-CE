@@ -12,7 +12,7 @@
 """
 
 import logging
-from typing import Callable, Union
+from collections.abc import Callable
 
 from ..core.dispatcher import MessageContext
 
@@ -22,7 +22,7 @@ logger = logging.getLogger("qingci-bot.permission")
 class Permission:
     """权限对象，支持 & | ~ 组合"""
 
-    def __init__(self, checker: Callable = None):
+    def __init__(self, checker: Callable | None = None):
         # checker: async (bot, event, ctx) -> bool
         self._checkers: list[Callable] = []
         if checker is not None:
@@ -70,6 +70,7 @@ class Permission:
         """NOT 组合：取反"""
         perm = Permission()
         original_checkers = self._checkers[:]
+
         async def _not_checker(bot, event, ctx):
             for c in original_checkers:
                 r = c(bot, event, ctx)
@@ -78,6 +79,7 @@ class Permission:
                 if not r:
                     return True  # 原本不通过，取反后通过
             return False  # 原本全通过，取反后不通过
+
         perm._checkers = [_not_checker]
         return perm
 
@@ -118,18 +120,16 @@ MEMBER = Permission(lambda bot, event, ctx: True)
 """普通群员（与 EVERYONE 等价但独立实例）"""
 
 
-def USER(user_ids: Union[int, list[int]]) -> Permission:
+def USER(user_ids: int | list[int]) -> Permission:
     """指定用户可用"""
     ids = [user_ids] if isinstance(user_ids, int) else list(user_ids)
     return Permission(lambda bot, event, ctx: ctx.user_id in ids)
 
 
-def GROUP_MEMBER(group_ids: Union[int, list[int]]) -> Permission:
+def GROUP_MEMBER(group_ids: int | list[int]) -> Permission:
     """指定群的成员可用（仅群聊消息生效）
 
     参数为群号列表；私聊消息一律不匹配。
     """
     ids = [group_ids] if isinstance(group_ids, int) else list(group_ids)
-    return Permission(
-        lambda bot, event, ctx: ctx.message_type == "group" and ctx.group_id in ids
-    )
+    return Permission(lambda bot, event, ctx: ctx.message_type == "group" and ctx.group_id in ids)

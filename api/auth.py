@@ -3,7 +3,6 @@
 import logging
 import secrets
 from pathlib import Path
-from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader
@@ -13,9 +12,9 @@ logger = logging.getLogger("qingci-bot.api.auth")
 # X-API-Key 请求头
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-_config_path: Optional[Path] = None
+_config_path: Path | None = None
 
-_cached_key: Optional[str] = None
+_cached_key: str | None = None
 _cached_mtime: float = 0.0
 
 
@@ -25,7 +24,7 @@ def set_config_path(path: Path):
     _config_path = path
 
 
-def _get_configured_api_key() -> Optional[str]:
+def _get_configured_api_key() -> str | None:
     """获取已配置的 API Key
 
     返回值：
@@ -36,6 +35,7 @@ def _get_configured_api_key() -> Optional[str]:
     global _cached_key, _cached_mtime
     try:
         from bot.core.bot import get_bot
+
         bot = get_bot()
         if bot and bot.config:
             return bot.config.config.api_key or ""
@@ -43,7 +43,8 @@ def _get_configured_api_key() -> Optional[str]:
         pass
     # 回退：直接读取配置文件（带 mtime 缓存）
     try:
-        from bot.config import ConfigManager, DEFAULT_CONFIG_PATH
+        from bot.config import DEFAULT_CONFIG_PATH, ConfigManager
+
         path = _config_path or DEFAULT_CONFIG_PATH
         try:
             mtime = path.stat().st_mtime

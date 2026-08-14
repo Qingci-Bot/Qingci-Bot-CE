@@ -1,14 +1,21 @@
 """Permission 权限系统测试：内置权限与组合逻辑"""
 
 from bot.plugin.permission import (
-    EVERYONE, SUPERUSER, ADMIN, PRIVATE, GROUP,
-    MEMBER, USER, GROUP_MEMBER,
+    ADMIN,
+    EVERYONE,
+    GROUP,
+    GROUP_MEMBER,
+    MEMBER,
+    PRIVATE,
+    SUPERUSER,
+    USER,
 )
 
 
 def make_ctx(user_id=0, group_id=0, message_type="private"):
     class Ctx:
         pass
+
     c = Ctx()
     c.user_id = user_id
     c.group_id = group_id
@@ -26,7 +33,9 @@ class FakeBot:
             def __init__(self, admins):
                 class Bot:
                     admin_users = admins
+
                 self.bot = Bot()
+
         self.config = Cfg(list(admin_users))
 
 
@@ -68,9 +77,13 @@ class TestBuiltinPermissions:
     async def test_group_member(self):
         bot = FakeBot()
         assert await check(GROUP_MEMBER([10, 20]), make_ctx(group_id=10, message_type="group"), bot)
-        assert not await check(GROUP_MEMBER([10, 20]), make_ctx(group_id=30, message_type="group"), bot)
+        assert not await check(
+            GROUP_MEMBER([10, 20]), make_ctx(group_id=30, message_type="group"), bot
+        )
         # 私聊消息不匹配群成员权限（即使 group_id 命中）
-        assert not await check(GROUP_MEMBER([10, 20]), make_ctx(group_id=10, message_type="private"), bot)
+        assert not await check(
+            GROUP_MEMBER([10, 20]), make_ctx(group_id=10, message_type="private"), bot
+        )
 
 
 class TestPermissionComposition:

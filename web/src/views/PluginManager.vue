@@ -20,6 +20,14 @@ const drawerOpen = ref(false)
 const drawerPlugin = ref(null)
 const drawerPage = ref(null)
 
+// 插件配置抽屉（JSON Schema 自动生成表单）
+const configOpen = ref(false)
+const configPlugin = ref(null)
+const configSchema = ref(null)
+const configValues = ref({})
+const configSaving = ref(false)
+const configLoading = ref(false)
+
 onMounted(() => {
   store.fetchStatus()
 })
@@ -52,6 +60,72 @@ function closeDrawer() {
   drawerOpen.value = false
   drawerPlugin.value = null
   drawerPage.value = null
+}
+
+function closeConfig() {
+  configOpen.value = false
+  configPlugin.value = null
+  configSchema.value = null
+  configValues.value = {}
+}
+
+async function openConfig(plugin) {
+  configPlugin.value = plugin
+  configOpen.value = true
+  configLoading.value = true
+  try {
+    const data = await store.apiFetch(`/api/plugin/${encodeURIComponent(plugin.name)}/config`)
+    configSchema.value = data.schema
+    // 以 schema 默认值补全，保证必填字段有初值
+    const merged = {}
+    const props = data.schema?.properties || {}
+    for (const key of Object.keys(props)) {
+      merged[key] = props[key].default !== undefined ? props[key].default : ''
+    }
+    Object.assign(merged, data.values || {})
+    configValues.value = merged
+  } catch (e) {
+    showToast('error', `获取配置失败：${e.message}`)
+    closeConfig()
+  } finally {
+    configLoading.value = false
+  }
+}
+
+const configFields = computed(() => {
+  if (!configSchema.value?.properties) return []
+  const required = configSchema.value.required || []
+  return Object.entries(configSchema.value.properties).map(([key, prop]) => ({
+    key,
+    title: prop.title || key,
+    type: prop.type || 'string',
+    description: prop.description || '',
+    required: required.includes(key),
+    default: prop.default,
+  }))
+})
+
+function configInputType(field) {
+  if (field.type === 'boolean') return 'checkbox'
+  if (field.type === 'integer' || field.type === 'number') return 'number'
+  return 'text'
+}
+
+async function saveConfig() {
+  configSaving.value = true
+  try {
+    const res = await store.apiFetch(`/api/plugin/${encodeURIComponent(configPlugin.value.name)}/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: configValues.value }),
+    })
+    configValues.value = res
+    showToast('success', `插件 ${configPlugin.value.name} 配置已保存`)
+  } catch (e) {
+    showToast('error', `保存失败：${e.message}`)
+  } finally {
+    configSaving.value = false
+  }
 }
 
 async function reload(name) {
@@ -299,6 +373,9 @@ function switchTab(tab) {
             <button class="btn btn-secondary btn-sm" :disabled="loading === plugin.name" @click="reload(plugin.name)">
               <span :class="{ spin: loading === plugin.name }">↻</span> 重载
             </button>
+            <button class="btn btn-secondary btn-sm" :disabled="loading === plugin.name" @click="openConfig(plugin)">
+              <span>⚙</span> 配置
+            </button>
             <button class="btn btn-danger btn-sm" :disabled="loading === plugin.name" @click="unload(plugin.name)">
               卸载
             </button>
@@ -331,6 +408,59 @@ function switchTab(tab) {
                 sandbox="allow-scripts allow-same-origin allow-forms"
                 title="插件管理页面"
               ></iframe>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
+
+    <!-- 插件配置抽屉（JSON Schema 自动生成表单） -->
+    <Teleport to="body">
+      <transition name="drawer">
+        <div v-if="configOpen" class="drawer-overlay" @click.self="closeConfig">
+          <div class="drawer-panel">
+            <div class="drawer-header">
+              <div class="drawer-title">
+                <span>⚙</span>
+                <span>{{ configPlugin?.name }} - 配置</span>
+              </div>
+              <button class="drawer-close" @click="closeConfig">✕</button>
+            </div>
+            <div class="drawer-body config-drawer-body">
+              <div v-if="configLoading" class="empty-state">加载配置中...</div>
+              <div v-else-if="!configSchema" class="empty-state">
+                <div class="icon">◇</div>
+                <div>该插件未定义配置项（无 Config 内嵌类）</div>
+              </div>
+              <div v-else class="config-form">
+                <div v-if="configFields.length === 0" class="empty-state">该插件无配置字段</div>
+                <div v-for="field in configFields" :key="field.key" class="config-field">
+                  <label class="config-label">
+                    <span class="config-title">
+                      {{ field.title }}
+                      <span v-if="field.required" class="required-mark" title="必填">*</span>
+                    </span>
+                    <span v-if="field.description" class="config-desc">{{ field.description }}</span>
+                  </label>
+                  <label v-if="field.type === 'boolean'" class="switch" style="width: 44px; height: 24px;">
+                    <input type="checkbox" v-model="configValues[field.key]">
+                    <span class="slider round"></span>
+                  </label>
+                  <input
+                    v-else
+                    :type="configInputType(field)"
+                    v-model="configValues[field.key]"
+                    class="config-input"
+                    :step="field.type === 'number' ? '0.1' : undefined"
+                  >
+                </div>
+                <div class="config-actions">
+                  <button class="btn btn-secondary" :disabled="configSaving" @click="closeConfig">取消</button>
+                  <button class="btn btn-primary" :disabled="configSaving" @click="saveConfig">
+                    <span :class="{ spin: configSaving }">✓</span> 保存配置
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -602,11 +732,72 @@ function switchTab(tab) {
   flex: 1;
   overflow: hidden;
 }
+.config-drawer-body {
+  overflow-y: auto;
+  padding: 20px;
+}
 .drawer-iframe {
   width: 100%;
   height: 100%;
   border: none;
   background: var(--bg-primary);
+}
+
+/* 插件配置表单 */
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.config-field {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+.config-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.config-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.required-mark {
+  color: var(--danger);
+}
+.config-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.config-input {
+  width: 220px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: rgba(0,0,0,0.2);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.config-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 /* 抽屉过渡动画 */

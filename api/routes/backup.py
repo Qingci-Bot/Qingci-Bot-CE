@@ -13,9 +13,9 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from bot.db.engine import DB_PATH
-from api.auth import require_auth
 from api.audit import record_audit
+from api.auth import require_auth
+from bot.db.engine import DB_PATH
 
 logger = logging.getLogger("qingci-bot.api.backup")
 
@@ -71,7 +71,7 @@ async def backup_db(request: Request):
         filename, size = await asyncio.to_thread(_do_backup)
     except Exception:
         logger.exception("数据库备份失败")
-        raise HTTPException(status_code=500, detail="数据库备份失败，详见服务端日志")
+        raise HTTPException(status_code=500, detail="数据库备份失败，详见服务端日志") from None
     # 审计埋点：仅记录文件名与大小，不含任何数据内容
     await record_audit("db_backup", f"数据库备份: {filename} ({size} 字节)", request)
     return {"filename": filename, "size": size}

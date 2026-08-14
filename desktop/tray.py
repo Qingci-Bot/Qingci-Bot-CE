@@ -17,12 +17,13 @@ class SystemTray:
     def create(self):
         """创建托盘图标"""
         try:
-            import pystray
-            from PIL import Image
-
             # 生成默认图标（32x32 蓝色圆形）
             # 源码模式位于 desktop/ 目录；frozen 模式从 _internal 或 exe 目录查找
             import sys
+
+            import pystray
+            from PIL import Image
+
             if getattr(sys, "frozen", False):
                 # onedir: _MEIPASS 指向 _internal 目录，datas 资源在此
                 base = Path(getattr(sys, "_MEIPASS", ""))
@@ -75,6 +76,7 @@ class SystemTray:
     def _generate_default_icon(self, path: Path):
         """生成默认图标"""
         from PIL import Image, ImageDraw
+
         size = 64
         img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)

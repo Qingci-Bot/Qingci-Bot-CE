@@ -2,20 +2,19 @@
 
 import asyncio
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from bot.core.bot import get_bot as _get_bot
-from api.auth import require_auth
 from api.audit import record_audit
+from api.auth import require_auth
+from bot.core.bot import get_bot as _get_bot
 
 logger = logging.getLogger("qingci-bot.api.bot")
 
 router = APIRouter()
 
 # 生命周期锁：惰性创建，避免模块导入时绑定到（可能不同的）事件循环
-_lifecycle_lock: Optional[asyncio.Lock] = None
+_lifecycle_lock: asyncio.Lock | None = None
 
 # 启动/停止超时保护（秒）：stop 内部最长约 7s，使用较短超时
 _START_TIMEOUT = 30
@@ -78,10 +77,10 @@ async def start_bot(request: Request):
             raise HTTPException(
                 status_code=504,
                 detail="Bot 启动超时，已尝试清理，请通过 /status 确认状态",
-            )
+            ) from None
         except Exception:
             logger.exception("Bot 启动失败")
-            raise HTTPException(status_code=500, detail="启动失败，详见服务端日志")
+            raise HTTPException(status_code=500, detail="启动失败，详见服务端日志") from None
 
 
 @router.post("/stop", dependencies=[Depends(require_auth)])
@@ -103,10 +102,10 @@ async def stop_bot(request: Request):
             raise HTTPException(
                 status_code=504,
                 detail="Bot 停止超时，已尝试清理，请通过 /status 确认状态",
-            )
+            ) from None
         except Exception:
             logger.exception("Bot 停止失败")
-            raise HTTPException(status_code=500, detail="停止失败，详见服务端日志")
+            raise HTTPException(status_code=500, detail="停止失败，详见服务端日志") from None
 
 
 @router.post("/restart", dependencies=[Depends(require_auth)])
@@ -127,7 +126,7 @@ async def restart_bot(request: Request):
                     raise HTTPException(
                         status_code=504,
                         detail="重启超时（停止阶段），已尝试清理，请通过 /status 确认状态",
-                    )
+                    ) from None
                 stopped = True
             try:
                 await asyncio.wait_for(bot.start(), timeout=_START_TIMEOUT)
@@ -139,7 +138,7 @@ async def restart_bot(request: Request):
                     if stopped
                     else "Bot 启动超时，已尝试清理，请通过 /status 确认状态"
                 )
-                raise HTTPException(status_code=504, detail=detail)
+                raise HTTPException(status_code=504, detail=detail) from None
             await record_audit("bot_restart", "重启 Bot", request)
             return {"message": "Bot 重启成功"}
         except HTTPException:
@@ -149,9 +148,9 @@ async def restart_bot(request: Request):
                 logger.exception("Bot 已停止且重启失败")
                 raise HTTPException(
                     status_code=500, detail="Bot 已停止且重启失败，详见服务端日志"
-                )
+                ) from None
             logger.exception("Bot 重启失败")
-            raise HTTPException(status_code=500, detail="重启失败，详见服务端日志")
+            raise HTTPException(status_code=500, detail="重启失败，详见服务端日志") from None
 
 
 @router.get("/health")

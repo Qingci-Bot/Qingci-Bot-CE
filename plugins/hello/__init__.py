@@ -50,4 +50,4 @@ class HelloPlugin(PluginBase):
 
     async def _greet(self, ctx: MatcherContext) -> str:
         user_id = ctx.user_id or "陌生人"
-        return f"你好呀！(来自 Hello 插件)"
+        return f"你好呀，{user_id}！(来自 Hello 插件)"

@@ -5,6 +5,28 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- 参数级依赖注入：Matcher handler 参数按签名自动解析注入（`MatcherContext`、`Bot`、DI 服务），支持 `Depends(...)` 显式声明与类型注解自动注入
+- 全局生命周期钩子：插件可覆写 `on_startup` / `on_shutdown` / `on_bot_connect` / `on_metaevent`，在 Bot 启动/停止、LLBot 连接建立、元事件到达时获得通知（异常隔离）
+- 插件数据目录：`PluginBase.data_dir` 属性，提供插件专属数据目录 `data/plugins/<name>/`（自动创建，卸载不删除）
+- 在线插件安装：`PluginManager.install(bot, source)` 支持从 git 仓库、HTTP 归档 URL、本地目录/归档安装插件到 `plugins/` 并自动安装 `requirements.txt`（或 `plugin.json` 的 `requirements` 字段）声明的依赖
+- 国际化（i18n）：`I18n` 翻译器 + 插件 `i18n/<locale>.json` 翻译资源自动加载，`self.i18n` / `self._` 使用；新增 `config.yaml` 的 `lang` 字段控制全局语言（默认 `zh-CN`）
+- 事件总线：`EventBus` 跨插件发布-订阅事件广播，插件无需显式依赖即可协作；支持 `subscribe`/`publish`、通配订阅 `"*"`、sync/async handler、线程安全；注入到 `PluginBase.event_bus` 与 DI 容器
+- 插件级 LLM 工具声明：`@llm_tool` 装饰器让插件注册 Function Calling 工具，参与 LLM 推理；工具名自动加插件名前缀（`<plugin>_<name>`），卸载时自动注销
+- 指令系统增强：`on_command` 新增 `aliases`（命令别名）、`subcommands`（子指令路由）、`args_schema`（类型化参数解析并按名注入 handler 形参）
+- 配置 schema 自动生成：插件定义 `Config` 内嵌类（pydantic）自动导出 JSON Schema，Web 插件管理页据此渲染配置表单，无需手写 UI；新增 `GET/PUT /api/plugin/{name}/config` 接口
+- 自动热重载：`PluginWatcher` 监听外部插件目录文件变更并自动重载插件（开发期提效）；由 `config.yaml` 的 `hot_reload.enabled` / `hot_reload.interval` 控制，默认关闭
+- 细粒度事件处理钩子：新增 Matcher 运行前全局钩子（`run_preprocessor`，`bot.add_matcher_preprocessor`，在 Matcher 匹配成功后、handler 前触发，返回非 None 即拦截该 Matcher）与平台接口调用钩子（`on_calling_api`，`bot.register_api_hook` / `connection.on_api_call`，每次 OneBot API 调用前触发，可改写参数或抛异常阻止调用）
+
+### Fixed
+- 修复 `DELETE /api/log/sessions/one` 接口（`delete_session`）使用 `Request | None` 参数导致 FastAPI 启动时路由注册失败、API 无法启动的问题
+
+### Changed
+- mypy 配置 `python_version` 由 3.10 提升至 3.12，与推荐运行版本保持一致
+- 代码质量维护：修复 ruff 检查 318 处、mypy 类型检查 82 处错误，并对 58 个文件统一格式化；`bot/db/database.py` 针对 SQLModel 列访问按文件禁用相关 mypy 错误码
+
 ## [1.3.0] - 2026-08-13
 
 ### Added

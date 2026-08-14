@@ -13,7 +13,8 @@
 import asyncio
 import json
 import logging
-from typing import AsyncIterator, Optional, TYPE_CHECKING
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Optional
 
 from ..config import LLMConfig, SessionSummaryConfig
 from ..core.tasks import spawn_background_task
@@ -22,6 +23,7 @@ from .adapter import LLMAdapter
 from .litellm_adapter import LiteLLMAdapter
 
 if TYPE_CHECKING:
+    from .mcp import MCPBridge
     from .tools import ToolRegistry
 
 logger = logging.getLogger("qingci-bot.llm.manager")
@@ -33,8 +35,8 @@ class LLMManager:
     def __init__(
         self,
         config: LLMConfig,
-        db: Optional[Database] = None,
-        summary_config: Optional[SessionSummaryConfig] = None,
+        db: Database | None = None,
+        summary_config: SessionSummaryConfig | None = None,
         usage_tracking: bool = True,
     ):
         self._config = config
@@ -46,7 +48,7 @@ class LLMManager:
         )
         # 用量入库开关（log.usage_tracking）：关闭后不写 usage_logs
         self._usage_tracking = usage_tracking
-        self._adapter: Optional[LLMAdapter] = None
+        self._adapter: LLMAdapter | None = None
         # 最近一次可用性检查失败的原因（供 /llm/test 展示）
         self.last_error: str = ""
         # 内存会话缓存: key = "group:{group_id}:{user_id}" 或 "private:{user_id}"
@@ -62,14 +64,14 @@ class LLMManager:
         # 轻则 dict 并发修改报错，重则新建会话逃过 reload 的清空（内存历史残留）
         self._reload_lock = asyncio.Lock()
         # Function Calling 工具注册表（enable_tools 且非 None 时启用）
-        self._tool_registry: Optional["ToolRegistry"] = None
+        self._tool_registry: ToolRegistry | None = None
         # MCP 桥接器（enable_tools + mcp_servers 配置时由 setup_mcp_tools 创建）
-        self._mcp: Optional[object] = None
+        self._mcp: MCPBridge | None = None
         # token 计数缓存：(role, content) -> token 数，避免对同一消息重复计数
         self._token_cache: dict[tuple[str, str], int] = {}
         # 模型能力判断缓存：模型不变时 supports_function_calling 结果恒定，
         # 避免每条消息都走 litellm.get_model_info；reload 时一并清空
-        self._tools_support_cache: Optional[bool] = None
+        self._tools_support_cache: bool | None = None
 
     # ============ 适配器管理 ============
 
@@ -93,8 +95,8 @@ class LLMManager:
     async def reload(
         self,
         config: LLMConfig,
-        summary_config: Optional[SessionSummaryConfig] = None,
-        usage_tracking: Optional[bool] = None,
+        summary_config: SessionSummaryConfig | None = None,
+        usage_tracking: bool | None = None,
     ):
         """重载 LLM 配置
 
@@ -190,9 +192,7 @@ class LLMManager:
             try:
                 await self._db.clear_sessions(key)
             except Exception:
-                logger.exception(
-                    f"清除 DB 会话失败: key={key}, model={self._config.model}"
-                )
+                logger.exception(f"清除 DB 会话失败: key={key}, model={self._config.model}")
 
     async def clear_session_by_key(self, key: str) -> None:
         """按 session key 清除单个会话（供 API 路由等外部调用）
@@ -214,14 +214,10 @@ class LLMManager:
             return
         try:
             rows = await self._db.get_sessions(key, limit=self._config.max_history * 2)
-            self._sessions[key] = [
-                {"role": r["role"], "content": r["content"]} for r in rows
-            ]
+            self._sessions[key] = [{"role": r["role"], "content": r["content"]} for r in rows]
             self._loaded_sessions.add(key)
         except Exception:
-            logger.exception(
-                f"加载会话历史失败: key={key}, model={self._config.model}"
-            )
+            logger.exception(f"加载会话历史失败: key={key}, model={self._config.model}")
             self._sessions.setdefault(key, [])
             # 不标记 _loaded_sessions，允许下次重试
 
@@ -242,6 +238,7 @@ class LLMManager:
             return cached
         try:
             import litellm
+
             tokens = litellm.token_counter(self._config.model, messages=[msg])
         except Exception:
             # 降级：粗略估算（中文≈ 2 token/字符）
@@ -293,9 +290,7 @@ class LLMManager:
                 try:
                     await self._db.trim_sessions(key, max_msgs)
                 except Exception:
-                    logger.exception(
-                        f"裁剪 DB 会话历史失败: key={key}, model={self._config.model}"
-                    )
+                    logger.exception(f"裁剪 DB 会话历史失败: key={key}, model={self._config.model}")
 
         # 2. 按 token 上限裁剪（保留最近至少 1 轮）
         max_tokens = self._config.max_context_tokens
@@ -365,8 +360,7 @@ class LLMManager:
             )
         except Exception as e:
             logger.error(
-                f"会话摘要生成失败，降级硬裁剪: {e}, key={key}, "
-                f"model={self._config.model}"
+                f"会话摘要生成失败，降级硬裁剪: {e}, key={key}, model={self._config.model}"
             )
             return False
 
@@ -419,9 +413,7 @@ class LLMManager:
         )
         return True
 
-    async def clear_session(
-        self, message_type: str = "", group_id: int = 0, user_id: int = 0
-    ):
+    async def clear_session(self, message_type: str = "", group_id: int = 0, user_id: int = 0):
         """清除会话历史
 
         指定 message_type+user_id 清除单会话，全部参数缺省时清除全部。
@@ -443,9 +435,7 @@ class LLMManager:
             # 清除全部：在 reload 锁内快照（期间不会新建会话锁），
             # 然后按 key 字典序逐个加锁清理
             async with self._reload_lock:
-                items = [
-                    (k, self._get_lock(k)) for k in sorted(self._sessions.keys())
-                ]
+                items = [(k, self._get_lock(k)) for k in sorted(self._sessions.keys())]
             for k, lock in items:
                 async with lock:
                     self._sessions.pop(k, None)
@@ -455,9 +445,7 @@ class LLMManager:
                 try:
                     await self._db.clear_sessions(None)
                 except Exception:
-                    logger.exception(
-                        f"清除全部 DB 会话失败: model={self._config.model}"
-                    )
+                    logger.exception(f"清除全部 DB 会话失败: model={self._config.model}")
 
     # ============ Function Calling ============
 
@@ -483,6 +471,7 @@ class LLMManager:
         bridge = None
         try:
             from .mcp import MCPBridge
+
             bridge = MCPBridge()
             connected = await bridge.connect_servers(servers)
             if connected and self._tool_registry is not None:
@@ -525,6 +514,7 @@ class LLMManager:
             return self._tools_support_cache
         try:
             import litellm
+
             model = getattr(self._adapter, "model", None) or self._config.model
             info = litellm.get_model_info(model)
             self._tools_support_cache = bool(info.get("supports_function_calling", True))
@@ -542,11 +532,11 @@ class LLMManager:
     async def chat_with_tools(
         self,
         messages: list[dict],
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 2048,
         temperature: float = 0.7,
-        images: Optional[list[str]] = None,
-    ) -> tuple[str, Optional[dict]]:
+        images: list[str] | None = None,
+    ) -> tuple[str, dict | None]:
         """Function Calling 循环：LLM 返回 tool_calls 时执行工具并回传结果
 
         - 最大轮数由 llm.max_tool_rounds 控制，防止模型反复调用工具导致死循环
@@ -563,14 +553,12 @@ class LLMManager:
         total_usage = {"prompt_tokens": 0, "completion_tokens": 0}
         has_usage = False
 
-        def _accumulate(usage: Optional[dict]) -> None:
+        def _accumulate(usage: dict | None) -> None:
             nonlocal has_usage
             if usage:
                 has_usage = True
                 total_usage["prompt_tokens"] += int(usage.get("prompt_tokens", 0) or 0)
-                total_usage["completion_tokens"] += int(
-                    usage.get("completion_tokens", 0) or 0
-                )
+                total_usage["completion_tokens"] += int(usage.get("completion_tokens", 0) or 0)
 
         max_rounds = max(1, self._config.max_tool_rounds)
         for round_idx in range(max_rounds):
@@ -602,10 +590,12 @@ class LLMManager:
                         "function": {
                             "name": self._tool_call_field(
                                 self._tool_call_field(tc, "function", {}), "name", ""
-                            ) or "",
+                            )
+                            or "",
                             "arguments": self._tool_call_field(
                                 self._tool_call_field(tc, "function", {}), "arguments", "{}"
-                            ) or "{}",
+                            )
+                            or "{}",
                         },
                     }
                     for tc in tool_calls
@@ -623,7 +613,9 @@ class LLMManager:
                     logger.warning(f"跳过工具调用（registry 未就绪）: name={name}")
                     break
                 try:
-                    arguments = json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args)
+                    arguments = (
+                        json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args)
+                    )
                     if not isinstance(arguments, dict):
                         arguments = {}
                 except (json.JSONDecodeError, TypeError, ValueError):
@@ -632,9 +624,7 @@ class LLMManager:
                 logger.info(f"执行工具调用: name={name}, round={round_idx + 1}")
                 # ToolRegistry.execute 内部捕获一切异常，返回错误文本回传模型
                 output = await registry.execute(name, arguments)
-                working.append(
-                    {"role": "tool", "tool_call_id": tc_id, "content": output}
-                )
+                working.append({"role": "tool", "tool_call_id": tc_id, "content": output})
 
         # 达到最大轮数仍未产出文本：再调用一次（不带 tools）强制收尾
         result = await self.adapter.chat_detail(
@@ -644,10 +634,7 @@ class LLMManager:
             temperature=temperature,
         )
         _accumulate(result.usage)
-        logger.warning(
-            f"工具调用达到最大轮数 {max_rounds}，强制收尾: "
-            f"model={self._config.model}"
-        )
+        logger.warning(f"工具调用达到最大轮数 {max_rounds}，强制收尾: model={self._config.model}")
         return result.content, (total_usage if has_usage else None)
 
     # ============ 对话调用 ============
@@ -659,10 +646,10 @@ class LLMManager:
         group_id: int = 0,
         user_id: int = 0,
         user_name: str = "",
-        images: Optional[list[str]] = None,
-        system_prompt: Optional[str] = None,
+        images: list[str] | None = None,
+        system_prompt: str | None = None,
         source: str = "chat",
-    ) -> Optional[str]:
+    ) -> str | None:
         """同步聊天（返回完整回复，失败时返回 None）
 
         Args:
@@ -683,9 +670,7 @@ class LLMManager:
             # 并行持久化用户消息：与下方 LLM 网络调用同时进行（DB 写不阻塞请求）
             save_user_task = None
             if self._db is not None:
-                save_user_task = asyncio.create_task(
-                    self._db.save_session(key, "user", message)
-                )
+                save_user_task = asyncio.create_task(self._db.save_session(key, "user", message))
 
             async def _wait_user_saved() -> bool:
                 """等待用户消息落库，返回是否成功（失败仅记日志）"""
@@ -695,9 +680,7 @@ class LLMManager:
                     await save_user_task
                     return True
                 except Exception:
-                    logger.exception(
-                        f"持久化用户消息失败: key={key}, model={self._config.model}"
-                    )
+                    logger.exception(f"持久化用户消息失败: key={key}, model={self._config.model}")
                     return False
 
             # 调用 LLM（走 chat_detail 以获取 usage，供后续用量统计）
@@ -758,30 +741,26 @@ class LLMManager:
                 if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
                     self._sessions[key].pop()
                     db_saved = await _wait_user_saved()
-                    if db_saved:
+                    if db_saved and self._db is not None:
                         try:
                             await self._db.delete_last_session(key, "user")
                         except Exception:
                             logger.exception(
-                                f"回滚用户消息失败: key={key}, "
-                                f"model={self._config.model}"
+                                f"回滚用户消息失败: key={key}, model={self._config.model}"
                             )
                 raise
             except Exception as e:
-                logger.error(
-                    f"LLM 调用失败: {e}, key={key}, model={self._config.model}"
-                )
+                logger.error(f"LLM 调用失败: {e}, key={key}, model={self._config.model}")
                 # 回滚刚加入的用户消息，保持内存与 DB 一致
                 if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
                     self._sessions[key].pop()
                     db_saved = await _wait_user_saved()
-                    if db_saved:
+                    if db_saved and self._db is not None:
                         try:
                             await self._db.delete_last_session(key, "user")
                         except Exception:
                             logger.exception(
-                                f"回滚用户消息失败: key={key}, "
-                                f"model={self._config.model}"
+                                f"回滚用户消息失败: key={key}, model={self._config.model}"
                             )
                 return None
             finally:
@@ -795,17 +774,15 @@ class LLMManager:
                 if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
                     self._sessions[key].pop()
                     db_saved = await _wait_user_saved()
-                    if db_saved:
+                    if db_saved and self._db is not None:
                         try:
                             await self._db.delete_last_session(key, "user")
                         except Exception:
                             logger.exception(
-                                f"回滚用户消息失败: key={key}, "
-                                f"model={self._config.model}"
+                                f"回滚用户消息失败: key={key}, model={self._config.model}"
                             )
                 logger.warning(
-                    f"LLM 返回空回复，已回滚用户消息: key={key}, "
-                    f"model={self._config.model}"
+                    f"LLM 返回空回复，已回滚用户消息: key={key}, model={self._config.model}"
                 )
                 return None
 
@@ -815,9 +792,7 @@ class LLMManager:
                 try:
                     await self._db.save_session(key, "assistant", reply)
                 except Exception:
-                    logger.exception(
-                        f"持久化助手回复失败: key={key}, model={self._config.model}"
-                    )
+                    logger.exception(f"持久化助手回复失败: key={key}, model={self._config.model}")
                     # DB 失败时仍保留内存（容错），记录不一致
             self._sessions.setdefault(key, []).append({"role": "assistant", "content": reply})
             return reply
@@ -828,7 +803,7 @@ class LLMManager:
         message_type: str = "group",
         group_id: int = 0,
         user_id: int = 0,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncGenerator[str, None]:
         """流式聊天（逐段返回增量文本）
 
         注意：流式路径暂不统计用量——litellm 流式响应需额外开启
@@ -846,9 +821,7 @@ class LLMManager:
             # 并行持久化用户消息：与下方 LLM 流式调用同时进行
             save_user_task = None
             if self._db is not None:
-                save_user_task = asyncio.create_task(
-                    self._db.save_session(key, "user", message)
-                )
+                save_user_task = asyncio.create_task(self._db.save_session(key, "user", message))
 
             async def _wait_user_saved() -> bool:
                 """等待用户消息落库，返回是否成功（失败仅记日志）"""
@@ -858,9 +831,7 @@ class LLMManager:
                     await save_user_task
                     return True
                 except Exception:
-                    logger.exception(
-                        f"持久化用户消息失败: key={key}, model={self._config.model}"
-                    )
+                    logger.exception(f"持久化用户消息失败: key={key}, model={self._config.model}")
                     return False
 
             full_reply = ""
@@ -889,9 +860,7 @@ class LLMManager:
                 cancelled = True
                 success = False
             except Exception as e:
-                logger.error(
-                    f"LLM 流式调用失败: {e}, key={key}, model={self._config.model}"
-                )
+                logger.error(f"LLM 流式调用失败: {e}, key={key}, model={self._config.model}")
                 # 不 yield 错误信息，避免污染内容流
 
             # 清理逻辑：依据 success 标志决定保存回复还是回滚用户消息
@@ -904,36 +873,35 @@ class LLMManager:
                             await self._db.save_session(key, "assistant", full_reply)
                         except Exception:
                             logger.exception(
-                                f"持久化助手回复失败: key={key}, "
-                                f"model={self._config.model}"
+                                f"持久化助手回复失败: key={key}, model={self._config.model}"
                             )
                             # DB 失败时仍保留内存（容错），记录不一致
-                    self._sessions.setdefault(key, []).append({"role": "assistant", "content": full_reply})
+                    self._sessions.setdefault(key, []).append(
+                        {"role": "assistant", "content": full_reply}
+                    )
                 elif not success:
                     # 失败（含取消）时回滚用户消息
                     if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
                         self._sessions[key].pop()
                         db_saved = await _wait_user_saved()
-                        if db_saved:
+                        if db_saved and self._db is not None:
                             try:
                                 await self._db.delete_last_session(key, "user")
                             except Exception:
                                 logger.exception(
-                                    f"回滚用户消息失败: key={key}, "
-                                    f"model={self._config.model}"
+                                    f"回滚用户消息失败: key={key}, model={self._config.model}"
                                 )
                 elif success and not full_reply:
                     # 空回复：回滚用户消息，避免历史中出现空 assistant 回复
                     if self._sessions.get(key) and self._sessions[key][-1]["role"] == "user":
                         self._sessions[key].pop()
                         db_saved = await _wait_user_saved()
-                        if db_saved:
+                        if db_saved and self._db is not None:
                             try:
                                 await self._db.delete_last_session(key, "user")
                             except Exception:
                                 logger.exception(
-                                    f"回滚用户消息失败: key={key}, "
-                                    f"model={self._config.model}"
+                                    f"回滚用户消息失败: key={key}, model={self._config.model}"
                                 )
             finally:
                 # 清理完成后重新抛出取消/关闭异常，保持 asyncio 取消与生成器关闭语义

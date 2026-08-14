@@ -31,7 +31,9 @@ class KnowledgePlugin(PluginBase):
         logger.info("知识库插件已加载")
         self.matchers.append(
             on_command(
-                "kb", permission=SUPERUSER, priority=1,
+                "kb",
+                permission=SUPERUSER,
+                priority=1,
                 description="知识库管理: /kb add|list|search|remove|reload",
             )(self._cmd_kb)
         )

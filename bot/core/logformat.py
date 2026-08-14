@@ -11,9 +11,8 @@ import datetime
 import json
 import logging
 import logging.handlers
-import os
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
 
 class JsonFormatter(logging.Formatter):
@@ -21,8 +20,7 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {
-            "time": datetime.datetime.fromtimestamp(record.created)
-            .strftime("%Y-%m-%d %H:%M:%S"),
+            "time": datetime.datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S"),
             "level": record.levelname,
             "name": record.name,
             "message": record.getMessage(),
@@ -49,6 +47,7 @@ def _resolve_log_dir(config: object) -> Path:
         p = Path("logs")
     if not p.is_absolute():
         from ..paths import app_root
+
         p = app_root() / p
     return p
 
@@ -91,7 +90,7 @@ def _add_rotating_file_handler(
 def configure_logging(
     log_json: bool = False,
     log_level: str = "INFO",
-    file_config: Optional[object] = None,
+    file_config: object | None = None,
 ) -> None:
     """按开关配置根日志
 
@@ -101,9 +100,13 @@ def configure_logging(
         file_config: 日志文件配置（config.log 节），非 None 时启用文件轮转
     """
     level = getattr(logging, log_level.upper(), logging.INFO)
-    fmt = JsonFormatter() if log_json else logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+    fmt = (
+        JsonFormatter()
+        if log_json
+        else logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
     )
     handler = logging.StreamHandler()
     handler.setFormatter(fmt)

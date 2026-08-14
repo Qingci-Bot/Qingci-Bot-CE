@@ -9,12 +9,12 @@ import pkgutil
 import re
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Union, cast, get_args, get_origin
 
-from packaging.version import Version, InvalidVersion
 from packaging.specifiers import SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from .base import PluginBase, PluginStatus
 from .matcher import Matcher, begin_module_collection, end_module_collection
@@ -25,6 +25,7 @@ logger = logging.getLogger("qingci-bot.plugin.manager")
 @dataclass
 class MatcherMetrics:
     """单个 Matcher 的执行指标"""
+
     call_count: int = 0
     total_time_ms: float = 0.0
     error_count: int = 0
@@ -37,7 +38,7 @@ class MatcherMetrics:
         return self.total_time_ms / self.call_count
 
 
-def _parse_version_spec(dep_spec: str) -> tuple[str, Optional[SpecifierSet]]:
+def _parse_version_spec(dep_spec: str) -> tuple[str, SpecifierSet | None]:
     """解析依赖声明，返回 (name, version_spec)。
 
     示例：
@@ -54,17 +55,17 @@ def _parse_version_spec(dep_spec: str) -> tuple[str, Optional[SpecifierSet]]:
         try:
             return name, SpecifierSet(spec_str)
         except Exception:
-            raise ValueError(f"无效的版本约束: {dep_spec}")
+            raise ValueError(f"无效的版本约束: {dep_spec}") from None
     return name, None
 
 
-def _load_plugin_json(directory: Path) -> Optional[dict]:
+def _load_plugin_json(directory: Path) -> dict | None:
     """从目录中加载 plugin.json 元数据（若存在）"""
     json_path = directory / "plugin.json"
     if not json_path.is_file():
         return None
     try:
-        return json.loads(json_path.read_text(encoding="utf-8"))
+        return cast(dict, json.loads(json_path.read_text(encoding="utf-8")))
     except (json.JSONDecodeError, OSError):
         logger.warning(f"plugin.json 解析失败: {json_path}")
         return None
@@ -80,7 +81,7 @@ class PluginManager:
 
     def __init__(self):
         self._plugins: dict[str, PluginBase] = {}
-        self._cached_matchers: Optional[list[Matcher]] = None
+        self._cached_matchers: list[Matcher] | None = None
         # Matcher 执行指标: owner_name -> Matcher 实例 -> MatcherMetrics
         self._metrics: dict[str, dict[Matcher, MatcherMetrics]] = {}
         # plugin.json 预取缓存: module_path -> metadata dict
@@ -89,12 +90,32 @@ class PluginManager:
         self._plugin_pages: dict[str, list[dict]] = {}
         # FastAPI 应用引用（由 create_app 后注入）
         self._web_app = None
+        # 全局 i18n 语言（插件翻译默认语言，由 config.lang 设置）
+        self._i18n_locale = "zh-CN"
+        # 插件注册的 LLM 工具名: plugin_name -> [full_tool_name]，卸载时注销
+        self._plugin_tools: dict[str, list[str]] = {}
+
+    def set_i18n_locale(self, locale: str) -> None:
+        """设置全局语言并刷新已加载插件的翻译"""
+        self._i18n_locale = locale or "zh-CN"
+        for plugin in self._plugins.values():
+            self._load_i18n(plugin)
+
+    def _load_i18n(self, plugin: PluginBase) -> None:
+        """为插件加载翻译资源（i18n/<locale>.json）"""
+        from ..i18n import load_plugin_i18n
+
+        plugin.i18n.locale = self._i18n_locale
+        plugin.i18n._data.clear()
+        loaded = load_plugin_i18n(plugin)
+        if loaded.locale == self._i18n_locale and loaded._data:
+            plugin.i18n._data.update(loaded._data)
 
     @property
     def plugins(self) -> dict[str, PluginBase]:
         return self._plugins
 
-    def get(self, name: str) -> Optional[PluginBase]:
+    def get(self, name: str) -> PluginBase | None:
         return self._plugins.get(name)
 
     def all_matchers(self) -> list[Matcher]:
@@ -138,23 +159,25 @@ class PluginManager:
         if not plugin:
             return []
         result = []
-        for matcher in (plugin.matchers or []):
+        for matcher in plugin.matchers or []:
             owner_metrics = self._metrics.get(plugin_name, {})
             m = owner_metrics.get(matcher)
             if m is None:
                 continue
             handler_name = getattr(matcher.handler, "__name__", "unknown")
-            result.append({
-                "handler": handler_name,
-                "event_type": matcher.event_type,
-                "priority": matcher.priority,
-                "description": (matcher.meta or {}).get("description", ""),
-                "call_count": m.call_count,
-                "avg_time_ms": round(m.avg_time_ms, 2),
-                "total_time_ms": round(m.total_time_ms, 2),
-                "error_count": m.error_count,
-                "last_call_time": m.last_call_time,
-            })
+            result.append(
+                {
+                    "handler": handler_name,
+                    "event_type": matcher.event_type,
+                    "priority": matcher.priority,
+                    "description": (matcher.meta or {}).get("description", ""),
+                    "call_count": m.call_count,
+                    "avg_time_ms": round(m.avg_time_ms, 2),
+                    "total_time_ms": round(m.total_time_ms, 2),
+                    "error_count": m.error_count,
+                    "last_call_time": m.last_call_time,
+                }
+            )
         return result
 
     # ---- Web 管理页面 ----
@@ -169,6 +192,7 @@ class PluginManager:
         if self._web_app is None:
             return
         from fastapi.staticfiles import StaticFiles
+
         for plugin_name, pages in self._plugin_pages.items():
             for page in pages:
                 static_dir = page.get("static_dir", "")
@@ -176,9 +200,7 @@ class PluginManager:
                     mount_path = f"/api/plugin-data/{plugin_name}"
                     # 避免重复挂载
                     if not any(
-                        r.path == mount_path
-                        for r in self._web_app.routes
-                        if hasattr(r, "path")
+                        r.path == mount_path for r in self._web_app.routes if hasattr(r, "path")
                     ):
                         try:
                             self._web_app.mount(
@@ -190,14 +212,70 @@ class PluginManager:
                                 f"插件 {plugin_name} 管理页面已挂载: {mount_path} -> {static_dir}"
                             )
                         except Exception:
-                            logger.exception(
-                                f"挂载插件 {plugin_name} 管理页面失败: {static_dir}"
-                            )
+                            logger.exception(f"挂载插件 {plugin_name} 管理页面失败: {static_dir}")
 
     def get_plugin_pages(self, name: str) -> list[dict]:
         """获取指定插件的管理页面注册信息（不含 static_dir）"""
         pages = self._plugin_pages.get(name, [])
         return [{"title": p["title"], "icon": p["icon"]} for p in pages]
+
+    # ---- 配置 schema 自动生成配置 UI ----
+
+    def get_config_schema(self, name: str) -> dict | None:
+        """获取插件的配置 JSON Schema（用于自动渲染 Web 配置表单）
+
+        插件定义 Config 内嵌类（pydantic BaseModel）时，返回其 JSON Schema；
+        定义为普通类时，从 __annotations__ 兜底生成简单 schema；
+        未定义 Config 时返回 None。
+        """
+        plugin = self._plugins.get(name)
+        if not plugin:
+            return None
+        config_cls = getattr(type(plugin), "Config", None)
+        if config_cls is None or not isinstance(config_cls, type):
+            return None
+        # pydantic v2：直接导出 JSON Schema（含默认值、必填字段、描述）
+        if hasattr(config_cls, "model_json_schema"):
+            try:
+                return cast(dict, config_cls.model_json_schema())
+            except Exception:
+                pass
+        return _schema_from_annotations(config_cls)
+
+    def get_config_values(self, name: str) -> dict:
+        """获取插件当前配置值（dict 形式）"""
+        plugin = self._plugins.get(name)
+        if not plugin or plugin.plugin_config is None:
+            return {}
+        cfg = plugin.plugin_config
+        if hasattr(cfg, "model_dump"):
+            try:
+                return cast(dict, cfg.model_dump())
+            except Exception:
+                pass
+        return dict(cfg)
+
+    async def update_config(self, name: str, values: dict, bot) -> bool:
+        """更新插件配置：写入 config.yaml 并重新校验应用到插件实例
+
+        Args:
+            name: 插件名
+            values: 新配置值（dict）
+            bot: Bot 实例
+
+        Returns:
+            是否成功
+        """
+        plugin = self._plugins.get(name)
+        if not plugin:
+            return False
+        try:
+            bot.config.set_plugin_config(name, values)
+            await self._load_plugin_config(plugin, bot)
+            return True
+        except Exception:
+            logger.exception(f"更新插件 {name} 配置失败")
+            return False
 
     def _collect_plugin_pages(self, plugin: PluginBase) -> None:
         """从插件实例收集已注册的 Web 管理页面"""
@@ -214,7 +292,7 @@ class PluginManager:
 
     def discover_metadata(self, directory: Path) -> list[dict]:
         """扫描目录中的 plugin.json 元数据，无需导入模块"""
-        results = []
+        results: list[dict] = []
         if not directory.is_dir():
             return results
         for py_file in sorted(directory.glob("*.py")):
@@ -232,6 +310,7 @@ class PluginManager:
     async def load_builtin(self, bot) -> None:
         """加载内置插件"""
         from . import builtin
+
         pkg_path = Path(builtin.__path__[0])
         for module_info in pkgutil.iter_modules([str(pkg_path)]):
             if module_info.name.startswith("_"):
@@ -251,7 +330,7 @@ class PluginManager:
             logger.exception(f"加载外部插件失败: {module_path}")
             return False
 
-    async def load_external_dir(self, bot, directory: Optional[Path] = None) -> int:
+    async def load_external_dir(self, bot, directory: Path | None = None) -> int:
         """扫描并加载外部插件目录
 
         支持两种插件形态：
@@ -269,6 +348,7 @@ class PluginManager:
         """
         if directory is None:
             from ..paths import app_root
+
             directory = app_root() / "plugins"
 
         root_str = str(directory.parent)
@@ -330,21 +410,27 @@ class PluginManager:
         return count
 
     async def _load_or_reload(
-        self, full_path: str, bot, replaced_name: Optional[str] = None,
-        _loading: Optional[set] = None,
+        self,
+        full_path: str,
+        bot,
+        replaced_name: str | None = None,
+        _loading: set | None = None,
     ) -> None:
         """加载或重载模块，确保模块级装饰器重新执行
 
         对已缓存的模块使用 reload，对新模块使用 import_module。
-        始终包裹 begin/end collection 以收集模块级 Matcher。
+        始终包裹 begin/end collection 以收集模块级 Matcher 与 LLM 工具。
 
         Args:
             replaced_name: reload 场景下被替换插件的原注册名（插件可能改名，
                 首次 load 传 None）
             _loading: 正在加载的模块名集合（依赖解析用，检测循环依赖）
         """
+        from .llm_tool import begin_tool_collection, end_tool_collection
+
         collector = begin_module_collection()
-        stale_classes: Optional[set] = None
+        tool_collector = begin_tool_collection()
+        stale_classes: set | None = None
         try:
             if full_path in sys.modules:
                 module = sys.modules[full_path]
@@ -361,9 +447,10 @@ class PluginManager:
                 module = importlib.import_module(full_path)
         finally:
             end_module_collection()
+            end_tool_collection()
 
         await self._register_from_module(
-            module, collector, bot, replaced_name, stale_classes, _loading
+            module, collector, bot, replaced_name, stale_classes, _loading, tool_collector
         )
 
     async def _ensure_dependencies(self, plugin: PluginBase, bot, loading: set) -> None:
@@ -386,7 +473,7 @@ class PluginManager:
                         raise ValueError(
                             f"插件 {plugin.name} 依赖 {dep_name}{version_spec}，"
                             f"但 {dep_name} 版本号 {existing.version} 无效"
-                        )
+                        ) from None
                     if dep_version not in version_spec:
                         raise ValueError(
                             f"插件 {plugin.name} 依赖 {dep_name}{version_spec}，"
@@ -403,9 +490,8 @@ class PluginManager:
                 importlib.import_module(dep_module)
             except ImportError:
                 raise ValueError(
-                    f"插件 {plugin.name} 依赖的插件 {dep_name} 不存在"
-                    f"（找不到模块 {dep_module}）"
-                )
+                    f"插件 {plugin.name} 依赖的插件 {dep_name} 不存在（找不到模块 {dep_module}）"
+                ) from None
             await self._load_or_reload(dep_module, bot, _loading=loading)
 
             # 加载后再次校验版本
@@ -418,7 +504,7 @@ class PluginManager:
                         raise ValueError(
                             f"插件 {plugin.name} 依赖 {dep_name}{version_spec}，"
                             f"但 {dep_name} 版本号 {dep_plugin.version} 无效"
-                        )
+                        ) from None
                     if dep_version not in version_spec:
                         raise ValueError(
                             f"插件 {plugin.name} 依赖 {dep_name}{version_spec}，"
@@ -430,9 +516,10 @@ class PluginManager:
         module,
         collector: list[Matcher],
         bot,
-        replaced_name: Optional[str] = None,
-        stale_classes: Optional[set] = None,
-        _loading: Optional[set] = None,
+        replaced_name: str | None = None,
+        stale_classes: set | None = None,
+        _loading: set | None = None,
+        tool_collector: list | None = None,
     ) -> None:
         """从模块中查找 PluginBase 子类并注册"""
         plugin_classes = []
@@ -452,8 +539,7 @@ class PluginManager:
         if not plugin_classes:
             if replaced_name is not None:
                 raise ValueError(
-                    f"模块 {module.__name__} 中未找到插件类，"
-                    f"无法替换已注册的插件 {replaced_name}"
+                    f"模块 {module.__name__} 中未找到插件类，无法替换已注册的插件 {replaced_name}"
                 )
             return
 
@@ -483,6 +569,8 @@ class PluginManager:
 
             # 初始化插件
             await self._init_plugin(plugin, bot)
+            if plugin.matchers is None:
+                plugin.matchers = []
 
             # 关联 Matcher
             for m in plugin.matchers:
@@ -508,6 +596,13 @@ class PluginManager:
                         f"被 {module.__name__} 替换）"
                     )
                 self._plugins[plugin.name] = plugin
+                # 注册插件声明的 LLM 工具（模块级 @llm_tool），卸载时注销
+                if tool_collector:
+                    from .llm_tool import register_tools
+
+                    registered = register_tools(bot.tool_registry, plugin.name, tool_collector)
+                    if registered:
+                        self._plugin_tools[plugin.name] = registered
                 # 重载场景下 unload 已清除页面注册，需重新收集
                 # （若插件没有页面，_plugin_pages 保持为空即可）
                 self._collect_plugin_pages(plugin)
@@ -549,9 +644,7 @@ class PluginManager:
             try:
                 plugin.plugin_config = config_cls(**config_dict)
             except Exception as e:
-                logger.warning(
-                    f"插件 {plugin.name} 配置校验失败: {e}，使用原始 dict"
-                )
+                logger.warning(f"插件 {plugin.name} 配置校验失败: {e}，使用原始 dict")
                 plugin.plugin_config = config_dict
         else:
             plugin.plugin_config = config_dict
@@ -575,6 +668,11 @@ class PluginManager:
                     logger.exception(f"清理插件 {name} 定时任务异常")
             # 清理指标
             self._metrics.pop(name, None)
+            # 注销插件注册的 LLM 工具
+            tool_names = self._plugin_tools.pop(name, [])
+            if tool_names and plugin.bot is not None and getattr(plugin.bot, "tool_registry", None):
+                for full_name in tool_names:
+                    plugin.bot.tool_registry.unregister(full_name)
             # 清理 Web 管理页面注册
             self._remove_plugin_pages(name)
             logger.info(f"插件已卸载: {name}")
@@ -667,11 +765,14 @@ class PluginManager:
         plugin.tool_registry = plugin.tool_registry or bot.tool_registry
         plugin.knowledge_store = plugin.knowledge_store or bot.knowledge_store
         plugin.session_state = plugin.session_state or bot.session_state
+        plugin.event_bus = plugin.event_bus or getattr(bot, "event_bus", None)
         plugin.matchers = plugin.matchers or []
         plugin._status = PluginStatus.LOADING
         await plugin.on_load()
         # 收集插件注册的 Web 管理页面
         self._collect_plugin_pages(plugin)
+        # 加载插件 i18n 翻译资源
+        self._load_i18n(plugin)
 
     # ---- 关闭 ----
 
@@ -679,6 +780,236 @@ class PluginManager:
         """关闭所有插件"""
         for name in list(self._plugins.keys()):
             await self.unload(name)
+
+    # ---- 全局生命周期钩子 ----
+
+    async def dispatch_lifecycle(self, hook: str, *args, **kwargs) -> None:
+        """向所有已加载插件分发全局生命周期钩子（异常隔离）
+
+        仅调用实际覆写了该钩子的插件（跳过基类空实现），
+        避免空转。支持 on_startup / on_shutdown / on_bot_connect / on_metaevent。
+        """
+        base = getattr(PluginBase, hook, None)
+        for plugin in list(self._plugins.values()):
+            if plugin.status != PluginStatus.LOADED:
+                continue
+            fn = getattr(type(plugin), hook, None)
+            if fn is None or fn is base:
+                continue
+            try:
+                res = getattr(plugin, hook)(*args, **kwargs)
+                if hasattr(res, "__await__"):
+                    await res
+            except Exception:
+                logger.exception(f"插件 {plugin.name} {hook} 钩子异常")
+
+    # ---- 在线安装 ----
+
+    async def install(self, bot, source: str, *, name: str | None = None) -> bool:
+        """在线安装插件到外部插件目录并加载
+
+        source 支持：
+        - git 仓库地址（git+https://... / https://... / git@...）
+        - HTTP 指向 zip/tar 归档的 URL
+        - 本地路径（目录或归档文件）
+
+        安装过程：拉取到 plugins/<name>/ → 加载 requirements.txt 依赖 → 加载插件。
+
+        Args:
+            bot: Bot 实例（用于加载）
+            source: 插件来源
+            name: 目标插件名（为空时从来源推断）
+
+        Returns:
+            是否成功安装并加载
+        """
+        from ..paths import app_root
+
+        plugins_dir = app_root() / "plugins"
+        plugins_dir.mkdir(parents=True, exist_ok=True)
+
+        target_name, target_dir = await self._fetch_plugin(source, name, plugins_dir)
+        if target_dir is None:
+            return False
+
+        # 自动安装依赖（requirements.txt / plugin.json 的 requirements 字段）
+        await self._install_requirements(target_dir)
+
+        # 加载插件
+        module_path = f"plugins.{target_name}"
+        try:
+            return await self.load_external(module_path, bot)
+        except Exception:
+            logger.exception(f"安装后加载插件失败: {module_path}")
+            return False
+
+    async def _fetch_plugin(
+        self, source: str, name: str | None, plugins_dir: Path
+    ) -> tuple[str, Path | None]:
+        """拉取插件源码到 plugins/ 目录，返回 (插件名, 插件目录)"""
+        import shutil
+        import tempfile
+
+        source = source.strip()
+        is_local_path = Path(source).exists()
+        temp_dir: str | None = None
+        try:
+            if is_local_path:
+                src = Path(source).resolve()
+                if src.is_dir():
+                    return await self._copy_plugin_dir(src, name, plugins_dir)
+                if src.is_file() and self._is_archive(src):
+                    temp_dir = tempfile.mkdtemp(prefix="qb-plugin-")
+                    extracted = await self._extract_archive(src, Path(temp_dir))
+                    return await self._copy_plugin_dir(extracted, name, plugins_dir)
+                logger.error(f"本地插件来源无效: {source}")
+                return "", None
+            else:
+                # 远程来源：git 克隆或 HTTP 下载归档
+                temp_dir = tempfile.mkdtemp(prefix="qb-plugin-")
+                staging = Path(temp_dir) / "src"
+                if source.startswith(("git+", "git@", "ssh://")):
+                    repo = source[4:] if source.startswith("git+") else source
+                    ok = await self._run_subprocess(
+                        ["git", "clone", "--depth", "1", repo, str(staging)]
+                    )
+                    if not ok or not staging.exists():
+                        logger.error(f"git 克隆失败: {source}")
+                        return "", None
+                elif source.startswith(("http://", "https://")):
+                    ok = await self._download_archive(source, staging)
+                    if not ok:
+                        logger.error(f"下载归档失败: {source}")
+                        return "", None
+                    staging = await self._extract_archive(staging, staging.parent)
+                else:
+                    logger.error(f"不支持的插件来源: {source}")
+                    return "", None
+
+                # 找到插件目录（仓库根或其下含 plugin.json/__init__.py 的目录）
+                plugin_dir = self._locate_plugin_dir(staging)
+                if plugin_dir is None:
+                    logger.error(f"来源中未找到插件目录: {source}")
+                    return "", None
+                return await self._copy_plugin_dir(plugin_dir, name, plugins_dir)
+        finally:
+            if temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    async def _copy_plugin_dir(
+        self, src: Path, name: str | None, plugins_dir: Path
+    ) -> tuple[str, Path | None]:
+        """复制插件目录到 plugins/，返回 (插件名, 目标目录)"""
+        import shutil
+
+        target_name = name or src.name
+        target = plugins_dir / target_name
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+        try:
+            shutil.copytree(
+                src, target, ignore=shutil.ignore_patterns(".git", "__pycache__", ".venv")
+            )
+            return target_name, target
+        except OSError as e:
+            logger.error(f"复制插件目录失败: {e}")
+            return "", None
+
+    async def _install_requirements(self, plugin_dir: Path) -> None:
+        """安装插件的 Python 依赖（requirements.txt 或 plugin.json 的 requirements 字段）"""
+        req_file = plugin_dir / "requirements.txt"
+        reqs: list[str] = []
+        if req_file.is_file():
+            lines = req_file.read_text(encoding="utf-8").splitlines()
+            reqs = [
+                line.strip() for line in lines if line.strip() and not line.strip().startswith("#")
+            ]
+        else:
+            meta = _load_plugin_json(plugin_dir)
+            if meta and isinstance(meta.get("requirements"), list):
+                reqs = [str(r) for r in meta["requirements"]]
+        if not reqs:
+            return
+        logger.info(f"安装插件 {plugin_dir.name} 依赖: {reqs}")
+        ok = await self._run_subprocess([sys.executable, "-m", "pip", "install"] + reqs)
+        if not ok:
+            logger.warning(f"插件 {plugin_dir.name} 依赖安装失败，插件可能无法正常工作")
+
+    @staticmethod
+    async def _run_subprocess(cmd: list[str]) -> bool:
+        """运行子进程并返回是否成功"""
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode != 0:
+                logger.error(f"子进程失败 ({cmd[0]}): {stdout.decode(errors='replace')[-2000:]}")
+                return False
+            return True
+        except (OSError, ValueError) as e:
+            logger.error(f"无法运行子进程 {cmd[0]}: {e}")
+            return False
+
+    @staticmethod
+    async def _download_archive(url: str, dest: Path) -> bool:
+        """下载远程归档文件到 dest"""
+        import shutil
+        import urllib.request
+
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Qingci-Bot-CE"})
+            with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as f:
+                shutil.copyfileobj(resp, f)
+            return True
+        except (OSError, urllib.error.URLError) as e:
+            logger.error(f"下载失败 {url}: {e}")
+            return False
+
+    @staticmethod
+    async def _extract_archive(archive: Path, dest_dir: Path) -> Path:
+        """解压 zip/tar 归档，返回解压后的根目录"""
+        import tarfile
+        import zipfile
+
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        fname = archive.name.lower()
+        if fname.endswith(".zip"):
+            with zipfile.ZipFile(archive) as zf:
+                zf.extractall(dest_dir)
+        elif fname.endswith((".tar.gz", ".tgz", ".tar.bz2", ".tar")):
+            with tarfile.open(archive) as tf:
+                # Python 3.12+ 支持安全解压过滤，旧版本回退（来源通常可信）
+                if hasattr(tarfile, "data_filter"):
+                    tf.extractall(dest_dir, filter="data")
+                else:
+                    tf.extractall(dest_dir)
+        else:
+            raise ValueError(f"不支持的归档格式: {fname}")
+        # 若顶层为单个目录，返回该目录
+        entries = [p for p in dest_dir.iterdir() if not p.name.startswith("__")]
+        if len(entries) == 1 and entries[0].is_dir():
+            return entries[0]
+        return dest_dir
+
+    @staticmethod
+    def _locate_plugin_dir(root: Path) -> Path | None:
+        """定位仓库/归档中的插件目录"""
+        if (root / "plugin.json").is_file() or (root / "__init__.py").is_file():
+            return root
+        for child in sorted(root.iterdir()):
+            if child.is_dir() and (
+                (child / "plugin.json").is_file() or (child / "__init__.py").is_file()
+            ):
+                return child
+        return None
+
+    @staticmethod
+    def _is_archive(path: Path) -> bool:
+        return path.suffix.lower() in (".zip", ".tar", ".gz", ".tgz", ".bz2")
 
     # ---- 工具 ----
 
@@ -690,3 +1021,39 @@ class PluginManager:
         if plugin is not None and plugin.matchers and matcher in plugin.matchers:
             plugin.matchers.remove(matcher)
             self._invalidate_matchers_cache()
+
+
+def _schema_from_annotations(config_cls: type) -> dict:
+    """从普通类的类型注解兜底生成 JSON Schema（非 pydantic Config 类）"""
+    props: dict[str, dict] = {}
+    annotations = getattr(config_cls, "__annotations__", {}) or {}
+    for field_name, ann in annotations.items():
+        if field_name.startswith("_"):
+            continue
+        props[field_name] = {
+            "title": field_name,
+            "type": _annotation_json_type(ann),
+        }
+    return {"type": "object", "properties": props, "required": []}
+
+
+def _annotation_json_type(ann: Any) -> str:
+    """将 Python 类型注解映射为 JSON Schema 类型（兜底用）"""
+    if ann is bool:
+        return "boolean"
+    if ann is int:
+        return "integer"
+    if ann is float:
+        return "number"
+    if ann is str:
+        return "string"
+    if ann is list:
+        return "array"
+    if ann is dict:
+        return "object"
+    origin = get_origin(ann)
+    if origin is Union:
+        args = [a for a in get_args(ann) if a is not type(None)]
+        if args:
+            return _annotation_json_type(args[0])
+    return "string"

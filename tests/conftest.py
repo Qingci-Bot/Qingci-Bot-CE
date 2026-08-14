@@ -11,9 +11,9 @@ from pathlib import Path
 TESTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(TESTS_DIR))
 
-import pytest
+import pytest  # noqa: E402
 
-from bot.testing import TestBot
+from bot.testing import TestBot  # noqa: E402
 
 
 @pytest.fixture

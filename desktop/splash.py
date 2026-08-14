@@ -20,9 +20,9 @@ ULW_ALPHA = 0x00000002
 SW_SHOW = 5
 
 # 配色：暗色主题，与 Qingci-Bot CE UI 风格一致
-BG_COLOR = 0x001E1E2E       # 深藏青 (BGR)
-TITLE_COLOR = 0x00CDD6F4    # 亮薰衣草 (BGR) — 实际是 RGB(0xF4, 0xD6, 0xCD)
-SUB_COLOR = 0x00A6ADC8      # 灰紫 (BGR)
+BG_COLOR = 0x001E1E2E  # 深藏青 (BGR)
+TITLE_COLOR = 0x00CDD6F4  # 亮薰衣草 (BGR) — 实际是 RGB(0xF4, 0xD6, 0xCD)
+SUB_COLOR = 0x00A6ADC8  # 灰紫 (BGR)
 
 user32 = ctypes.windll.user32
 gdi32 = ctypes.windll.gdi32
@@ -151,8 +151,14 @@ class SplashScreen:
                     "Static",
                     "",
                     WS_POPUP,
-                    x, y, self.W, self.H,
-                    None, None, module, None,
+                    x,
+                    y,
+                    self.W,
+                    self.H,
+                    None,
+                    None,
+                    module,
+                    None,
                 )
                 if not self._hwnd:
                     raise OSError(f"CreateWindowExW 失败: {ctypes.get_last_error()}")
@@ -162,16 +168,21 @@ class SplashScreen:
                 pt_dst = wintypes.POINT(x, y)
                 size = wintypes.SIZE(self.W, self.H)
                 blend = BLENDFUNCTION()
-                blend.BlendOp = 0       # AC_SRC_OVER
+                blend.BlendOp = 0  # AC_SRC_OVER
                 blend.BlendFlags = 0
                 blend.SourceConstantAlpha = 240
-                blend.AlphaFormat = 0   # 位图无 alpha 通道，用 SourceConstantAlpha 控制整体透明度
+                blend.AlphaFormat = 0  # 位图无 alpha 通道，用 SourceConstantAlpha 控制整体透明度
 
                 user32.UpdateLayeredWindow(
-                    self._hwnd, hdc_screen,
-                    ctypes.byref(pt_dst), ctypes.byref(size),
-                    hdc_mem, ctypes.byref(pt_src),
-                    0, ctypes.byref(blend), ULW_ALPHA,
+                    self._hwnd,
+                    hdc_screen,
+                    ctypes.byref(pt_dst),
+                    ctypes.byref(size),
+                    hdc_mem,
+                    ctypes.byref(pt_src),
+                    0,
+                    ctypes.byref(blend),
+                    ULW_ALPHA,
                 )
 
                 user32.ShowWindow(self._hwnd, SW_SHOW)

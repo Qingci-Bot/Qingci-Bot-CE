@@ -44,6 +44,9 @@ filter:
   exempt_admins: true
 scheduler:
   enabled: true
+hot_reload:
+  enabled: false
+  interval: 2.0
 alert:
   enabled: false
   error_threshold: 5

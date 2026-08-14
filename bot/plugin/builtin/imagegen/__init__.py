@@ -8,6 +8,7 @@
 """
 
 import logging
+from typing import cast
 
 from ...core.tasks import spawn_background_task
 from ..base import PluginBase
@@ -54,7 +55,9 @@ class ImageGenPlugin(PluginBase):
         if not api_key and self.bot.config.llm:
             api_key = self.bot.config.llm.api_key or ""
         if not api_key:
-            return "图片生成失败：未配置 image.api_key（且无可回退的 llm.api_key），请先在设置中配置"
+            return (
+                "图片生成失败：未配置 image.api_key（且无可回退的 llm.api_key），请先在设置中配置"
+            )
 
         try:
             import litellm
@@ -108,4 +111,5 @@ class ImageGenPlugin(PluginBase):
                 logger.warning("提交图片生成用量记录失败", exc_info=True)
 
         from ...core.dispatcher import MessageDispatcher
-        return MessageDispatcher.build_cq_image(url)
+
+        return cast(str, MessageDispatcher.build_cq_image(url))

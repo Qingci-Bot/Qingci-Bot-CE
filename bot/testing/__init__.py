@@ -20,11 +20,11 @@
 
 from .bot import FakeConfig, FakeConnection, TestBot
 from .events import (
+    group_message,
     make_message_event,
     make_notice_event,
     make_request_event,
     private_message,
-    group_message,
 )
 
 __all__ = [

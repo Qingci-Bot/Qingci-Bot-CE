@@ -12,7 +12,7 @@ block=True 的 Matcher 匹配后（无论 handler 返回什么）停止后续 Ma
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .bot import QingciBot
@@ -20,32 +20,42 @@ if TYPE_CHECKING:
 logger = logging.getLogger("qingci-bot.dispatcher")
 
 
+def _to_reply(result: Any, post_type: str) -> Any:
+    """将 Matcher 返回值转为回复：消息事件 str 化，事件事件保留原始类型
+
+    事件事件保留原始类型的目的是让 request Matcher 返回的 bool（审批结果）
+    可被上层正确识别。
+    """
+    return str(result) if post_type == "message" else result
+
+
 @dataclass
 class MessageContext:
     """解析后的消息上下文"""
+
     # 原始事件
     raw_event: dict
 
     # 基础信息
     post_type: str = ""
-    message_type: str = ""          # group / private
-    sub_type: str = ""             # normal / anonymous / notice
+    message_type: str = ""  # group / private
+    sub_type: str = ""  # normal / anonymous / notice
     # 刻意保持 str 类型（OneBot 事件原始为 int）：
     # 支持 chat.py 的 f"{message_id}_reply" 复合标识与数据库 str 列的兼容，勿改为 int
     message_id: str = ""
     user_id: int = 0
     group_id: int = 0
-    self_id: int = 0               # Bot 自己的 QQ 号
+    self_id: int = 0  # Bot 自己的 QQ 号
 
     # 消息内容
-    raw_message: str = ""           # CQ 码原始文本
-    plain_text: str = ""            # 纯文本
+    raw_message: str = ""  # CQ 码原始文本
+    plain_text: str = ""  # 纯文本
     at_list: list[int] = field(default_factory=list)  # 被 @ 的用户列表
-    is_at_bot: bool = False         # 是否 @ 了 Bot
-    images: list[str] = field(default_factory=list)   # 图片 URL 列表
+    is_at_bot: bool = False  # 是否 @ 了 Bot
+    images: list[str] = field(default_factory=list)  # 图片 URL 列表
 
     # 回复专用
-    sender: dict = field(default_factory=dict)         # 发送者信息
+    sender: dict = field(default_factory=dict)  # 发送者信息
 
     # 所有原始消息段
     segments: list[dict] = field(default_factory=list)  # 完整消息段列表
@@ -87,13 +97,31 @@ class MessageDispatcher:
         except (ValueError, TypeError):
             return default
 
-    async def run_matchers(self, bot: "QingciBot", event: dict, ctx: MessageContext) -> tuple[Optional[str], bool]:
-        """执行 Matcher 调度（消息事件）
+    async def run_matchers(
+        self, bot: "QingciBot", event: dict, ctx: MessageContext
+    ) -> tuple[str | None, bool]:
+        """执行消息 Matcher 调度（包装 _run_matchers，保持调用方兼容）"""
+        return await self._run_matchers(bot, event, ctx, "message")
+
+    async def _run_event_matchers(
+        self, bot: "QingciBot", event: dict, ctx: MessageContext
+    ) -> tuple[str | None, bool]:
+        """执行 notice/request 事件 Matcher 调度（包装 _run_matchers，保持调用方兼容）"""
+        post_type = event.get("post_type", "")
+        return await self._run_matchers(bot, event, ctx, post_type)
+
+    async def _run_matchers(
+        self, bot: "QingciBot", event: dict, ctx: MessageContext, post_type: str
+    ) -> tuple[str | None, bool]:
+        """统一 Matcher 调度
+
+        按事件类型预过滤，逐个检查 permission + rule，匹配则执行 handler。
 
         返回 (reply, blocked)：
-        - reply: handler 返回的回复文本（None 表示无回复）
-        - blocked: 是否发生 block 语义（匹配成功且 block=True，
-          或已有回复），此时应停止整个分发链（含旧式回调）
+        - reply: handler 返回的回复。消息事件 str 化为文本；事件事件保留
+          原始类型，使 request Matcher 的 bool 审批结果可被上层正确识别。
+        - blocked: 是否发生 block 语义（匹配成功且 block=True，或已有回复），
+          此时应停止整个分发链（含旧式回调）。
         """
         from ..plugin.matcher import MatcherContext
 
@@ -101,9 +129,23 @@ class MessageDispatcher:
         if not matchers:
             return None, False
 
-        for matcher in matchers:
-            mctx = MatcherContext.from_message_context(ctx, bot=bot, plugin=None, matcher=matcher)
+        # 按事件类型预过滤，避免消息事件遍历 notice/request Matcher
+        event_matchers = [m for m in matchers if m.event_type == post_type]
+        if not event_matchers:
+            return None, False
 
+        # 会话状态每事件预取一次，供所有 Matcher 复用（避免逐 Matcher 重复查询）
+        session_state = None
+        if bot.session_state is not None:
+            session_state = await bot.session_state.get_session(
+                user_id=ctx.user_id,
+                group_id=ctx.group_id,
+                message_type=ctx.message_type,
+            )
+
+        for matcher in event_matchers:
+            mctx = MatcherContext.from_message_context(ctx, bot=bot, plugin=None, matcher=matcher)
+            mctx.session_state = session_state
             if matcher.owner:
                 plugin = bot.plugin_manager.get(matcher.owner)
                 if plugin is None:
@@ -111,16 +153,18 @@ class MessageDispatcher:
                 mctx.plugin = plugin
 
             try:
-                if matcher.event_type != "message":
-                    continue
-
                 if not await matcher.permission.check(bot, event, mctx):
                     continue
-
                 if not await matcher.rule.check(bot, event, mctx):
                     continue
 
                 mctx.matcher = matcher
+
+                # Matcher 运行前全局钩子（run_preprocessor）：拦截则停止分发
+                if bot._matcher_preprocessors:
+                    intercepted = await self._run_preprocessors(bot, matcher, mctx)
+                    if intercepted is not None:
+                        return _to_reply(intercepted, post_type), True
 
                 # 执行 handler（含指标 + 中间件）
                 try:
@@ -132,7 +176,7 @@ class MessageDispatcher:
                         bot.plugin_manager.remove_temp_matcher(matcher)
 
                 if result is not None:
-                    return result, True
+                    return _to_reply(result, post_type), True
 
                 if matcher.block:
                     return None, True
@@ -146,61 +190,37 @@ class MessageDispatcher:
 
         return None, False
 
-    async def _run_event_matchers(self, bot: "QingciBot", event: dict, ctx: MessageContext) -> tuple[Optional[str], bool]:
-        """执行 notice/request 事件的 Matcher 调度，返回 (reply, blocked)"""
-        from ..plugin.matcher import MatcherContext
+    async def _run_preprocessors(self, bot: "QingciBot", matcher, mctx) -> Any:
+        """执行 Matcher 运行前全局钩子（run_preprocessor）
 
-        matchers = bot.plugin_manager.all_matchers()
-        post_type = event.get("post_type", "")
-
-        event_matchers = [m for m in matchers if m.event_type == post_type]
-
-        for matcher in event_matchers:
-            mctx = MatcherContext.from_message_context(ctx, bot=bot, plugin=None, matcher=matcher)
-            if matcher.owner:
-                mctx.plugin = bot.plugin_manager.get(matcher.owner)
-                if mctx.plugin is None:
-                    continue
-
+        返回第一个钩子的非 None 拦截值；全部放行返回 None。单个钩子异常
+        隔离（记录后继续下一个），不影响主链路。
+        """
+        for fn in list(bot._matcher_preprocessors):
             try:
-                if not await matcher.permission.check(bot, event, mctx):
-                    continue
-                if not await matcher.rule.check(bot, event, mctx):
-                    continue
-
-                mctx.matcher = matcher
-
-                # 执行 handler（含指标）
-                try:
-                    result = await self._execute_handler(bot, matcher, mctx)
-                finally:
-                    if matcher.temp:
-                        bot.plugin_manager.remove_temp_matcher(matcher)
-                if result is not None:
-                    return result, True
-                if matcher.block:
-                    return None, True
+                res = fn(bot, matcher, mctx)
+                if hasattr(res, "__await__"):
+                    res = await res
+                if res is not None:
+                    return res
             except Exception:
-                logger.exception(f"事件 Matcher 执行异常: owner={matcher.owner}")
-                continue
+                logger.exception("Matcher 运行前钩子异常")
+        return None
 
-        return None, False
+    async def _execute_handler(self, bot: "QingciBot", matcher, mctx) -> Any:
+        """执行单个 Matcher handler（含指标记录 + 插件级中间件）
 
-    async def _execute_handler(self, bot: "QingciBot", matcher, mctx) -> Optional[str]:
-        """执行单个 Matcher handler（含指标记录 + 插件级中间件）"""
+        返回 handler 的原始返回值（不 str 化），str 化由调用方按事件类型决定，
+        使 request Matcher 的 bool 审批结果得以保留。
+        """
         plugin = mctx.plugin
         start = time.perf_counter()
         is_error = False
 
-        # 初始化 session_state（异步获取会话状态）
-        from ..core.session_state import SessionState
-        if mctx.session_state is None and bot.session_state is not None:
-            mctx.session_state = await bot.session_state.get_session(
-                user_id=mctx.user_id,
-                group_id=mctx.group_id,
-                message_type=mctx.message_type,
-            )
-        elif mctx.session_state is None:
+        # 会话状态兜底：调用方通常已预取注入；仅当 bot.session_state 缺失时给空会话
+        if mctx.session_state is None:
+            from ..core.session_state import SessionState
+
             mctx.session_state = SessionState()
 
         try:
@@ -215,15 +235,20 @@ class MessageDispatcher:
                             # 中间件拦截，返回拦截值作为回复
                             # 指标不在此记录：由下方 finally 统一记录一次，
                             # 避免同一 Matcher 执行被计数两次
-                            return str(intercept)
+                            return intercept
                     except Exception:
                         logger.exception(
                             f"插件 {plugin.name} before_handler 异常: "
                             f"{getattr(before_fn, '__name__', repr(before_fn))}"
                         )
 
-            # 执行 handler
-            result = matcher.handler(mctx)
+            # 执行 handler（支持参数级依赖注入：按签名解析 MatcherContext、Bot、DI 服务等）
+            from ..core.di import resolve_handler_args
+
+            args, kwargs = await resolve_handler_args(
+                matcher.handler, context=mctx, bot=bot, container=bot.di
+            )
+            result = matcher.handler(*args, **kwargs)
             if hasattr(result, "__await__"):
                 result = await result
 

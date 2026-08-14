@@ -3,15 +3,25 @@
 import pytest
 
 from bot.plugin.rule import (
-    startswith, endswith, fullmatch, contains,
-    regex, command, to_me, is_private, is_group, keyword,
+    command,
+    contains,
+    endswith,
+    fullmatch,
+    is_group,
+    is_private,
+    keyword,
+    regex,
+    startswith,
+    to_me,
 )
 
 
 def make_ctx(plain_text="", message_type="private", is_at_bot=False):
     """构造最小 MessageContext 兼容对象"""
+
     class Ctx:
         pass
+
     c = Ctx()
     c.plain_text = plain_text
     c.message_type = message_type

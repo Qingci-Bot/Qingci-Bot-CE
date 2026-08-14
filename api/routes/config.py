@@ -2,22 +2,23 @@
 
 import asyncio
 import logging
-from typing import Optional
+from pathlib import Path
+from typing import Any, cast
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
 
+from api.audit import record_audit
+from api.auth import require_auth
+from bot.config import LLM_PROVIDER_PRESETS, ConfigManager, LLMConfig
 from bot.core.bot import get_bot as _get_bot
 from bot.core.tasks import spawn_background_task
-from bot.config import ConfigManager, LLMConfig, LLM_PROVIDER_PRESETS
 from bot.llm.manager import LLMManager
-from api.auth import require_auth
-from api.audit import record_audit
 
 logger = logging.getLogger("qingci-bot.api.config")
 
 # 配置锁：惰性创建，避免模块导入时绑定到（可能不同的）事件循环
-_config_lock: Optional[asyncio.Lock] = None
+_config_lock: asyncio.Lock | None = None
 
 
 def _get_config_lock() -> asyncio.Lock:
@@ -29,8 +30,8 @@ def _get_config_lock() -> asyncio.Lock:
 
 
 # Bot 未运行时的 ConfigManager 缓存，避免每次请求重复创建/读取文件
-_fallback_cfg: Optional[ConfigManager] = None
-_fallback_path: Optional[str] = None
+_fallback_cfg: ConfigManager | None = None
+_fallback_path: Path | None = None
 
 
 def _get_config_manager() -> ConfigManager:
@@ -41,6 +42,7 @@ def _get_config_manager() -> ConfigManager:
     except RuntimeError:
         from api.auth import _config_path
         from bot.config import DEFAULT_CONFIG_PATH
+
         global _fallback_cfg, _fallback_path
         path = _config_path or DEFAULT_CONFIG_PATH
         if _fallback_cfg is None or path != _fallback_path:
@@ -95,7 +97,7 @@ def _is_sensitive_key(key: str) -> bool:
 
 def _mask_sensitive(data: dict) -> dict:
     """递归脱敏敏感字段（api_key / access_token / 各类 *api_key / *token 等），返回副本"""
-    masked = {}
+    masked: dict[Any, Any] = {}
     for k, v in data.items():
         if isinstance(v, dict):
             masked[k] = _mask_sensitive(v)
@@ -108,15 +110,14 @@ def _mask_sensitive(data: dict) -> dict:
 
 def _filter_masked(data: dict) -> dict:
     """过滤掉脱敏占位符 "***"，保留原值"""
-    filtered = {}
+    filtered: dict[Any, Any] = {}
     for k, v in data.items():
         if v == "***":
             continue  # 跳过脱敏占位符
         if isinstance(v, dict):
             filtered[k] = _filter_masked(v)
         elif isinstance(v, list):
-            filtered[k] = [_filter_masked(i) if isinstance(i, dict) else i
-                           for i in v if i != "***"]
+            filtered[k] = [_filter_masked(i) if isinstance(i, dict) else i for i in v if i != "***"]
         else:
             filtered[k] = v
     return filtered
@@ -159,10 +160,10 @@ async def update_config(data: dict, request: Request):
             )
             return {"message": "配置已更新", "config": _mask_sensitive(cfg.to_dict())}
         except ValidationError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from None
         except Exception:
             logger.exception("配置更新失败")
-            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
+            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志") from None
 
 
 @router.get("/bot", dependencies=[Depends(require_auth)])
@@ -189,10 +190,10 @@ async def update_bot_config(data: dict, request: Request):
             )
             return {"message": "Bot 配置已更新"}
         except ValidationError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from None
         except Exception:
             logger.exception("配置更新失败")
-            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
+            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志") from None
 
 
 @router.get("/llm", dependencies=[Depends(require_auth)])
@@ -239,10 +240,10 @@ async def update_llm_config(data: dict, request: Request):
         except HTTPException:
             raise
         except ValidationError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from None
         except Exception:
             logger.exception("配置更新失败")
-            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
+            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志") from None
 
 
 @router.post("/llm/test", dependencies=[Depends(require_auth)])
@@ -273,10 +274,10 @@ async def test_llm_config(data: dict):
     except HTTPException:
         raise
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from None
     except Exception:
         logger.exception("LLM 连接测试失败")
-        raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
+        raise HTTPException(status_code=500, detail="内部错误，详见服务端日志") from None
     finally:
         if manager is not None:
             await manager.close()
@@ -306,19 +307,17 @@ async def list_llm_models(data: dict):
     api_url = (current.get("api_url") or "").rstrip("/")
     api_key = current.get("api_key") or ""
 
-    async def _fetch(url: str, headers: Optional[dict] = None, params: Optional[dict] = None) -> dict:
+    async def _fetch(url: str, headers: dict | None = None, params: dict | None = None) -> dict:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(url, headers=headers, params=params)
             resp.raise_for_status()
-            return resp.json()
+            return cast(dict, resp.json())
 
     try:
         if provider == "ollama":
             base = api_url or "http://localhost:11434"
             payload = await _fetch(f"{base}/api/tags")
-            models = [
-                m.get("name", "") for m in payload.get("models", []) if m.get("name")
-            ]
+            models = [m.get("name", "") for m in payload.get("models", []) if m.get("name")]
         elif provider == "claude":
             base = api_url or "https://api.anthropic.com/v1"
             payload = await _fetch(
@@ -328,9 +327,7 @@ async def list_llm_models(data: dict):
                     "anthropic-version": "2023-06-01",
                 },
             )
-            models = [
-                m.get("id", "") for m in payload.get("data", []) if m.get("id")
-            ]
+            models = [m.get("id", "") for m in payload.get("data", []) if m.get("id")]
         elif provider == "gemini":
             if not api_key:
                 raise ValueError("Gemini 查询模型列表需要填写 API Key")
@@ -338,24 +335,20 @@ async def list_llm_models(data: dict):
                 "https://generativelanguage.googleapis.com/v1beta/models",
                 params={"key": api_key},
             )
-            models = [
-                m.get("name", "") for m in payload.get("models", []) if m.get("name")
-            ]
+            models = [m.get("name", "") for m in payload.get("models", []) if m.get("name")]
         else:
             # OpenAI 兼容协议（openai/deepseek/siliconflow/custom）
             if not api_url:
                 raise ValueError(f"provider {provider} 需要填写 API 地址（api_url）")
             headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
             payload = await _fetch(f"{api_url}/models", headers=headers)
-            models = [
-                m.get("id", "") for m in payload.get("data", []) if m.get("id")
-            ]
+            models = [m.get("id", "") for m in payload.get("data", []) if m.get("id")]
         return {"models": sorted(set(models))}
     except HTTPException:
         raise
     except Exception as e:
         logger.warning(f"查询模型列表失败: provider={provider}, error={e}")
-        raise HTTPException(status_code=400, detail=f"查询模型列表失败：{e}")
+        raise HTTPException(status_code=400, detail=f"查询模型列表失败：{e}") from None
 
 
 @router.get("/onebot", dependencies=[Depends(require_auth)])
@@ -366,6 +359,7 @@ async def get_onebot_config():
 
 
 # ============ 配置引导向导 ============
+
 
 @router.get("/wizard/status")
 async def get_wizard_status():
@@ -436,7 +430,7 @@ async def complete_wizard(data: dict):
                     if qq > 0:
                         current["bot"]["admin_users"] = [qq]
                 except (ValueError, TypeError):
-                    raise HTTPException(status_code=400, detail="管理员 QQ 号格式无效")
+                    raise HTTPException(status_code=400, detail="管理员 QQ 号格式无效") from None
 
             # OneBot 端口
             if onebot_port is not None:
@@ -459,7 +453,7 @@ async def complete_wizard(data: dict):
             raise
         except Exception:
             logger.exception("初始配置向导失败")
-            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
+            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志") from None
 
 
 @router.post("/wizard/skip")
@@ -474,4 +468,4 @@ async def skip_wizard():
             return {"message": "已跳过配置引导"}
         except Exception:
             logger.exception("跳过配置引导失败")
-            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志")
+            raise HTTPException(status_code=500, detail="内部错误，详见服务端日志") from None

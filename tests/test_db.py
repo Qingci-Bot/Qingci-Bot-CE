@@ -1,9 +1,7 @@
 """数据库操作测试（使用临时 SQLite 文件）"""
 
 import tempfile
-import os
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -15,6 +13,7 @@ def temp_db_dir():
     yield Path(tmp)
     # 清理
     import shutil
+
     shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -23,6 +22,7 @@ async def db(temp_db_dir, monkeypatch):
     """设置测试数据库（每个测试独立）"""
     # 重置引擎全局状态
     import bot.db.engine as _engine
+
     _engine._engine = None
     _engine._session_factory = None
 
@@ -33,6 +33,7 @@ async def db(temp_db_dir, monkeypatch):
 
     await _engine.init_db()
     from bot.db.database import Database
+
     d = Database()
     yield d
 
