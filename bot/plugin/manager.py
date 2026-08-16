@@ -75,6 +75,37 @@ def _load_plugin_json(directory: Path) -> dict | None:
         return None
 
 
+def _sdk_plugin_base():
+    """惰性获取独立插件 SDK 的 PluginBase 基类（SDK 未安装时返回 None）
+
+    外部插件可能基于 bot.plugin.base.PluginBase（内置式）或
+    qingci_plugin_sdk.base.PluginBase（独立 SDK 式）开发，两者是镜像类、
+    无继承关系。管理器需同时识别这两类插件。
+    """
+    try:
+        from qingci_plugin_sdk.base import PluginBase as _SdkBase
+
+        return _SdkBase
+    except ImportError:
+        return None
+
+
+def _module_plugin_classes(module, sdk_base) -> list[type]:
+    """返回模块中定义的插件类（bot 基类或 SDK 基类的直接子类）"""
+    result: list[type] = []
+    for attr_name in dir(module):
+        attr = getattr(module, attr_name)
+        if not isinstance(attr, type) or attr.__module__ != module.__name__:
+            continue
+        if attr is PluginBase or (sdk_base is not None and attr is sdk_base):
+            continue
+        if issubclass(attr, PluginBase):
+            result.append(attr)
+        elif sdk_base is not None and issubclass(attr, sdk_base):
+            result.append(attr)
+    return result
+
+
 class PluginManager:
     """插件管理器：加载、卸载、热重载、状态管理、指标监控
 
@@ -464,18 +495,12 @@ class PluginManager:
 
         collector = begin_module_collection()
         tool_collector = begin_tool_collection()
+        sdk_base = _sdk_plugin_base()
         stale_classes: set | None = None
         try:
             if full_path in sys.modules:
                 module = sys.modules[full_path]
-                stale_classes = {
-                    attr
-                    for attr in vars(module).values()
-                    if isinstance(attr, type)
-                    and issubclass(attr, PluginBase)
-                    and attr is not PluginBase
-                    and attr.__module__ == module.__name__
-                }
+                stale_classes = set(_module_plugin_classes(module, sdk_base))
                 module = importlib.reload(module)
             else:
                 module = importlib.import_module(full_path)
@@ -556,16 +581,10 @@ class PluginManager:
         tool_collector: list | None = None,
     ) -> None:
         """从模块中查找 PluginBase 子类并注册"""
-        plugin_classes = []
-        for attr_name in dir(module):
-            attr = getattr(module, attr_name)
-            if (
-                isinstance(attr, type)
-                and issubclass(attr, PluginBase)
-                and attr is not PluginBase
-                and attr.__module__ == module.__name__
-            ):
-                plugin_classes.append(attr)
+        from ..paths import data_root
+
+        sdk_base = _sdk_plugin_base()
+        plugin_classes = _module_plugin_classes(module, sdk_base)
 
         if stale_classes is not None:
             plugin_classes = [c for c in plugin_classes if c not in stale_classes]
@@ -585,6 +604,16 @@ class PluginManager:
 
         plugin_cls = plugin_classes[0]
         plugin = plugin_cls()
+
+        # 独立 SDK 式插件：将 SDK 数据目录重定向到当前实例可写数据根，
+        # 保证插件数据（DB/缓存/导出文件）遵循实例隔离，而非落在 SDK 默认目录。
+        if sdk_base is not None and issubclass(plugin_cls, sdk_base):
+            try:
+                import qingci_plugin_sdk.paths as sdk_paths
+
+                sdk_paths.set_data_root(data_root())
+            except ImportError:
+                logger.debug("qingci_plugin_sdk 未安装，跳过 SDK 数据目录重定向")
 
         # 依赖解析
         loading = _loading if _loading is not None else set()

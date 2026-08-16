@@ -23,6 +23,26 @@ async def test_load_missing_module_fails(bot):
     assert ok is False
 
 
+async def test_load_sdk_plugin(bot):
+    """基于独立插件 SDK（qingci_plugin_sdk）的插件应被识别并加载"""
+    from bot.paths import data_root
+
+    ok = await bot.plugin_manager.load_external("plugin_pkg.sdk_plugin", bot)
+    assert ok is True
+
+    plugin = bot.plugin_manager.get("sdk_plugin")
+    assert plugin is not None
+    assert plugin.name == "sdk_plugin"
+    assert len(plugin.matchers) == 1
+    assert plugin.matchers[0].owner == "sdk_plugin"
+
+    # SDK 插件数据目录应重定向到 bot 的可写数据根（实例隔离），
+    # 而非 SDK 包默认的 Plugins-SDK/data/plugins/<name>。
+    sdk_plugin_dir = plugin.data_dir
+    assert sdk_plugin_dir == data_root() / "plugins" / "sdk_plugin"
+    assert sdk_plugin_dir.is_dir()
+
+
 async def test_load_multi_class_rejected(bot):
     """单模块定义多个 PluginBase 子类必须拒绝"""
     ok = await bot.plugin_manager.load_external("plugin_pkg.multi_class_plugin", bot)

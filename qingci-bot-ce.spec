@@ -31,11 +31,15 @@ tiktoken_datas, tiktoken_binaries, tiktoken_hiddenimports = collect_all('tiktoke
 pythonnet_datas, pythonnet_binaries, pythonnet_hiddenimports = collect_all('pythonnet')
 clrloader_datas, clrloader_binaries, clrloader_hiddenimports = collect_all('clr_loader')
 
+# 独立插件 SDK（qingci_plugin_sdk）：外部插件运行时 import 它，必须随主程序
+# 打包；整体收集全部子模块，保证数据目录重定向等特性可用
+sdk_datas, sdk_binaries, sdk_hiddenimports = collect_all('qingci_plugin_sdk')
+
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=litellm_binaries + tiktoken_binaries + pythonnet_binaries + clrloader_binaries,
-    datas=litellm_datas + tiktoken_datas + pythonnet_datas + clrloader_datas + [
+    binaries=litellm_binaries + tiktoken_binaries + pythonnet_binaries + clrloader_binaries + sdk_binaries,
+    datas=litellm_datas + tiktoken_datas + pythonnet_datas + clrloader_datas + sdk_datas + [
         ('desktop\\app-icon.ico', '.'),
     ],
     hiddenimports=[
@@ -43,6 +47,7 @@ a = Analysis(
         *tiktoken_hiddenimports,
         *pythonnet_hiddenimports,
         *clrloader_hiddenimports,
+        *sdk_hiddenimports,
         'tiktoken_ext.openai_public',
         # ---- uvicorn 运行时动态导入（五件套 + standard 附加依赖） ----
         'uvicorn.logging',

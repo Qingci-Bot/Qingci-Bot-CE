@@ -17,6 +17,14 @@ if (-not (Test-Path $Python)) {
     throw "python not found: $Python (create .venv and install dependencies first)"
 }
 
+# ---------- [0/3] 独立插件 SDK ----------
+# 外部插件运行时 import qingci_plugin_sdk，必须装进构建环境才能在
+# PyInstaller 打包时一并收集（spec 中 collect_all('qingci_plugin_sdk')）。
+# 相对路径依赖在 pyproject.toml 中无法解析（打包时丢工作目录），故在此显式安装。
+Write-Host "==> [0/3] installing qingci-plugin-sdk (Plugins-SDK)..." -ForegroundColor Cyan
+uv pip install --python $Python -e (Join-Path $Root "..\Plugins-SDK")
+if ($LASTEXITCODE -ne 0) { throw "qingci-plugin-sdk install failed with exit code $LASTEXITCODE" }
+
 # ---------- [1/3] PyInstaller build ----------
 Write-Host "==> [1/3] PyInstaller build (first run takes 3-10 min)..." -ForegroundColor Cyan
 & $Python -m PyInstaller --noconfirm --clean qingci-bot-ce.spec
