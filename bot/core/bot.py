@@ -8,7 +8,7 @@ from typing import Any
 from ..config import ConfigManager
 from ..db import Database
 from ..llm import LLMManager, ToolRegistry, register_builtin_tools
-from ..paths import app_root
+from ..paths import app_root, data_root
 from ..plugin import PluginManager, PluginStatus
 from ..plugin.ratelimit import RateLimiter
 from ..plugin.watcher import PluginWatcher
@@ -118,7 +118,7 @@ class QingciBot:
             rag_cfg = self.config.rag
             knowledge_dir = Path(rag_cfg.knowledge_dir)
             if not knowledge_dir.is_absolute():
-                knowledge_dir = app_root() / knowledge_dir
+                knowledge_dir = data_root() / knowledge_dir
             llm_cfg = self.config.llm
             self.knowledge_store = KnowledgeStore(
                 root=knowledge_dir,
@@ -135,7 +135,7 @@ class QingciBot:
         # （enabled 开关由批次 1 的拦截逻辑判断，此处仅构造）
         words_file = Path(self.config.filter.words_file)
         if not words_file.is_absolute():
-            words_file = app_root() / words_file
+            words_file = data_root() / words_file
         self.sensitive_filter = SensitiveFilter(words_file)
 
     # ============ 生命周期 ============

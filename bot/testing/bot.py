@@ -50,7 +50,8 @@ class FakeConfig:
 
     def __init__(self):
         self.bot = SimpleNamespace(
-            admin_users=[10001],  # 默认 10001 视为管理员，方便测试权限
+            admin_users=[10001],  # 默认 10001 视为普通管理员，方便测试权限
+            super_admin=10001,  # 默认 10001 同时为超级管理员，方便测试权限
             super_users=[],
         )
         self.rate_limit = SimpleNamespace(enabled=False)

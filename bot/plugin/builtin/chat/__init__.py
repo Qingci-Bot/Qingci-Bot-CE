@@ -245,7 +245,12 @@ class ChatPlugin(PluginBase):
         )
         exempt = False
         if need_filter:
-            exempt = filter_cfg.exempt_admins and ctx.user_id in self.config.bot.admin_users
+            cfg_bot = self.config.bot
+            admins = cfg_bot.admin_users or []
+            super_admin = getattr(cfg_bot, "super_admin", None)
+            exempt = filter_cfg.exempt_admins and (
+                ctx.user_id in admins or ctx.user_id == super_admin
+            )
             if not exempt:
                 hit = self.bot.sensitive_filter.check(message)
                 if hit:

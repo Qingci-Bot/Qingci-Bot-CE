@@ -737,6 +737,8 @@ self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 
 **内置 Permission：** `EVERYONE` / `SUPERUSER` / `ADMIN` / `PRIVATE` / `GROUP` / `MEMBER` / `USER(ids)` / `GROUP_MEMBER(ids)`
 
+> 权限分两级：`SUPERUSER` = 超级管理员（唯一，`config.yaml` 的 `bot.super_admin`）；`ADMIN` = 普通管理员（多个，`bot.admin_users`，超级管理员自动继承普通管理员权限）。
+
 ### MatcherContext 字段
 
 继承自 `MessageContext`，额外字段：

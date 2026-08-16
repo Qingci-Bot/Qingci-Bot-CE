@@ -26,10 +26,8 @@ async def db(temp_db_dir, monkeypatch):
     _engine._engine = None
     _engine._session_factory = None
 
-    # monkeypatch DB_PATH（模块级变量，仅在首次 import 时计算）
-    db_path = temp_db_dir / "data" / "qingci-bot.db"
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(_engine, "DB_PATH", db_path)
+    # 将引擎的数据根指向临时目录，使 db_path() 解析到临时库
+    monkeypatch.setattr(_engine, "data_root", lambda: temp_db_dir)
 
     await _engine.init_db()
     from bot.db.database import Database

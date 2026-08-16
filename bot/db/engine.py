@@ -6,22 +6,25 @@
 """
 
 import threading
+from pathlib import Path
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
-# 基于应用根目录的绝对路径，避免从非根目录启动时建库位置错误
-# （frozen 模式下为 exe 所在目录，见 bot/paths.py）
-from ..paths import app_root
-
-DB_PATH = app_root() / "data" / "qingci-bot.db"
+# 数据库文件位于可写数据根目录（默认 app_root()/data，可用 --data-dir 覆盖以实现多实例隔离）
+from ..paths import data_root
 
 _engine: AsyncEngine | None = None
 _session_factory: sessionmaker | None = None
 _engine_lock = threading.Lock()
 _session_factory_lock = threading.Lock()
+
+
+def db_path() -> Path:
+    """返回当前实例的 SQLite 数据库文件路径"""
+    return data_root() / "qingci-bot.db"
 
 
 def _set_sqlite_pragma(dbapi_conn, _connection_record):
@@ -42,9 +45,10 @@ def get_engine():
     if _engine is None:
         with _engine_lock:
             if _engine is None:
-                DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+                db = db_path()
+                db.parent.mkdir(parents=True, exist_ok=True)
                 engine = create_async_engine(
-                    f"sqlite+aiosqlite:///{DB_PATH}",
+                    f"sqlite+aiosqlite:///{db}",
                     echo=False,
                     connect_args={"check_same_thread": False},
                 )

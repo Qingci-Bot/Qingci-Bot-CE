@@ -131,7 +131,8 @@ class BotConfig(BaseModel):
     model_config = {"extra": "ignore"}
 
     name: str = "Qingci-Bot CE"
-    admin_users: list[int] = []  # 管理员 QQ 号
+    super_admin: int | None = None  # 超级管理员 QQ 号（唯一）
+    admin_users: list[int] = []  # 普通管理员 QQ 号列表
     trigger_mode: Literal["at", "keyword", "always"] = "at"  # 触发方式
     trigger_keywords: list[str] = ["/bot", "/ai"]
     group_blacklist: list[int] = []  # 群黑名单

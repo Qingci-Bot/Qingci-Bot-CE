@@ -27,10 +27,10 @@ if config.config_file_name is not None:
 
 # 导入所有 SQLModel 模型，让 autogenerate 能发现表结构
 from bot.db import models  # noqa: F401, E402
-from bot.db.engine import DB_PATH  # noqa: E402
+from bot.db.engine import db_path  # noqa: E402
 
-# 注入数据库 URL（与运行时一致）
-config.set_main_option("sqlalchemy.url", f"sqlite+aiosqlite:///{DB_PATH}")
+# 注入数据库 URL（与运行时一致；尊重 --data-dir 设置的实例数据根）
+config.set_main_option("sqlalchemy.url", f"sqlite+aiosqlite:///{db_path()}")
 
 # SQLModel.metadata 作为 autogenerate 的目标
 target_metadata = models.SQLModel.metadata

@@ -10,26 +10,31 @@ import logging
 import secrets
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.audit import record_audit
 from api.auth import require_auth
-from bot.db.engine import DB_PATH
+from bot.db.engine import db_path
 
 logger = logging.getLogger("qingci-bot.api.backup")
 
 router = APIRouter()
 
-# 备份输出目录与保留份数
-BACKUP_DIR = DB_PATH.parent / "backups"
+# 保留份数
 _KEEP_COUNT = 10
+
+
+def _backup_dir() -> Path:
+    """备份输出目录（位于当前实例数据根目录下）"""
+    return db_path().parent / "backups"
 
 
 def _cleanup_old_backups() -> None:
     """保留最近 _KEEP_COUNT 份备份，删除更旧的（按文件名时间戳排序）"""
     try:
-        files = sorted(BACKUP_DIR.glob("qingci-bot_*.db"), key=lambda p: p.name)
+        files = sorted(_backup_dir().glob("qingci-bot_*.db"), key=lambda p: p.name)
         for old in files[:-_KEEP_COUNT]:
             try:
                 old.unlink()
@@ -45,11 +50,12 @@ def _do_backup() -> tuple[str, int]:
     文件名带随机后缀，避免同一秒内并发备份同名互相覆盖；
     清理 glob（qingci-bot_*.db）对新命名同样匹配。
     """
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backup_dir = _backup_dir()
+    backup_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dst_path = BACKUP_DIR / f"qingci-bot_{timestamp}_{secrets.token_hex(3)}.db"
+    dst_path = backup_dir / f"qingci-bot_{timestamp}_{secrets.token_hex(3)}.db"
     # sqlite3 官方 backup API：在线一致性拷贝，兼容 WAL 模式
-    src_conn = sqlite3.connect(str(DB_PATH))
+    src_conn = sqlite3.connect(str(db_path()))
     try:
         dst_conn = sqlite3.connect(str(dst_path))
         try:
@@ -65,7 +71,7 @@ def _do_backup() -> tuple[str, int]:
 @router.post("/db", dependencies=[Depends(require_auth)])
 async def backup_db(request: Request):
     """备份数据库：返回备份文件名与大小"""
-    if not DB_PATH.exists():
+    if not db_path().exists():
         raise HTTPException(status_code=404, detail="数据库文件不存在")
     try:
         filename, size = await asyncio.to_thread(_do_backup)

@@ -191,12 +191,19 @@ LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不�
 
 ## 管理命令
 
-**管理员命令**（QQ 号在 `config.yaml` 的 `bot.admin_users` 中配置）：
+管理员分为两级：**超级管理员**（唯一，`bot.super_admin`）与**普通管理员**（多个，`bot.admin_users`，超级管理员自动继承普通管理员权限）。
+
+**普通管理员命令**（`bot.admin_users` 中的 QQ 号）：
 
 | 命令 | 说明 |
 |------|------|
 | `/status` | 查看 Bot 运行状态（OneBot 连接 / LLM 可用性 / 消息记录数） |
 | `/clear` | 清除当前会话历史 |
+
+**超级管理员命令**（仅 `bot.super_admin` 的 QQ 号）：
+
+| 命令 | 说明 |
+|------|------|
 | `/blacklist add <QQ>` | 添加用户到黑名单 |
 | `/blacklist remove <QQ>` | 从黑名单移除用户 |
 | `/filter on\|off\|reload` | 敏感词过滤开关 / 重载词库（词库为空时会提示编辑 `data/sensitive_words.txt`） |
@@ -237,7 +244,8 @@ api_key: your-secret-key
 ```yaml
 bot:
   name: Qingci-Bot CE
-  admin_users: [123456789]        # 管理员 QQ 号列表
+  super_admin: 123456789          # 超级管理员 QQ 号（唯一）
+  admin_users: [123456789]        # 普通管理员 QQ 号列表
   trigger_mode: at                 # 触发方式: at / keyword / always
   trigger_keywords: ["/bot", "/ai"] # keyword 模式的触发词
   group_blacklist: []              # 群黑名单

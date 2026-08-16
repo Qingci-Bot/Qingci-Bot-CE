@@ -28,15 +28,16 @@ async def check(perm, ctx, bot):
 
 
 class FakeBot:
-    def __init__(self, admin_users=()):
+    def __init__(self, admin_users=(), super_admin=None):
         class Cfg:
-            def __init__(self, admins):
+            def __init__(self, admins, sa):
                 class Bot:
                     admin_users = admins
+                    super_admin = sa
 
                 self.bot = Bot()
 
-        self.config = Cfg(list(admin_users))
+        self.config = Cfg(list(admin_users), super_admin)
 
 
 class TestBuiltinPermissions:
@@ -49,12 +50,24 @@ class TestBuiltinPermissions:
         assert await check(MEMBER, make_ctx(), bot)
 
     async def test_superuser(self):
-        bot = FakeBot(admin_users=[10001])
+        bot = FakeBot(super_admin=10001)
         assert await check(SUPERUSER, make_ctx(user_id=10001), bot)
         assert not await check(SUPERUSER, make_ctx(user_id=99999), bot)
 
-    async def test_admin_equals_superuser(self):
+    async def test_superuser_excludes_regular_admin(self):
+        """普通管理员不是超级管理员"""
+        bot = FakeBot(admin_users=[10001], super_admin=None)
+        assert await check(ADMIN, make_ctx(user_id=10001), bot)
+        assert not await check(SUPERUSER, make_ctx(user_id=10001), bot)
+
+    async def test_admin_regular(self):
         bot = FakeBot(admin_users=[10001])
+        assert await check(ADMIN, make_ctx(user_id=10001), bot)
+        assert not await check(ADMIN, make_ctx(user_id=99999), bot)
+
+    async def test_admin_super_inherits(self):
+        """超级管理员自动继承普通管理员权限"""
+        bot = FakeBot(super_admin=10001)
         assert await check(ADMIN, make_ctx(user_id=10001), bot)
 
     async def test_private(self):
@@ -88,27 +101,27 @@ class TestBuiltinPermissions:
 
 class TestPermissionComposition:
     async def test_and(self):
-        bot = FakeBot(admin_users=[10001])
+        bot = FakeBot(super_admin=10001)
         r = SUPERUSER & PRIVATE
         assert await check(r, make_ctx(user_id=10001, message_type="private"), bot)
         assert not await check(r, make_ctx(user_id=10001, message_type="group"), bot)
         assert not await check(r, make_ctx(user_id=1, message_type="private"), bot)
 
     async def test_or(self):
-        bot = FakeBot(admin_users=[10001])
+        bot = FakeBot(super_admin=10001)
         r = SUPERUSER | PRIVATE
         assert await check(r, make_ctx(user_id=10001, message_type="group"), bot)
         assert await check(r, make_ctx(user_id=1, message_type="private"), bot)
         assert not await check(r, make_ctx(user_id=1, message_type="group"), bot)
 
     async def test_invert(self):
-        bot = FakeBot(admin_users=[10001])
+        bot = FakeBot(super_admin=10001)
         r = ~SUPERUSER
         assert await check(r, make_ctx(user_id=1), bot)
         assert not await check(r, make_ctx(user_id=10001), bot)
 
     async def test_chained(self):
-        bot = FakeBot(admin_users=[10001])
+        bot = FakeBot(super_admin=10001)
         r = (SUPERUSER & GROUP) | PRIVATE
         # 管理员群聊 ✓ / 任意私聊 ✓ / 非管理员群聊 ✗
         assert await check(r, make_ctx(user_id=10001, group_id=1, message_type="group"), bot)

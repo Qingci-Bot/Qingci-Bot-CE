@@ -5,6 +5,21 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-08-16
+
+### Added
+- 管理员细分为**超级管理员**（唯一，`bot.super_admin`）与**普通管理员**（多个，`bot.admin_users`）：`SUPERUSER` 权限仅超级可命；`ADMIN` 权限普通管理员可命，超级管理员自动继承
+- 多实例支持：新增 `--data-dir` 参数指定可写数据根目录（DB/日志/插件数据等），在同一台机器上可运行多个相互隔离的实例
+- 单实例保护升级：互斥名由数据根目录派生，同一实例（同数据目录）重复双击聚焦已有窗口，不同实例（不同 `--data-dir`）互不阻塞可多开
+
+### Changed
+- 内置命令权限映射：`/status`、`/clear` 降级为普通管理员（`ADMIN`）；`/blacklist`、`/filter`、`/group`、`/kb` 保持超级管理员（`SUPERUSER`）
+- 限流豁免、聊天敏感词 `exempt_admins` 豁免、错误告警通知目标均同时纳入超级管理员
+- 数据库、日志、备份、插件数据等所有可写路径统一改为基于 `data_root()` 解析，尊重 `--data-dir` 设置
+
+### Fixed
+- 修复双击 exe / 重复启动会新建多个界面与进程：在入口加入单实例保护（Windows 命名互斥量），重复启动时聚焦已有窗口并退出，避免多窗口与端口冲突
+
 ## [1.4.1] - 2026-08-14
 
 ### Fixed

@@ -65,7 +65,11 @@ class AlertHandler(logging.Handler):
             config: ConfigManager（读取 alert 阈值/冷却与 bot.admin_users）
         """
         self._connection = connection
-        self._admin_users = list(config.bot.admin_users or [])
+        admins = list(config.bot.admin_users or [])
+        super_admin = getattr(config.bot, "super_admin", None)
+        if super_admin is not None and super_admin not in admins:
+            admins.append(super_admin)
+        self._admin_users = admins
         self._threshold = max(1, int(config.alert.error_threshold))
         self._cooldown_seconds = max(0, int(config.alert.cooldown_minutes)) * 60.0
         self._error_times.clear()

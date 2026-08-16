@@ -39,16 +39,16 @@ class JsonFormatter(logging.Formatter):
 
 
 def _resolve_log_dir(config: object) -> Path:
-    """解析日志目录（相对路径基于 app_root）"""
+    """解析日志目录（相对路径基于可写数据根 data_root）"""
     log_dir = getattr(config, "log_dir", None)
     if log_dir and isinstance(log_dir, str):
         p = Path(log_dir)
     else:
         p = Path("logs")
     if not p.is_absolute():
-        from ..paths import app_root
+        from ..paths import data_root
 
-        p = app_root() / p
+        p = data_root() / p
     return p
 
 

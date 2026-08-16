@@ -2,7 +2,8 @@
 
 支持权限组合（AND/OR/NOT），内置常用权限：
 - EVERYONE: 所有人（默认）
-- SUPERUSER / ADMIN: 配置中的管理员
+- SUPERUSER: 超级管理员（唯一，配置中的 super_admin）
+- ADMIN: 普通管理员（配置中的 admin_users，多个；超级管理员自动包含在内）
 - PRIVATE: 私聊
 - GROUP: 群聊
 - USER(user_ids): 指定用户
@@ -91,15 +92,29 @@ EVERYONE = Permission(lambda bot, event, ctx: True)
 
 
 async def _is_superuser(bot, event, ctx):
-    admin_users = bot.config.bot.admin_users if bot and bot.config else []
-    return ctx.user_id in admin_users
+    cfg = bot.config.bot if bot and bot.config else None
+    if cfg is None:
+        return False
+    return ctx.user_id == getattr(cfg, "super_admin", None)
 
 
 SUPERUSER = Permission(_is_superuser)
-"""超级管理员（配置中的 admin_users）"""
+"""超级管理员（唯一，配置中的 super_admin）"""
 
-ADMIN = Permission(_is_superuser)
-"""管理员（与 SUPERUSER 等价但独立实例）"""
+
+async def _is_admin(bot, event, ctx):
+    cfg = bot.config.bot if bot and bot.config else None
+    if cfg is None:
+        return False
+    uid = ctx.user_id
+    # 超级管理员自动继承普通管理员权限
+    if uid == getattr(cfg, "super_admin", None):
+        return True
+    return uid in (cfg.admin_users or [])
+
+
+ADMIN = Permission(_is_admin)
+"""普通管理员（配置中的 admin_users，多个；超级管理员自动包含在内）"""
 
 
 def _is_private(bot, event, ctx):

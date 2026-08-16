@@ -49,6 +49,12 @@ def parse_args():
     parser.add_argument("--port", type=int, default=8080, help="API 端口")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="API 监听地址")
     parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=None,
+        help="可写数据目录（DB/插件数据/日志等，多实例隔离；默认 <应用根>/data）",
+    )
+    parser.add_argument(
         "--config", type=str, default=str(app_root() / "config.yaml"), help="配置文件路径"
     )
     args = parser.parse_args()
@@ -124,6 +130,27 @@ async def run_bot_and_api(args):
 
 def main():
     args = parse_args()
+
+    # 解析实例数据根（--data-dir，默认 <应用根>/data），先于任何数据访问（DB/日志/插件数据）
+    from bot.paths import set_data_root
+
+    data_dir = Path(args.data_dir).resolve() if args.data_dir else app_root() / "data"
+    set_data_root(data_dir)
+
+    # 单实例保护：按数据根派生互斥名——同一实例重复双击聚焦已有窗口；
+    # 不同实例（不同 --data-dir）互不阻塞，可多开。必须在 splash 之前检查，避免闪现启动画面。
+    from desktop.single_instance import (
+        SingleInstance,
+        bring_existing_to_front,
+        mutex_name_for_data_dir,
+    )
+
+    _instance = SingleInstance(name=mutex_name_for_data_dir(data_dir))
+    if not _instance.acquire():
+        if args.desktop:
+            bring_existing_to_front()
+        logger.info("已有实例正在运行，本次启动退出")
+        return
 
     if args.desktop:
         # 桌面模式：在任何重型操作前先显示启动画面

@@ -1,7 +1,8 @@
 """内置管理插件 - 权限控制、开关、黑名单（Matcher 新式 API 示例）
 
 使用 NoneBot2 风格的 Matcher/Rule/Permission 系统：
-- on_command("clear", permission=SUPERUSER): 命令匹配 + 权限控制
+- on_command("status", permission=ADMIN): 普通管理员命令
+- on_command("blacklist", permission=SUPERUSER): 超级管理员命令
 - handler 接收 MatcherContext，通过 ctx.bot/plugin/matcher 访问依赖
 """
 
@@ -11,7 +12,7 @@ import time
 
 from ...base import PluginBase
 from ...matcher import MatcherContext, on_command
-from ...permission import SUPERUSER
+from ...permission import ADMIN, SUPERUSER
 
 logger = logging.getLogger("qingci-bot.plugin.admin")
 
@@ -36,7 +37,7 @@ class AdminPlugin(PluginBase):
         self.matchers.append(
             on_command(
                 "clear",
-                permission=SUPERUSER,
+                permission=ADMIN,
                 priority=1,
                 description="清除当前会话的对话历史",
             )(self._cmd_clear)
@@ -44,7 +45,7 @@ class AdminPlugin(PluginBase):
         self.matchers.append(
             on_command(
                 "status",
-                permission=SUPERUSER,
+                permission=ADMIN,
                 priority=1,
                 description="查看 Bot 运行状态",
             )(self._cmd_status)

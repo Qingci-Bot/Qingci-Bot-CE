@@ -116,12 +116,12 @@ class PluginBase(ABC):
     def data_dir(self) -> Path:
         """插件专属数据目录（自动创建，建议用于持久化文件数据）
 
-        路径约定：app_root()/data/plugins/<name>/，卸载不删除，
+        路径约定：data_root()/plugins/<name>/，卸载不删除，
         供插件存储运行时数据（缓存、导出文件等）。
         """
-        from ..paths import app_root
+        from ..paths import data_root
 
-        d = app_root() / "data" / "plugins" / self.name
+        d = data_root() / "plugins" / self.name
         d.mkdir(parents=True, exist_ok=True)
         return d
 
