@@ -5,7 +5,7 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.5.1] - 2026-08-16
 
 ### Added
 - 实例管理：侧边栏新增实例列表，支持新建/删除/切换/重命名实例

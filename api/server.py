@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """创建 FastAPI 应用"""
-    app = FastAPI(title="Qingci-Bot CE API", version="1.5.0", lifespan=lifespan)
+    app = FastAPI(title="Qingci-Bot CE API", version="1.5.1", lifespan=lifespan)
 
     # 注入 FastAPI 应用到 PluginManager（供插件注册 Web 管理页面）
     bot = get_bot()
