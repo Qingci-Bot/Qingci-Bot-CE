@@ -1,0 +1,15 @@
+refactor: 架构优化 — 协议层归 SDK、组合根装配、DI 解析单例
+
+- 协议层统一由独立插件 SDK 维护：bot/plugin/{base,matcher,permission,rule,
+  ratelimit}.py 与 dispatcher.MessageContext 改为薄转发，消除两处定义漂移
+  （净删约 500 行）；SDK 升级为主项目正式依赖（pyproject git 依赖，
+  构建仍走 build.ps1 的 -e 安装），uv.lock 同步
+- 组合根：QingciBot.__init__ 组件装配抽离到 bot/core/composition.py
+  assemble_bot()，__init__ 只保留配置加载与状态字段；新增 build_bot()
+- 单例改造：get_bot() 由持有 bot 实例改为持有 DI 容器引用并从容器解析，
+  DIContainer 新增公开 resolve_sync()
+- 弃用：PluginBase 旧式 on_message/on_notice/on_request 标注 deprecated
+- 打包：spec 过滤 litellm proxy/_experimental/out 前端产物（约 22MB）
+- 依赖：lancedb 移至 optional vector 分组，缺失时 KnowledgeStore 自动回退
+  keyword 并告警；新增降级测试
+- 测试：ratelimit 用例 monkeypatch 目标改指 SDK 模块；全套件 199 通过

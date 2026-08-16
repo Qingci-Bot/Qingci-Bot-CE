@@ -217,9 +217,9 @@ class TestBot:
             if self._plugin_has_event_matcher(plugin, "message"):
                 continue
             try:
-                reply = await plugin.on_message(ctx)
-                if reply:
-                    return reply
+                legacy_reply: str | None = await plugin.on_message(ctx)
+                if legacy_reply:
+                    return legacy_reply
             except Exception:
                 logger.exception(f"插件 {plugin.name} on_message 异常")
         return None

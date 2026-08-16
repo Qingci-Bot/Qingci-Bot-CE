@@ -16,10 +16,23 @@
 建议配合 config.yaml 的文件日志使用；如需控制台可将 EXE 参数改回 console=True。
 """
 
+import os
+
 from PyInstaller.utils.hooks import collect_all
 
-# litellm 携带大量数据文件（模型/provider 映射 JSON），整体收集
-litellm_datas, litellm_binaries, litellm_hiddenimports = collect_all('litellm')
+# 过滤目标：litellm/proxy/_experimental/out 的前端静态产物子树
+_LITELLM_OUT_PREFIX = ("litellm", "proxy", "_experimental", "out")
+
+# litellm 携带大量数据文件（模型/provider 映射 JSON），整体收集。
+# 注意：litellm.proxy 的模块被 __init__.py 顶层导入（proxy_cli），不可排除整个
+# proxy；但其 proxy/_experimental/out 是 Next.js Web 前端静态产物（约 22MB），
+# exe 内从不使用，故从 datas 中过滤以减小体积。
+litellm_datas_all, litellm_binaries, litellm_hiddenimports = collect_all('litellm')
+litellm_datas = [
+    (src, dst)
+    for src, dst in litellm_datas_all
+    if not str(dst).split(os.sep)[:4] == list(_LITELLM_OUT_PREFIX)
+]
 
 # tiktoken 的编码数据经 tiktoken_ext 插件包加载，缺失会导致
 # "Unknown encoding cl100k_base"，需整体收集并显式导入

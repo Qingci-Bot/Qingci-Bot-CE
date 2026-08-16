@@ -5,6 +5,9 @@ description = "QQ Bot 框架，对接 LLBot (OneBot 11)，支持 LLM 对话、We
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
 dependencies = [
+    # 独立插件 SDK：协议层（PluginBase/Matcher/Permission/Rule/MessageContext）唯一来源，
+    # bot/plugin/ 下为薄转发。构建/本地开发用 build.ps1 的 -e 安装优先；git 依赖供 CI 与干净环境。
+    "qingci-plugin-sdk @ git+https://atomgit.com/Qingci-Bot/Plugins-SDK.git@master",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
     "websockets>=14.0",
@@ -22,13 +25,17 @@ dependencies = [
     "pystray>=0.19.0",
     "pillow>=11.0",
     "mcp>=1.6,<2",
-    "lancedb>=0.15,<1",
 ]
 
 [project.scripts]
 qingci-bot-ce = "main:main"
 
 [project.optional-dependencies]
+# 向量知识库（语义检索）依赖。lancedb/pyarrow 体积大且仅增强功能，
+# 缺省时 KeywordKnowledgeStore 关键词检索仍可用，故作为可选特性。
+vector = [
+    "lancedb>=0.15,<1",
+]
 test = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -39,7 +46,7 @@ build = [
     "pyinstaller>=6.0",
 ]
 dev = [
-    "qingci-bot-ce[test,build]",
+    "qingci-bot-ce[test,build,vector]",
     "ruff>=0.8",
     "mypy>=1.0",
 ]

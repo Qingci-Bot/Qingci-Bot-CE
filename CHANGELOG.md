@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 引入 GitHub Actions CI（`.github/workflows/ci.yml`）：ruff lint + format + mypy + pytest + 覆盖率门槛
 
 ### Changed
+- 架构：协议层（`PluginBase`/`Matcher`/`Permission`/`Rule`/`MessageContext`）统一由独立插件 SDK 维护，`bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `bot/core/dispatcher.py` 的 `MessageContext` 改为薄转发（`from qingci_plugin_sdk.* import *`），消除两处定义漂移（净删约 500 行重复代码）；SDK 由可选升级为主项目正式依赖（git 依赖声明于 `pyproject.toml`，构建/本地开发仍走 `build.ps1` 的 `-e` 安装）
+- 架构：`QingciBot.__init__` 的组件装配（核心服务创建 + DI 注册）抽离到组合根 `bot/core/composition.py` 的 `assemble_bot()`，`__init__` 只保留配置加载与状态字段；新增 `build_bot()` 便捷入口
+- 架构：全局单例 `get_bot()` 不再持有 bot 实例，改为持有 DI 容器引用、从容器解析（`resolve_sync(QingciBot)`），消除模块级 bot 状态与多实例的潜在冲突
+- API：`DIContainer` 新增公开 `resolve_sync()`（同步解析，供非异步上下文）
+- 弃用：`PluginBase` 旧式回调 `on_message`/`on_notice`/`on_request` 标注 deprecated，新插件请改用 Matcher（内置插件均已迁移）
+- 打包：`litellm` 的 `proxy/_experimental/out`（Next.js Web 前端静态产物，约 22MB）从 datas 中过滤，exe 体积下降
+- 依赖：`lancedb` 由主依赖移至 optional 的 `vector` 分组；`KnowledgeStore` 在 `lancedb` 缺失时（vector 模式）自动回退 keyword 后端并告警
 - 性能优化：`bot/db` 新增 `session_scope()` 上下文管理器统一 commit/rollback/close，Database 仓储全部方法改用，减少重复样板
 - 性能优化：RAG 关键词库 `add_document`/`remove_document` 改为增量索引，仅更新受影响文档，不再全量重建
 - 覆盖率防回退门槛：pytest 新增 `--cov-fail-under=40`，低于 40% 直接失败

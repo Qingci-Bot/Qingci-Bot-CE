@@ -611,16 +611,33 @@ class KnowledgeStore:
         self._mode = mode
         self._backend: KeywordKnowledgeStore | VectorKnowledgeStore
         if mode == "vector":
-            self._backend = VectorKnowledgeStore(
-                root=root,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                top_k=top_k,
-                embedding_model=embedding_model or "text-embedding-3-small",
-                embedding_api_url=embedding_api_url,
-                embedding_api_key=embedding_api_key,
-                collection_name=collection_name,
-            )
+            # lancedb 为可选依赖（见 pyproject 的 vector 分组）；未安装时
+            # 回退到 keyword 后端，避免向量检索直接崩溃。
+            try:
+                import lancedb  # noqa: F401
+
+                self._backend = VectorKnowledgeStore(
+                    root=root,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    top_k=top_k,
+                    embedding_model=embedding_model or "text-embedding-3-small",
+                    embedding_api_url=embedding_api_url,
+                    embedding_api_key=embedding_api_key,
+                    collection_name=collection_name,
+                )
+            except ModuleNotFoundError:
+                logger.warning(
+                    "lancedb 未安装，向量检索不可用，已回退到 keyword 模式。"
+                    "如需语义检索请安装：uv pip install 'qingci-bot-ce[vector]'"
+                )
+                self._mode = "keyword"
+                self._backend = KeywordKnowledgeStore(
+                    root=root,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    top_k=top_k,
+                )
         else:
             self._backend = KeywordKnowledgeStore(
                 root=root,

@@ -11,8 +11,11 @@ block=True 的 Matcher 匹配后（无论 handler 返回什么）停止后续 Ma
 
 import logging
 import time
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
+# 消息上下文统一由独立插件 SDK 定义（qingci_plugin_sdk.context.MessageContext），
+# 主项目与外部插件共用同一类型，避免协议层定义漂移。
+from qingci_plugin_sdk.context import MessageContext
 
 if TYPE_CHECKING:
     from .bot import QingciBot
@@ -27,38 +30,6 @@ def _to_reply(result: Any, post_type: str) -> Any:
     可被上层正确识别。
     """
     return str(result) if post_type == "message" else result
-
-
-@dataclass
-class MessageContext:
-    """解析后的消息上下文"""
-
-    # 原始事件
-    raw_event: dict
-
-    # 基础信息
-    post_type: str = ""
-    message_type: str = ""  # group / private
-    sub_type: str = ""  # normal / anonymous / notice
-    # 刻意保持 str 类型（OneBot 事件原始为 int）：
-    # 支持 chat.py 的 f"{message_id}_reply" 复合标识与数据库 str 列的兼容，勿改为 int
-    message_id: str = ""
-    user_id: int = 0
-    group_id: int = 0
-    self_id: int = 0  # Bot 自己的 QQ 号
-
-    # 消息内容
-    raw_message: str = ""  # CQ 码原始文本
-    plain_text: str = ""  # 纯文本
-    at_list: list[int] = field(default_factory=list)  # 被 @ 的用户列表
-    is_at_bot: bool = False  # 是否 @ 了 Bot
-    images: list[str] = field(default_factory=list)  # 图片 URL 列表
-
-    # 回复专用
-    sender: dict = field(default_factory=dict)  # 发送者信息
-
-    # 所有原始消息段
-    segments: list[dict] = field(default_factory=list)  # 完整消息段列表
 
 
 class MessageDispatcher:

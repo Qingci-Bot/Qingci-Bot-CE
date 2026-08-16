@@ -1,8 +1,9 @@
 """知识库（RAG）测试：关键词库增量索引与检索"""
 
+import builtins
 from pathlib import Path
 
-from bot.rag.knowledge import KeywordKnowledgeStore
+from bot.rag.knowledge import KeywordKnowledgeStore, KnowledgeStore
 
 
 def _store(tmp_path: Path) -> KeywordKnowledgeStore:
@@ -78,3 +79,22 @@ def test_reload_full_reindex(tmp_path):
     store.reload()
     assert store.chunk_count == count_before
     assert sorted(c.text for c in store._chunks if c.source == "doc_a") == text_chunks_a
+
+
+def test_vector_mode_falls_back_to_keyword_when_lancedb_missing(tmp_path, monkeypatch):
+    """lancedb 未安装（可选依赖缺失）时，vector 模式回退到 keyword 后端"""
+    real_import = builtins.__import__
+
+    def _block_lancedb(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "lancedb":
+            raise ModuleNotFoundError("No module named 'lancedb'", name="lancedb")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _block_lancedb)
+
+    store = KnowledgeStore(root=tmp_path / "knowledge", mode="vector")
+    assert store.mode == "keyword", "lancedb 缺失应回退到 keyword 模式"
+    assert isinstance(store._backend, KeywordKnowledgeStore)
+    # 回退后 keyword 检索仍可用
+    store.add_document("doc_a", "北京 上海 广州")
+    assert store.search("北京")

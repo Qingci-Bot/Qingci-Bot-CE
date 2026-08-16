@@ -380,6 +380,14 @@ class DIContainer:
             instance=instance,
         )
 
+    def resolve_sync(self, service_type: type) -> Any | None:
+        """同步解析服务（兼容旧代码 / 非异步上下文）
+
+        语义与 await resolve() 一致：按类型解析，未注册返回 None。
+        供 get_bot() 等无法使用 async 的模块级入口使用。
+        """
+        return self._resolve_sync(service_type)
+
     def inject_sync(self, target: Any, *, skip_missing: bool = True) -> None:
         """同步注入（兼容旧代码）"""
         annotations: dict[str, type] = {}

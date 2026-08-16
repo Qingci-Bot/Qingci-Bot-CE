@@ -3,25 +3,28 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ..config import ConfigManager
-from ..db import Database
-from ..llm import LLMManager, ToolRegistry, register_builtin_tools
-from ..paths import data_root, plugins_dir
-from ..plugin import PluginManager, PluginStatus
-from ..plugin.ratelimit import RateLimiter
+from ..paths import plugins_dir
+from ..plugin import PluginStatus
 from ..plugin.watcher import PluginWatcher
-from ..rag import KnowledgeStore
 from .alerter import AlertHandler
-from .connection import OneBotConnection
 from .di import DIContainer
 from .dispatcher import MessageContext, MessageDispatcher
-from .event_bus import EventBus
-from .filter import SensitiveFilter
-from .scheduler import BotScheduler
-from .session_state import SessionStateManager
 from .tasks import spawn_background_task
+
+if TYPE_CHECKING:
+    from ..db import Database
+    from ..llm import LLMManager, ToolRegistry
+    from ..plugin import PluginManager
+    from ..plugin.ratelimit import RateLimiter
+    from ..rag import KnowledgeStore
+    from .connection import OneBotConnection
+    from .event_bus import EventBus
+    from .filter import SensitiveFilter
+    from .scheduler import BotScheduler
+    from .session_state import SessionStateManager
 
 logger = logging.getLogger("qingci-bot")
 
@@ -35,45 +38,34 @@ _MAX_PENDING_EVENTS = 128
 class QingciBot:
     """Qingci-Bot CE 主类"""
 
+    # ---- 组件属性（由 composition.assemble_bot 创建并注入，供类型检查）----
+    config: ConfigManager
+    db: "Database"
+    connection: "OneBotConnection"
+    dispatcher: MessageDispatcher
+    llm: "LLMManager"
+    plugin_manager: "PluginManager"
+    di: DIContainer
+    session_state: "SessionStateManager"
+    event_bus: "EventBus"
+    rate_limiter: "RateLimiter | None"
+    scheduler: "BotScheduler"
+    tool_registry: "ToolRegistry"
+    knowledge_store: "KnowledgeStore | None"
+    sensitive_filter: "SensitiveFilter"
+    # 插件热重载监听器（composition 初始化为 None，start 中按需创建）
+    _plugin_watcher: "PluginWatcher | None"
+
     def __init__(self, config_path: str | None = None):
         path = Path(config_path) if config_path else None
         self.config = ConfigManager(path)
         self.config.load()
 
-        self.db = Database()
-        self.connection = OneBotConnection(
-            host=self.config.onebot.host,
-            port=self.config.onebot.port,
-            access_token=self.config.onebot.access_token,
-        )
-        self.dispatcher = MessageDispatcher()
-        self.llm = LLMManager(
-            self.config.llm,
-            db=self.db,
-            summary_config=self.config.session_summary,
-            usage_tracking=self.config.log.usage_tracking,
-        )
-        self.plugin_manager = PluginManager()
+        # 组件装配（核心服务创建 + DI 注册）收敛到组合根，
+        # 保持 __init__ 只做配置加载与状态字段初始化
+        from .composition import assemble_bot
 
-        # 依赖注入容器：集中管理所有服务实例
-        self.di = DIContainer()
-        # 会话状态：TTL 键值存储，用于多步骤对话、表单、临时缓存
-        self.session_state = SessionStateManager()
-        # 事件总线：跨插件发布-订阅事件广播，解耦插件间协作
-        self.event_bus = EventBus()
-
-        # 注册所有服务到 DI 容器（sync 兼容 __init__ 同步上下文）
-        self.di.register_sync(ConfigManager, self.config)
-        self.di.register_sync(Database, self.db)
-        self.di.register_sync(OneBotConnection, self.connection)
-        self.di.register_sync(LLMManager, self.llm)
-        self.di.register_sync(PluginManager, self.plugin_manager)
-        self.di.register_sync(MessageDispatcher, self.dispatcher)
-        self.di.register_sync(SessionStateManager, self.session_state)
-        self.di.register_sync(EventBus, self.event_bus)
-        self.di.register_sync(DIContainer, self.di)
-        # 注册自身（使插件可以注入 bot 引用）
-        self.di.register_sync(QingciBot, self)
+        assemble_bot(self)
 
         self._running = False
         self._started = False  # 是否已调用过 start()（含部分失败场景）
@@ -92,51 +84,6 @@ class QingciBot:
         # _pre_event_hooks（事件级、Matcher 调度前）与插件级 before_handler
         # （插件内、handler 前）。默认为空列表。
         self._matcher_preprocessors: list[Any] = []
-
-        # ---- 功能增强组件 ----
-        # 批次 1：限流器实例（rate_limit.enabled 时创建；创建于核心层，
-        # 不再依赖某个内置插件，避免插件缺失时限流静默失效）
-        rl_cfg = getattr(self.config, "rate_limit", None)
-        self.rate_limiter = None
-        if rl_cfg is not None and rl_cfg.enabled:
-            self.rate_limiter = RateLimiter(
-                daily_limit=rl_cfg.daily_limit,
-                cooldown_seconds=rl_cfg.cooldown_seconds,
-            )
-        # 批次 1：定时任务调度器（start/stop 中启动与关闭）
-        self.scheduler = BotScheduler()
-        # 插件开发期自动热重载监听器（hot_reload.enabled 时 start 中启动，stop 中关闭）
-        self._plugin_watcher: PluginWatcher | None = None
-        # 批次 3：Function Calling 工具注册表（常驻创建，轻量；
-        # 仅在 llm.enable_tools 开启且模型支持 tools 时才实际参与调用）
-        self.tool_registry = ToolRegistry()
-        register_builtin_tools(self.tool_registry)
-        self.llm.set_tool_registry(self.tool_registry)
-        # 批次 3：知识库（rag.enabled 时创建，未启用时为 None）
-        self.knowledge_store = None
-        if self.config.rag.enabled:
-            rag_cfg = self.config.rag
-            knowledge_dir = Path(rag_cfg.knowledge_dir)
-            if not knowledge_dir.is_absolute():
-                knowledge_dir = data_root() / knowledge_dir
-            llm_cfg = self.config.llm
-            self.knowledge_store = KnowledgeStore(
-                root=knowledge_dir,
-                mode=rag_cfg.mode,
-                chunk_size=rag_cfg.chunk_size,
-                chunk_overlap=rag_cfg.chunk_overlap,
-                top_k=rag_cfg.top_k,
-                embedding_model=rag_cfg.embedding_model,
-                embedding_api_url=rag_cfg.embedding_api_url or llm_cfg.api_url,
-                embedding_api_key=rag_cfg.embedding_api_key or llm_cfg.api_key,
-                collection_name=rag_cfg.collection_name,
-            )
-        # 敏感词过滤器：本批实例化，词库路径相对项目根目录解析
-        # （enabled 开关由批次 1 的拦截逻辑判断，此处仅构造）
-        words_file = Path(self.config.filter.words_file)
-        if not words_file.is_absolute():
-            words_file = data_root() / words_file
-        self.sensitive_filter = SensitiveFilter(words_file)
 
     # ============ 生命周期 ============
 
@@ -585,23 +532,31 @@ class QingciBot:
         }
 
 
-# ============ 全局实例 ============
+# ============ 全局实例访问 ============
 
-_bot_instance: QingciBot | None = None
+# 当前进程的 DI 容器引用（set_bot 时注入）。与旧式"模块级 bot 单例"不同，
+# 这里只持有容器，bot 实例通过容器解析（QingciBot 在 __init__ 中已
+# register_sync(QingciBot, self)），避免 bot 实例本身成为模块级状态。
+_bot_container: DIContainer | None = None
 
 
 def get_bot() -> QingciBot:
-    """获取全局 Bot 实例"""
-    if _bot_instance is None:
+    """获取当前进程的 Bot 实例（从 DI 容器解析）"""
+    if _bot_container is None:
         raise RuntimeError("Bot 未初始化")
-    return _bot_instance
+    bot = _bot_container.resolve_sync(QingciBot)
+    if bot is None:
+        raise RuntimeError("Bot 未初始化")
+    return cast(QingciBot, bot)
 
 
 def set_bot(bot: QingciBot):
-    global _bot_instance
-    _bot_instance = bot
+    """记录当前进程的 DI 容器（供 get_bot 解析）"""
+    global _bot_container
+    _bot_container = bot.di
 
 
 def clear_bot():
-    global _bot_instance
-    _bot_instance = None
+    """清空当前进程的 DI 容器引用"""
+    global _bot_container
+    _bot_container = None

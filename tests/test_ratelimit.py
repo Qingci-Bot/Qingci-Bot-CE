@@ -26,7 +26,8 @@ def test_cooldown_blocks_recent_calls():
 def test_cooldown_expires(monkeypatch):
     rl = RateLimiter(daily_limit=100, cooldown_seconds=10)
     now = [1000.0]
-    monkeypatch.setattr("bot.plugin.ratelimit.time.time", lambda: now[0])
+    # ratelimit 实现已转发至 SDK，monkeypatch SDK 模块内的 time.time
+    monkeypatch.setattr("qingci_plugin_sdk.ratelimit.time.time", lambda: now[0])
     rl.check(1)
     # 冷却期内拒绝
     assert rl.check(1)[0] is False
@@ -41,7 +42,7 @@ def test_cooldown_expires(monkeypatch):
 def test_rejected_does_not_consume_quota(monkeypatch):
     rl = RateLimiter(daily_limit=2, cooldown_seconds=10)
     now = [1000.0]
-    monkeypatch.setattr("bot.plugin.ratelimit.time.time", lambda: now[0])
+    monkeypatch.setattr("qingci_plugin_sdk.ratelimit.time.time", lambda: now[0])
     assert rl.check(1)[0] is True  # 第 1 次放行
     now[0] += 20  # 越过冷却期
     assert rl.check(1)[0] is True  # 第 2 次放行（达每日上限 2）
@@ -52,7 +53,7 @@ def test_rejected_does_not_consume_quota(monkeypatch):
 
 def test_reset_on_new_day(monkeypatch):
     rl = RateLimiter(daily_limit=2, cooldown_seconds=0)
-    # ratelimit 模块内是 `from datetime import date`，需 monkeypatch 模块内绑定
+    # ratelimit 实现已转发至 SDK，monkeypatch SDK 模块内绑定的 date
     import datetime
 
     real_date = datetime.date
@@ -64,7 +65,7 @@ def test_reset_on_new_day(monkeypatch):
         def today(cls):
             return cls._d
 
-    monkeypatch.setattr("bot.plugin.ratelimit.date", _FakeDate)
+    monkeypatch.setattr("qingci_plugin_sdk.ratelimit.date", _FakeDate)
     assert rl.check(1)[0] is True
     assert rl.check(1)[0] is True
     assert rl.check(1)[0] is False  # 当日上限
@@ -77,7 +78,7 @@ def test_reset_on_new_day(monkeypatch):
 def test_cleanup_removes_stale(monkeypatch):
     rl = RateLimiter(daily_limit=100, cooldown_seconds=0)
     now = [1000.0]
-    monkeypatch.setattr("bot.plugin.ratelimit.time.time", lambda: now[0])
+    monkeypatch.setattr("qingci_plugin_sdk.ratelimit.time.time", lambda: now[0])
     rl.check(1)
     rl.check(2)
     assert rl.cleanup(inactive_days=1) == 0  # 刚活跃，不清理
