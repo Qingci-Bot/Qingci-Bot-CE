@@ -1,0 +1,16 @@
+feat: 类型化事件的 LLM 工具化（事件缓冲 + Function Calling 查询工具）
+
+- 新增 bot/llm/events_tools.py：
+  - EventBuffer：notice/request 类型化事件内存环形缓冲（默认 200 条，
+    自动丢弃最旧）；支持按群/成员/hours/limit 维度查询；事件摘要按
+    类型化字段提取（operator_id/duration/comment/flag 等）格式化为
+    LLM 可读文本；dict 兜底兼容非 SDK 事件
+  - register_event_tools：幂等注册两个只读工具——
+    get_group_events（按群查最近入群/退群/禁言/撤回/上传等事件）、
+    get_member_events（按成员查）；仅查询无写操作，与内置只读工具同级
+- 挂接：composition.py 创建 bot.event_buffer + 注册事件工具（常驻）；
+  bot.py 事件分发时 notice/request 自动入缓冲（无论是否有 Matcher）；
+  TestBot 同步对齐
+- 工具描述含缓冲容量提示，参数 JSON Schema（hours/limit 校验 + 钳制）
+- 测试 test_event_tools.py 13 用例：记录/查询/环形容量/维度过滤/工具
+  幂等注册/文本格式化/参数校验/端到端分发入缓冲；全套 238 passed

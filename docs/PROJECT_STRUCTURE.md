@@ -59,7 +59,8 @@ Qingci-Bot-CE/
 │   │   ├── adapter.py      # 适配器基类
 │   │   ├── litellm_adapter.py
 │   │   ├── mcp.py          # MCP 工具接入
-│   │   └── tools.py        # 工具注册
+│   │   ├── tools.py        # 工具注册（内置只读工具）
+│   │   └── events_tools.py # 类型化事件缓冲 + 事件查询 LLM 工具
 │   ├── db/                 # SQLModel ORM、仓储、会话管理
 │   │   ├── database.py     # Database 会话/仓储
 │   │   ├── engine.py       # 数据库引擎

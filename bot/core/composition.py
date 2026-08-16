@@ -14,7 +14,13 @@ from typing import TYPE_CHECKING
 
 from ..config import ConfigManager
 from ..db import Database
-from ..llm import LLMManager, ToolRegistry, register_builtin_tools
+from ..llm import (
+    EventBuffer,
+    LLMManager,
+    ToolRegistry,
+    register_builtin_tools,
+    register_event_tools,
+)
 from ..paths import data_root
 from ..plugin import PluginManager
 from ..plugin.ratelimit import RateLimiter
@@ -92,6 +98,9 @@ def assemble_bot(bot: "QingciBot") -> None:
     # 仅在 llm.enable_tools 开启且模型支持 tools 时才实际参与调用）
     bot.tool_registry = ToolRegistry()
     register_builtin_tools(bot.tool_registry)
+    # 类型化事件缓冲（notice/request 事件环形记录，供 LLM 事件查询工具读取）
+    bot.event_buffer = EventBuffer()
+    register_event_tools(bot.tool_registry, bot.event_buffer)
     bot.llm.set_tool_registry(bot.tool_registry)
     # 知识库（rag.enabled 时创建，未启用时为 None）
     bot.knowledge_store = None

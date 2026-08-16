@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 from ..config import ConfigManager
 from ..paths import plugins_dir
 from ..plugin import PluginStatus
+from ..plugin.events import parse_event
 from ..plugin.watcher import PluginWatcher
 from .alerter import AlertHandler
 from .di import DIContainer
@@ -16,7 +17,7 @@ from .tasks import spawn_background_task
 
 if TYPE_CHECKING:
     from ..db import Database
-    from ..llm import LLMManager, ToolRegistry
+    from ..llm import EventBuffer, LLMManager, ToolRegistry
     from ..plugin import PluginManager
     from ..plugin.ratelimit import RateLimiter
     from ..rag import KnowledgeStore
@@ -51,6 +52,8 @@ class QingciBot:
     rate_limiter: "RateLimiter | None"
     scheduler: "BotScheduler"
     tool_registry: "ToolRegistry"
+    # 类型化事件缓冲（composition 创建，供 LLM 事件查询工具读取）
+    event_buffer: "EventBuffer | None"
     knowledge_store: "KnowledgeStore | None"
     sensitive_filter: "SensitiveFilter"
     # 插件热重载监听器（composition 初始化为 None，start 中按需创建）
@@ -361,6 +364,18 @@ class QingciBot:
                 return
 
             post_type = ctx.post_type or event.get("post_type", "")
+
+            # 类型化事件入缓冲：notice/request 事件写入 EventBuffer
+            # （无论是否有 Matcher 都记录，供 LLM 事件查询工具读取）
+            if post_type in ("notice", "request"):
+                buffer = getattr(self, "event_buffer", None)
+                if buffer is not None:
+                    try:
+                        buffer.record(
+                            parse_event(post_type, event) or event
+                        )
+                    except Exception:
+                        logger.debug("事件入缓冲失败，忽略", exc_info=True)
 
             # 前置钩子：可在分发前拦截事件（返回非 None 即作为回复发送并终止）
             for hook in self._pre_event_hooks:

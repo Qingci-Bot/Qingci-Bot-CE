@@ -130,6 +130,11 @@ class TestBot:
         self.connection = FakeConnection()
         self.event_bus = EventBus()
         self.tool_registry = ToolRegistry()
+        # 类型化事件缓冲 + 事件查询工具（与真实 Bot composition 对齐）
+        from ..llm import EventBuffer, register_event_tools
+
+        self.event_buffer = EventBuffer()
+        register_event_tools(self.tool_registry, self.event_buffer)
 
         # DI 容器：与真实 Bot 一致注册核心服务
         self.di = DIContainer()
@@ -199,6 +204,12 @@ class TestBot:
         """
         ctx = self.dispatcher.dispatch(event)
         post_type = ctx.post_type or event.get("post_type", "")
+
+        # 类型化事件入缓冲（与真实 Bot _process_event_impl 对齐）
+        if post_type in ("notice", "request"):
+            from ..plugin.events import parse_event
+
+            self.event_buffer.record(parse_event(post_type, event) or event)
 
         if post_type != "message":
             reply, blocked = await self.dispatcher._run_event_matchers(

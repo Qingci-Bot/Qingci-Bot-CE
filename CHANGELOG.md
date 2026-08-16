@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **类型化事件的 LLM 工具化**：新增 `bot/llm/events_tools.py`——`EventBuffer` 内存环形缓冲（默认 200 条）记录 notice/request 类型化事件，Dispatcher/TestBot 分发时自动入缓冲；`register_event_tools` 幂等注册两个只读 Function Calling 工具：`get_group_events`（按群查最近入群/退群/禁言/撤回/上传等事件）与 `get_member_events`（按成员查）；事件摘要按类型化字段提取（operator_id/duration/comment 等），结果格式化为 LLM 可读文本；仅记录仅查询，Bot 重启即清空；测试 `test_event_tools.py` 13 用例
 - **插件市场（WebUI）**：新增 `bot/plugin/market.py`（MarketIndex/MarketClient/MarketManager）——集中索引（AtomGit `Qingci-Bot/Plugin-Market`）拉取 + TTL 缓存 + 磁盘回退；列表合并已安装/可更新状态；安装/更新复用 `PluginManager.install`（卸载→覆盖重装）；WebUI 插件管理新增「插件市场」Tab（搜索/一键安装/更新/刷新）；配置 `market.url`/`market.refresh_interval`；`install()` 增强识别 `.git` 结尾 URL 为 git 仓库、`_locate_plugin_dir` 支持 `plugins/<name>/` 嵌套布局；测试 `test_market.py` 9 用例
 - **类型化事件（notice/request）**：Dispatcher 在事件分发时将 notice/request 原始 dict 解析为类型化事件对象（SDK `events.py`，`bot/plugin/events.py` 转发），`MatcherContext.event` 持有，handler 按参数注解注入（如 `event: GroupIncreaseNotice`）；`resolve_handler_args` 新增事件类型注解注入规则；覆盖 9 种 notice 子类 + 2 种 request 子类，未知类型回退基类，数值安全转换，零依赖 dataclass 实现；测试 `test_typed_events.py` 10 用例
 - **会话阶梯（多轮交互）**：Dispatcher 支持会话阶梯续接——handler 通过 `ctx.session`（SDK `Session`，`bot/plugin/session.py` 转发）调用 `pause()` 挂起等待同会话下一条消息续接同一 handler（跳过命令前缀规则）、`finish()` 结束、`reject()` 拒绝继续等；Session 实例跨轮复用保留自定义状态；阶梯默认 300s 超时自动失效，插件卸载/禁用时自动清理；测试 `test_session_steps.py` 7 用例覆盖 pause/reject/finish/隔离/超时/清理
