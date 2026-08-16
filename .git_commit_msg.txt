@@ -1,0 +1,17 @@
+feat: 插件市场（WebUI 一键安装/更新）
+
+- 新增 bot/plugin/market.py：MarketIndex（索引解析+校验）/ MarketClient
+  （拉取+TTL 缓存+磁盘回退，HTTP 失败自动回退 git clone）/
+  MarketManager（合并已安装/可更新状态 + 安装/更新编排）
+- 默认市场：AtomGit Qingci-Bot/Plugin-Market（集中索引 + plugins/<name>/
+  插件源码），配置 market.url / market.refresh_interval（默认 3600s）
+- 新增 api/routes/market.py：GET 列表 / POST install / update / refresh
+  （prefix=/api/plugins/market，走鉴权 + 审计）
+- WebUI 插件管理新增「插件市场」Tab：搜索/标签/已装/可更新状态，
+  一键安装/更新/刷新，npm build 验证通过
+- PluginManager.install() 增强：识别 .git 结尾 URL 为 git 仓库；
+  _locate_plugin_dir 支持 plugins/<name>/ 嵌套布局（按 name 精确匹配）
+- 测试 test_market.py 9 用例：索引过滤/版本对比/缓存/磁盘回退/状态
+  合并/安装编排/未知插件/刷新；全套 225 passed
+- 文档：README（特性+配置表）、CHANGELOG、PROJECT_STRUCTURE 同步
+- 遗留同步：plugins/hello 更新为 SDK 式示例插件（与新架构一致）

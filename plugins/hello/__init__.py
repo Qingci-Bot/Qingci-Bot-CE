@@ -1,53 +1,109 @@
-"""Qingci-Bot CE 最小示例插件
+"""Hello World 示例插件（演示 SDK 新能力）
 
-将 plugins/hello/ 目录放入 plugins/ 即可自动加载。
-发送 /hello 或 "你好" 测试。
+使用方式:
+    cd Plugins-SDK
+    uv pip install -e .
+    python -c "from qingci_plugin_sdk import PluginBase; print('SDK OK')"
+
+开发完成后，将 hello/ 目录复制到 Qingci-Bot/plugins/ 即可加载。
+
+本示例演示 SDK 新增能力：
+- i18n 国际化（self._ = self.i18n.t）
+- 全局生命周期钩子（on_startup / on_shutdown / on_bot_connect / on_metaevent）
+- 指令增强：别名 + 子指令 + 类型化参数（args_schema）
+- LLM 工具声明（@llm_tool）
+- 插件数据目录（self.data_dir）
 """
 
 import logging
 
-from bot.plugin.base import PluginBase
-from bot.plugin.matcher import MatcherContext, on_command, on_keyword
+from qingci_plugin_sdk import (
+    MatcherContext,
+    PluginBase,
+    llm_tool,
+    on_command,
+)
 
 logger = logging.getLogger("qingci-bot.plugin.hello")
 
 
 class HelloPlugin(PluginBase):
-    """最小插件示例 —— 适合快速上手"""
-
     name = "hello"
-    version = "1.0.0"
-    author = "Qingci-Bot CE"
-    description = "一个简单的问候插件"
+    version = "1.4.0"
+    author = "Qingci-Bot"
+    description = "Hello World 示例插件（演示 SDK 新能力）"
 
     async def on_load(self):
-        logger.info("Hello 插件已加载")
-
-        # 命令触发：/hello
+        # 命令：别名 hello / hi / 你好
         self.matchers.append(
             on_command(
                 "hello",
+                aliases=("hi", "你好"),
                 description="打个招呼",
-                priority=10,
-            )(self._hello)
+            )(self._handle_hello)
         )
 
-        # 关键词触发：消息含"你好"
+        # 子指令：/greet zh 或 /greet en
+        async def _greet_zh(ctx: MatcherContext) -> str:
+            return "你好呀！"
+
+        async def _greet_en(ctx: MatcherContext) -> str:
+            return "Hello, friend!"
+
         self.matchers.append(
-            on_keyword(
-                "你好",
-                description="响应问候",
-                priority=10,
-            )(self._greet)
+            on_command(
+                "greet",
+                description="多语言问候",
+                subcommands={"zh": _greet_zh, "en": _greet_en},
+            )(self._handle_greet)
         )
 
-    async def on_unload(self):
-        logger.info("Hello 插件已卸载")
+        # 类型化参数：/weather Beijing 3
+        self.matchers.append(
+            on_command(
+                "weather",
+                description="天气预报（类型化参数示例）",
+                args_schema={"city": str, "days": int},
+            )(self._handle_weather)
+        )
 
-    async def _hello(self, ctx: MatcherContext) -> str:
-        name = ctx.args.strip() or "世界"
+    async def _handle_hello(self, ctx: MatcherContext) -> str:
+        name = ctx.args.strip() or "world"
         return f"Hello, {name}!"
 
-    async def _greet(self, ctx: MatcherContext) -> str:
-        user_id = ctx.user_id or "陌生人"
-        return f"你好呀，{user_id}！(来自 Hello 插件)"
+    async def _handle_greet(self, ctx: MatcherContext) -> str:
+        return "子指令: /greet zh 或 /greet en"
+
+    async def _handle_weather(self, ctx: MatcherContext, city: str = "", days: int = 1):
+        return f"{city}: 未来 {days} 天预报略"
+
+    async def on_unload(self):
+        logger.info(f"[{self.name}] 插件已卸载")
+
+    # ---- 全局生命周期钩子（可选覆写） ----
+
+    async def on_startup(self):
+        logger.info(f"[{self.name}] 启动完成，数据目录: {self.data_dir}")
+
+    async def on_shutdown(self):
+        logger.info(f"[{self.name}] 关闭")
+
+    async def on_bot_connect(self):
+        logger.info(f"[{self.name}] QQ 会话已连接")
+
+    async def on_metaevent(self, event: dict):
+        return None
+
+    # ---- 模块级 LLM 工具（装饰器注册，PluginManager 自动收集） ----
+
+    @llm_tool(name="get_time", description="获取当前北京时间")
+    async def get_time(self) -> str:
+        from datetime import datetime, timezone
+
+        return datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+
+
+# 模块级 LLM 工具示例：独立函数也可用 @llm_tool 声明
+@llm_tool(name="echo", description="原样返回输入")
+async def echo(text: str) -> str:
+    return text

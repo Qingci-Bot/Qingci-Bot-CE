@@ -20,7 +20,7 @@
 - **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）
 - **增强能力**：AI 图片生成、轻量知识库（关键词检索零依赖；向量检索需可选依赖 lancedb）、会话摘要（历史裁剪）、Function Calling、MCP 服务器接入、定时任务调度器、LLM 用量统计
 - **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式），支持在线备份与消息 CSV 导出
-- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置。侧边栏内置实例列表，可新建/删除/切换/重命名实例
+- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板 + 插件市场一键安装/更新/搜索）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置。侧边栏内置实例列表，可新建/删除/切换/重命名实例
 - **桌面应用**：PyWebView 套壳 + 系统托盘（关闭窗口自动驻留后台），开机自启；启动时显示即时加载画面，重型模块延迟导入，双击 exe 后无感知等待
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖；litellm 延迟导入，启动不加载重型依赖
 
@@ -353,6 +353,7 @@ api_key: ''                        # API 鉴权密钥
 | `llm.mcp_servers` | MCP 服务器 | `[]` | 连接外部 MCP 服务器（stdio/HTTP 传输），工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用；需开启 `enable_tools`，修改后重启 Bot 生效 |
 | `llm.provider` | 提供商联动 | `openai` | 切换 provider 自动带出预设 api_url/model（openai/deepseek/ollama/siliconflow/claude/gemini/custom 共 7 个）；`api_url` 非空统一走 OpenAI 兼容协议 |
 | `llm.timeout` / `llm.num_retries` | 请求超时与重试 | `60` / `2` | 单次 LLM 请求超时秒数与失败重试次数 |
+| `market` | 插件市场 | `url` 指向官方 AtomGit 仓库 | WebUI「插件管理 → 插件市场」浏览/搜索/一键安装/更新/刷新；`url` 可指向自定义市场索引仓库，`refresh_interval` 为索引缓存 TTL（秒） |
 | `bot.log_json` | 结构化 JSON 日志 | `false` | 面向机器可读的日志采集场景 |
 | `log.log_file_enabled` | 文件日志轮转 | `false` | 启用后日志写入 `log_dir/qingci-bot.log`，按 `log_file_max_bytes` 大小轮转，保留 `log_file_backup_count` 个备份 |
 

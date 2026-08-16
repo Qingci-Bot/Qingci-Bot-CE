@@ -958,7 +958,11 @@ class PluginManager:
                 # 远程来源：git 克隆或 HTTP 下载归档
                 temp_dir = tempfile.mkdtemp(prefix="qb-plugin-")
                 staging = Path(temp_dir) / "src"
-                if source.startswith(("git+", "git@", "ssh://")):
+                # git 仓库识别：git+ / git@ / ssh:// 前缀，或 .git 结尾的 http(s) URL
+                is_git = source.startswith(("git+", "git@", "ssh://")) or (
+                    source.startswith(("http://", "https://")) and source.rstrip("/").endswith(".git")
+                )
+                if is_git:
                     repo = source[4:] if source.startswith("git+") else source
                     ok = await self._run_subprocess(
                         ["git", "clone", "--depth", "1", repo, str(staging)]
@@ -976,8 +980,9 @@ class PluginManager:
                     logger.error(f"不支持的插件来源: {source}")
                     return "", None
 
-                # 找到插件目录（仓库根或其下含 plugin.json/__init__.py 的目录）
-                plugin_dir = self._locate_plugin_dir(staging)
+                # 找到插件目录（仓库根或其下含 plugin.json/__init__.py 的目录；
+                # 指定 name 时优先精确匹配，兼容 plugins/<name>/ 嵌套布局）
+                plugin_dir = self._locate_plugin_dir(staging, name)
                 if plugin_dir is None:
                     logger.error(f"来源中未找到插件目录: {source}")
                     return "", None
@@ -1066,15 +1071,37 @@ class PluginManager:
         return dest_dir
 
     @staticmethod
-    def _locate_plugin_dir(root: Path) -> Path | None:
-        """定位仓库/归档中的插件目录"""
+    def _locate_plugin_dir(root: Path, name: str | None = None) -> Path | None:
+        """定位仓库/归档中的插件目录
+
+        1. 根目录本身是插件（含 plugin.json 或 __init__.py）→ 返回根
+        2. 指定 name 时：递归（最多 2 层）查找目录名 == name 且是插件的目录
+        3. 否则：返回首个直接子目录中的插件
+        4. 直接子目录中找不到时，再向下找一层（兼容 plugins/<name>/ 嵌套）
+        """
         if (root / "plugin.json").is_file() or (root / "__init__.py").is_file():
             return root
+
+        def _is_plugin_dir(d: Path) -> bool:
+            return (d / "plugin.json").is_file() or (d / "__init__.py").is_file()
+
+        if name:
+            for pattern in (f"*/{name}", f"*/*/{name}"):
+                for child in root.glob(pattern):
+                    if child.is_dir() and _is_plugin_dir(child):
+                        return child
+
         for child in sorted(root.iterdir()):
-            if child.is_dir() and (
-                (child / "plugin.json").is_file() or (child / "__init__.py").is_file()
-            ):
+            if child.is_dir() and _is_plugin_dir(child):
                 return child
+
+        # 嵌套一层：兼容 plugins/<name>/ 布局
+        for child in sorted(root.iterdir()):
+            if not child.is_dir():
+                continue
+            for sub in sorted(child.iterdir()):
+                if sub.is_dir() and _is_plugin_dir(sub):
+                    return sub
         return None
 
     @staticmethod

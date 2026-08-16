@@ -9,7 +9,14 @@ const modulePath = ref('')
 const loading = ref('')
 const activeCategory = ref('all')
 const expandedMetrics = ref('')
-const activeTab = ref('plugins')  // 'plugins' | 'commands'
+const activeTab = ref('plugins')  // 'plugins' | 'commands' | 'market'
+
+// 插件市场
+const market = ref([])
+const marketLoading = ref(false)
+const marketSearch = ref('')
+const marketAction = ref('')  // 'install:name' | 'update:name' | 'refresh'
+const marketError = ref('')
 
 // 命令管理
 const commands = ref([])
@@ -260,6 +267,90 @@ async function updatePriority(cmd, newPriority) {
 function switchTab(tab) {
   activeTab.value = tab
   if (tab === 'commands') fetchCommands()
+  if (tab === 'market') fetchMarket()
+}
+
+// ---- 插件市场 ----
+
+const filteredMarket = computed(() => {
+  const q = marketSearch.value.trim().toLowerCase()
+  if (!q) return market.value
+  return market.value.filter(p =>
+    (p.name || '').toLowerCase().includes(q) ||
+    (p.title || '').toLowerCase().includes(q) ||
+    (p.description || '').toLowerCase().includes(q) ||
+    (p.tags || []).some(t => t.toLowerCase().includes(q))
+  )
+})
+
+const marketStats = computed(() => {
+  const installed = market.value.filter(p => p.installed).length
+  const updatable = market.value.filter(p => p.update_available).length
+  return { total: market.value.length, installed, updatable }
+})
+
+const marketTypeLabel = (t) => ({ sdk: 'SDK', builtin: '内置' }[t] || t || 'SDK')
+
+async function fetchMarket() {
+  marketLoading.value = true
+  marketError.value = ''
+  try {
+    market.value = await store.apiFetch('/api/plugins/market')
+  } catch (e) {
+    marketError.value = e.message || '获取市场失败'
+    showToast('error', `获取插件市场失败：${e.message}`)
+  } finally {
+    marketLoading.value = false
+  }
+}
+
+async function marketInstall(name) {
+  marketAction.value = `install:${name}`
+  try {
+    await store.apiFetch('/api/plugins/market/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    showToast('success', `插件 ${name} 安装成功`)
+    await store.fetchStatus()
+    await fetchMarket()
+  } catch (e) {
+    showToast('error', `安装失败：${e.message}`)
+  } finally {
+    marketAction.value = ''
+  }
+}
+
+async function marketUpdate(name) {
+  marketAction.value = `update:${name}`
+  try {
+    await store.apiFetch('/api/plugins/market/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    showToast('success', `插件 ${name} 更新成功`)
+    await store.fetchStatus()
+    await fetchMarket()
+  } catch (e) {
+    showToast('error', `更新失败：${e.message}`)
+  } finally {
+    marketAction.value = ''
+  }
+}
+
+async function marketRefresh() {
+  marketAction.value = 'refresh'
+  try {
+    const res = await store.apiFetch('/api/plugins/market/refresh', { method: 'POST' })
+    showToast('success', res.message || '市场已刷新')
+    await fetchMarket()
+  } catch (e) {
+    showToast('error', `刷新失败：${e.message}`)
+  } finally {
+    marketAction.value = ''
+  }
 }
 </script>
 
@@ -280,6 +371,10 @@ function switchTab(tab) {
         :class="['main-tab-btn', { active: activeTab === 'commands' }]"
         @click="switchTab('commands')"
       >命令管理</button>
+      <button
+        :class="['main-tab-btn', { active: activeTab === 'market' }]"
+        @click="switchTab('market')"
+      >插件市场</button>
     </div>
 
     <!-- 插件管理 Tab -->
@@ -551,6 +646,92 @@ function switchTab(tab) {
           {{ toast.message }}
         </div>
       </transition>
+    </template>
+
+    <!-- 插件市场 Tab -->
+    <template v-if="activeTab === 'market'">
+      <div class="card fade-in">
+        <div class="card-header">
+          <div class="card-title">
+            插件市场
+            <span class="text-muted" style="font-size: 12px; margin-left: 10px;">
+              共 {{ marketStats.total }} 个插件 · 已装 {{ marketStats.installed }} · 可更新 {{ marketStats.updatable }}
+            </span>
+          </div>
+          <div class="market-tools">
+            <input
+              v-model="marketSearch"
+              type="text"
+              class="market-search"
+              placeholder="搜索插件名 / 描述 / 标签..."
+            >
+            <button
+              class="btn btn-secondary btn-sm"
+              :disabled="marketAction === 'refresh'"
+              @click="marketRefresh"
+            >
+              <span :class="{ spin: marketAction === 'refresh' }">↻</span> 刷新市场
+            </button>
+          </div>
+        </div>
+        <div v-if="marketLoading" class="empty-state">加载市场中...</div>
+        <div v-else-if="marketError" class="empty-state">
+          <div class="icon">⚠</div>
+          <div>市场加载失败：{{ marketError }}</div>
+        </div>
+        <div v-else-if="filteredMarket.length === 0" class="empty-state">
+          <div class="icon">◇</div>
+          <div>{{ marketSearch ? '未找到匹配的插件' : '市场暂无插件' }}</div>
+        </div>
+        <div v-else>
+          <div v-for="item in filteredMarket" :key="item.name" class="market-card">
+            <div class="market-info">
+              <div class="name">
+                {{ item.title || item.name }}
+                <span class="tag tag-purple" style="font-size: 10px;">{{ marketTypeLabel(item.type) }}</span>
+                <span v-for="t in item.tags" :key="t" class="tag tag-accent" style="font-size: 10px; margin-left: 4px;">{{ t }}</span>
+              </div>
+              <div class="desc">{{ item.description || '无描述' }}</div>
+              <div class="market-meta-row">
+                <span class="tag tag-blue" style="font-size: 11px;">{{ item.name }}</span>
+                <span class="tag tag-accent" style="font-size: 11px;">v{{ item.version }}</span>
+                <span v-if="item.author" class="text-muted" style="font-size: 11px;">{{ item.author }}</span>
+                <span v-if="item.installed" class="status-badge green" style="font-size: 11px;">
+                  已安装 v{{ item.installed_version }}
+                </span>
+                <span v-if="item.update_available" class="status-badge yellow" style="font-size: 11px;">
+                  可更新至 v{{ item.version }}
+                </span>
+              </div>
+            </div>
+            <div class="action-bar">
+              <button
+                v-if="item.update_available"
+                class="btn btn-warning btn-sm"
+                :disabled="marketAction === `update:${item.name}`"
+                @click="marketUpdate(item.name)"
+              >
+                <span :class="{ spin: marketAction === `update:${item.name}` }">↻</span>
+                {{ marketAction === `update:${item.name}` ? '更新中...' : '更新' }}
+              </button>
+              <button
+                v-else
+                class="btn btn-primary btn-sm"
+                :disabled="marketAction === `install:${item.name}` || item.installed"
+                @click="marketInstall(item.name)"
+              >
+                <span :class="{ spin: marketAction === `install:${item.name}` }">＋</span>
+                {{ item.installed ? '已安装' : (marketAction === `install:${item.name}` ? '安装中...' : '安装') }}
+              </button>
+            </div>
+          </div>
+        </div>
+        <transition name="toast">
+          <div v-if="toast.show" class="toast" :class="toast.type" style="margin-top: 16px;">
+            {{ toast.message }}
+          </div>
+        </transition>
+      </div>
     </template>
   </div>
 </template>
@@ -932,4 +1113,57 @@ function switchTab(tab) {
   border: 1px solid rgba(52, 211, 153, 0.3);
 }
 .btn-success:hover { background: rgba(52, 211, 153, 0.25); }
+
+/* 插件市场 */
+.market-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.market-search {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: rgba(0,0,0,0.2);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  width: 240px;
+}
+.market-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.market-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  margin-bottom: 10px;
+  background: rgba(255,255,255,0.02);
+  transition: border-color 0.2s;
+}
+.market-card:hover { border-color: var(--border-active); }
+.market-info { flex: 1; min-width: 0; }
+.market-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.market-card .action-bar {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.spin { display: inline-block; animation: market-spin 1s linear infinite; }
+@keyframes market-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.text-muted { color: var(--text-muted); }
 </style>

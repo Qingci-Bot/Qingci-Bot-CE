@@ -295,6 +295,13 @@ class RAGConfig(BaseModel):
     collection_name: str = "qingci_knowledge"  # LanceDB 集合名（vector 模式使用）
 
 
+class MarketConfig(BaseModel):
+    """插件市场配置"""
+
+    url: str = "https://atomgit.com/Qingci-Bot/Plugin-Market.git"
+    refresh_interval: int = 3600  # 索引缓存 TTL（秒）
+
+
 class AppConfig(BaseModel):
     """应用总配置"""
 
@@ -312,6 +319,7 @@ class AppConfig(BaseModel):
     rag: RAGConfig = RAGConfig()
     session_summary: SessionSummaryConfig = SessionSummaryConfig()
     log: LogConfig = LogConfig()
+    market: MarketConfig = MarketConfig()
     api_key: str = ""  # API 鉴权密钥，为空则不启用鉴权
     plugins: dict = {}  # 插件级配置：plugins.<name>: { ... }
     lang: str = "zh-CN"  # 全局语言（插件 i18n 默认语言，如 zh-CN / en-US）
@@ -381,6 +389,10 @@ class ConfigManager:
     @property
     def log(self) -> LogConfig:
         return self._config.log
+
+    @property
+    def market(self) -> MarketConfig:
+        return self._config.market
 
     def load(self) -> AppConfig:
         """从文件加载配置，不存在则创建默认配置"""

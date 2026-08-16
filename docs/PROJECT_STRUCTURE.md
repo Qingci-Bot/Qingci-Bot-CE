@@ -33,7 +33,7 @@ Qingci-Bot-CE/
 │   ├── server.py           # 应用装配、路由挂载、中间件
 │   ├── auth.py             # 鉴权 / 审计横切逻辑
 │   ├── audit.py            # 登录/操作审计
-│   └── routes/             # REST 路由：auth/backup/bot/command/config/group/instances/log/plugin
+│   └── routes/             # REST 路由：auth/backup/bot/command/config/group/instances/log/market/plugin
 ├── bot/                    # Bot 核心逻辑（纯 Python 包）
 │   ├── core/               # 生命周期与调度：bot/composition/connection/dispatcher/event_bus/
 │   │                       #   di/scheduler/session_state/filter/alerter/tasks/
@@ -48,6 +48,9 @@ Qingci-Bot-CE/
 │   │   ├── rule.py         # 薄转发 SDK Rule 规则系统
 │   │   ├── permission.py   # 薄转发 SDK Permission 权限
 │   │   ├── ratelimit.py    # 薄转发 SDK RateLimiter 限流
+│   │   ├── session.py      # 薄转发 SDK Session（会话阶梯，多轮交互）
+│   │   ├── events.py       # 薄转发 SDK 类型化事件（notice/request 事件模型）
+│   │   ├── market.py       # 插件市场：索引拉取/缓存 + 安装/更新编排
 │   │   ├── llm_tool.py     # @llm_tool 插件级 LLM 工具声明（注册到 ToolRegistry 的运行时逻辑，保留在本仓库）
 │   │   ├── watcher.py      # 插件自动热重载监听
 │   │   └── builtin/        # 内置插件：admin/chat/help/imagegen/knowledge

@@ -6,6 +6,7 @@ from .config import router as config_router  # noqa: F401
 from .group import router as group_router  # noqa: F401
 from .instances import router as instances_router  # noqa: F401
 from .log import router as log_router  # noqa: F401
+from .market import router as market_router  # noqa: F401
 from .plugin import router as plugin_router  # noqa: F401
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "backup_router",
     "command_router",
     "instances_router",
+    "market_router",
 ]

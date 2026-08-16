@@ -152,12 +152,14 @@ def create_app() -> FastAPI:
         group_router,
         instances_router,
         log_router,
+        market_router,
         plugin_router,
     )
 
     app.include_router(bot_router, prefix="/api/bot", tags=["Bot"])
     app.include_router(config_router, prefix="/api/config", tags=["Config"])
     app.include_router(plugin_router, prefix="/api/plugin", tags=["Plugin"])
+    app.include_router(market_router, prefix="/api/plugins/market", tags=["PluginMarket"])
     app.include_router(log_router, prefix="/api/log", tags=["Log"])
     app.include_router(group_router, prefix="/api/group", tags=["Group"])
     app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
