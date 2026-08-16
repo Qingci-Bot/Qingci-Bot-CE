@@ -9,6 +9,7 @@ from bot.plugin.permission import (
     PRIVATE,
     SUPERUSER,
     USER,
+    describe_permission,
 )
 
 
@@ -97,6 +98,29 @@ class TestBuiltinPermissions:
         assert not await check(
             GROUP_MEMBER([10, 20]), make_ctx(group_id=10, message_type="private"), bot
         )
+
+
+class TestDescribePermission:
+    async def test_builtin_labels(self):
+        assert describe_permission(SUPERUSER) == "SUPERUSER"
+        assert describe_permission(ADMIN) == "ADMIN"
+        assert describe_permission(EVERYONE) == "EVERYONE"
+        assert describe_permission(PRIVATE) == "PRIVATE"
+        assert describe_permission(GROUP) == "GROUP"
+        assert describe_permission(MEMBER) == "MEMBER"
+        assert describe_permission(USER([1, 2])) == "USER([1, 2])"
+        assert describe_permission(GROUP_MEMBER([10, 20])) == "GROUP_MEMBER([10, 20])"
+
+    async def test_composition_labels(self):
+        assert describe_permission(SUPERUSER & PRIVATE) == "(SUPERUSER & PRIVATE)"
+        assert describe_permission(SUPERUSER | PRIVATE) == "(SUPERUSER | PRIVATE)"
+        assert describe_permission(~SUPERUSER) == "~SUPERUSER"
+
+    async def test_unlabeled_returns_custom(self):
+        from bot.plugin.permission import Permission
+
+        assert describe_permission(Permission(lambda b, e, c: True)) == "CUSTOM"
+        assert describe_permission(None) == "CUSTOM"
 
 
 class TestPermissionComposition:

@@ -18,7 +18,8 @@
 | 前端依赖/构建 | `web/node_modules/`、`web/dist/` | 根目录 | 已忽略 |
 | 虚拟环境 | `Qingci-Bot-CE/.venv/` | 根目录 | 已忽略 |
 | 安装元数据 | `*.egg-info/` | 根目录 | 已忽略 |
-| 运行时数据 | `data/`、`*.db`、`config.yaml` | 根目录 | 已忽略 |
+| 运行时数据 | `data/`、`*.db` | 根目录 | 已忽略 |
+| 实例配置/数据 | `instances/<name>/config.yaml`、`instances/<name>/data/` | 根目录 `config.yaml` | `.gitignore` 已忽略 `instances/` |
 
 > 规则：**在 `Qingci-Bot-CE/` 目录下运行所有命令**（ruff、pytest、mypy、构建），使缓存落在本目录内，避免污染根目录。
 
@@ -31,7 +32,7 @@ Qingci-Bot-CE/
 │   ├── server.py           # 应用装配、路由挂载、中间件
 │   ├── auth.py             # 鉴权 / 审计横切逻辑
 │   ├── audit.py            # 登录/操作审计
-│   └── routes/             # REST 路由：auth/backup/bot/command/config/group/log/plugin
+│   └── routes/             # REST 路由：auth/backup/bot/command/config/group/instances/log/plugin
 ├── bot/                    # Bot 核心逻辑（纯 Python 包）
 │   ├── core/               # 生命周期与调度：bot/connection/dispatcher/event_bus/
 │   │                       #   di/scheduler/session_state/filter/alerter/tasks/
@@ -62,8 +63,9 @@ Qingci-Bot-CE/
 │   │   ├── bot.py          # TestBot
 │   │   └── events.py       # 事件工厂
 │   ├── config.py           # ConfigManager（config.yaml 加载与校验）
+│   ├── instances.py        # 实例管理（instances/<name>/ 自包含目录，含 config/plugins/data）
 │   ├── i18n.py             # 国际化翻译器
-│   ├── paths.py            # 路径解析（app_root / data_dir 等）
+│   ├── paths.py            # 路径解析（app_root / data_root / plugins_dir 等）
 │   └── __init__.py
 ├── web/                    # Vue 3 前端
 │   ├── index.html          # 入口 HTML
@@ -75,11 +77,12 @@ Qingci-Bot-CE/
 │       ├── router/         # 路由
 │       ├── composables/    # 组合式函数
 │       └── styles/         # 全局样式
-├── desktop/                # 桌面应用壳（main/splash/tray + 图标资源）
-├── plugins/                # 外部插件目录（运行时加载）
+├── desktop/                # 桌面应用壳（main/splash/tray/single_instance/relaunch + 图标资源）
+├── plugins/                # 外部插件目录（运行时加载；实例模式下为 instances/<name>/plugins）
 │   ├── _template/          # 插件模板（下划线前缀 = 非正式/模板，不参与加载）
 │   │   └── plugin.json     # 插件元数据模板
 │   └── hello/              # 示例插件
+├── instances/              # 实例注册表（运行时生成，启动必需；每个实例一个自包含目录，无全局模式）
 ├── migrations/             # Alembic 数据库迁移
 │   └── versions/           # 版本迁移脚本
 ├── tests/                  # pytest 测试

@@ -18,7 +18,7 @@
 - **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）
 - **增强能力**：AI 图片生成、轻量知识库（关键词 + LanceDB 向量检索，双模式）、会话摘要（历史裁剪）、Function Calling、MCP 服务器接入、定时任务调度器、LLM 用量统计
 - **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式），支持在线备份与消息 CSV 导出
-- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板）/ 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置
+- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置。侧边栏内置实例列表，可新建/删除/切换/重命名实例
 - **桌面应用**：PyWebView 套壳 + 系统托盘（关闭窗口自动驻留后台），开机自启；启动时显示即时加载画面，重型模块延迟导入，双击 exe 后无感知等待
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖；litellm 延迟导入，启动不加载重型依赖
 
@@ -79,7 +79,12 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 
 # 桌面应用
 .venv\Scripts\python main.py --desktop
+
+# 以指定实例启动（instances/<name>/ 自包含目录：config.yaml + data/ + plugins/）
+.venv\Scripts\python main.py --instance <name>
 ```
+
+启动必须绑定一个实例（无全局模式）：未指定 `--instance` 时自动选择默认实例（`default` 优先，其次名称排序第一个）；若实例数为 0 则自动创建 `default` 实例。每个实例是 `instances/<name>/` 下的自包含目录，侧边栏「实例」区块可新建/删除/切换实例；切换会以目标实例重启进程。
 
 启动后访问 `http://127.0.0.1:8080/ui` 进入管理界面。
 
@@ -187,7 +192,9 @@ LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不�
 | `--desktop` | 启动桌面应用 | - |
 | `--port` | API 端口 | 8080 |
 | `--host` | API 监听地址 | 127.0.0.1 |
-| `--config` | 配置文件路径 | config.yaml |
+| `--config` | 配置文件路径 | 实例内 `config.yaml` |
+| `--instance` | 启动到指定实例（`instances/<name>/` 自包含目录） | 默认实例 |
+| `--data-dir` | 指定可写数据根目录（DB/日志/插件数据等），用于多实例隔离；未指定时默认落在实例内 `data/` | `instances/<name>/data` |
 
 ## 管理命令
 
@@ -262,7 +269,7 @@ llm:
   model: gpt-4o-mini
   max_tokens: 2048                 # 单次回复最大 token
   temperature: 0.7
-  system_prompt: 你是一个友好的 QQ 机器人助手。
+  system_prompt: 你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。
   max_history: 20                  # 最大对话历史轮数（每轮 = user + assistant）
   max_context_tokens: 8192         # 上下文窗口 token 上限，超出自动裁剪历史
   timeout: 60                      # 单次 LLM 请求超时（秒）

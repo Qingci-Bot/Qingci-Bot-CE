@@ -50,6 +50,15 @@ const drawerUrl = computed(() => {
 const statusLabel = (s) => ({ loading: '加载中', loaded: '已加载', disabled: '已禁用', error: '错误', unloading: '卸载中' }[s] || s)
 const statusClass = (s) => ({ loaded: 'green', loading: 'yellow', disabled: 'gray', error: 'red', unloading: 'yellow' }[s] || 'gray')
 
+// 权限等级中文映射（含组合标签，如 "(SUPERUSER & PRIVATE)"）
+const permZh = { SUPERUSER: '超级管理员', ADMIN: '管理员', EVERYONE: '所有人', MEMBER: '群成员', PRIVATE: '私聊', GROUP: '群聊', CUSTOM: '自定义' }
+const permissionLabel = (p) => {
+  if (!p) return '-'
+  let s = String(p)
+  for (const [k, v] of Object.entries(permZh)) s = s.replaceAll(k, v)
+  return s
+}
+
 function openDrawer(plugin, page) {
   drawerPlugin.value = plugin
   drawerPage.value = page
@@ -486,6 +495,7 @@ function switchTab(tab) {
                 <th>命令</th>
                 <th>插件</th>
                 <th>事件</th>
+                <th>权限</th>
                 <th>优先级</th>
                 <th>状态</th>
                 <th>操作</th>
@@ -503,6 +513,9 @@ function switchTab(tab) {
                 </td>
                 <td>
                   <span class="tag tag-purple" style="font-size: 11px;">{{ cmd.event_type }}</span>
+                </td>
+                <td>
+                  <span class="tag tag-perm" style="font-size: 11px;">{{ permissionLabel(cmd.permission) }}</span>
                 </td>
                 <td>
                   <input

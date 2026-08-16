@@ -5,6 +5,28 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- 实例管理：侧边栏新增实例列表，支持新建/删除/切换/重命名实例
+- 实例=完全自包含目录（`instances/<name>/`，含 `config.yaml` + `plugins/` + `data/`），新增 `--instance <name>` 一次性决定 config/data_root/plugins/port 四个维度，可整体复制/迁移/备份
+- 新增实例管理 API：`GET/POST/DELETE /api/instances`、`PUT /api/instances/{name}`（重命名目录 + 更新元数据）、`POST /api/instances/{name}/start`（重启进程到目标实例）
+- 运行中实例也支持重命名：改名后自动重启到新名称（复用切换实例的 relaunch 机制），避免 Windows 文件锁阻止目录改名
+- `bot.paths` 新增 `plugins_dir()`/`set_plugins_dir()`：外部插件代码目录默认 `app_root()/plugins`，实例模式下指向实例内 `plugins/`
+- 命令权限等级显示：`Permission` 新增 `label` 属性，内置权限标注可读标签，组合（`&`/`|`/`~`）自动生成组合标签；`describe_permission()` 返回可读标签；命令管理接口追加 `permission` 字段，Web「命令管理」表格新增权限列并映射为中文（超级管理员/管理员/所有人等）
+- `on_message` 新增 `description` 参数（与 `on_command`/`on_startswith`/`on_keyword` 对齐），存入 `meta.description` 供 `/help` 与命令管理展示
+
+### Changed
+- 移除全局模式：启动必须绑定一个实例（无实例时自动创建 `default`，未指定 `--instance` 时自动启动到默认实例）
+- 外部插件目录、在线安装、热重载、插件元数据发现统一改用 `plugins_dir()`，不再硬编码 `app_root()/plugins`
+- 端口自动分配从 8080 起：首个实例占用 8080，后续实例依次递增
+- 构建脚本 `build.ps1` 不再生成根级 `config.yaml`/`data\`：配置/插件/数据均在实例自包含目录内，产物随实例目录分发
+- 优化实例管理区块样式：改用全局 CSS 变量统一配色，增强「新建/重命名/删除/切换」按钮对比度与交互（hover 高亮、当前实例琥珀高亮）
+
+### Fixed
+- 修复"切换实例/重启"实际从未生效：旧实现用 `os._exit` 终止进程，会一并杀死等待重启的后台线程，导致新进程从未被拉起。改为派发独立分离的助手进程（`desktop/relaunch.py`）等待旧进程退出后再拉起目标实例
+- 修复根级 `config.yaml` 残留/兜底生成：API 鉴权与配置接口在未显式指定 `--config` 时改用 `bot.instances.default_config_path()`（默认实例的 `config.yaml`），不再回退到 `app_root()/config.yaml`，保证配置始终落在实例自包含目录内
+
 ## [1.5.0] - 2026-08-16
 
 ### Added

@@ -23,11 +23,17 @@ logger = logging.getLogger("qingci-bot.permission")
 class Permission:
     """权限对象，支持 & | ~ 组合"""
 
-    def __init__(self, checker: Callable | None = None):
+    def __init__(self, checker: Callable | None = None, label: str = ""):
         # checker: async (bot, event, ctx) -> bool
         self._checkers: list[Callable] = []
+        self._label = label
         if checker is not None:
             self._checkers.append(checker)
+
+    @property
+    def label(self) -> str:
+        """权限的可读标签（供命令管理/帮助等展示权限等级）"""
+        return self._label
 
     async def check(self, bot, event: dict, ctx: MessageContext) -> bool:
         """检查权限：所有 checker 都通过才返回 True（AND 逻辑）"""
@@ -47,6 +53,7 @@ class Permission:
         """AND 组合：两者都满足"""
         perm = Permission()
         perm._checkers = self._checkers + other._checkers
+        perm._label = f"({self._label} & {other._label})"
         return perm
 
     def __or__(self, other: "Permission") -> "Permission":
@@ -65,7 +72,9 @@ class Permission:
             except Exception:
                 return False
 
-        return Permission(combined_check)
+        perm = Permission(combined_check)
+        perm._label = f"({self._label} | {other._label})"
+        return perm
 
     def __invert__(self) -> "Permission":
         """NOT 组合：取反"""
@@ -82,12 +91,13 @@ class Permission:
             return False  # 原本全通过，取反后不通过
 
         perm._checkers = [_not_checker]
+        perm._label = f"~{self._label}"
         return perm
 
 
 # ============ 内置权限 ============
 
-EVERYONE = Permission(lambda bot, event, ctx: True)
+EVERYONE = Permission(lambda bot, event, ctx: True, label="EVERYONE")
 """所有人"""
 
 
@@ -98,7 +108,7 @@ async def _is_superuser(bot, event, ctx):
     return ctx.user_id == getattr(cfg, "super_admin", None)
 
 
-SUPERUSER = Permission(_is_superuser)
+SUPERUSER = Permission(_is_superuser, label="SUPERUSER")
 """超级管理员（唯一，配置中的 super_admin）"""
 
 
@@ -113,7 +123,7 @@ async def _is_admin(bot, event, ctx):
     return uid in (cfg.admin_users or [])
 
 
-ADMIN = Permission(_is_admin)
+ADMIN = Permission(_is_admin, label="ADMIN")
 """普通管理员（配置中的 admin_users，多个；超级管理员自动包含在内）"""
 
 
@@ -125,20 +135,20 @@ def _is_group(bot, event, ctx):
     return ctx.message_type == "group"
 
 
-PRIVATE = Permission(_is_private)
+PRIVATE = Permission(_is_private, label="PRIVATE")
 """私聊消息"""
 
-GROUP = Permission(_is_group)
+GROUP = Permission(_is_group, label="GROUP")
 """群聊消息"""
 
-MEMBER = Permission(lambda bot, event, ctx: True)
+MEMBER = Permission(lambda bot, event, ctx: True, label="MEMBER")
 """普通群员（与 EVERYONE 等价但独立实例）"""
 
 
 def USER(user_ids: int | list[int]) -> Permission:
     """指定用户可用"""
     ids = [user_ids] if isinstance(user_ids, int) else list(user_ids)
-    return Permission(lambda bot, event, ctx: ctx.user_id in ids)
+    return Permission(lambda bot, event, ctx: ctx.user_id in ids, label=f"USER({ids})")
 
 
 def GROUP_MEMBER(group_ids: int | list[int]) -> Permission:
@@ -147,4 +157,12 @@ def GROUP_MEMBER(group_ids: int | list[int]) -> Permission:
     参数为群号列表；私聊消息一律不匹配。
     """
     ids = [group_ids] if isinstance(group_ids, int) else list(group_ids)
-    return Permission(lambda bot, event, ctx: ctx.message_type == "group" and ctx.group_id in ids)
+    return Permission(
+        lambda bot, event, ctx: ctx.message_type == "group" and ctx.group_id in ids,
+        label=f"GROUP_MEMBER({ids})",
+    )
+
+
+def describe_permission(perm: Permission) -> str:
+    """返回权限的可读标签；未标注的自定义权限返回 CUSTOM"""
+    return perm.label if perm and perm.label else "CUSTOM"

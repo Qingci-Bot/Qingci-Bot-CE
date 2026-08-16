@@ -2,8 +2,8 @@
 # Usage: .\build.ps1
 # Output: dist\qingci-bot-ce\qingci-bot-ce.exe
 #
-# config.yaml and data\ inside the output folder are treated as user data:
-# they are stashed before the build and restored afterwards, never overwritten.
+# 自 v1.6 起配置/插件/数据已收敛到 instances/<name>/ 自包含目录，
+# 构建产物不再生成根级 config.yaml 或 data\（用户数据按实例隔离，随实例目录分发）。
 
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
@@ -12,31 +12,18 @@ Set-Location $Root
 $Python  = Join-Path $Root ".venv\Scripts\python.exe"
 $DistDir = Join-Path $Root "dist"
 $AppDir  = Join-Path $DistDir "qingci-bot-ce"
-$Stash   = Join-Path $DistDir ".user-stash"
 
 if (-not (Test-Path $Python)) {
     throw "python not found: $Python (create .venv and install dependencies first)"
 }
 
-# ---------- before build: stash existing user data ----------
-if (Test-Path (Join-Path $AppDir "config.yaml")) {
-    New-Item -ItemType Directory -Force -Path $Stash | Out-Null
-    Copy-Item (Join-Path $AppDir "config.yaml") (Join-Path $Stash "config.yaml") -Force
-    Write-Host "stashed existing config.yaml (will restore after build)"
-}
-if (Test-Path (Join-Path $AppDir "data")) {
-    New-Item -ItemType Directory -Force -Path $Stash | Out-Null
-    Copy-Item -Recurse -Force (Join-Path $AppDir "data") (Join-Path $Stash "data")
-    Write-Host "stashed existing data\ folder (will restore after build)"
-}
-
-# ---------- [1/4] PyInstaller build ----------
-Write-Host "==> [1/4] PyInstaller build (first run takes 3-10 min)..." -ForegroundColor Cyan
+# ---------- [1/3] PyInstaller build ----------
+Write-Host "==> [1/3] PyInstaller build (first run takes 3-10 min)..." -ForegroundColor Cyan
 & $Python -m PyInstaller --noconfirm --clean qingci-bot-ce.spec
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed with exit code $LASTEXITCODE" }
 
-# ---------- [2/4] copy Web UI ----------
-Write-Host "==> [2/4] copying Web UI (web\dist)..." -ForegroundColor Cyan
+# ---------- [2/3] copy Web UI ----------
+Write-Host "==> [2/3] copying Web UI (web\dist)..." -ForegroundColor Cyan
 $WebSrc = Join-Path $Root "web\dist"
 if (Test-Path (Join-Path $WebSrc "index.html")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $AppDir "web") | Out-Null
@@ -46,34 +33,10 @@ if (Test-Path (Join-Path $WebSrc "index.html")) {
     Write-Warning "    web\dist\index.html not found; run 'npm run build' in web\ first, /ui will be unavailable"
 }
 
-# ---------- [3/4] config.yaml (keep if exists) ----------
-Write-Host "==> [3/4] preparing config.yaml..." -ForegroundColor Cyan
-$TargetConfig = Join-Path $AppDir "config.yaml"
-$StashConfig  = Join-Path $Stash "config.yaml"
-if (Test-Path $StashConfig) {
-    Copy-Item $StashConfig $TargetConfig -Force
-    Write-Host "    restored user config.yaml"
-} else {
-    Copy-Item (Join-Path $Root "config.example.yaml") $TargetConfig
-    Write-Host "    copied config.example.yaml as config.yaml template"
-}
-
-# ---------- [4/4] data\ folder (keep if exists) ----------
-Write-Host "==> [4/4] preparing data\ folder..." -ForegroundColor Cyan
-$DataDir   = Join-Path $AppDir "data"
-$StashData = Join-Path $Stash "data"
-if (Test-Path $StashData) {
-    Copy-Item -Recurse -Force $StashData $DataDir
-    Write-Host "    restored user data\ folder"
-} else {
-    New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
-    New-Item -ItemType File -Force -Path (Join-Path $DataDir "sensitive_words.txt") | Out-Null
-    Write-Host "    created data\ folder (with empty sensitive_words.txt)"
-}
-
-# cleanup stash
-if (Test-Path $Stash) {
-    Remove-Item -Recurse -Force $Stash
+# ---------- [3/3] ensure output folder exists ----------
+Write-Host "==> [3/3] finished output folder..." -ForegroundColor Cyan
+if (-not (Test-Path $AppDir)) {
+    throw "output folder missing: $AppDir"
 }
 
 Write-Host ""
@@ -83,4 +46,4 @@ Write-Host "  .\dist\qingci-bot-ce\qingci-bot-ce.exe                # Bot + API"
 Write-Host "  .\dist\qingci-bot-ce\qingci-bot-ce.exe --no-bot       # API/Web UI only"
 Write-Host "  .\dist\qingci-bot-ce\qingci-bot-ce.exe --port 8080    # custom port"
 Write-Host "Then open http://127.0.0.1:8080/ui/"
-Write-Host "Note: keep config.yaml and data\ next to the exe; do not move the exe alone."
+Write-Host "Note: config/plugins/data live inside instances\<name>\; first launch auto-creates the default instance."

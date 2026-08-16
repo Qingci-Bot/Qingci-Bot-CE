@@ -130,6 +130,7 @@ export const useAppStore = defineStore('app', () => {
   const loading = ref(false)
   const error = ref('')
   const configLoaded = ref(false)
+  const instances = ref([])
 
   const statusText = computed(() => {
     if (!botRunning.value) return '未启动'
@@ -278,12 +279,54 @@ export const useAppStore = defineStore('app', () => {
     if (logs.value.length > 200) logs.value.pop()
   }
 
+  // ---- 实例管理 ----
+
+  async function fetchInstances() {
+    try {
+      instances.value = await apiFetch('/api/instances') || []
+      error.value = ''
+    } catch (e) {
+      console.warn('fetchInstances failed:', e.message)
+    }
+  }
+
+  async function createInstance(payload) {
+    const inst = await apiFetch('/api/instances', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    })
+    await fetchInstances()
+    return inst
+  }
+
+  async function deleteInstance(name) {
+    await apiFetch(`/api/instances/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    await fetchInstances()
+  }
+
+  async function renameInstance(name, newName) {
+    const inst = await apiFetch(`/api/instances/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ new_name: newName }),
+    })
+    await fetchInstances()
+    return inst
+  }
+
+  function switchInstance(name) {
+    // 触发后端重启进程到目标实例；当前连接将断开，页面随之刷新
+    apiFetch(`/api/instances/${encodeURIComponent(name)}/start`, { method: 'POST' }).catch(() => {})
+  }
+
   return {
     botRunning, botConnected, plugins, config, llmPresets, logs, loading, error,
-    configLoaded,
+    configLoaded, instances,
     statusText, statusColor,
     fetchStatus, fetchConfig, fetchLLMPresets, startBot, stopBot, restartBot,
     saveConfig, testLLM, fetchLLMModels, fetchLogs, fetchMessageCount, addLog,
+    fetchInstances, createInstance, deleteInstance, renameInstance, switchInstance,
     apiFetch, getApiKey, setApiKey,
   }
 })

@@ -10,6 +10,7 @@ dist/
 build/
 data/
 *.db
+instances/
 node_modules/
 web/dist/
 .venv/

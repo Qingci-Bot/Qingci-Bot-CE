@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from api.audit import record_audit
 from api.auth import require_auth
 from bot.core.bot import get_bot as _get_bot
+from bot.plugin.permission import describe_permission
 
 logger = logging.getLogger("qingci-bot.api.command")
 
@@ -55,6 +56,7 @@ async def list_commands():
                 "disabled": m.disabled,
                 "event_type": m.event_type,
                 "description": m.meta.get("description", ""),
+                "permission": describe_permission(m.permission),
             }
             commands.setdefault(cmd, []).append(entry)
 

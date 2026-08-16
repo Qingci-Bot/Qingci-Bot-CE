@@ -228,7 +228,7 @@ async def stats(
 
 ### 插件数据目录（data_dir）
 
-每个插件拥有专属数据目录 `app_root()/data/plugins/<name>/`，用于持久化运行时数据（缓存、导出文件等）。目录自动创建，卸载插件不删除。
+每个插件拥有专属数据目录 `data_root()/plugins/<name>/`（默认 `app_root()/data/plugins/<name>/`；实例模式下为 `instances/<name>/data/plugins/<name>/`），用于持久化运行时数据（缓存、导出文件等）。目录自动创建，卸载插件不删除。
 
 ```python
 async def on_load(self):
@@ -1096,10 +1096,10 @@ self.bot.register_post_hook(post_hook)
 
 **方式一：外部目录自动加载（推荐）**
 
-将插件包（目录）放入项目根目录的 `plugins/` 文件夹中，Bot 启动时自动扫描加载。无需手动操作，源码运行和 exe 打包均支持。
+将插件包（目录）放入**当前实例的插件目录** `instances/<name>/plugins/` 中，Bot 启动时自动扫描加载（源码运行时默认 `app_root()/plugins`，实例模式下自动指向实例内 `plugins/`；`plugins_dir()` 可查询当前位置）。无需手动操作，源码运行和 exe 打包均支持。
 
 ```
-plugins/
+instances/<name>/plugins/
 ├── __init__.py        # 包标记（自动创建）
 ├── _template/         # 完整模板（以 _ 开头，不会被加载）
 │   ├── __init__.py
@@ -1161,6 +1161,10 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin")
 
 插件管理页 →「命令管理」Tab 列出所有已注册命令。冲突命令行红色高亮 + ⚠ 标记，一目了然。
 
+**权限等级显示：**
+
+「命令管理」表格新增权限列，展示每条命令对应的权限等级（如「超级管理员」「管理员」「所有人」等）。`Permission` 的 `label` 为英文标识（`SUPERUSER`/`ADMIN`/`EVERYONE` 等），组合权限自动生成组合标签（如 `(SUPERUSER & PRIVATE)`），未标注的自定义权限经 `describe_permission()` 返回 `CUSTOM`；Web 表格将英文标识映射为中文（超级管理员/管理员/所有人/自定义等）。
+
 **禁用单条命令：**
 
 点击「禁用」按钮，该命令不再参与调度，但插件其余功能不受影响。相当于在不卸载插件的前提下关闭某个命令。
@@ -1173,7 +1177,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin")
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/command/conflicts` | 列出所有命令及冲突信息 |
+| GET | `/api/command/conflicts` | 列出所有命令及冲突信息（含 `permission` 权限等级） |
 | PUT | `/api/command/{owner}/{command}` | 更新命令状态（`disabled` / `priority`） |
 
 ### 注意事项
@@ -1314,11 +1318,7 @@ cd web; npm install; npm run build; cd ..
 .\build.ps1
 ```
 
-> `config.yaml` 已被 `.gitignore` 忽略（避免密钥入库）。新克隆的仓库中没有该文件，打包前需先从 `config.example.yaml` 复制一份并填入配置：
->
-> ```powershell
-> Copy-Item config.example.yaml config.yaml
-> ```
+> `instances/` 目录已被 `.gitignore` 忽略（其中的 `config.yaml` 可能含密钥）。新克隆的仓库中没有该目录，首次启动会自动创建 `default` 实例并生成其 `config.yaml`；如需预先配置，可参考 `config.example.yaml` 在 `instances/default/config.yaml` 中填写。
 
 产物位于 `dist\qingci-bot\`：
 
@@ -1327,9 +1327,10 @@ dist\qingci-bot\
 ├── qingci-bot.exe        # 主程序（带控制台，日志直接可见）
 ├── _internal\            # Python 运行时与依赖（勿动）
 ├── web\dist\             # Web UI 静态资源（build.ps1 复制）
-├── config.yaml           # 配置文件（build.ps1 从项目根复制/暂存还原）
-└── data\                 # SQLite 数据库 / 备份 / 敏感词库
+└── instances\            # 实例目录（首次启动自动创建 default 实例，含 config.yaml/plugins/data）
 ```
+
+> 自 v1.6 起配置/插件/数据已收敛到 `instances\<name>\` 自包含目录，构建产物不再生成根级 `config.yaml` 或 `data\`。用户数据（配置、插件、数据库、日志）均按实例隔离，随实例目录一起分发。
 
 ### 运行
 
@@ -1341,12 +1342,12 @@ dist\qingci-bot\
 
 启动后访问 `http://127.0.0.1:8080/ui/`。
 
-> **启动性能**：litellm 采用延迟导入，启动阶段不会加载该重型依赖（节省约 3.5 秒），仅首次真正调用 LLM 时一次性导入；首次运行 `config.yaml` 缺失时自动生成默认配置，无需手工准备。
+> **启动性能**：litellm 采用延迟导入，启动阶段不会加载该重型依赖（节省约 3.5 秒），仅首次真正调用 LLM 时一次性导入；首次运行自动创建 `default` 实例并生成其 `config.yaml`，无需手工准备。
 
 ### 注意事项
 
-- `config.yaml` 与 `data\` 按 **exe 所在目录** 相对定位：分发时整个 `dist\qingci-bot\` 目录一起拷贝，勿单独移动 exe。
-- 首次运行若缺少数据库会自动建表（SQLModel create_all）；`config.yaml` 缺失时会自动生成默认配置。
-- 重新执行 `build.ps1` 不会覆盖产物目录中已有的 `config.yaml` 与 `data\`（脚本会先暂存后还原）。
+- 实例目录 `instances\` 按 **exe 所在目录** 相对定位（`app_root`）：分发时整个 `dist\qingci-bot\` 目录一起拷贝，勿单独移动 exe。
+- 首次运行自动创建 `instances\default\` 实例并生成默认 `config.yaml`；数据库自动建表（SQLModel create_all）。
+- 重新执行 `build.ps1` 不会覆盖 `instances\` 中已有的实例配置与数据（用户数据始终保留在实例目录内）。
 - `--desktop` 桌面模式依赖系统 WebView2 运行时（pywebview EdgeChromium 后端），未安装的系统可能无法打开窗口。
 - 如需无控制台窗口模式，将 `qingci-bot-ce.spec` 中 `console=True` 改为 `False` 后重新构建。

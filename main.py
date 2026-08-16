@@ -46,16 +46,27 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Qingci-Bot CE")
     parser.add_argument("--no-bot", action="store_true", help="仅启动 API 服务")
     parser.add_argument("--desktop", action="store_true", help="启动桌面应用")
-    parser.add_argument("--port", type=int, default=8080, help="API 端口")
+    parser.add_argument(
+        "--port", type=int, default=None, help="API 端口（默认 8080；实例模式下取实例元数据端口）"
+    )
     parser.add_argument("--host", type=str, default="127.0.0.1", help="API 监听地址")
     parser.add_argument(
         "--data-dir",
         type=str,
         default=None,
-        help="可写数据目录（DB/插件数据/日志等，多实例隔离；默认 <应用根>/data）",
+        help="可写数据目录（DB/插件数据/日志等，多实例隔离；默认实例内 data/）",
     )
     parser.add_argument(
-        "--config", type=str, default=str(app_root() / "config.yaml"), help="配置文件路径"
+        "--instance",
+        type=str,
+        default=None,
+        help="实例名（instances/<name>）；指定后 config.yaml/data/plugins 均取自该实例目录",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="配置文件路径（默认 <应用根>/config.yaml；指定 --instance 时默认取实例内 config.yaml）",
     )
     args = parser.parse_args()
     # UX：frozen windowed 下双击（无任何参数）没有控制台也没有窗口，
@@ -129,13 +140,52 @@ async def run_bot_and_api(args):
 
 
 def main():
+    # 跨进程重启助手模式：桌面/CLI 切换实例、运行中实例改名时，由分离的助手
+    # 进程等待旧进程退出后重新拉起。必须在任何重型逻辑（实例解析/单实例保护/
+    # 启动画面）之前处理，命中即退出本进程。
+    from desktop.relaunch import run_helper_if_requested
+
+    if run_helper_if_requested():
+        return
+
     args = parse_args()
 
-    # 解析实例数据根（--data-dir，默认 <应用根>/data），先于任何数据访问（DB/日志/插件数据）
-    from bot.paths import set_data_root
+    from bot.paths import set_data_root, set_desktop_flag, set_plugins_dir
 
+    set_desktop_flag(bool(args.desktop) or (getattr(sys, "frozen", False) and len(sys.argv) <= 1))
+
+    # 启动必须绑定实例（无全局模式）：--instance 显式指定，否则自动选择默认实例
+    # （default 优先，其次名称排序第一个）；实例数为 0 时自动创建 default，确保至少一个。
+    from bot.instances import ensure_default_instance, get_instance, instance_path
+
+    if args.instance is None:
+        inst = ensure_default_instance()
+        args.instance = inst.name
+        logger.info("未指定实例，自动启动到默认实例 %r", inst.name)
+    else:
+        inst = get_instance(args.instance)
+        if inst is None:
+            logger.error(f"实例不存在: {args.instance}")
+            sys.exit(1)
+
+    # 实例目录一次性决定 config/data_root/plugins/port 四个维度（完全自包含目录）。
+    # 显式 --config/--data-dir/--port 优先级更高，可覆盖实例推导值。
+    inst_dir = instance_path(args.instance)
+    if args.data_dir is None:
+        args.data_dir = str(inst_dir / "data")
+    if args.config is None:
+        args.config = str(inst_dir / "config.yaml")
+    if args.port is None:
+        args.port = inst.port
+    set_plugins_dir(inst_dir / "plugins")
+
+    # 解析实例数据根，先于任何数据访问（DB/日志/插件数据）
     data_dir = Path(args.data_dir).resolve() if args.data_dir else app_root() / "data"
     set_data_root(data_dir)
+    if args.config is None:
+        args.config = str(app_root() / "config.yaml")
+    if args.port is None:
+        args.port = 8080
 
     # 单实例保护：按数据根派生互斥名——同一实例重复双击聚焦已有窗口；
     # 不同实例（不同 --data-dir）互不阻塞，可多开。必须在 splash 之前检查，避免闪现启动画面。

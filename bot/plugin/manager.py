@@ -366,9 +366,9 @@ class PluginManager:
             成功加载的插件数量
         """
         if directory is None:
-            from ..paths import app_root
+            from ..paths import plugins_dir
 
-            directory = app_root() / "plugins"
+            directory = plugins_dir()
 
         root_str = str(directory.parent)
         if root_str not in sys.path:
@@ -842,12 +842,12 @@ class PluginManager:
         Returns:
             是否成功安装并加载
         """
-        from ..paths import app_root
+        from ..paths import plugins_dir
 
-        plugins_dir = app_root() / "plugins"
-        plugins_dir.mkdir(parents=True, exist_ok=True)
+        plugin_dir = plugins_dir()
+        plugin_dir.mkdir(parents=True, exist_ok=True)
 
-        target_name, target_dir = await self._fetch_plugin(source, name, plugins_dir)
+        target_name, target_dir = await self._fetch_plugin(source, name, plugin_dir)
         if target_dir is None:
             return False
 

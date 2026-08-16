@@ -32,15 +32,17 @@
 
 ```
 Qingci-Bot-CE/
-├── main.py                    # 统一入口
+├── main.py                    # 统一入口（实例启动 / 单实例保护 / 跨进程重启）
 ├── pyproject.toml
 ├── alembic.ini                # Alembic 迁移配置
-├── config.example.yaml        # 配置模板（脱敏，复制为 config.yaml）
-├── config.yaml                # 配置文件（首次运行自动生成，已被 .gitignore 忽略）
+├── config.example.yaml        # 配置模板（脱敏；实例配置在 instances/<name>/config.yaml）
 ├── build.ps1                  # PyInstaller 打包脚本
 ├── qingci-bot-ce.spec         # PyInstaller 打包配置
 ├── bot/
 │   ├── config.py              # 配置管理（Pydantic 模型）
+│   ├── instances.py           # 实例管理（instances/<name>/ 自包含目录，含 config/plugins/data）
+│   ├── paths.py               # 路径解析（app_root / data_root / plugins_dir）
+│   ├── i18n.py                # 国际化翻译器
 │   ├── core/
 │   │   ├── bot.py             # Bot 主类（生命周期、事件调度、全局钩子）
 │   │   ├── connection.py      # OneBot 连接（aiocqhttp 反向 WS）
@@ -75,7 +77,7 @@ Qingci-Bot-CE/
 │       ├── manager.py         # 插件管理器（热加载 + 模块级收集）
 │       ├── matcher.py         # Matcher + MatcherContext + 工厂函数（on_command 等）
 │       ├── rule.py            # 规则系统（startswith/command/subcommand/regex 等）
-│       ├── permission.py      # 权限系统（SUPERUSER/PRIVATE/GROUP 等）
+│       ├── permission.py      # 权限系统（SUPERUSER/ADMIN 等，含 label 与 describe_permission）
 │       ├── ratelimit.py       # RateLimiter 限流
 │       ├── llm_tool.py        # @llm_tool 插件级 LLM 工具声明
 │       ├── watcher.py         # 插件自动热重载监听
@@ -85,13 +87,15 @@ Qingci-Bot-CE/
 │           ├── help/          # /help 命令（按权限列出可用命令）
 │           ├── imagegen/      # AI 绘图（/image 命令）
 │           └── knowledge/     # 知识库管理（/kb 命令）
-├── plugins/                   # 外部插件目录（Bot 启动时自动扫描加载）
+├── plugins/                   # 外部插件目录（Bot 启动时自动扫描加载；实例模式下为 instances/<name>/plugins）
 │   ├── __init__.py
 │   ├── _template/             # 插件开发模板（以 _ 开头，不自动加载）
 │   │   ├── __init__.py
 │   │   └── plugin.json        # 插件元数据模板
 │   └── hello/                 # 最小示例插件
 │       └── __init__.py
+├── instances/                 # 实例注册表（运行时生成；每个实例一个自包含目录，无全局模式）
+│   └── <name>/                # config.yaml + plugins/ + data/（DB/日志/插件数据）
 ├── migrations/                # Alembic 迁移脚本
 │   ├── env.py                 # 异步迁移环境
 │   └── versions/              # 迁移版本
@@ -99,7 +103,7 @@ Qingci-Bot-CE/
 │   ├── auth.py                # API 鉴权
 │   ├── audit.py               # 审计日志（埋点 + 查询）
 │   ├── server.py              # FastAPI 应用
-│   └── routes/                # API 路由（bot/config/plugin/log/group/auth/backup）
+│   └── routes/                # API 路由（bot/config/plugin/log/group/auth/backup/command/instances）
 ├── web/                       # Vue 3 前端
 │   └── src/
 │       ├── views/             # 页面组件
@@ -108,9 +112,12 @@ Qingci-Bot-CE/
 │       └── styles/            # 全局样式
 ├── desktop/
 │   ├── main.py                # 桌面入口
+│   ├── splash.py              # 启动画面（即时加载，重型模块延迟导入）
 │   ├── tray.py                # 系统托盘
+│   ├── single_instance.py     # 单实例保护（Windows 命名互斥量，由数据根目录派生）
+│   ├── relaunch.py            # 跨进程重启助手（切换/重命名实例后重启）
 │   └── app-icon.ico           # 应用图标（exe 图标 + 托盘图标）
-└── data/
+└── data/                      # 可写数据根目录（实例模式下默认 instances/<name>/data；--data-dir 可覆盖）
     └── qingci-bot.db          # SQLite 数据库文件
 ```
 

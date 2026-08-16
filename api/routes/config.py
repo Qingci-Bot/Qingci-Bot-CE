@@ -41,10 +41,10 @@ def _get_config_manager() -> ConfigManager:
         return bot.config
     except RuntimeError:
         from api.auth import _config_path
-        from bot.config import DEFAULT_CONFIG_PATH
+        from bot.instances import default_config_path
 
         global _fallback_cfg, _fallback_path
-        path = _config_path or DEFAULT_CONFIG_PATH
+        path = _config_path or default_config_path()
         if _fallback_cfg is None or path != _fallback_path:
             _fallback_cfg = ConfigManager(path)
             _fallback_cfg.load()

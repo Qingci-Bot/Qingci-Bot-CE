@@ -10,8 +10,16 @@ import sys
 from pathlib import Path
 
 # 可写数据根目录的运行时覆盖（默认 app_root()/data）。
-# 通过 --data-dir 设置，实现多进程多实例下各实例数据（DB/插件数据/日志等）相互隔离。
+# 通过 --data-dir / --instance 设置，实现多进程多实例下各实例数据（DB/插件数据/日志等）相互隔离。
 _data_root: Path | None = None
+
+# 外部插件代码目录的运行时覆盖（默认 app_root()/plugins）。
+# 通过 --instance 设置，使实例拥有专属插件目录（完全自包含）。
+_plugins_root: Path | None = None
+
+# 当前进程是否运行桌面 UI（frozen windowed 下双击无参数时无法从 sys.argv 得知，
+# 故在 main() 显式记录，供"切换实例"重建启动命令时保留 --desktop）。
+_desktop: bool = False
 
 
 def app_root() -> Path:
@@ -32,3 +40,32 @@ def data_root() -> Path:
     if _data_root is not None:
         return _data_root
     return app_root() / "data"
+
+
+def set_plugins_dir(path: str | Path) -> None:
+    """设置外部插件代码目录（应尽早于任何插件加载前调用）"""
+    global _plugins_root
+    _plugins_root = Path(path).resolve()
+
+
+def plugins_dir() -> Path:
+    """返回外部插件代码目录（默认 app_root()/plugins）"""
+    if _plugins_root is not None:
+        return _plugins_root
+    return app_root() / "plugins"
+
+
+def instances_dir() -> Path:
+    """返回实例注册表根目录（默认 app_root()/instances，每个实例一个子目录）"""
+    return app_root() / "instances"
+
+
+def set_desktop_flag(value: bool) -> None:
+    """记录当前进程是否运行桌面 UI（供切换实例时重建启动命令）"""
+    global _desktop
+    _desktop = bool(value)
+
+
+def is_desktop() -> bool:
+    """当前进程是否运行桌面 UI"""
+    return _desktop

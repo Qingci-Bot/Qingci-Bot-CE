@@ -198,8 +198,8 @@ async def update_plugin_config(name: str, data: UpdatePluginConfigRequest, reque
 @router.get("/discover/metadata", dependencies=[Depends(require_auth)])
 async def discover_plugins_metadata():
     """无导入发现：扫描 plugins/ 目录中的 plugin.json 元数据"""
-    from bot.paths import app_root
+    from bot.paths import plugins_dir
 
     bot = _get_bot_instance()
-    directory = app_root() / "plugins"
+    directory = plugins_dir()
     return bot.plugin_manager.discover_metadata(directory)

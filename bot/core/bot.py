@@ -8,7 +8,7 @@ from typing import Any
 from ..config import ConfigManager
 from ..db import Database
 from ..llm import LLMManager, ToolRegistry, register_builtin_tools
-from ..paths import app_root, data_root
+from ..paths import data_root, plugins_dir
 from ..plugin import PluginManager, PluginStatus
 from ..plugin.ratelimit import RateLimiter
 from ..plugin.watcher import PluginWatcher
@@ -146,7 +146,7 @@ class QingciBot:
         logger.info("Qingci-Bot CE 启动中...")
         await self.db.connect()
         await self.plugin_manager.load_builtin(self)
-        # 加载外部插件目录（app_root/plugins/，exe 打包后同样生效）
+        # 加载外部插件目录（plugins_dir()：默认 app_root/plugins/，实例模式下为该实例 plugins/）
         await self.plugin_manager.load_external_dir(self)
         # 应用全局语言到插件 i18n
         self.plugin_manager.set_i18n_locale(self.config.config.lang)
@@ -184,7 +184,7 @@ class QingciBot:
                 self._plugin_watcher = PluginWatcher(
                     manager=self.plugin_manager,
                     bot=self,
-                    directory=app_root() / "plugins",
+                    directory=plugins_dir(),
                     interval=self.config.hot_reload.interval,
                 )
                 await self._plugin_watcher.start()

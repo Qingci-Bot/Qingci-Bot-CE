@@ -435,6 +435,7 @@ body::before {
 .tag-accent { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(251, 191, 36, 0.2); }
 .tag-blue { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(56, 189, 248, 0.2); }
 .tag-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid rgba(192, 132, 252, 0.2); }
+.tag-perm { background: rgba(52, 211, 153, 0.1); color: var(--success); border: 1px solid rgba(52, 211, 153, 0.2); }
 .tag-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(248, 113, 113, 0.2); }
 
 /* 表格 */

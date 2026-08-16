@@ -43,9 +43,10 @@ def _get_configured_api_key() -> str | None:
         pass
     # 回退：直接读取配置文件（带 mtime 缓存）
     try:
-        from bot.config import DEFAULT_CONFIG_PATH, ConfigManager
+        from bot.config import ConfigManager
+        from bot.instances import default_config_path
 
-        path = _config_path or DEFAULT_CONFIG_PATH
+        path = _config_path or default_config_path()
         try:
             mtime = path.stat().st_mtime
         except OSError:

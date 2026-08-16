@@ -97,9 +97,11 @@ Qingci-Bot-CE/
 │   ├── testing/      # TestBot 测试沙箱
 │   ├── config.py     # 配置管理
 │   ├── i18n.py       # 国际化翻译器
-│   └── paths.py      # 路径解析（app_root 等）
+│   ├── instances.py  # 实例管理（instances/<name>/ 自包含目录）
+│   └── paths.py      # 路径解析（app_root / data_root / plugins_dir）
 ├── web/              # Vue 3 前端（src/ 下 views/stores/router/composables/styles）
-├── desktop/          # 桌面应用（窗口、托盘、启动页）
+├── desktop/          # 桌面应用（窗口、托盘、启动页、single_instance 单实例保护、relaunch 跨进程重启）
+├── instances/        # 实例注册表（运行时生成；每个实例一个自包含目录，无全局模式）
 ├── plugins/          # 外部插件目录（_template 为插件模板，hello 为示例）
 ├── migrations/       # Alembic 数据库迁移
 ├── tests/            # pytest 测试（plugin_pkg/ 为测试插件）

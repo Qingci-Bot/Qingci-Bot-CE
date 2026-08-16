@@ -150,6 +150,7 @@ def create_app() -> FastAPI:
         command_router,
         config_router,
         group_router,
+        instances_router,
         log_router,
         plugin_router,
     )
@@ -163,6 +164,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_router, prefix="/api/audit", tags=["Audit"])
     app.include_router(backup_router, prefix="/api/backup", tags=["Backup"])
     app.include_router(command_router, prefix="/api/command", tags=["Command"])
+    app.include_router(instances_router, prefix="/api/instances", tags=["Instance"])
 
     # 注册 WebSocket 广播 broker（register_broker 内部已去重，create_app 多次调用安全）
     register_broker(_broadcast_message_to_ws)

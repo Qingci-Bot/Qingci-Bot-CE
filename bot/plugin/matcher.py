@@ -150,6 +150,7 @@ def on_message(
     priority: int = 1,
     block: bool = True,
     temp: bool = False,
+    description: str = "",
 ) -> Callable:
     """注册消息匹配器（装饰器工厂）
 
@@ -160,6 +161,7 @@ def on_message(
 
     Args:
         temp: 一次性匹配器，匹配执行后自动从插件中移除（适合 "下一次对话" 类场景）
+        description: 功能描述（存入 meta.description，供 /help 与命令管理展示）
     """
 
     def decorator(func: Callable) -> Matcher:
@@ -172,6 +174,7 @@ def on_message(
             temp=temp,
             event_type="message",
         )
+        m.meta["description"] = description
         _collect_module_matcher(m)
         return m
 
