@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **会话阶梯（多轮交互）**：Dispatcher 支持会话阶梯续接——handler 通过 `ctx.session`（SDK `Session`，`bot/plugin/session.py` 转发）调用 `pause()` 挂起等待同会话下一条消息续接同一 handler（跳过命令前缀规则）、`finish()` 结束、`reject()` 拒绝继续等；Session 实例跨轮复用保留自定义状态；阶梯默认 300s 超时自动失效，插件卸载/禁用时自动清理；测试 `test_session_steps.py` 7 用例覆盖 pause/reject/finish/隔离/超时/清理
 - 支持基于独立插件 SDK（`qingci_plugin_sdk`）编写的外部插件：`PluginManager` 现可识别并注册 SDK 式 `PluginBase` 子类（此前仅识别 `bot.plugin.base.PluginBase`），加载时自动将 SDK 插件数据目录重定向到当前实例可写数据根（`data_root()/plugins/<name>/`），保持实例隔离
 - 打包：`qingci-bot-ce.spec` 通过 `collect_all('qingci_plugin_sdk')` 将独立插件 SDK 整体打入 exe，外部插件运行时 `import qingci_plugin_sdk` 不再 `ModuleNotFoundError`；`build.ps1` 在打包前显式安装 `Plugins-SDK`（相对路径依赖在 `pyproject.toml` 中无法解析，故在构建脚本中安装源码包）
 - 测试：新增 `sdk_plugin` 用例，验证 SDK 式插件可被管理器加载、`data_dir` 重定向到 bot 数据根

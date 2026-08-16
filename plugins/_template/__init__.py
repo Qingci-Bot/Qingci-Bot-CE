@@ -134,7 +134,18 @@ class TemplatePlugin(PluginBase):
             )(self._on_friend_request)
         )
 
-        # ─── 7. 一次性 Matcher（temp=True）───────────────────────
+        # ─── 7. 会话阶梯 Matcher（多轮交互）────────────────────
+        # handler 内用 ctx.session 控制多轮流程：pause 挂起等待下一条
+        # 同会话消息续接同一 handler，finish 结束，reject 拒绝继续等
+        self.matchers.append(
+            on_command(
+                "wizard",
+                description="多轮向导（会话阶梯示例）",
+                priority=1,
+            )(self._cmd_wizard)
+        )
+
+        # ─── 8. 一次性 Matcher（temp=True）───────────────────────
         # 执行一次后自动移除，适合"下一条消息"场景
         self.matchers.append(
             on_message(
@@ -145,7 +156,7 @@ class TemplatePlugin(PluginBase):
             )(self._cmd_next_message)
         )
 
-        # ─── 8. 定时任务（需 self.scheduler 可用）────────────────
+        # ─── 9. 定时任务（需 self.scheduler 可用）────────────────
         if self.scheduler is not None:
             # 每小时执行
             self.scheduler.add_job(
@@ -214,6 +225,19 @@ class TemplatePlugin(PluginBase):
         # 通过 self.llm 调用大模型
         # 通过 self.db 访问数据库
         return "管理员命令已执行"
+
+    async def _cmd_wizard(self, ctx: MatcherContext) -> None:
+        """多轮向导：演示会话阶梯（pause/finish + 跨轮状态）"""
+        step = getattr(ctx.session, "step", "ask_name")
+        if step == "ask_name":
+            ctx.session.step = "ask_age"  # 跨轮保留状态
+            await ctx.session.pause("请输入你的名字：")  # 挂起等待下一条消息
+        if step == "ask_age":
+            ctx.session.name = ctx.plain_text
+            ctx.session.step = "done"
+            await ctx.session.pause(f"你好 {ctx.session.name}，请输入你的年龄：")
+        ctx.session.age = ctx.plain_text
+        await ctx.session.finish(f"向导完成：{ctx.session.name}，{ctx.session.age}岁")
 
     async def _cmd_next_message(self, ctx: MatcherContext) -> str:
         """一次性匹配器：触发后自动移除"""

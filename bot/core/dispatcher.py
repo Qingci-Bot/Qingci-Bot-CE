@@ -9,6 +9,7 @@ block=True 的 Matcher 匹配后（无论 handler 返回什么）停止后续 Ma
 已注册 Matcher 的插件不再走旧式 on_message 调度。
 """
 
+import asyncio
 import logging
 import time
 from typing import TYPE_CHECKING, Any
@@ -17,10 +18,34 @@ from typing import TYPE_CHECKING, Any
 # 主项目与外部插件共用同一类型，避免协议层定义漂移。
 from qingci_plugin_sdk.context import MessageContext
 
+from ..plugin.matcher import MatcherContext
+from ..plugin.session import (
+    FinishException,
+    PauseException,
+    RejectException,
+    Session,
+)
+
 if TYPE_CHECKING:
     from .bot import QingciBot
 
 logger = logging.getLogger("qingci-bot.dispatcher")
+
+
+class _PendingStep:
+    """等待中的会话阶梯：续接同一 matcher 直到 finish
+
+    session 实例跨轮复用（保留 handler 挂载的自定义属性），
+    expire_at 为挂起超时（monotonic 时间戳）。
+    """
+
+    __slots__ = ("matcher", "plugin", "session", "expire_at")
+
+    def __init__(self, matcher, plugin, session: Session, ttl: float):
+        self.matcher = matcher
+        self.plugin = plugin
+        self.session = session
+        self.expire_at = time.monotonic() + ttl
 
 
 def _to_reply(result: Any, post_type: str) -> Any:
@@ -36,7 +61,11 @@ class MessageDispatcher:
     """消息分发器：解析事件、路由到插件"""
 
     def __init__(self):
-        pass
+        # 会话阶梯：会话键 -> 等待中的 _PendingStep
+        self._pending_steps: dict[str, _PendingStep] = {}
+        self._steps_lock = asyncio.Lock()
+        # 阶梯挂起默认超时（秒）：超时后下一条同会话消息不再续接
+        self.step_ttl: float = 300.0
 
     def dispatch(self, event: dict) -> MessageContext:
         """分发事件（仅解析，不执行 Matcher）
@@ -94,7 +123,12 @@ class MessageDispatcher:
         - blocked: 是否发生 block 语义（匹配成功且 block=True，或已有回复），
           此时应停止整个分发链（含旧式回调）。
         """
-        from ..plugin.matcher import MatcherContext
+        # 会话阶梯续接优先：若该会话存在挂起中的阶梯，跳过 rule/permission
+        # 直接续接 handler（用户已进入多轮流程，不应被命令前缀规则再次拦截）
+        if post_type == "message":
+            step_reply, step_blocked = await self._try_resume_step(bot, ctx)
+            if step_blocked:
+                return step_reply, True
 
         # 事件类型倒排索引：直接取该事件类型的 Matcher，避免对全部
         # Matcher 线性扫描过滤（消息事件不再遍历 notice/request Matcher）
@@ -114,6 +148,12 @@ class MessageDispatcher:
         for matcher in event_matchers:
             mctx = MatcherContext.from_message_context(ctx, bot=bot, plugin=None, matcher=matcher)
             mctx.session_state = session_state
+            # 注入会话阶梯对象：handler 可调用 ctx.session.pause/finish 等控制多轮流程
+            mctx.session = Session(
+                send_fn=lambda text: self._send_text(bot, ctx, text),
+                step_key=self._step_key(ctx),
+                step_ttl=self.step_ttl,
+            )
             if matcher.owner:
                 plugin = bot.plugin_manager.get(matcher.owner)
                 if plugin is None:
@@ -137,6 +177,18 @@ class MessageDispatcher:
                 # 执行 handler（含指标 + 中间件）
                 try:
                     result = await self._execute_handler(bot, matcher, mctx)
+                except PauseException:
+                    # 挂起：等待同会话下一条消息续接同一 handler
+                    await self._register_step(bot, matcher, mctx.plugin, mctx)
+                    return None, True
+                except FinishException:
+                    # 结束：清除阶梯，本消息已由 session 内部发送
+                    await self._clear_step(ctx)
+                    return None, True
+                except RejectException:
+                    # 拒绝：保留阶梯继续等待（重新计时）
+                    await self._register_step(bot, matcher, mctx.plugin, mctx)
+                    return None, True
                 finally:
                     # temp 一次性匹配器：无论 handler 成功/异常都移除，
                     # 避免失败后反复匹配刷错
@@ -157,6 +209,124 @@ class MessageDispatcher:
                 continue
 
         return None, False
+
+    # ---- 会话阶梯（多轮交互） ----
+
+    @staticmethod
+    def _step_key(ctx: MessageContext) -> str:
+        """构建会话阶梯键：private:{uid} / group:{gid}:{uid}（与 SessionStateManager 一致）"""
+        if ctx.message_type == "group" and ctx.group_id:
+            return f"group:{ctx.group_id}:{ctx.user_id}"
+        return f"private:{ctx.user_id}"
+
+    async def _try_resume_step(
+        self, bot: "QingciBot", ctx: MessageContext
+    ) -> tuple[Any, bool]:
+        """尝试续接挂起中的会话阶梯
+
+        命中则执行 handler（跳过 rule/permission），并按其控制流更新阶梯状态。
+
+        返回 (reply, blocked)：
+        - blocked=True 表示已消费事件（含阶梯结束返回的回复）
+        - blocked=False 表示无阶梯或已失效，走正常分发
+        """
+        key = self._step_key(ctx)
+        async with self._steps_lock:
+            step = self._pending_steps.get(key)
+            if step is None:
+                return None, False
+            if time.monotonic() > step.expire_at:
+                del self._pending_steps[key]
+                logger.debug(f"会话阶梯超时清除: {key}")
+                return None, False
+            # 插件失效（卸载/重载）则丢弃阶梯
+            plugin = bot.plugin_manager.get(step.matcher.owner) if step.matcher.owner else None
+            if plugin is None or plugin is not step.plugin:
+                del self._pending_steps[key]
+                return None, False
+            matcher = step.matcher
+            session = step.session
+            # 取出阶梯：handler 若再次 pause/reject 会重新注册，否则自然结束
+            del self._pending_steps[key]
+
+        mctx = MatcherContext.from_message_context(ctx, bot=bot, plugin=plugin, matcher=matcher)
+        mctx.session_state = await self._get_session_state(bot, ctx)
+        # 复用跨轮 Session 实例（保留 handler 挂载的自定义状态），仅重绑发送函数
+        session._rebind_send(lambda text: self._send_text(bot, ctx, text))
+        mctx.session = session
+
+        try:
+            result = await self._execute_handler(bot, matcher, mctx)
+        except PauseException:
+            await self._register_step(bot, matcher, plugin, mctx)
+            return None, True
+        except FinishException:
+            return None, True
+        except RejectException:
+            await self._register_step(bot, matcher, plugin, mctx)
+            return None, True
+        finally:
+            if matcher.temp:
+                bot.plugin_manager.remove_temp_matcher(matcher)
+
+        # handler 正常返回：回复由上层发送，阶梯已结束（未 pause/reject 则不再续接）
+        return result, True
+
+    async def _register_step(
+        self,
+        bot: "QingciBot",
+        matcher,
+        plugin,
+        mctx: "MatcherContext",
+    ) -> None:
+        """注册/刷新会话阶梯：等待同会话下一条消息续接同一 handler
+
+        mctx.session 若不存在则新建（首次 pause）；存在则复用跨轮实例。
+        """
+        key = self._step_key(mctx)
+        session = mctx.session
+        if session is None:
+            session = Session(
+                send_fn=lambda text: self._send_text(bot, mctx, text),
+                step_key=key,
+                step_ttl=self.step_ttl,
+            )
+            mctx.session = session
+        else:
+            session._rebind_send(lambda text: self._send_text(bot, mctx, text))
+        step = _PendingStep(matcher, plugin, session, ttl=self.step_ttl)
+        async with self._steps_lock:
+            self._pending_steps[key] = step
+        logger.debug(f"会话阶梯挂起: {key} -> matcher={matcher.owner}")
+
+    async def _clear_step(self, ctx: MessageContext) -> None:
+        """清除会话阶梯（finish / 插件停用等场景）"""
+        key = self._step_key(ctx)
+        async with self._steps_lock:
+            self._pending_steps.pop(key, None)
+
+    async def clear_steps_for(self, owner: str) -> None:
+        """清除指定插件名下所有挂起阶梯（插件卸载/重载时调用）"""
+        async with self._steps_lock:
+            stale = [k for k, s in self._pending_steps.items() if s.matcher.owner == owner]
+            for k in stale:
+                del self._pending_steps[k]
+
+    async def _get_session_state(self, bot: "QingciBot", ctx: MessageContext):
+        """预取会话状态（所有 Matcher 复用，避免逐 Matcher 重复查询）"""
+        if bot.session_state is None:
+            return None
+        return await bot.session_state.get_session(
+            user_id=ctx.user_id,
+            group_id=ctx.group_id,
+            message_type=ctx.message_type,
+        )
+
+    async def _send_text(self, bot: "QingciBot", ctx: MessageContext, text: str) -> None:
+        """Session 内部发送辅助：复用 bot 的回复通道"""
+        from .bot import QingciBot  # noqa: F401
+
+        await bot._send_reply(ctx, text)
 
     async def _run_preprocessors(self, bot: "QingciBot", matcher, mctx) -> Any:
         """执行 Matcher 运行前全局钩子（run_preprocessor）

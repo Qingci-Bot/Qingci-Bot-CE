@@ -28,6 +28,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 
+from qingci_plugin_sdk.context import MessageContext
+
 from ..core.di import DIContainer
 from ..core.dispatcher import MessageDispatcher
 from ..core.event_bus import EventBus
@@ -178,6 +180,16 @@ class TestBot:
             sys.path.insert(0, str(p))
 
     # ---- 事件发送 ----
+
+    # ---- 发送回复 ----
+
+    async def _send_reply(self, ctx: MessageContext, reply: str) -> None:
+        """发送回复（与真实 Bot 对齐；会话阶梯的 send/pause 文本走此通道）"""
+        text = str(reply)
+        if ctx.message_type == "group":
+            await self.connection.send_group_msg(ctx.group_id, text)
+        else:
+            await self.connection.send_private_msg(ctx.user_id, text)
 
     async def send(self, event: dict) -> str | None:
         """发送事件并返回 Bot 的回复（str），无回复返回 None

@@ -750,6 +750,13 @@ class PluginManager:
                     plugin.bot.tool_registry.unregister(full_name)
             # 清理 Web 管理页面注册
             self._remove_plugin_pages(name)
+            # 清理该插件名下挂起的会话阶梯（多轮交互等待态）
+            dispatcher = getattr(plugin.bot, "dispatcher", None) if plugin.bot else None
+            if dispatcher is not None:
+                try:
+                    await dispatcher.clear_steps_for(name)
+                except Exception:
+                    logger.exception(f"清理插件 {name} 会话阶梯异常")
             logger.info(f"插件已卸载: {name}")
         self._invalidate_matchers_cache()
 
@@ -772,6 +779,13 @@ class PluginManager:
             await plugin.on_disable()
         except Exception:
             logger.exception(f"插件 {name} on_disable 异常")
+        # 禁用时清除该插件名下挂起的会话阶梯（多轮交互等待态不再续接）
+        dispatcher = getattr(plugin.bot, "dispatcher", None) if plugin.bot else None
+        if dispatcher is not None:
+            try:
+                await dispatcher.clear_steps_for(name)
+            except Exception:
+                logger.exception(f"清理插件 {name} 会话阶梯异常")
         self._invalidate_matchers_cache()
         logger.info(f"插件已禁用: {name}")
 
