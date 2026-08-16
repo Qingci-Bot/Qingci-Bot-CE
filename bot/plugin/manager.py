@@ -17,6 +17,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from .base import PluginBase, PluginStatus
+from .deps import ensure_dependencies, ensure_in_sys_path
 from .matcher import Matcher, begin_module_collection, end_module_collection
 
 logger = logging.getLogger("qingci-bot.plugin.manager")
@@ -461,8 +462,19 @@ class PluginManager:
 
         # 加载
         count = 0
+        auto_install = bool(getattr(bot.config.bot, "auto_install_plugin_deps", True))
         for module_name in plugins_to_load:
             module_path = f"plugins.{module_name}"
+            # 目录型插件：加载前确保其第三方依赖已装到实例 deps 目录并注入 sys.path
+            plugin_dir = directory / module_name
+            if plugin_dir.is_dir() and (plugin_dir / "__init__.py").is_file():
+                try:
+                    if auto_install:
+                        await ensure_dependencies(plugin_dir)
+                    else:
+                        ensure_in_sys_path()
+                except Exception:
+                    logger.exception(f"确保插件 {module_name} 依赖失败")
             try:
                 ok = await self.load_external(module_path, bot)
                 if ok:
@@ -895,8 +907,9 @@ class PluginManager:
         if target_dir is None:
             return False
 
-        # 自动安装依赖（requirements.txt / plugin.json 的 requirements 字段）
-        await self._install_requirements(target_dir)
+        # 自动安装依赖（requirements.txt / plugin.json 的 requirements 字段，
+        # 装入实例隔离的 deps 目录而非全局环境）
+        await ensure_dependencies(target_dir)
 
         # 加载插件
         module_path = f"plugins.{target_name}"
@@ -977,26 +990,6 @@ class PluginManager:
         except OSError as e:
             logger.error(f"复制插件目录失败: {e}")
             return "", None
-
-    async def _install_requirements(self, plugin_dir: Path) -> None:
-        """安装插件的 Python 依赖（requirements.txt 或 plugin.json 的 requirements 字段）"""
-        req_file = plugin_dir / "requirements.txt"
-        reqs: list[str] = []
-        if req_file.is_file():
-            lines = req_file.read_text(encoding="utf-8").splitlines()
-            reqs = [
-                line.strip() for line in lines if line.strip() and not line.strip().startswith("#")
-            ]
-        else:
-            meta = _load_plugin_json(plugin_dir)
-            if meta and isinstance(meta.get("requirements"), list):
-                reqs = [str(r) for r in meta["requirements"]]
-        if not reqs:
-            return
-        logger.info(f"安装插件 {plugin_dir.name} 依赖: {reqs}")
-        ok = await self._run_subprocess([sys.executable, "-m", "pip", "install"] + reqs)
-        if not ok:
-            logger.warning(f"插件 {plugin_dir.name} 依赖安装失败，插件可能无法正常工作")
 
     @staticmethod
     async def _run_subprocess(cmd: list[str]) -> bool:

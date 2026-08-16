@@ -139,6 +139,10 @@ class BotConfig(BaseModel):
     user_blacklist: list[int] = []  # 用户黑名单
     log_json: bool = False  # 结构化 JSON 日志（默认关闭，使用普通文本日志）
     wizard_skipped: bool = False  # 是否跳过了首次配置引导
+    # 自动安装外部插件声明的第三方依赖到实例隔离的 deps 目录（data_root()/deps）。
+    # 关闭可避免插件 requirements.txt 触发任意包安装（供给链风险），
+    # 但依赖缺失时插件会加载失败。
+    auto_install_plugin_deps: bool = True
 
     # admin_set 缓存：super_admin + admin_users 的并集集合（权限检查 O(1) 成员判断）
     _admin_set_cache: frozenset[int] | None = None

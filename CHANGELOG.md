@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 支持基于独立插件 SDK（`qingci_plugin_sdk`）编写的外部插件：`PluginManager` 现可识别并注册 SDK 式 `PluginBase` 子类（此前仅识别 `bot.plugin.base.PluginBase`），加载时自动将 SDK 插件数据目录重定向到当前实例可写数据根（`data_root()/plugins/<name>/`），保持实例隔离
 - 打包：`qingci-bot-ce.spec` 通过 `collect_all('qingci_plugin_sdk')` 将独立插件 SDK 整体打入 exe，外部插件运行时 `import qingci_plugin_sdk` 不再 `ModuleNotFoundError`；`build.ps1` 在打包前显式安装 `Plugins-SDK`（相对路径依赖在 `pyproject.toml` 中无法解析，故在构建脚本中安装源码包）
 - 测试：新增 `sdk_plugin` 用例，验证 SDK 式插件可被管理器加载、`data_dir` 重定向到 bot 数据根
+- 插件依赖管理：目录型外部插件加载前自动把 `requirements.txt` 声明的第三方依赖安装到实例隔离目录（`data_root()/deps/`）并注入 `sys.path`，插件可 `import` 其专属依赖且不污染主程序环境；`bot.auto_install_plugin_deps` 可关闭以满足供给链安全（默认开启）
+- 打包：`qingci-bot-ce.spec` 内嵌 `pip`（`collect_all('pip')`），打包模式下自动安装插件依赖到实例 `deps` 目录；源码环境优先 `uv pip install --target`，缺失时回退嵌入 pip
 - 性能优化：`BotConfig.admin_set` 预编译集合（`super_admin` + `admin_users` 并集，O(1) 成员判断），权限判定由 O(n) 列表遍历降为 O(1)；`rule` 限流豁免与敏感词豁免同步受益
 - 性能优化：`PluginManager.all_matchers(post_type)` 事件类型倒排索引，事件分发按类型直接取 Matcher，不再对全部 Matcher 线性扫描过滤
 - 测试：新增 39 个用例（告警、限流、API 实例路由、登录路由、`session_scope`、RAG 增量索引等），全套件 193 个全部通过
