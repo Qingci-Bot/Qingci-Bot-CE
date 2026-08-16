@@ -65,6 +65,7 @@ npm run build    # 构建生产版本到 web/dist/
 plugins/my_plugin/          # 目录名 = 插件名（不能以 _ 或 . 开头）
 ├── __init__.py              # 必需：插件入口，含 PluginBase 子类
 ├── plugin.json              # 可选：元数据（替代类属性 name/version/author 等）
+├── requirements.txt         # 可选：Python 第三方依赖声明（见「插件第三方依赖」）
 ├── utils.py                 # 可选：插件内部模块
 └── web/                     # 可选：Web 管理页面静态文件
     ├── index.html           # 入口页面（register_page 自动加载）
@@ -87,6 +88,17 @@ Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，�
 - **旧式（兼容）**：重写 `on_message` 方法，返回回复文本
 
 两种方式可共存，Dispatcher 按 priority 优先调度 Matcher，无匹配时回退到旧式 `on_message`。
+
+### 两种插件形态（内置 vs 独立 SDK）
+
+插件可用两种方式编写，加载入口统一：
+
+| 形态 | 基类导入 | 适用场景 |
+|------|----------|----------|
+| 内置式 | `from bot.plugin.base import PluginBase` | 与主项目同仓库开发的插件 |
+| 独立 SDK 式（推荐） | `from qingci_plugin_sdk import PluginBase` | 独立工作区开发、可分发/版本化的插件 |
+
+SDK 式插件在 [Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) 工作区开发（SDK 已随 exe 打包，插件运行时无需另行安装），两类插件混用不受影响：`PluginManager` 自动识别 SDK 式 `PluginBase` 子类，并调用 `set_data_root()` 将数据目录重定向到当前实例（`data_root()/plugins/<name>/`），保持实例隔离。
 
 ### 插件基类
 
@@ -233,6 +245,38 @@ async def stats(
 async def on_load(self):
     # 写入持久化数据
     (self.data_dir / "cache.json").write_text('{"key": "value"}', encoding="utf-8")
+```
+
+### 插件第三方依赖
+
+插件可声明自己的 Python 第三方库依赖（随插件分发，不随 exe 打包）。在插件目录放置 `requirements.txt`，或在 `plugin.json` 中声明 `requirements` 字段：
+
+```json
+// plugin.json 也可声明
+{"name": "my_plugin", "requirements": ["httpx>=0.27", "jieba"]}
+```
+
+加载时 `PluginManager` 自动把依赖安装到**当前实例隔离**的依赖目录（`data_root()/deps/`，实例模式下为 `instances/<name>/data/deps/`），并把该目录注入 `sys.path`，插件可直接 `import` 其专属依赖，不污染主程序环境：
+
+```python
+# plugins/my_plugin/__init__.py
+import httpx  # requirements.txt 声明后可直接使用
+
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+```
+
+**依赖安装规则：**
+- 声明内容未变化时跳过安装（按内容哈希幂等），`requirements.txt` 变更才触发重装
+- 源码运行优先 `uv pip install --target`，无 uv 时回退 `python -m pip`；exe 打包版使用内嵌 pip
+- 安装失败仅记录警告，不阻止插件加载（插件缺依赖 import 时会报 `ModuleNotFoundError`）
+
+**安全开关：** 自动安装由 `config.yaml` 的 `bot.auto_install_plugin_deps` 控制（默认 `true`）。关闭后插件 `requirements.txt` 不再触发任何包安装（降低供给链风险），但依赖缺失时插件会加载失败：
+
+```yaml
+# config.yaml
+bot:
+  auto_install_plugin_deps: false
 ```
 
 ### 全局生命周期钩子
@@ -1147,7 +1191,7 @@ ok = await bot.plugin_manager.install(
 ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin")
 ```
 
-安装流程：拉取到 `plugins/<name>/` → 自动安装 `requirements.txt`（或 `plugin.json` 的 `requirements` 字段）声明的 Python 依赖 → 加载插件。来源支持 git 仓库、HTTP 指向 zip/tar 的归档、本地目录或归档文件。
+安装流程：拉取到 `plugins/<name>/` → 自动安装 `requirements.txt`（或 `plugin.json` 的 `requirements` 字段）声明的 Python 依赖到实例隔离的 `data_root()/deps/` 目录 → 加载插件。来源支持 git 仓库、HTTP 指向 zip/tar 的归档、本地目录或归档文件。
 
 ### 常用 OneBot API
 
