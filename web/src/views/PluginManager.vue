@@ -4,7 +4,7 @@ import { useAppStore } from '../stores/app'
 import { useToast } from '../composables/useToast'
 
 const store = useAppStore()
-const { toast, showToast } = useToast()
+const { showToast } = useToast()
 const modulePath = ref('')
 const loading = ref('')
 const activeCategory = ref('all')
@@ -436,7 +436,7 @@ function openHomepage(url) {
       </div>
     </div>
 
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">已加载插件</div>
         <div class="category-tabs">
@@ -474,7 +474,7 @@ function openHomepage(url) {
             </div>
             <!-- 指标面板 -->
             <div v-if="expandedMetrics === plugin.name && plugin._metrics" class="metrics-panel">
-              <div v-if="plugin._metrics.length === 0" class="empty-state" style="padding: 12px; font-size: 12px;">
+              <div v-if="plugin._metrics.length === 0" class="empty-state" style="padding: 12px;">
                 暂无指标数据
               </div>
               <table v-else class="metrics-table">
@@ -491,7 +491,7 @@ function openHomepage(url) {
                 <tbody>
                   <tr v-for="m in plugin._metrics" :key="m.handler">
                     <td>{{ m.handler }}</td>
-                    <td><span class="tag tag-accent" style="font-size: 10px;">{{ m.event_type }}</span></td>
+                    <td><span class="tag tag-accent">{{ m.event_type }}</span></td>
                     <td>{{ m.priority }}</td>
                     <td>{{ m.call_count }}</td>
                     <td>{{ m.avg_time_ms }}ms</td>
@@ -528,11 +528,6 @@ function openHomepage(url) {
           </div>
         </div>
       </div>
-      <transition name="toast">
-        <div v-if="toast.show" class="toast" :class="toast.type" style="margin-top: 16px;">
-          {{ toast.message }}
-        </div>
-      </transition>
     </div>
 
     <!-- 插件管理页面抽屉 -->
@@ -588,7 +583,7 @@ function openHomepage(url) {
                     </span>
                     <span v-if="field.description" class="config-desc">{{ field.description }}</span>
                   </label>
-                  <label v-if="field.type === 'boolean'" class="switch" style="width: 44px; height: 24px;">
+                  <label v-if="field.type === 'boolean'" class="switch">
                     <input type="checkbox" v-model="configValues[field.key]">
                     <span class="slider round"></span>
                   </label>
@@ -619,7 +614,7 @@ function openHomepage(url) {
       <div class="card fade-in">
         <div class="card-header">
           <div class="card-title">已注册命令</div>
-          <span class="text-muted" style="font-size: 12px;">共 {{ commands.length }} 条</span>
+          <span class="text-muted">共 {{ commands.length }} 条</span>
         </div>
         <div v-if="commands.length === 0" class="empty-state">
           <div class="icon">◇</div>
@@ -646,13 +641,13 @@ function openHomepage(url) {
                   <span v-if="cmd.has_conflict" class="conflict-badge" title="存在同名命令冲突">⚠</span>
                 </td>
                 <td>
-                  <span class="tag tag-accent" style="font-size: 11px;">{{ cmd.plugin }}</span>
+                  <span class="tag tag-accent">{{ cmd.plugin }}</span>
                 </td>
                 <td>
-                  <span class="tag tag-purple" style="font-size: 11px;">{{ cmd.event_type }}</span>
+                  <span class="tag tag-purple">{{ cmd.event_type }}</span>
                 </td>
                 <td>
-                  <span class="tag tag-perm" style="font-size: 11px;">{{ permissionLabel(cmd.permission) }}</span>
+                  <span class="tag tag-perm">{{ permissionLabel(cmd.permission) }}</span>
                 </td>
                 <td>
                   <input
@@ -683,11 +678,6 @@ function openHomepage(url) {
           </table>
         </div>
       </div>
-      <transition name="toast">
-        <div v-if="toast.show" class="toast" :class="toast.type" style="margin-top: 16px;">
-          {{ toast.message }}
-        </div>
-      </transition>
     </template>
 
     <!-- 插件市场 Tab -->
@@ -696,10 +686,10 @@ function openHomepage(url) {
         <div class="card-header">
           <div class="card-title">
             {{ marketInfo?.name || '插件市场' }}
-            <span class="text-muted" style="font-size: 12px; margin-left: 10px;">
+            <span class="text-muted" style="margin-left: 10px;">
               共 {{ marketStats.total }} 个插件 · 已装 {{ marketStats.installed }} · 可更新 {{ marketStats.updatable }}
             </span>
-            <span v-if="marketUpdatedText" class="text-muted" style="font-size: 12px; margin-left: 8px;">
+            <span v-if="marketUpdatedText" class="text-muted" style="margin-left: 8px;">
               索引更新于 {{ marketUpdatedText }}
             </span>
           </div>
@@ -748,29 +738,28 @@ function openHomepage(url) {
               <div class="name">
                 <span class="market-icon">{{ item.icon || '📦' }}</span>
                 {{ item.title || item.name }}
-                <span class="tag tag-purple" style="font-size: 10px;">{{ marketTypeLabel(item.type) }}</span>
-                <span v-for="t in item.tags" :key="t" class="tag tag-accent" style="font-size: 10px; margin-left: 4px;">{{ t }}</span>
+                <span class="tag tag-purple">{{ marketTypeLabel(item.type) }}</span>
+                <span v-for="t in item.tags" :key="t" class="tag tag-accent" style="margin-left: 4px;">{{ t }}</span>
               </div>
               <div class="desc">{{ item.description || '无描述' }}</div>
               <div v-if="item.requirements && item.requirements.length" class="market-meta-row">
-                <span v-for="r in item.requirements" :key="r" class="tag tag-blue" style="font-size: 10px;" title="依赖">⬡ {{ r }}</span>
+                <span v-for="r in item.requirements" :key="r" class="tag tag-blue" title="依赖">⬡ {{ r }}</span>
               </div>
               <div class="market-meta-row">
-                <span class="tag tag-blue" style="font-size: 11px;">{{ item.name }}</span>
-                <span class="tag tag-accent" style="font-size: 11px;">v{{ item.version }}</span>
-                <span v-if="item.author" class="text-muted" style="font-size: 11px;">{{ item.author }}</span>
-                <span v-if="item.updated_at" class="text-muted" style="font-size: 11px;">更新 {{ item.updated_at }}</span>
+                <span class="tag tag-blue">{{ item.name }}</span>
+                <span class="tag tag-accent">v{{ item.version }}</span>
+                <span v-if="item.author" class="text-muted">{{ item.author }}</span>
+                <span v-if="item.updated_at" class="text-muted">更新 {{ item.updated_at }}</span>
                 <a
                   v-if="item.homepage"
                   href="javascript:void(0)"
                   class="market-link"
-                  style="font-size: 11px;"
                   @click="openHomepage(item.homepage)"
                 >🔗 主页</a>
-                <span v-if="item.installed" class="status-badge green" style="font-size: 11px;">
+                <span v-if="item.installed" class="status-badge green">
                   已安装 v{{ item.installed_version }}
                 </span>
-                <span v-if="item.update_available" class="status-badge yellow" style="font-size: 11px;">
+                <span v-if="item.update_available" class="status-badge yellow">
                   可更新至 v{{ item.version }}
                 </span>
               </div>
@@ -778,7 +767,7 @@ function openHomepage(url) {
             <div class="action-bar">
               <button
                 v-if="item.update_available"
-                class="btn btn-warning btn-sm"
+                class="btn btn-primary btn-sm"
                 :disabled="marketAction === `update:${item.name}`"
                 @click="marketUpdate(item.name)"
               >
@@ -806,23 +795,49 @@ function openHomepage(url) {
             </div>
           </div>
         </div>
-        <transition name="toast">
-          <div v-if="toast.show" class="toast" :class="toast.type" style="margin-top: 16px;">
-            {{ toast.message }}
-          </div>
-        </transition>
       </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-/* 分类标签 */
+/* Tab 导航（下划线式）：主 Tab 与分类 Tab 统一视觉 */
+.main-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border-color);
+}
+.main-tab-btn,
+.category-tabs .tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.main-tab-btn:hover,
+.category-tabs .tab-btn:hover { color: var(--text-primary); }
+.main-tab-btn.active,
+.category-tabs .tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* 分类标签容器（下划线式，与主 Tab 同视觉） */
 .category-tabs {
   display: flex;
-  gap: 6px;
+  gap: 2px;
   flex-wrap: wrap;
+  border-bottom: 1px solid var(--border-color);
 }
+
+/* 市场标签筛选（胶囊式） */
 .tab-btn {
   padding: 4px 12px;
   border-radius: 20px;
@@ -882,71 +897,6 @@ function openHomepage(url) {
 }
 .metrics-table td { color: var(--text-secondary); }
 .text-danger { color: var(--danger) !important; }
-
-/* 状态标记 */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 500;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid var(--border-color);
-}
-.status-badge.green { border-color: rgba(52, 211, 153, 0.3); color: var(--success); }
-.status-badge.yellow { border-color: rgba(251, 191, 36, 0.3); color: var(--warning); }
-.status-badge.gray { border-color: rgba(148, 163, 184, 0.2); color: var(--text-muted); }
-.status-badge.red { border-color: rgba(248, 113, 113, 0.3); color: var(--danger); }
-
-/* 开关按钮 */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-  flex-shrink: 0;
-}
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(148, 163, 184, 0.2);
-  border: 1px solid var(--border-color);
-  transition: 0.25s;
-}
-.slider.round { border-radius: 24px; }
-.slider::before {
-  content: '';
-  position: absolute;
-  height: 16px; width: 16px;
-  left: 3px; bottom: 3px;
-  background: var(--text-secondary);
-  transition: 0.25s;
-  border-radius: 50%;
-}
-.switch input:checked + .slider {
-  background: var(--accent-bg);
-  border-color: rgba(251, 191, 36, 0.4);
-}
-.switch input:checked + .slider::before {
-  transform: translateX(20px);
-  background: var(--accent);
-}
-.switch input:disabled + .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.toast-enter-active, .toast-leave-active {
-  transition: all 0.3s ease;
-}
-.toast-enter-from, .toast-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
 
 /* 插件管理页面抽屉 */
 .drawer-overlay {
@@ -1094,31 +1044,6 @@ function openHomepage(url) {
   transform: translateX(100%);
 }
 
-/* 主 Tab 导航 */
-.main-tabs {
-  display: flex;
-  gap: 0;
-  margin-bottom: 22px;
-  border-bottom: 1px solid var(--border-color);
-}
-.main-tab-btn {
-  padding: 10px 24px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-.main-tab-btn:hover { color: var(--text-primary); }
-.main-tab-btn.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-
 /* 命令管理表格 */
 .command-table-wrap {
   overflow-x: auto;
@@ -1181,18 +1106,6 @@ function openHomepage(url) {
 }
 .status-on { background: rgba(52, 211, 153, 0.15); color: var(--success); }
 .status-off { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
-.btn-warning {
-  background: rgba(248, 113, 113, 0.15);
-  color: var(--danger);
-  border: 1px solid rgba(248, 113, 113, 0.3);
-}
-.btn-warning:hover { background: rgba(248, 113, 113, 0.25); }
-.btn-success {
-  background: rgba(52, 211, 153, 0.15);
-  color: var(--success);
-  border: 1px solid rgba(52, 211, 153, 0.3);
-}
-.btn-success:hover { background: rgba(52, 211, 153, 0.25); }
 
 /* 插件市场 */
 .market-tools {
@@ -1208,7 +1121,7 @@ function openHomepage(url) {
   color: var(--text-primary);
   font-size: 13px;
   font-family: inherit;
-  width: 240px;
+  max-width: 240px;
 }
 .market-search:focus {
   outline: none;
@@ -1263,5 +1176,4 @@ function openHomepage(url) {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
-.text-muted { color: var(--text-muted); }
 </style>

@@ -102,8 +102,8 @@ function onRename(inst) {
 
 <template>
   <div id="app-root">
-    <!-- 登录页：无侧边栏全屏展示 -->
-    <RouterView v-if="route.path === '/login'" />
+    <!-- 登录页/首次向导：无侧边栏全屏展示 -->
+    <RouterView v-if="route.path === '/login' || route.path === '/setup'" />
 
     <template v-else>
     <aside class="sidebar">
@@ -156,8 +156,8 @@ function onRename(inst) {
           <span>{{ item.name }}</span>
         </RouterLink>
       </nav>
-      <div style="margin-top: auto; padding: 16px 12px 0; border-top: 1px solid var(--border-color);">
-        <div class="status-badge" style="width: 100%; justify-content: center;">
+      <div class="sidebar-footer">
+        <div class="status-badge sidebar-status">
           <span class="status-dot" :class="{
             green: store.botRunning && store.botConnected,
             yellow: store.botRunning && !store.botConnected,
@@ -184,8 +184,8 @@ function onRename(inst) {
       <header class="topbar">
         <div class="left">
           <span class="breadcrumb">Qingci-Bot CE</span>
-          <span style="color: var(--text-muted);">/</span>
-          <span class="breadcrumb" style="color: var(--text-primary);">
+          <span class="breadcrumb-sep">/</span>
+          <span class="breadcrumb breadcrumb-current">
             {{ navItems.find(n => n.path === route.path)?.name || '仪表盘' }}
           </span>
         </div>
@@ -211,7 +211,7 @@ function onRename(inst) {
             :disabled="store.loading || !store.botRunning"
             @click="store.restartBot"
           >
-            <span style="display: inline-block" :class="{ spin: store.loading }">↻</span> 重启
+            <span class="spin-btn-icon" :class="{ spin: store.loading }">↻</span> 重启
           </button>
         </div>
       </header>
@@ -236,6 +236,30 @@ function onRename(inst) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* 侧边栏底部状态区 */
+.sidebar-footer {
+  margin-top: auto;
+  padding: 16px 12px 0;
+  border-top: 1px solid var(--border-color);
+}
+.sidebar-status {
+  width: 100%;
+  justify-content: center;
+}
+
+/* 顶栏面包屑 */
+.breadcrumb-sep {
+  color: var(--text-muted);
+}
+.breadcrumb-current {
+  color: var(--text-primary);
+}
+
+/* 按钮内旋转图标（行内图标保持 inline-block 以便 transform 生效） */
+.spin-btn-icon {
+  display: inline-block;
 }
 
 .instance-section {

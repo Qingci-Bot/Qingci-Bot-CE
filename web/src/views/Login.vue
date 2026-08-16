@@ -65,7 +65,7 @@ async function doLogin() {
           {{ loading ? '登录中' : '登 录' }}
         </button>
       </form>
-      <div v-if="errorMsg" class="toast error">
+      <div v-if="errorMsg" class="status-bar error">
         {{ errorMsg }}
       </div>
       <div class="hint-text" style="margin-top: 14px;">

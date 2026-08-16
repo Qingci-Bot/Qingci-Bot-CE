@@ -143,12 +143,12 @@ function formatDate(ts) {
       <div class="card-header">
         <div class="card-title">
           消息流
-          <span class="tag" :class="wsConnected ? 'tag-success' : 'tag-danger'" style="margin-left: 10px;">
+          <span class="tag tag-status" :class="wsConnected ? 'tag-perm' : 'tag-danger'">
             {{ wsConnected ? '实时推送中' : '推送断开' }}
           </span>
         </div>
-        <div class="input-group" style="max-width: 320px;">
-          <div class="form-group" style="flex: 1; margin-bottom: 0;">
+        <div class="input-group search-bar">
+          <div class="form-group">
             <input v-model="keyword" type="text" placeholder="搜索关键词 / QQ / 群号" @keyup.enter="search">
           </div>
           <button class="btn btn-secondary btn-sm" @click="search">搜索</button>
@@ -156,7 +156,7 @@ function formatDate(ts) {
       </div>
 
       <div class="log-container">
-        <div v-if="store.logs.length === 0" class="empty-state" style="padding: 30px;">
+        <div v-if="store.logs.length === 0" class="empty-state">
           <div class="icon">✉</div>
           <div>暂无消息记录</div>
         </div>
@@ -184,7 +184,7 @@ function formatDate(ts) {
 
       <!-- 会话列表 -->
       <div v-if="!currentSession">
-        <div v-if="sessions.length === 0" class="empty-state" style="padding: 30px;">
+        <div v-if="sessions.length === 0" class="empty-state">
           <div class="icon">🗨</div>
           <div>暂无会话，与 Bot 对话后自动生成</div>
         </div>
@@ -214,7 +214,7 @@ function formatDate(ts) {
           <span class="session-detail-key">{{ currentSession }}</span>
         </div>
         <div class="log-container">
-          <div v-if="sessionMessages.length === 0" class="empty-state" style="padding: 30px;">
+          <div v-if="sessionMessages.length === 0" class="empty-state">
             <div class="icon">✉</div>
             <div>该会话暂无消息</div>
           </div>
@@ -235,34 +235,37 @@ function formatDate(ts) {
 </template>
 
 <style scoped>
-.tag-success { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
+.tag-status { margin-left: 10px; }
+.search-bar { max-width: 320px; }
 .tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 0;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border-color);
 }
 .tab {
-  padding: 8px 18px;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
-  color: var(--text-color, #ccc);
+  padding: 10px 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  font-size: 13px;
+  border-bottom: 2px solid transparent;
   transition: all 0.2s;
+  font-family: inherit;
 }
-.tab:hover { color: var(--text-color, #fff); }
+.tab:hover { color: var(--text-primary); }
 .tab.active {
-  background: var(--primary-color, #6f8ffc);
-  border-color: var(--primary-color, #6f8ffc);
-  color: #fff;
+  color: var(--blue);
+  border-bottom-color: var(--blue);
 }
 .session-item {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+  border-bottom: 1px solid var(--border-color);
   cursor: pointer;
   transition: background 0.2s;
 }
@@ -271,11 +274,11 @@ function formatDate(ts) {
 .session-title {
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-color, #e6e6e6);
+  color: var(--text-primary);
 }
 .session-meta {
   font-size: 12px;
-  color: var(--text-muted, #8a8a8a);
+  color: var(--text-muted);
   margin-top: 2px;
 }
 .session-detail-header {
@@ -283,11 +286,11 @@ function formatDate(ts) {
   align-items: center;
   gap: 12px;
   padding: 8px 0 12px;
-  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+  border-bottom: 1px solid var(--border-color);
 }
 .session-detail-key {
   font-size: 13px;
-  color: var(--text-muted, #8a8a8a);
+  color: var(--text-muted);
   word-break: break-all;
 }
 </style>

@@ -84,14 +84,14 @@ const triggerDesc = {
       <div class="card stat-card">
         <span class="stat-icon" style="color: var(--accent)">✦</span>
         <div class="stat-label">LLM 模型</div>
-        <div class="stat-value" style="font-size: 18px; margin-top: 8px; color: var(--accent)">
+        <div class="stat-value" style="margin-top: 8px; color: var(--accent)">
           {{ store.config.llm?.model || '-' }}
         </div>
         <div class="stat-desc">{{ store.config.llm?.provider || '未配置' }}</div>
       </div>
     </div>
 
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">近 30 天 LLM 用量</div>
         <button class="btn btn-secondary btn-sm" :disabled="usageLoading" @click="loadUsage">
@@ -99,14 +99,14 @@ const triggerDesc = {
         </button>
       </div>
       <div v-if="usage" class="grid grid-2" style="margin-bottom: 18px;">
-        <div class="card stat-card" style="padding: 16px 18px;">
+        <div class="stat-card">
           <div class="stat-label">总调用次数</div>
-          <div class="stat-value" style="font-size: 22px; color: var(--blue);">{{ formatNum(usageSummary.calls) }}</div>
+          <div class="stat-value" style="color: var(--blue);">{{ formatNum(usageSummary.calls) }}</div>
           <div class="stat-desc">近 {{ usage.days || 30 }} 天 LLM 调用总数</div>
         </div>
-        <div class="card stat-card" style="padding: 16px 18px;">
+        <div class="stat-card">
           <div class="stat-label">总 Token 用量</div>
-          <div class="stat-value" style="font-size: 22px; color: var(--accent);">{{ formatNum(usageSummary.total_tokens) }}</div>
+          <div class="stat-value" style="color: var(--accent);">{{ formatNum(usageSummary.total_tokens) }}</div>
           <div class="stat-desc">prompt {{ formatNum(usageSummary.prompt_tokens) }} · completion {{ formatNum(usageSummary.completion_tokens) }}</div>
         </div>
       </div>
@@ -131,19 +131,19 @@ const triggerDesc = {
       </div>
     </div>
 
-    <div class="grid grid-2" style="margin-top: 22px;">
+    <div class="grid grid-2">
       <div class="card">
         <div class="card-header">
           <div class="card-title">快捷操作</div>
         </div>
         <div class="action-bar" style="margin-bottom: 18px;">
-          <button v-if="!store.botRunning" class="btn btn-success btn-lg" :disabled="store.loading" @click="store.startBot">
+          <button v-if="!store.botRunning" class="btn btn-success btn-sm" :disabled="store.loading" @click="store.startBot">
             <span>▶</span> 启动 Bot
           </button>
-          <button v-else class="btn btn-danger btn-lg" :disabled="store.loading" @click="store.stopBot">
+          <button v-else class="btn btn-danger btn-sm" :disabled="store.loading" @click="store.stopBot">
             <span>■</span> 停止 Bot
           </button>
-          <button class="btn btn-secondary btn-lg" :disabled="store.loading || !store.botRunning" @click="store.restartBot">
+          <button class="btn btn-secondary btn-sm" :disabled="store.loading || !store.botRunning" @click="store.restartBot">
             <span style="display: inline-block" :class="{ spin: store.loading }">↻</span> 重启 Bot
           </button>
         </div>
@@ -175,7 +175,7 @@ const triggerDesc = {
       </div>
     </div>
 
-    <div class="card" style="margin-top: 22px;">
+    <div class="card">
       <div class="card-header">
         <div class="card-title">当前配置快照</div>
       </div>
@@ -200,10 +200,6 @@ const triggerDesc = {
 </template>
 
 <style scoped>
-.grid-4 { grid-template-columns: repeat(4, 1fr); }
-@media (max-width: 1100px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 640px) { .grid-4 { grid-template-columns: 1fr; } }
-
 .usage-chart {
   display: flex;
   align-items: flex-end;

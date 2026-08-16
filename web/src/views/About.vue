@@ -50,7 +50,7 @@
     </div>
 
     <!-- 鸣谢 -->
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">鸣谢</div>
       </div>
@@ -144,7 +144,7 @@
     </div>
 
     <!-- 版本信息 -->
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">版本信息</div>
       </div>

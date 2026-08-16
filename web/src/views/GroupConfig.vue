@@ -4,7 +4,7 @@ import { useAppStore } from '../stores/app'
 import { useToast } from '../composables/useToast'
 
 const store = useAppStore()
-const { toast, showToast } = useToast()
+const { showToast } = useToast()
 const defaults = ref({ enabled: true, trigger_mode: null })
 const groups = ref([])
 const loading = ref(false)
@@ -104,7 +104,7 @@ async function addGroup() {
         <div class="action-bar">
           <div class="input-group">
             <div class="form-group">
-              <input v-model="newGroupId" type="number" placeholder="输入群号添加" style="width: 180px;" @keyup.enter="addGroup">
+              <input v-model="newGroupId" type="number" placeholder="输入群号添加" @keyup.enter="addGroup">
             </div>
             <button class="btn btn-secondary btn-sm" :disabled="savingId !== null" @click="addGroup">
               <span>＋</span> 添加群
@@ -116,7 +116,7 @@ async function addGroup() {
         </div>
       </div>
 
-      <div class="hint-text" style="margin-bottom: 14px;">
+      <div class="hint-text">
         <strong>全局默认：</strong>{{ defaults.enabled === false ? '停用' : '启用' }} ·
         触发模式 {{ defaults.trigger_mode || '（未设置）' }}。
         触发模式选择"跟随全局"表示清除该群的独立设置。
@@ -131,8 +131,8 @@ async function addGroup() {
       <table v-else class="table">
         <thead>
           <tr>
-            <th style="width: 180px;">群号</th>
-            <th style="width: 120px;">启用</th>
+            <th class="col-group-id">群号</th>
+            <th class="col-enabled">启用</th>
             <th>触发模式</th>
           </tr>
         </thead>
@@ -140,13 +140,15 @@ async function addGroup() {
           <tr v-for="group in groups" :key="group.group_id">
             <td style="font-family: var(--font-mono); font-weight: 600;">{{ group.group_id }}</td>
             <td>
-              <input
-                type="checkbox"
-                class="group-switch"
-                :checked="group.enabled"
-                :disabled="savingId === group.group_id"
-                @change="onEnabledChange(group, $event)"
-              >
+              <label class="switch">
+                <input
+                  type="checkbox"
+                  :checked="group.enabled"
+                  :disabled="savingId === group.group_id"
+                  @change="onEnabledChange(group, $event)"
+                >
+                <span class="slider"></span>
+              </label>
             </td>
             <td>
               <select
@@ -161,25 +163,13 @@ async function addGroup() {
           </tr>
         </tbody>
       </table>
-
-      <transition name="toast">
-        <div v-if="toast.show" class="toast" :class="toast.type">
-          {{ toast.message }}
-        </div>
-      </transition>
     </div>
   </div>
 </template>
 
 <style scoped>
-.group-switch {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-.group-switch:disabled { cursor: not-allowed; }
+.col-group-id { width: 180px; }
+.col-enabled { width: 120px; }
 
 .inline-select {
   padding: 7px 12px;
@@ -202,12 +192,4 @@ async function addGroup() {
 }
 
 .inline-select:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.toast-enter-active, .toast-leave-active {
-  transition: all 0.3s ease;
-}
-.toast-enter-from, .toast-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
 </style>

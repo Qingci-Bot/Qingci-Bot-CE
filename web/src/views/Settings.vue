@@ -4,7 +4,7 @@ import { useAppStore } from '../stores/app'
 import { useToast } from '../composables/useToast'
 
 const store = useAppStore()
-const { toast, showToast } = useToast()
+const { showToast } = useToast()
 const form = reactive({
   bot: {},
   onebot: {},
@@ -268,7 +268,7 @@ async function saveConfigJson() {
       </div>
     </div>
 
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">OneBot 连接</div>
       </div>
@@ -292,7 +292,7 @@ async function saveConfigJson() {
       </div>
     </div>
 
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">平台适配器</div>
       </div>
@@ -337,14 +337,14 @@ async function saveConfigJson() {
       </div>
     </div>
 
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">API 鉴权</div>
       </div>
       <div class="form-grid">
         <div class="form-group">
           <label>服务端 API Key（写入 config.yaml）</label>
-          <div style="display: flex; gap: 8px;">
+          <div class="input-group">
             <input v-model="form.api_key" :type="showServerKey ? 'text' : 'password'" placeholder="留空则不启用鉴权">
             <button class="btn btn-secondary btn-sm" @click="showServerKey = !showServerKey">
               {{ showServerKey ? '隐藏' : '显示' }}
@@ -359,7 +359,7 @@ async function saveConfigJson() {
       <div class="form-grid" style="margin-top: 16px;">
         <div class="form-group">
           <label>浏览器 API Key（本地存储）</label>
-          <div style="display: flex; gap: 8px;">
+          <div class="input-group">
             <input v-model="apiKeyInput" :type="showLocalKey ? 'text' : 'password'" placeholder="填写服务端配置的 API Key">
             <button class="btn btn-secondary btn-sm" @click="showLocalKey = !showLocalKey">
               {{ showLocalKey ? '隐藏' : '显示' }}
@@ -370,7 +370,7 @@ async function saveConfigJson() {
       </div>
     </div>
 
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">数据管理</div>
         <div class="action-bar">
@@ -384,7 +384,7 @@ async function saveConfigJson() {
           </button>
         </div>
       </div>
-      <div v-if="backupResult" class="toast success">
+      <div v-if="backupResult" class="status-bar success">
         备份完成：{{ backupResult.filename }}（{{ formatSize(backupResult.size) }}），保存在服务端 data/backups/ 目录
       </div>
       <div class="hint-text" style="margin-top: 8px;">
@@ -392,7 +392,7 @@ async function saveConfigJson() {
       </div>
     </div>
 
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">审计日志</div>
         <button class="btn btn-secondary btn-sm" :disabled="auditLoading" @click="loadAuditLogs">
@@ -407,25 +407,25 @@ async function saveConfigJson() {
         <table class="table">
           <thead>
             <tr>
-              <th style="width: 170px;">时间</th>
-              <th style="width: 170px;">动作</th>
-              <th>详情</th>
-              <th style="width: 120px;">来源 IP</th>
+              <th class="audit-time">时间</th>
+              <th class="audit-action">动作</th>
+              <th class="audit-detail">详情</th>
+              <th class="audit-ip">来源 IP</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="log in auditLogs" :key="log.id">
-              <td style="font-family: var(--font-mono); color: var(--text-muted); white-space: nowrap;">{{ log.created_at }}</td>
+              <td class="audit-time">{{ log.created_at }}</td>
               <td><span class="tag tag-blue">{{ log.action }}</span></td>
-              <td style="word-break: break-all;">{{ log.detail || '-' }}</td>
-              <td style="font-family: var(--font-mono);">{{ log.client_ip || '-' }}</td>
+              <td class="audit-detail">{{ log.detail || '-' }}</td>
+              <td class="audit-ip">{{ log.client_ip || '-' }}</td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">高级配置（JSON）</div>
         <div class="action-bar">
@@ -442,31 +442,18 @@ async function saveConfigJson() {
       <textarea v-model="configJson" class="json-editor" spellcheck="false" placeholder="点击「加载当前配置」填充"></textarea>
     </div>
 
-    <div class="card fade-in" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">保存更改</div>
         <button class="btn btn-primary" :disabled="saving" @click="saveConfig">
           <span>✓</span> {{ saving ? '保存中' : '保存设置' }}
         </button>
       </div>
-      <transition name="toast">
-        <div v-if="toast.show" class="toast" :class="toast.type">
-          {{ toast.message }}
-        </div>
-      </transition>
     </div>
   </div>
 </template>
 
 <style scoped>
-.toast-enter-active, .toast-leave-active {
-  transition: all 0.3s ease;
-}
-.toast-enter-from, .toast-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-
 /* 平台适配器卡片 */
 .platform-cfg {
   padding: 16px;
@@ -486,46 +473,6 @@ async function saveConfigJson() {
   margin-top: 8px;
 }
 
-/* 开关按钮 */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-  flex-shrink: 0;
-}
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(148, 163, 184, 0.2);
-  border: 1px solid var(--border-color);
-  border-radius: 24px;
-  transition: 0.25s;
-}
-.slider::before {
-  content: '';
-  position: absolute;
-  height: 16px; width: 16px;
-  left: 3px; bottom: 3px;
-  background: var(--text-secondary);
-  transition: 0.25s;
-  border-radius: 50%;
-}
-.switch input:checked + .slider {
-  background: var(--accent-bg);
-  border-color: rgba(251, 191, 36, 0.4);
-}
-.switch input:checked + .slider::before {
-  transform: translateX(20px);
-  background: var(--accent);
-}
-.switch input:disabled + .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .json-editor {
   width: 100%;
   min-height: 360px;
@@ -542,6 +489,21 @@ async function saveConfigJson() {
 }
 .json-editor:focus {
   outline: none;
-  border-color: var(--primary-color);
+  border-color: var(--blue);
 }
+
+/* 审计日志列样式（收敛内联样式） */
+.audit-time { width: 170px; }
+.audit-action { width: 170px; }
+.audit-ip { width: 120px; }
+td.audit-time {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+td.audit-ip { font-family: var(--font-mono); }
+td.audit-detail { word-break: break-all; }
+
+/* API Key 输入行：输入框撑满剩余宽度 */
+.input-group input { flex: 1; min-width: 0; }
 </style>

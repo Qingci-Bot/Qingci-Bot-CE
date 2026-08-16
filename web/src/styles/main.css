@@ -28,6 +28,10 @@
   --danger: #f87171;
   --danger-bg: rgba(248, 113, 113, 0.1);
 
+  /* 旧主题变量别名（历史引用自动归位） */
+  --primary-color: var(--blue);
+  --text-color: var(--text-primary);
+
   --radius: 16px;
   --radius-sm: 10px;
   --radius-xs: 6px;
@@ -201,6 +205,13 @@ body::before {
   overflow-y: auto;
 }
 
+/* 卡片堆叠：同一容器内相邻卡片自动间距（替代内联 margin-top） */
+.page-body > .card + .card,
+.page-body > .grid + .card,
+.page-body > .card + .grid {
+  margin-top: 22px;
+}
+
 /* 卡片 */
 .card {
   background: var(--bg-card);
@@ -299,6 +310,27 @@ body::before {
   background: rgba(255, 255, 255, 0.1);
 }
 
+/* 主题强调按钮（金色渐变，与 primary 同色系、弱一档） */
+.btn-accent {
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  color: #0f172a;
+  box-shadow: 0 4px 16px var(--accent-glow);
+}
+
+.btn-accent:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px var(--accent-glow);
+}
+
+/* 警告按钮（黄） */
+.btn-warning {
+  background: linear-gradient(135deg, #fbbf24, #d97706);
+  color: #0f172a;
+  box-shadow: 0 4px 16px rgba(251, 191, 36, 0.2);
+}
+
+.btn-warning:hover { transform: translateY(-2px); }
+
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .btn-lg { padding: 12px 28px; font-size: 14px; }
 
@@ -379,6 +411,50 @@ body::before {
   cursor: pointer;
 }
 
+/* 文本辅助类 */
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+
+/* 开关按钮（全局唯一实现） */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(148, 163, 184, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  transition: 0.25s;
+}
+.switch .slider::before {
+  content: '';
+  position: absolute;
+  height: 16px; width: 16px;
+  left: 3px; bottom: 3px;
+  background: var(--text-secondary);
+  transition: 0.25s;
+  border-radius: 50%;
+}
+.switch input:checked + .slider {
+  background: var(--accent-bg);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+.switch input:checked + .slider::before {
+  transform: translateX(20px);
+  background: var(--accent);
+}
+.switch input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* 状态指示器 */
 .status-badge {
   display: inline-flex;
@@ -439,8 +515,13 @@ body::before {
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
 
 @media (max-width: 1100px) {
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
   .form-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .grid-4 { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
@@ -557,6 +638,7 @@ body::before {
   padding: 14px;
   max-height: 520px;
   overflow-y: auto;
+  overflow-x: hidden;
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.7;
@@ -592,8 +674,8 @@ body::before {
   opacity: 0.5;
 }
 
-/* 提示消息 */
-.toast {
+/* 常驻状态条（页内持续展示，区别于顶部悬浮 toast 通知） */
+.status-bar {
   padding: 12px 16px;
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -602,9 +684,9 @@ body::before {
   border: 1px solid transparent;
 }
 
-.toast.success { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.25); }
-.toast.error { background: var(--danger-bg); color: var(--danger); border-color: rgba(248, 113, 113, 0.25); }
-.toast.info { background: var(--blue-bg); color: var(--blue); border-color: rgba(56, 189, 248, 0.25); }
+.status-bar.success { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.25); }
+.status-bar.error { background: var(--danger-bg); color: var(--danger); border-color: rgba(248, 113, 113, 0.25); }
+.status-bar.info { background: var(--blue-bg); color: var(--blue); border-color: rgba(56, 189, 248, 0.25); }
 
 /* 顶部状态栏 */
 .topbar {

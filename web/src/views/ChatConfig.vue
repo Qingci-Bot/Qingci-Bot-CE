@@ -4,7 +4,7 @@ import { useAppStore } from '../stores/app'
 import { useToast } from '../composables/useToast'
 
 const store = useAppStore()
-const { toast, showToast } = useToast()
+const { showToast } = useToast()
 const form = reactive({})
 const testing = ref(false)
 const saving = ref(false)
@@ -226,7 +226,8 @@ async function saveConfig() {
         </div>
         <div class="form-group">
           <label>API Key</label>
-          <input v-model="form.api_key" type="password" placeholder="sk-..."></div>
+          <input v-model="form.api_key" type="password" placeholder="sk-...">
+        </div>
         <div class="form-group">
           <label>模型名称</label>
           <select v-if="modelOptions.length" v-model="form.model">
@@ -257,15 +258,9 @@ async function saveConfig() {
           <textarea v-model="form.system_prompt" placeholder="定义 Bot 的人格、回复风格和知识边界..."></textarea>
         </div>
       </div>
-
-      <transition name="toast">
-        <div v-if="toast.show" class="toast" :class="toast.type">
-          {{ toast.message }}
-        </div>
-      </transition>
     </div>
 
-    <div class="card" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">人格管理</div>
         <div class="action-bar">
@@ -299,7 +294,7 @@ async function saveConfig() {
       </div>
     </div>
 
-    <div class="card" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">MCP 服务器</div>
         <div class="action-bar">
@@ -324,7 +319,7 @@ async function saveConfig() {
       </div>
     </div>
 
-    <div class="card" style="margin-top: 22px;">
+    <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">常见配置参考</div>
       </div>
@@ -338,17 +333,10 @@ async function saveConfig() {
 </template>
 
 <style scoped>
-.toast-enter-active, .toast-leave-active {
-  transition: all 0.3s ease;
-}
-.toast-enter-from, .toast-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
 .persona-block {
   margin-top: 16px;
   padding: 16px;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.02);
 }
@@ -382,16 +370,16 @@ async function saveConfig() {
 .persona-block input,
 .persona-block textarea {
   padding: 8px 12px;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
-  color: var(--text-color, #e6e6e6);
+  color: var(--text-primary);
   font-size: 13px;
   line-height: 1.5;
 }
 .persona-block input:focus,
 .persona-block textarea:focus {
   outline: none;
-  border-color: var(--primary-color, #6f8ffc);
+  border-color: var(--blue);
 }
 </style>

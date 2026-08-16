@@ -129,7 +129,7 @@ function scrollDown() {
       <div class="card-header">
         <div class="card-title">
           调试会话
-          <span class="tag" :class="wsConnected ? 'tag-success' : 'tag-danger'" style="margin-left: 10px;">
+          <span class="tag tag-status" :class="wsConnected ? 'tag-perm' : 'tag-danger'">
             {{ wsConnected ? '已连接' : '连接断开' }}
           </span>
         </div>
@@ -180,9 +180,7 @@ function scrollDown() {
 </template>
 
 <style scoped>
-.tag-success { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
-.tag-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
-
+.tag-status { margin-left: 10px; }
 .chat-page { flex: 1; display: flex; }
 .chat-card {
   flex: 1;
@@ -235,8 +233,8 @@ function scrollDown() {
   color: var(--text-primary);
 }
 .chat-msg.user .chat-bubble {
-  background: rgba(79, 70, 229, 0.25);
-  border-color: rgba(99, 102, 241, 0.35);
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.35);
 }
 .chat-msg.error .chat-bubble {
   background: rgba(239, 68, 68, 0.12);
