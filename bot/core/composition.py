@@ -9,6 +9,7 @@
 因此对 QingciBot 仅做 TYPE_CHECKING 导入，运行时无循环导入。
 """
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -30,8 +31,11 @@ from .di import DIContainer
 from .dispatcher import MessageDispatcher
 from .event_bus import EventBus
 from .filter import SensitiveFilter
+from .platforms.base import make_platform
 from .scheduler import BotScheduler
 from .session_state import SessionStateManager
+
+logger = logging.getLogger("qingci-bot.core.composition")
 
 if TYPE_CHECKING:
     from .bot import QingciBot
@@ -48,6 +52,18 @@ def assemble_bot(bot: "QingciBot") -> None:
         port=config.onebot.port,
         access_token=config.onebot.access_token,
     )
+    # 平台适配器表：onebot 为默认平台，其余按 platforms 配置启用
+    # （connection 保持主连接引用以兼容现有代码，同时注册到 platforms）
+    bot.platforms = {"onebot": bot.connection}  # type: ignore[attr-defined]
+    _platforms_cfg = config.platforms
+    for _attr in ("telegram",):
+        _cfg = getattr(_platforms_cfg, _attr, None)
+        if _cfg is None or not getattr(_cfg, "enabled", False):
+            continue
+        _adapter = make_platform(_cfg)
+        if _adapter is not None:
+            bot.platforms[_adapter.name] = _adapter
+            logger.info(f"平台适配器已注册: {_adapter.display_name} ({_adapter.name})")
     bot.dispatcher = MessageDispatcher()
     bot.llm = LLMManager(
         config.llm,

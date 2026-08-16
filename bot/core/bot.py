@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from .connection import OneBotConnection
     from .event_bus import EventBus
     from .filter import SensitiveFilter
+    from .platforms.base import PlatformAdapter
     from .scheduler import BotScheduler
     from .session_state import SessionStateManager
 
@@ -54,6 +55,8 @@ class QingciBot:
     tool_registry: "ToolRegistry"
     # 类型化事件缓冲（composition 创建，供 LLM 事件查询工具读取）
     event_buffer: "EventBuffer | None"
+    # 平台适配器表（composition 创建：onebot 为默认，其余按配置启用）
+    platforms: dict[str, "PlatformAdapter"]
     knowledge_store: "KnowledgeStore | None"
     sensitive_filter: "SensitiveFilter"
     # 插件热重载监听器（composition 初始化为 None，start 中按需创建）
@@ -102,10 +105,11 @@ class QingciBot:
         self.plugin_manager.set_i18n_locale(self.config.config.lang)
         # 初始化 MCP 工具（enable_tools + mcp_servers 配置时；失败仅记日志）
         await self.llm.setup_mcp_tools()
-        self.connection.on_event(self._handle_event)
-        # 注册全局生命周期回调：连接建立 → on_bot_connect，元事件 → on_metaevent
-        self.connection.on_connect(self._on_bot_connect)
-        self.connection.on_metaevent(self._on_metaevent)
+        # 多平台：onebot 为主连接，其余按 platforms 配置启用的适配器一并启动
+        for platform in self.platforms.values():
+            platform.on_event(self._handle_event)
+            platform.on_connect(self._on_bot_connect)
+            platform.on_metaevent(self._on_metaevent)
         try:
             await self.connection.start()
         except (Exception, asyncio.CancelledError):
@@ -122,6 +126,16 @@ class QingciBot:
 
         # 连接就绪后立即标记运行状态，避免事件到达时被 _handle_event 静默丢弃
         self._running = True
+
+        # 启动附加平台适配器（Telegram 等；失败仅记日志，不阻断主平台）
+        for name, platform in self.platforms.items():
+            if name == "onebot" or platform is self.connection:
+                continue
+            try:
+                await platform.start()
+                logger.info(f"平台适配器已启动: {platform.display_name}")
+            except Exception:
+                logger.exception(f"平台适配器启动失败: {name}（该平台将不可用）")
 
         # 启动调度器与错误告警；失败时连同连接/插件/数据库一并回滚
         try:
@@ -193,6 +207,15 @@ class QingciBot:
             await self.connection.stop()
         except (Exception, asyncio.CancelledError):
             logger.exception("OneBot 连接停止异常")
+
+        # 停止附加平台适配器（异常隔离）
+        for name, platform in self.platforms.items():
+            if name == "onebot" or platform is self.connection:
+                continue
+            try:
+                await platform.stop()
+            except (Exception, asyncio.CancelledError):
+                logger.exception(f"平台适配器停止异常: {name}")
 
         # 等待进行中的事件处理完成（最多 5 秒）
         if self._pending_tasks:
@@ -316,12 +339,14 @@ class QingciBot:
     def register_api_hook(self, fn) -> None:
         """注册平台接口调用钩子（on_calling_api）
 
-        每次 Bot 调用 OneBot API 前触发。签名：
+        每次 Bot 调用平台 API 前触发（所有已启用平台适配器生效）。签名：
             async (api_name, params) -> Optional[dict]
         返回新 params 时替换原参数；返回 None 保持原样；抛异常则阻止该次
         API 调用。用于横切鉴权、参数改写、审计。注册自动去重。
         """
         self.connection.on_api_call(fn)
+        for platform in self.platforms.values():
+            platform.on_api_call(fn)
 
     async def _run_post_hooks(self, event: dict, ctx: MessageContext, reply: str | None) -> None:
         """执行后置钩子（异常隔离）"""
@@ -474,7 +499,7 @@ class QingciBot:
         )
 
     async def _send_reply(self, ctx: MessageContext, reply: str) -> None:
-        """发送插件回复"""
+        """发送插件回复（按 ctx.platform 路由到对应平台适配器）"""
         target_id = ctx.group_id if ctx.message_type == "group" else ctx.user_id
         if not target_id:
             logger.warning(
@@ -489,13 +514,18 @@ class QingciBot:
             prefix += MessageDispatcher.build_cq_at(ctx.user_id)
             reply = prefix + " " + reply
 
+        # 按事件来源平台路由；未知平台回退主连接
+        platform = getattr(ctx, "platform", "") or ""
+        conn = self.platforms.get(platform, self.connection)
+
         for attempt in range(3):
             try:
-                await self.connection.send_msg(ctx.message_type, target_id, reply)
+                await conn.send_msg(ctx.message_type, target_id, reply)
                 return
             except Exception:
                 logger.exception(
                     f"发送消息失败 (attempt {attempt + 1}/3, "
+                    f"platform={platform or 'onebot'}, "
                     f"type={ctx.message_type}, target={target_id})"
                 )
                 if attempt < 2:

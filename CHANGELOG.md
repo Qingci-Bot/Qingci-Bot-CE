@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **多平台适配器**：新增 `bot/core/platforms/`（`base.py` PlatformAdapter 契约 + `telegram.py` Telegram Bot API 长轮询适配器）；事件归一化为 OneBot-11 兼容 dict（含 `platform` 字段），发送按 `MessageContext.platform` 路由到对应适配器；`OneBotConnection` 升级为实现契约的「onebot」平台（完全兼容）；配置 `platforms.telegram`（enabled/token/poll_interval），附加平台启动失败仅记日志不阻断主平台；SDK `MessageContext` 新增 `platform` 字段（v1.6.0）；测试 `test_platforms.py` 13 用例（归一化/发送映射/API 透传/配置解析/回复路由/dispatcher 透传）
 - **插件市场体验打磨**：索引条目新增 `icon`（emoji 卡片图标）/`homepage`（主页链接）/`requirements`（依赖展示）/`tags`（标签筛选）字段；新增 `GET /api/plugins/market/info` 返回市场名称/插件数/索引更新时间（墙钟）；WebUI 市场 Tab 增强——市场名 + 索引更新时间、标签筛选栏、卡片图标、依赖标签、主页链接、加载失败重试按钮、已安装插件「卸载」入口；测试 `test_market.py` 增至 10 用例
 - **类型化事件的 LLM 工具化**：新增 `bot/llm/events_tools.py`——`EventBuffer` 内存环形缓冲（默认 200 条）记录 notice/request 类型化事件，Dispatcher/TestBot 分发时自动入缓冲；`register_event_tools` 幂等注册两个只读 Function Calling 工具：`get_group_events`（按群查最近入群/退群/禁言/撤回/上传等事件）与 `get_member_events`（按成员查）；事件摘要按类型化字段提取（operator_id/duration/comment 等），结果格式化为 LLM 可读文本；仅记录仅查询，Bot 重启即清空；测试 `test_event_tools.py` 13 用例
 - **插件市场（WebUI）**：新增 `bot/plugin/market.py`（MarketIndex/MarketClient/MarketManager）——集中索引（AtomGit `Qingci-Bot/Plugin-Market`）拉取 + TTL 缓存 + 磁盘回退；列表合并已安装/可更新状态；安装/更新复用 `PluginManager.install`（卸载→覆盖重装）；WebUI 插件管理新增「插件市场」Tab（搜索/一键安装/更新/刷新）；配置 `market.url`/`market.refresh_interval`；`install()` 增强识别 `.git` 结尾 URL 为 git 仓库、`_locate_plugin_dir` 支持 `plugins/<name>/` 嵌套布局；测试 `test_market.py` 9 用例

@@ -26,14 +26,22 @@ from collections.abc import Callable
 
 from aiocqhttp import CQHttp
 
+from .platforms.base import PlatformAdapter
+
 logger = logging.getLogger("qingci-bot.connection")
 
 # 连接状态监控间隔（秒）
 _CONNECTION_MONITOR_INTERVAL = 3.0
 
 
-class OneBotConnection:
-    """OneBot 11 反向 WebSocket 连接管理（基于 aiocqhttp）"""
+class OneBotConnection(PlatformAdapter):
+    """OneBot 11 反向 WebSocket 连接管理（基于 aiocqhttp）
+
+    实现 PlatformAdapter 契约，作为内置「onebot」平台适配器。
+    """
+
+    name = "onebot"
+    display_name = "OneBot 11"
 
     def __init__(self, host: str = "127.0.0.1", port: int = 3001, access_token: str = ""):
         self.host = host

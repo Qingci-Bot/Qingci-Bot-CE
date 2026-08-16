@@ -88,6 +88,9 @@ class MessageDispatcher:
             ctx.group_id = self._safe_int(event.get("group_id"))
             ctx.sender = event.get("sender", {}) or {}
 
+        # 事件来源平台（适配器在事件 dict 中注入 platform，默认 onebot）
+        ctx.platform = str(event.get("platform", "onebot") or "onebot")
+
         return ctx
 
     @staticmethod

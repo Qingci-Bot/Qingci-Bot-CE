@@ -128,6 +128,8 @@ class TestBot:
         self.dispatcher = MessageDispatcher()
         self.session_state = SessionStateManager()
         self.connection = FakeConnection()
+        # 平台适配器表（与真实 Bot 对齐：onebot 主连接）
+        self.platforms = {"onebot": self.connection}
         self.event_bus = EventBus()
         self.tool_registry = ToolRegistry()
         # 类型化事件缓冲 + 事件查询工具（与真实 Bot composition 对齐）
@@ -189,12 +191,12 @@ class TestBot:
     # ---- 发送回复 ----
 
     async def _send_reply(self, ctx: MessageContext, reply: str) -> None:
-        """发送回复（与真实 Bot 对齐；会话阶梯的 send/pause 文本走此通道）"""
+        """发送回复（与真实 Bot 对齐：按 ctx.platform 路由；会话阶梯的 send/pause 文本走此通道）"""
         text = str(reply)
-        if ctx.message_type == "group":
-            await self.connection.send_group_msg(ctx.group_id, text)
-        else:
-            await self.connection.send_private_msg(ctx.user_id, text)
+        target_id = ctx.group_id if ctx.message_type == "group" else ctx.user_id
+        platform = getattr(ctx, "platform", "") or ""
+        conn = self.platforms.get(platform, self.connection)
+        await conn.send_msg(ctx.message_type, target_id, text)
 
     async def send(self, event: dict) -> str | None:
         """发送事件并返回 Bot 的回复（str），无回复返回 None

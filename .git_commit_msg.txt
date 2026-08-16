@@ -1,0 +1,20 @@
+feat: 多平台适配器（PlatformAdapter 契约 + Telegram 长轮询接入）
+
+- 新增 bot/core/platforms/：base.py（PlatformAdapter 统一契约——
+  事件上报 emit_event/emit_metaevent、状态回调、send_msg/call_api、
+  on_api_call 钩子、make_platform 配置工厂）+ telegram.py
+  （Telegram Bot API 长轮询适配器：getUpdates offset 续传、Update
+  归一化为 OneBot-11 兼容事件 dict、sendMessage 发送、OneBot action
+  映射、轮询失败离线广播）
+- OneBotConnection 继承 PlatformAdapter 作为「onebot」平台（完全兼容）
+- Bot 多平台：composition 装配 bot.platforms（onebot + 配置启用的附加
+  平台）；start/stop 统一生命周期，附加平台失败仅记日志不阻断主平台；
+  register_api_hook 对全部平台生效
+- 回复按来源平台路由：SDK MessageContext 新增 platform 字段（v1.6.0），
+  dispatcher 透传，_send_reply 按 ctx.platform 选择适配器（未知回退
+  主连接）；TestBot 同步对齐
+- 配置 platforms.telegram（enabled/token/poll_interval），README 配置
+  样例与配置表同步
+- 测试 test_platforms.py 13 用例：归一化（私聊/群聊/caption/未知类型）、
+  emit platform 注入、发送/API 映射与透传、make_platform 解析、
+  回复平台路由、dispatcher 透传；全套 252 passed

@@ -302,6 +302,21 @@ class MarketConfig(BaseModel):
     refresh_interval: int = 3600  # 索引缓存 TTL（秒）
 
 
+class TelegramConfig(BaseModel):
+    """Telegram 平台适配器配置"""
+
+    name: str = "telegram"
+    enabled: bool = False
+    token: str = ""  # Bot API token（@BotFather 获取）
+    poll_interval: float = 1.0  # 长轮询间隔（秒）
+
+
+class PlatformsConfig(BaseModel):
+    """多平台适配器配置（onebot 为内置默认平台，走 onebot.* 配置）"""
+
+    telegram: TelegramConfig = TelegramConfig()
+
+
 class AppConfig(BaseModel):
     """应用总配置"""
 
@@ -320,6 +335,7 @@ class AppConfig(BaseModel):
     session_summary: SessionSummaryConfig = SessionSummaryConfig()
     log: LogConfig = LogConfig()
     market: MarketConfig = MarketConfig()
+    platforms: PlatformsConfig = PlatformsConfig()
     api_key: str = ""  # API 鉴权密钥，为空则不启用鉴权
     plugins: dict = {}  # 插件级配置：plugins.<name>: { ... }
     lang: str = "zh-CN"  # 全局语言（插件 i18n 默认语言，如 zh-CN / en-US）
@@ -393,6 +409,10 @@ class ConfigManager:
     @property
     def market(self) -> MarketConfig:
         return self._config.market
+
+    @property
+    def platforms(self) -> PlatformsConfig:
+        return self._config.platforms
 
     def load(self) -> AppConfig:
         """从文件加载配置，不存在则创建默认配置"""
