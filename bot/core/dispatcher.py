@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 # 主项目与外部插件共用同一类型，避免协议层定义漂移。
 from qingci_plugin_sdk.context import MessageContext
 
+from ..plugin.events import parse_event
 from ..plugin.matcher import MatcherContext
 from ..plugin.session import (
     FinishException,
@@ -154,6 +155,9 @@ class MessageDispatcher:
                 step_key=self._step_key(ctx),
                 step_ttl=self.step_ttl,
             )
+            # 类型化事件：notice/request 事件解析为类型化对象（handler 按注解注入）
+            if post_type in ("notice", "request") and mctx.event is None:
+                mctx.event = parse_event(post_type, event)
             if matcher.owner:
                 plugin = bot.plugin_manager.get(matcher.owner)
                 if plugin is None:

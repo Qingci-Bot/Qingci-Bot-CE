@@ -94,6 +94,15 @@ async def resolve_handler_args(
             )
             continue
 
+        # 2.5 类型化事件（notice/request）：注解为事件模型子类时注入解析后的对象
+        if ann is not inspect.Parameter.empty and _is_event_annotation(ann):
+            evt = getattr(context, "event", None)
+            if evt is not None and isinstance(evt, ann):
+                kwargs[name] = evt
+            elif param.default is not inspect.Parameter.empty:
+                kwargs[name] = param.default
+            continue
+
         # 3. bot 实例
         if ann is not inspect.Parameter.empty and _matches_bot(ann, bot):
             kwargs[name] = bot
@@ -174,6 +183,19 @@ def _matches_bot(ann: Any, bot: Any) -> bool:
         return True
     try:
         return isinstance(bot, ann)
+    except TypeError:
+        return False
+
+
+def _is_event_annotation(ann: Any) -> bool:
+    """判断类型注解是否为类型化事件模型（NoticeEvent/RequestEvent 或其子类）
+
+    惰性导入避免模块级循环依赖；转发后与 SDK 是同一类型。
+    """
+    from ..plugin.events import NoticeEvent, RequestEvent
+
+    try:
+        return isinstance(ann, type) and issubclass(ann, (NoticeEvent, RequestEvent))
     except TypeError:
         return False
 
