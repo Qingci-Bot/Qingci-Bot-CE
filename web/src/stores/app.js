@@ -123,6 +123,7 @@ function deepMerge(target, source) {
 export const useAppStore = defineStore('app', () => {
   const botRunning = ref(false)
   const botConnected = ref(false)
+  const platforms = ref([])
   const plugins = ref([])
   const config = reactive(JSON.parse(JSON.stringify(defaultConfig)))
   const llmPresets = ref({})
@@ -180,6 +181,7 @@ export const useAppStore = defineStore('app', () => {
       const data = await apiFetch('/api/bot/status')
       botRunning.value = data.running
       botConnected.value = data.connected
+      platforms.value = data.platforms || []
       plugins.value = data.plugins || []
       error.value = ''
       return true
@@ -321,7 +323,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   return {
-    botRunning, botConnected, plugins, config, llmPresets, logs, loading, error,
+    botRunning, botConnected, platforms, plugins, config, llmPresets, logs, loading, error,
     configLoaded, instances,
     statusText, statusColor,
     fetchStatus, fetchConfig, fetchLLMPresets, startBot, stopBot, restartBot,

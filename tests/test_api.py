@@ -129,6 +129,13 @@ class TestBotStatus:
         assert "connected" in data
         assert "plugins" in data
         assert isinstance(data["plugins"], list)
+        # 平台状态：结构校验；运行中时至少包含默认 onebot 平台
+        assert "platforms" in data
+        assert isinstance(data["platforms"], list)
+        for p in data["platforms"]:
+            assert {"name", "display_name", "connected", "last_heartbeat", "self_id"} <= set(p.keys())
+        if data["running"]:
+            assert any(p["name"] == "onebot" for p in data["platforms"])
 
 
 class TestLogEndpoint:

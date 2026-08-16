@@ -563,6 +563,16 @@ class QingciBot:
             "running": self._running,
             "connected": self.connection.is_connected,
             "last_heartbeat": self.connection.last_heartbeat,
+            "platforms": [
+                {
+                    "name": p.name,
+                    "display_name": p.display_name,
+                    "connected": bool(p.is_connected),
+                    "last_heartbeat": p.last_heartbeat,
+                    "self_id": int(getattr(p, "self_id", 0) or 0),
+                }
+                for p in self.platforms.values()
+            ],
             "plugins": [
                 {
                     "name": p.name,

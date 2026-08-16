@@ -403,6 +403,35 @@ body::before {
 .status-dot.yellow { color: var(--warning); background: var(--warning); }
 .status-dot.gray { color: var(--text-muted); background: var(--text-muted); }
 
+/* 平台状态（侧边栏） */
+.platform-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-xs);
+}
+.platform-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  cursor: default;
+}
+.platform-name {
+  flex: 1;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.platform-state {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 /* 网格 */
 .grid { display: grid; gap: 18px; }
 .grid-2 { grid-template-columns: repeat(2, 1fr); }

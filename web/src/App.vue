@@ -26,6 +26,15 @@ function isActive(path) {
   return route.path === path
 }
 
+// 心跳时间（epoch 秒）→ 相对时间文本
+function fmtHeartbeat(ts) {
+  const diff = Date.now() / 1000 - ts
+  if (diff < 60) return '刚刚'
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
+  return `${Math.floor(diff / 86400)} 天前`
+}
+
 // setTimeout 链式调度：成功维持 3000ms；失败间隔翻倍（上限 30000ms），成功即重置
 async function pollStatus() {
   if (disposed) return
@@ -155,6 +164,18 @@ function onRename(inst) {
             gray: !store.botRunning
           }"></span>
           <span>{{ store.statusText }}</span>
+        </div>
+        <div v-if="store.platforms.length" class="platform-status">
+          <div
+            v-for="p in store.platforms"
+            :key="p.name"
+            class="platform-row"
+            :title="`${p.display_name}${p.self_id ? ' · self_id ' + p.self_id : ''}${p.last_heartbeat ? ' · 心跳 ' + fmtHeartbeat(p.last_heartbeat) : ''}`"
+          >
+            <span class="status-dot" :class="p.connected ? 'green' : (store.botRunning ? 'yellow' : 'gray')"></span>
+            <span class="platform-name">{{ p.display_name }}</span>
+            <span class="platform-state">{{ p.connected ? '在线' : '离线' }}</span>
+          </div>
         </div>
       </div>
     </aside>

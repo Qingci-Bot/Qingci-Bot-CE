@@ -33,6 +33,7 @@ from qingci_plugin_sdk.context import MessageContext
 from ..core.di import DIContainer
 from ..core.dispatcher import MessageDispatcher
 from ..core.event_bus import EventBus
+from ..core.platforms.base import PlatformAdapter
 from ..core.session_state import SessionStateManager
 from ..llm.tools import ToolRegistry
 from ..plugin.base import PluginStatus
@@ -66,7 +67,7 @@ class FakeConfig:
         return self.plugins_config.get(plugin_name)
 
 
-class FakeConnection:
+class FakeConnection(PlatformAdapter):
     """记录 API 调用与发送消息的假连接
 
     - send_* 方法记录到 connection.sent
@@ -74,11 +75,22 @@ class FakeConnection:
     - 插件内部主动发消息可在此断言
     """
 
+    name = "onebot"
+    display_name = "OneBot 11"
+
     def __init__(self):
         self.sent: list[tuple[str, int, str]] = []
         # [(message_type, target_id, message), ...]
         self.api_calls: list[tuple[str, dict]] = []
         self._api_call_hooks: list[Any] = []
+
+    @property
+    def is_connected(self) -> bool:
+        return True
+
+    @property
+    def last_heartbeat(self) -> float:
+        return 0.0
 
     def on_api_call(self, handler) -> None:
         """注册平台接口调用钩子（与 OneBotConnection.on_api_call 对齐）"""
@@ -158,6 +170,35 @@ class TestBot:
         self._matcher_preprocessors: list[Any] = []
 
         self._running = True  # 模拟已启动，事件可被处理
+
+    def get_status(self) -> dict:
+        """获取 Bot 状态（与真实 Bot 对齐，供测试断言）"""
+        return {
+            "running": self._running,
+            "connected": self.connection.is_connected,
+            "last_heartbeat": self.connection.last_heartbeat,
+            "platforms": [
+                {
+                    "name": p.name,
+                    "display_name": p.display_name,
+                    "connected": bool(p.is_connected),
+                    "last_heartbeat": p.last_heartbeat,
+                    "self_id": int(getattr(p, "self_id", 0) or 0),
+                }
+                for p in self.platforms.values()
+            ],
+            "plugins": [
+                {
+                    "name": p.name,
+                    "version": p.version,
+                    "description": p.description,
+                    "category": getattr(p, "category", "other"),
+                    "status": p.status.value,
+                    "enabled": getattr(p, "enabled", True),
+                }
+                for p in self.plugin_manager.plugins.values()
+            ],
+        }
 
     # ---- 钩子注册 ----
 

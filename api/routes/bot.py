@@ -55,7 +55,7 @@ async def get_status():
     bot = _get_bot_or_none()
     if bot:
         return bot.get_status()
-    return {"running": False, "connected": False, "plugins": []}
+    return {"running": False, "connected": False, "platforms": [], "plugins": []}
 
 
 @router.post("/start", dependencies=[Depends(require_auth)])

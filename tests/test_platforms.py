@@ -301,3 +301,19 @@ def test_dispatcher_platform_field():
     # 默认 onebot
     ctx2 = disp.dispatch({"post_type": "message", "message_type": "private", "message_id": "2", "user_id": 1, "self_id": 2})
     assert ctx2.platform == "onebot"
+
+
+def test_get_status_platforms(bot):
+    """get_status 返回各平台状态（名称/连接/心跳/self_id）"""
+    tg = FakeTelegram()
+    tg.self_id = 12345
+    bot.platforms["telegram"] = tg
+    bot._running = True
+
+    status = bot.get_status()
+    platforms = {p["name"]: p for p in status["platforms"]}
+    assert set(platforms.keys()) == {"onebot", "telegram"}
+    assert platforms["onebot"]["display_name"] == "OneBot 11"
+    assert platforms["telegram"]["display_name"] == "Telegram"
+    assert platforms["telegram"]["self_id"] == 12345
+    assert platforms["telegram"]["connected"] is False  # 未启动
