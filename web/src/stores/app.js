@@ -60,6 +60,14 @@ const defaultConfig = {
     port: 3001,
     access_token: '',
   },
+  platforms: {
+    telegram: {
+      name: 'telegram',
+      enabled: false,
+      token: '',
+      poll_interval: 1.0,
+    },
+  },
   rate_limit: {
     enabled: false,
     daily_limit: 50,

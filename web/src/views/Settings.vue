@@ -8,12 +8,16 @@ const { toast, showToast } = useToast()
 const form = reactive({
   bot: {},
   onebot: {},
+  platforms: {
+    telegram: { name: 'telegram', enabled: false, token: '', poll_interval: 1.0 },
+  },
   api_key: '',
 })
 const apiKeyInput = ref('')
 const saving = ref(false)
 const showServerKey = ref(false)
 const showLocalKey = ref(false)
+const showTelegramToken = ref(false)
 const backupLoading = ref(false)
 const backupResult = ref(null)
 const exporting = ref(false)
@@ -36,6 +40,7 @@ watch(() => store.configLoaded, (loaded) => {
 function resetForm() {
   const bot = store.config.bot || {}
   const onebot = store.config.onebot || {}
+  const telegram = (store.config.platforms || {}).telegram || {}
   Object.assign(form, {
     bot: {
       name: bot.name || 'Qingci-Bot CE',
@@ -50,6 +55,14 @@ function resetForm() {
       host: onebot.host || '127.0.0.1',
       port: onebot.port || 3001,
       access_token: onebot.access_token || '',
+    },
+    platforms: {
+      telegram: {
+        name: 'telegram',
+        enabled: telegram.enabled || false,
+        token: telegram.token || '',
+        poll_interval: telegram.poll_interval || 1.0,
+      },
     },
     api_key: store.config.api_key || '',
   })
@@ -92,6 +105,13 @@ async function saveConfig() {
     newConfig.onebot = {
       ...form.onebot,
       port: Number(form.onebot.port) || 3001,
+    }
+    newConfig.platforms = {
+      telegram: {
+        ...form.platforms.telegram,
+        name: 'telegram',
+        poll_interval: Number(form.platforms.telegram.poll_interval) || 1.0,
+      },
     }
     newConfig.api_key = form.api_key
     await store.saveConfig(newConfig)
@@ -274,6 +294,51 @@ async function saveConfigJson() {
 
     <div class="card fade-in" style="margin-top: 22px;">
       <div class="card-header">
+        <div class="card-title">平台适配器</div>
+      </div>
+      <div class="platform-cfg">
+        <div class="platform-cfg-head">
+          <div class="form-group" style="margin: 0; flex: 1;">
+            <label>Telegram（Bot API 长轮询）</label>
+            <div class="switch-row">
+              <label class="switch">
+                <input type="checkbox" v-model="form.platforms.telegram.enabled">
+                <span class="slider"></span>
+              </label>
+              <span class="text-muted" style="font-size: 13px;">
+                {{ form.platforms.telegram.enabled ? '已启用' : '已停用' }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Bot Token</label>
+            <input
+              v-model="form.platforms.telegram.token"
+              :type="showTelegramToken ? 'text' : 'password'"
+              placeholder="123456:ABC-DEF...（@BotFather 获取）"
+            >
+          </div>
+          <div class="form-group">
+            <label>轮询间隔（秒）</label>
+            <input v-model.number="form.platforms.telegram.poll_interval" type="number" min="0.5" step="0.5" placeholder="1.0">
+          </div>
+        </div>
+        <div class="form-group" style="margin-top: 8px;">
+          <button class="btn btn-secondary btn-sm" @click="showTelegramToken = !showTelegramToken">
+            {{ showTelegramToken ? '隐藏' : '显示' }} Token
+          </button>
+        </div>
+      </div>
+      <div class="hint-text" style="margin-top: 16px;">
+        启用后以 Telegram Bot API 长轮询接入，现有插件/命令零改动可用；回复自动路由到对应平台。
+        <strong>修改后需要重启 Bot 才能生效。</strong>Token 已配置时显示为 <code>***</code>，留空保存不会清空原值。
+      </div>
+    </div>
+
+    <div class="card fade-in" style="margin-top: 22px;">
+      <div class="card-header">
         <div class="card-title">API 鉴权</div>
       </div>
       <div class="form-grid">
@@ -401,6 +466,66 @@ async function saveConfigJson() {
   opacity: 0;
   transform: translateY(-10px);
 }
+
+/* 平台适配器卡片 */
+.platform-cfg {
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.platform-cfg-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* 开关按钮 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(148, 163, 184, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  transition: 0.25s;
+}
+.slider::before {
+  content: '';
+  position: absolute;
+  height: 16px; width: 16px;
+  left: 3px; bottom: 3px;
+  background: var(--text-secondary);
+  transition: 0.25s;
+  border-radius: 50%;
+}
+.switch input:checked + .slider {
+  background: var(--accent-bg);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+.switch input:checked + .slider::before {
+  transform: translateX(20px);
+  background: var(--accent);
+}
+.switch input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .json-editor {
   width: 100%;
   min-height: 360px;

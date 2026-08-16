@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **WebUI 平台配置表单**：系统设置页新增「平台适配器」卡片——Telegram 启用开关（switch）、Bot Token 输入（password + 显示/隐藏，保存时 `***` 占位符自动过滤保留原值）、轮询间隔数字输入；前端 `defaultConfig` 与表单模型加入 `platforms.telegram` 节，保存时随完整配置写回；后端 `token` 后缀命中既有敏感字段遮蔽/过滤逻辑，GET/PUT 零改动
 - **WebUI 平台状态展示**：`GET /api/bot/status` 新增 `platforms` 数组（各适配器名称/展示名/连接状态/心跳时间/self_id，未启动时返回空列表）；WebUI 侧边栏状态区下方新增平台列表（状态点 + 展示名 + 在线/离线 + 心跳相对时间 tooltip）；store 新增 `platforms` 状态；TestBot `get_status` 与真实 Bot 对齐，`FakeConnection` 补全 PlatformAdapter 契约属性；测试 `test_platforms.py` 增 1 用例 + `test_api.py` 平台字段断言
 - **多平台适配器**：新增 `bot/core/platforms/`（`base.py` PlatformAdapter 契约 + `telegram.py` Telegram Bot API 长轮询适配器）；事件归一化为 OneBot-11 兼容 dict（含 `platform` 字段），发送按 `MessageContext.platform` 路由到对应适配器；`OneBotConnection` 升级为实现契约的「onebot」平台（完全兼容）；配置 `platforms.telegram`（enabled/token/poll_interval），附加平台启动失败仅记日志不阻断主平台；SDK `MessageContext` 新增 `platform` 字段（v1.6.0）；测试 `test_platforms.py` 13 用例（归一化/发送映射/API 透传/配置解析/回复路由/dispatcher 透传）
 - **插件市场体验打磨**：索引条目新增 `icon`（emoji 卡片图标）/`homepage`（主页链接）/`requirements`（依赖展示）/`tags`（标签筛选）字段；新增 `GET /api/plugins/market/info` 返回市场名称/插件数/索引更新时间（墙钟）；WebUI 市场 Tab 增强——市场名 + 索引更新时间、标签筛选栏、卡片图标、依赖标签、主页链接、加载失败重试按钮、已安装插件「卸载」入口；测试 `test_market.py` 增至 10 用例
