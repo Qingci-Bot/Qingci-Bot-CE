@@ -71,6 +71,25 @@ class KeywordKnowledgeStore:
 
     # ============ 索引 ============
 
+    def _index_file(self, path: Path) -> list[KnowledgeChunk]:
+        """索引单个文档文件，返回其分块列表（供全量/增量索引复用）"""
+        chunks: list[KnowledgeChunk] = []
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            logger.exception(f"读取知识文件失败: {path.name}")
+            return chunks
+        source = path.stem
+        for piece in self._chunk_text(text):
+            chunks.append(
+                KnowledgeChunk(
+                    source=source,
+                    text=piece,
+                    tf=Counter(tokenize(piece)),
+                )
+            )
+        return chunks
+
     def reload(self) -> int:
         """（重新）索引知识库目录下所有文档，返回分块总数"""
         chunks: list[KnowledgeChunk] = []
@@ -80,19 +99,7 @@ class KeywordKnowledgeStore:
                     continue
                 if not path.is_file():
                     continue
-                try:
-                    text = path.read_text(encoding="utf-8", errors="ignore")
-                except OSError:
-                    logger.exception(f"读取知识文件失败: {path.name}")
-                    continue
-                for piece in self._chunk_text(text):
-                    chunks.append(
-                        KnowledgeChunk(
-                            source=path.stem,
-                            text=piece,
-                            tf=Counter(tokenize(piece)),
-                        )
-                    )
+                chunks.extend(self._index_file(path))
         self._chunks = chunks
         logger.info(
             f"知识库索引完成: 目录={self._root}, "
@@ -153,7 +160,7 @@ class KeywordKnowledgeStore:
     # ============ 文档管理 ============
 
     def add_document(self, name: str, content: str) -> Path:
-        """新增文档（写入知识库目录后重建索引）
+        """新增文档（写入知识库目录后增量索引，不重建其余文档）
 
         Raises:
             ValueError: 文档名非法或已存在、内容为空
@@ -168,11 +175,15 @@ class KeywordKnowledgeStore:
         if path.exists():
             raise ValueError(f"文档已存在: {safe}")
         path.write_text(content.strip(), encoding="utf-8")
-        self.reload()
+        # 增量索引：仅追加新文档的分块，避免全量重建已索引文档
+        self._chunks.extend(self._index_file(path))
         return path
 
     def remove_document(self, name: str) -> bool:
-        """删除文档并重建索引，返回是否删除成功"""
+        """删除文档并增量更新索引，返回是否删除成功
+
+        仅移除被删文档的分块，不重建其余文档索引。
+        """
         safe = self._safe_name(name)
         if not safe:
             logger.warning(f"拒绝非法文档名删除请求: {name!r}")
@@ -188,7 +199,8 @@ class KeywordKnowledgeStore:
                 continue
             if path.is_file():
                 path.unlink()
-                self.reload()
+                # 增量索引：仅剔除该文档的分块
+                self._chunks = [c for c in self._chunks if c.source != path.stem]
                 return True
         return False
 

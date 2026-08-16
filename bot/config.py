@@ -140,6 +140,29 @@ class BotConfig(BaseModel):
     log_json: bool = False  # 结构化 JSON 日志（默认关闭，使用普通文本日志）
     wizard_skipped: bool = False  # 是否跳过了首次配置引导
 
+    # admin_set 缓存：super_admin + admin_users 的并集集合（权限检查 O(1) 成员判断）
+    _admin_set_cache: frozenset[int] | None = None
+
+    @model_validator(mode="after")
+    def _invalidate_admin_set(self):
+        # 配置经 update/reload 重建实例时刷新缓存，避免在旧实例上残留
+        self._admin_set_cache = None
+        return self
+
+    @property
+    def admin_set(self) -> frozenset[int]:
+        """超级管理员 + 普通管理员的并集集合（仅读，权限检查用）
+
+        预编译为 frozenset，将权限检查从 O(n) 列表成员判断降为 O(1)；
+        超级管理员自动包含在集合内（继承普通管理员权限）。
+        """
+        if self._admin_set_cache is None:
+            members = set(self.admin_users or [])
+            if self.super_admin is not None:
+                members.add(self.super_admin)
+            self._admin_set_cache = frozenset(members)
+        return self._admin_set_cache
+
 
 class RateLimitConfig(BaseModel):
     """对话限流配置（默认关闭）"""

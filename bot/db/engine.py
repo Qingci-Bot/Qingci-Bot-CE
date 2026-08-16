@@ -6,6 +6,8 @@
 """
 
 import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from sqlalchemy import event
@@ -70,6 +72,24 @@ def get_session_factory() -> sessionmaker:
                     expire_on_commit=False,
                 )
     return _session_factory
+
+
+@asynccontextmanager
+async def session_scope() -> AsyncIterator[AsyncSession]:
+    """可复用的 AsyncSession 作用域：成功提交、异常回滚、最后关闭
+
+    仓储层统一通过本协程管理器访问会话，避免重复的 commit/rollback/close
+    样板代码；也便于在单个事件处理中复用同一会话执行多次数据库操作。
+    """
+    session = get_session_factory()()
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
 
 
 async def init_db():

@@ -28,8 +28,9 @@ onUnmounted(() => {
 function connect() {
   if (!shouldReconnect) return
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const token = encodeURIComponent(store.getApiKey() || '')
-  socket = new WebSocket(`${proto}//${location.host}/api/ws/chat?token=${token}`)
+  const token = store.getApiKey() || ''
+  const protocols = token ? [`api-key.${token}`] : []
+  socket = new WebSocket(`${proto}//${location.host}/api/ws/chat`, protocols)
   socket.onopen = () => {
     wsConnected.value = true
     if (reconnectTimer) {

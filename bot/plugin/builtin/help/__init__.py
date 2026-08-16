@@ -37,6 +37,7 @@ class HelpPlugin(PluginBase):
 
     async def _cmd_help(self, ctx: MatcherContext) -> str:
         """列出当前用户有权限使用的命令，按插件分组，支持分类筛选"""
+        assert self.bot is not None  # 运行时由 on_bot_connect 注入，仅类型收缩
         event = ctx.raw_event or {}
         # 构建插件 → 命令列表（保留顺序）
         plugin_commands: dict[str, dict] = {}

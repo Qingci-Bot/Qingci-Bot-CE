@@ -185,6 +185,7 @@ class ChatPlugin(PluginBase):
 
         返回 None 表示使用 LLMConfig.system_prompt。
         """
+        assert self.config is not None
         llm_cfg = self.config.llm
         key = self._session_key(ctx)
         override = _persona_override.get(key)
@@ -203,6 +204,7 @@ class ChatPlugin(PluginBase):
 
     async def _handle_persona(self, ctx: MatcherContext) -> str | None:
         """处理 /persona 命令：查看 / 列表 / 切换 / 重置"""
+        assert self.config is not None
         args = ctx.args.strip()
         key = self._session_key(ctx)
         llm_cfg = self.config.llm
@@ -232,6 +234,10 @@ class ChatPlugin(PluginBase):
 
     async def _handle_chat(self, ctx: MatcherContext) -> str | None:
         """处理聊天消息：调用 LLM + 保存记录 + 实时广播"""
+        # 运行时由 on_bot_connect 注入，assert 仅为类型收缩
+        assert self.config is not None
+        assert self.bot is not None
+        assert self.llm is not None
         message = ctx.args
         if not message:
             return None
@@ -246,11 +252,8 @@ class ChatPlugin(PluginBase):
         exempt = False
         if need_filter:
             cfg_bot = self.config.bot
-            admins = cfg_bot.admin_users or []
-            super_admin = getattr(cfg_bot, "super_admin", None)
-            exempt = filter_cfg.exempt_admins and (
-                ctx.user_id in admins or ctx.user_id == super_admin
-            )
+            # super_admin + admin_users 并集，O(1) 成员判断
+            exempt = filter_cfg.exempt_admins and ctx.user_id in cfg_bot.admin_set
             if not exempt:
                 hit = self.bot.sensitive_filter.check(message)
                 if hit:

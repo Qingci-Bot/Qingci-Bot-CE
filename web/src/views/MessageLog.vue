@@ -69,8 +69,9 @@ async function removeSession(key) {
 function connectWebSocket() {
   if (!shouldReconnect) return
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const token = encodeURIComponent(store.getApiKey() || '')
-  socket = new WebSocket(`${proto}//${location.host}/api/ws/log?token=${token}`)
+  const token = store.getApiKey() || ''
+  const protocols = token ? [`api-key.${token}`] : []
+  socket = new WebSocket(`${proto}//${location.host}/api/ws/log`, protocols)
   socket.onopen = () => {
     wsConnected.value = true
     if (reconnectTimer) {

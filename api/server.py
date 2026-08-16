@@ -169,9 +169,22 @@ def create_app() -> FastAPI:
     # 注册 WebSocket 广播 broker（register_broker 内部已去重，create_app 多次调用安全）
     register_broker(_broadcast_message_to_ws)
 
-    # WebSocket 实时日志（鉴权：通过 token 查询参数传递 API Key）
+    def _ws_auth(ws: WebSocket, query_token: str) -> tuple[str, str | None]:
+        """从 WebSocket 子协议或 query 参数提取鉴权 token。
+
+        浏览器 WebSocket 无法设置自定义 header，若把 API Key 放进 URL query
+        会进入访问日志/代理日志；改用子协议（sec-websocket-protocol）传递更安全。
+        query 参数保留作为兼容回退。
+        """
+        sub = ws.headers.get("sec-websocket-protocol", "")
+        if sub.startswith("api-key."):
+            return sub[len("api-key.") :], sub
+        return query_token, None
+
+    # WebSocket 实时日志（鉴权：子协议或 token 查询参数传递 API Key）
     @app.websocket("/api/ws/log")
     async def ws_log(ws: WebSocket, token: str = Query(default="")):
+        token, subprotocol = _ws_auth(ws, token)
         configured_key = _get_configured_api_key()
         if configured_key is None:
             # 配置读取失败，fail-closed
@@ -184,7 +197,7 @@ def create_app() -> FastAPI:
         if len(_ws_clients) >= _MAX_WS_CLIENTS:
             await ws.close(code=4003, reason="连接数已满")
             return
-        await ws.accept()
+        await ws.accept(subprotocol=subprotocol)
         _ws_clients.add(ws)
         # 二次检查，防止并发超过上限：
         # accept 前检查 + accept 后二次检查已闭合并发窗口，超限连接立即断开
@@ -219,6 +232,7 @@ def create_app() -> FastAPI:
     # 服务端逐块返回 {"type":"delta","text":...}，结束返回 {"type":"done"}。
     @app.websocket("/api/ws/chat")
     async def ws_chat(ws: WebSocket, token: str = Query(default="")):
+        token, subprotocol = _ws_auth(ws, token)
         configured_key = _get_configured_api_key()
         if configured_key is None:
             await ws.close(code=4001, reason="服务暂不可用")
@@ -230,7 +244,7 @@ def create_app() -> FastAPI:
         if len(_chat_clients) >= _MAX_WS_CLIENTS:
             await ws.close(code=4003, reason="连接数已满")
             return
-        await ws.accept()
+        await ws.accept(subprotocol=subprotocol)
         _chat_clients.add(ws)
         # 二次检查，防止并发超过上限
         if len(_chat_clients) > _MAX_WS_CLIENTS:

@@ -153,3 +153,32 @@ class TestPluginConfig:
         await db.set_plugin_config("test.key", "v2")
         value = await db.get_plugin_config("test.key")
         assert value == "v2"
+
+
+@pytest.mark.asyncio
+class TestSessionScope:
+    """session_scope 作用域：成功提交、异常回滚"""
+
+    async def test_commit_on_success(self, db):
+        from bot.db.engine import session_scope
+        from bot.db.models import SessionHistory
+
+        async with session_scope() as session:
+            session.add(SessionHistory(session_key="k", role="user", content="hi"))
+        # scope 退出后自动提交，数据可被新会话读到
+        sessions = await db.get_sessions("k")
+        assert len(sessions) == 1
+        assert sessions[0]["content"] == "hi"
+
+    async def test_rollback_on_error(self, db):
+        from bot.db.engine import session_scope
+        from bot.db.models import SessionHistory
+
+        with pytest.raises(RuntimeError):
+            async with session_scope() as session:
+                # 事务内新增一条待提交记录
+                session.add(SessionHistory(session_key="k", role="user", content="pending"))
+                raise RuntimeError("boom")
+        # 异常回滚：待提交记录未落库，仅保留此前已提交的记录
+        sessions = await db.get_sessions("k")
+        assert sessions == []

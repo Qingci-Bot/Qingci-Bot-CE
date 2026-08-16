@@ -42,6 +42,7 @@ class ImageGenPlugin(PluginBase):
 
     async def _cmd_image(self, ctx: MatcherContext) -> str:
         """处理 /image <提示词> 命令"""
+        assert self.bot is not None  # 运行时由 on_bot_connect 注入，仅类型收缩
         prompt = (ctx.args or "").strip()
         if not prompt:
             return "用法: /image <提示词>，例如: /image 一只在竹林里喝茶的熊猫"

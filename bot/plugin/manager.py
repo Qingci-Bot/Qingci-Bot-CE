@@ -86,6 +86,8 @@ class PluginManager:
     def __init__(self):
         self._plugins: dict[str, PluginBase] = {}
         self._cached_matchers: list[Matcher] | None = None
+        # 事件类型倒排索引: event_type -> 该类型的 Matcher（保持优先级升序）
+        self._matcher_index: dict[str, list[Matcher]] = {}
         # Matcher 执行指标: owner_name -> Matcher 实例 -> MatcherMetrics
         self._metrics: dict[str, dict[Matcher, MatcherMetrics]] = {}
         # plugin.json 预取缓存: module_path -> metadata dict
@@ -122,11 +124,15 @@ class PluginManager:
     def get(self, name: str) -> PluginBase | None:
         return self._plugins.get(name)
 
-    def all_matchers(self) -> list[Matcher]:
+    def all_matchers(self, post_type: str | None = None) -> list[Matcher]:
         """收集所有已启用插件的 Matcher（用于调度），结果已按优先级升序排序
 
         约定：priority 越小越先执行。返回缓存副本，防止调用方污染缓存。
         仅 LOADED 状态的插件参与调度，disabled 的 Matcher 被跳过。
+
+        post_type 非空时通过事件类型倒排索引直接返回该事件类型的 Matcher，
+        避免每次分发都对全部 Matcher 做线性扫描过滤（注意/请求等低频
+        事件类型收益尤其明显）。
         """
         if self._cached_matchers is None:
             result = []
@@ -135,11 +141,20 @@ class PluginManager:
                     for m in plugin.matchers:
                         if not m.disabled:
                             result.append(m)
-            self._cached_matchers = sorted(result, key=lambda m: m.priority)
+            result.sort(key=lambda m: m.priority)
+            self._cached_matchers = result
+            # 构建事件类型倒排索引（各类型子列表随全量排序保持优先级升序）
+            index: dict[str, list[Matcher]] = {}
+            for m in result:
+                index.setdefault(m.event_type, []).append(m)
+            self._matcher_index = index
+        if post_type:
+            return list(self._matcher_index.get(post_type, []))
         return list(self._cached_matchers)
 
     def _invalidate_matchers_cache(self) -> None:
         self._cached_matchers = None
+        self._matcher_index = {}
 
     # ---- 指标 ----
 

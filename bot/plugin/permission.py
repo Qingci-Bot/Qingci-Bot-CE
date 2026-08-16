@@ -116,11 +116,14 @@ async def _is_admin(bot, event, ctx):
     cfg = bot.config.bot if bot and bot.config else None
     if cfg is None:
         return False
-    uid = ctx.user_id
-    # 超级管理员自动继承普通管理员权限
-    if uid == getattr(cfg, "super_admin", None):
-        return True
-    return uid in (cfg.admin_users or [])
+    # 预编译集合 O(1) 成员判断；超级管理员已包含在集合内（自动继承）
+    admins = getattr(cfg, "admin_set", None)
+    if admins is not None:
+        return ctx.user_id in admins
+    # 兜底：旧配置对象无 admin_set 属性时回退到列表判断
+    return ctx.user_id in (cfg.admin_users or []) or ctx.user_id == getattr(
+        cfg, "super_admin", None
+    )
 
 
 ADMIN = Permission(_is_admin, label="ADMIN")

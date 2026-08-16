@@ -117,6 +117,7 @@ class AdminPlugin(PluginBase):
 
     async def _cmd_blacklist(self, ctx: MatcherContext) -> str:
         """黑名单管理: /blacklist add/remove <qq>"""
+        assert self.config is not None  # 运行时由 on_bot_connect 注入，仅类型收缩
         args = ctx.args.strip()
         if not args:
             return "格式: /blacklist add/remove <QQ号>"
@@ -159,6 +160,7 @@ class AdminPlugin(PluginBase):
 
     async def _cmd_filter(self, ctx: MatcherContext) -> str:
         """敏感词过滤管理: /filter on|off|reload"""
+        assert self.config is not None  # 运行时由 on_bot_connect 注入，仅类型收缩
         action = ctx.args.strip().lower()
         if action == "on":
             self.config.filter.enabled = True

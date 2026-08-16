@@ -433,7 +433,9 @@ async def complete_wizard(data: dict):
                     if qq > 0:
                         current["bot"]["super_admin"] = qq
                 except (ValueError, TypeError):
-                    raise HTTPException(status_code=400, detail="超级管理员 QQ 号格式无效") from None
+                    raise HTTPException(
+                        status_code=400, detail="超级管理员 QQ 号格式无效"
+                    ) from None
 
             # OneBot 端口
             if onebot_port is not None:

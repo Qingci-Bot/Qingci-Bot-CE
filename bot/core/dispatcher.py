@@ -125,12 +125,9 @@ class MessageDispatcher:
         """
         from ..plugin.matcher import MatcherContext
 
-        matchers = bot.plugin_manager.all_matchers()
-        if not matchers:
-            return None, False
-
-        # 按事件类型预过滤，避免消息事件遍历 notice/request Matcher
-        event_matchers = [m for m in matchers if m.event_type == post_type]
+        # 事件类型倒排索引：直接取该事件类型的 Matcher，避免对全部
+        # Matcher 线性扫描过滤（消息事件不再遍历 notice/request Matcher）
+        event_matchers = bot.plugin_manager.all_matchers(post_type)
         if not event_matchers:
             return None, False
 

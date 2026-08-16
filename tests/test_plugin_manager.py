@@ -118,6 +118,38 @@ async def test_matchers_sorted_by_priority(bot):
     assert priorities == sorted(priorities)
 
 
+async def test_matchers_event_type_inverted_index(bot):
+    """事件类型倒排索引：all_matchers(post_type) 只返回该类型的 Matcher"""
+    pm = bot.plugin_manager
+    await pm.load_external("plugin_pkg.simple_plugin", bot)
+    plugin = pm.get("simple")
+
+    msg = _make_matcher("msg", 1)
+    msg.event_type = "message"
+    notice = _make_matcher("notice", 2)
+    notice.event_type = "notice"
+    request = _make_matcher("request", 3)
+    request.event_type = "request"
+    plugin.matchers.extend([msg, notice, request])
+    pm._invalidate_matchers_cache()
+
+    # 全量包含所有类型
+    all_types = {m.event_type for m in pm.all_matchers()}
+    assert "message" in all_types and "notice" in all_types and "request" in all_types
+
+    # 按类型过滤：只返回对应类型
+    assert {m.event_type for m in pm.all_matchers("notice")} == {"notice"}
+    assert {m.event_type for m in pm.all_matchers("request")} == {"request"}
+
+    # 未注册的事件类型返回空列表
+    assert pm.all_matchers("meta_event") == []
+
+    # 各类型子列表保持优先级升序
+    msg_events = pm.all_matchers("message")
+    priorities = [m.priority for m in msg_events]
+    assert priorities == sorted(priorities)
+
+
 def _make_matcher(owner: str, priority: int):
     from bot.plugin.matcher import Matcher
 

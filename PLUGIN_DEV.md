@@ -209,11 +209,10 @@ from bot.plugin.matcher import MatcherContext, on_command
 
 @on_command("stats")
 async def stats(
-    ctx: MatcherContext,                       # 混合上下文（自动注入）
+    ctx: MatcherContext,  # 混合上下文（自动注入）
     state: SessionStateManager = Depends(SessionStateManager),  # Depends 显式声明
-    bot: QingciBot = None,                     # 类型注解自动解析
-):
-    ...
+    bot: QingciBot = None,  # 类型注解自动解析
+): ...
 ```
 
 **参数解析规则（按顺序）：**
@@ -350,21 +349,27 @@ def add(a: int, b: int) -> int:
 @on_command("weather", aliases=("天气", "tq"))
 async def weather(ctx: MatcherContext) -> str:
     return f"查询天气：{ctx.args}"
+
+
 # /weather 北京 与 天气 北京 均触发
 ```
 
 **子指令（subcommands）：** 将一组相关命令组织到父指令下，父指令不含子指令时匹配，`"父 子 [参数]"` 路由到对应子指令 handler。
 
 ```python
-@on_command("admin", subcommands={
-    "ban": _ban,
-    "unban": _unban,
-})
+@on_command(
+    "admin",
+    subcommands={
+        "ban": _ban,
+        "unban": _unban,
+    },
+)
 async def admin(ctx: MatcherContext) -> str:
     return "子指令: ban/unban"
 
+
 async def _ban(ctx: MatcherContext) -> str:
-    return f"已封禁 {ctx.args}"   # ctx.args 为子指令后的剩余参数
+    return f"已封禁 {ctx.args}"  # ctx.args 为子指令后的剩余参数
 ```
 父指令自动排除已声明的子指令（不会拦截 `admin ban xx`），子指令消息必然命中对应子指令 Matcher。
 
@@ -374,6 +379,8 @@ async def _ban(ctx: MatcherContext) -> str:
 @on_command("weather", args_schema={"city": str, "days": int})
 async def weather(ctx: MatcherContext, city: str = "", days: int = 1) -> str:
     return f"{city}: {days} 天预报"
+
+
 # /weather 北京 3 -> city="北京"（str），days=3（int），输出 "北京: 3 天预报"
 ```
 
@@ -431,8 +438,8 @@ async def admin(ctx: MatcherContext) -> str:
 # 在插件 on_load 中注册（或直接调用 ctx.bot.add_matcher_preprocessor）
 async def check_admin(bot, matcher, mctx) -> str | None:
     if not is_admin(mctx.user_id):
-        return "无权限执行此指令"   # 返回非 None 即拦截该 Matcher
-    return None                    # 返回 None 则放行
+        return "无权限执行此指令"  # 返回非 None 即拦截该 Matcher
+    return None  # 返回 None 则放行
 
 
 bot.add_matcher_preprocessor(check_admin)  # 此处的 bot 为注入的 Bot 实例
@@ -448,13 +455,14 @@ bot.add_matcher_preprocessor(check_admin)  # 此处的 bot 为注入的 Bot 实�
 ```python
 bot.register_api_hook(check_api)
 
+
 async def check_api(api_name: str, params: dict) -> dict | None:
     if api_name == "send_group_msg":
-        params["message"] = f"[审计] {params['message']}"   # 改写参数
+        params["message"] = f"[审计] {params['message']}"  # 改写参数
         return params
     if api_name == "set_group_ban":
-        raise PermissionError("禁止执行禁言")                 # 抛异常阻止调用
-    return None                                             # 保持原样
+        raise PermissionError("禁止执行禁言")  # 抛异常阻止调用
+    return None  # 保持原样
 ```
 
 - 钩子签名 `async (api_name, params) -> dict | None`；返回新 params 替换原参数，返回 None 保持原样，抛异常则阻止该次 API 调用
@@ -1130,8 +1138,12 @@ instances/<name>/plugins/
 
 ```python
 # 支持：git 仓库、HTTP 归档 URL、本地目录或 zip/tar 归档
-ok = await bot.plugin_manager.install(bot, "https://github.com/user/my_plugin/archive/refs/heads/main.zip")
-ok = await bot.plugin_manager.install(bot, "git+https://github.com/user/my_plugin.git", name="my_plugin")
+ok = await bot.plugin_manager.install(
+    bot, "https://github.com/user/my_plugin/archive/refs/heads/main.zip"
+)
+ok = await bot.plugin_manager.install(
+    bot, "git+https://github.com/user/my_plugin.git", name="my_plugin"
+)
 ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin")
 ```
 
@@ -1330,7 +1342,7 @@ dist\qingci-bot\
 └── instances\            # 实例目录（首次启动自动创建 default 实例，含 config.yaml/plugins/data）
 ```
 
-> 自 v1.6 起配置/插件/数据已收敛到 `instances\<name>\` 自包含目录，构建产物不再生成根级 `config.yaml` 或 `data\`。用户数据（配置、插件、数据库、日志）均按实例隔离，随实例目录一起分发。
+> 自 v1.5.1 起配置/插件/数据已收敛到 `instances\<name>\` 自包含目录，构建产物不再生成根级 `config.yaml` 或 `data\`。用户数据（配置、插件、数据库、日志）均按实例隔离，随实例目录一起分发。
 
 ### 运行
 

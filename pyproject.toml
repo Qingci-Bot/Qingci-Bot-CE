@@ -47,7 +47,8 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = ["--cov=bot", "--cov=api", "--cov-report=term-missing"]
+# --cov-fail-under 为覆盖率防回退门槛：低于该值测试直接失败
+addopts = ["--cov=bot", "--cov=api", "--cov-report=term-missing", "--cov-fail-under=40"]
 
 [tool.ruff]
 target-version = "py310"

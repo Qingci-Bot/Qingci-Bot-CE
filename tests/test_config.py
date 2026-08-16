@@ -123,3 +123,28 @@ class TestConfigManager:
         assert "api_key" in data["llm"]
         # 非敏感字段应正常返回
         assert data["bot"]["admin_users"] == [10001, 10002]
+
+    def test_admin_set_precompiled(self, config_file):
+        """admin_set 预编译集合正确包含 super_admin + admin_users 并集"""
+        cm = ConfigManager(Path(config_file))
+        cm.load()
+        cfg = cm.config.bot
+
+        # 初始配置：super_admin=None, admin_users=[10001, 10002]
+        assert cfg.admin_set == frozenset({10001, 10002})
+
+        # 设置 super_admin 后应包含在内
+        new_data = {"bot": {"super_admin": 12345, "admin_users": [10001, 10002]}}
+        cm.update(new_data)
+        cfg = cm.config.bot
+        assert cfg.admin_set == frozenset({12345, 10001, 10002})
+
+        # 清空 admin_users 后仍包含 super_admin
+        new_data = {"bot": {"super_admin": 12345, "admin_users": []}}
+        cm.update(new_data)
+        cfg = cm.config.bot
+        assert cfg.admin_set == frozenset({12345})
+
+        # 只有 super_admin 时，admin_set 仅为 super_admin
+        assert 12345 in cfg.admin_set
+        assert 99999 not in cfg.admin_set

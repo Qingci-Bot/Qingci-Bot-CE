@@ -5,6 +5,28 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- 性能优化：`BotConfig.admin_set` 预编译集合（`super_admin` + `admin_users` 并集，O(1) 成员判断），权限判定由 O(n) 列表遍历降为 O(1)；`rule` 限流豁免与敏感词豁免同步受益
+- 性能优化：`PluginManager.all_matchers(post_type)` 事件类型倒排索引，事件分发按类型直接取 Matcher，不再对全部 Matcher 线性扫描过滤
+- 测试：新增 39 个用例（告警、限流、API 实例路由、登录路由、`session_scope`、RAG 增量索引等），全套件 192 个全部通过
+- 引入 GitHub Actions CI（`.github/workflows/ci.yml`）：ruff lint + format + mypy + pytest + 覆盖率门槛
+
+### Changed
+- 性能优化：`bot/db` 新增 `session_scope()` 上下文管理器统一 commit/rollback/close，Database 仓储全部方法改用，减少重复样板
+- 性能优化：RAG 关键词库 `add_document`/`remove_document` 改为增量索引，仅更新受影响文档，不再全量重建
+- 覆盖率防回退门槛：pytest 新增 `--cov-fail-under=40`，低于 40% 直接失败
+- WebSocket 鉴权：API Key 由 URL 查询参数改为子协议（`sec-websocket-protocol: api-key.<token>`）传递，避免敏感信息落入访问/代理日志；query 参数保留为兼容回退
+- 前端启停 Bot 失败时通过 toast 给出明确错误提示（此前 Promise rejection 被静默吞掉）
+
+### Fixed
+- 修复 18 个既有 mypy 类型错误（内建插件 `self.bot`/`self.config`/`self.llm` 为 Optional 的 union-attr），方法入口加 `assert` 类型收缩，全量 mypy 通过
+- 配置模板 `config.example.yaml` 补充 `bot.wizard_skipped` 与 `log` 节（`level`/`log_file_enabled`/`log_file_max_bytes`/`log_file_backup_count`/`log_dir`）说明
+
+### Docs
+- `PLUGIN_DEV.md` 修正实例目录功能版本描述（「自 v1.6 起」→「自 v1.5.1 起」），补充子命令/类型化参数等示例
+
 ## [1.5.1] - 2026-08-16
 
 ### Added
@@ -183,6 +205,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 完全离线运行（无 CDN 依赖）
 - 一键打包为 Windows EXE（PyInstaller）
 
+[1.5.1]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.5.1
+[1.5.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.5.0
+[1.4.1]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.4.1
 [1.4.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.4.0
 [1.3.0]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.3.0
 [1.2.1]: https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.1
