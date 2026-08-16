@@ -234,7 +234,7 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
         <div class="step-desc">设置管理员信息与 OneBot 端口</div>
 
         <div class="form-group">
-          <label class="form-label">管理员 QQ 号 <span class="optional">(可选，用于管理命令)</span></label>
+          <label class="form-label">超级管理员 QQ <span class="optional">(可选，唯一，拥有全部权限)</span></label>
           <input
             v-model="adminQQ"
             type="text"
@@ -264,7 +264,7 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
             <span>{{ apiKey ? '****' + apiKey.slice(-4) : '(未填写)' }}</span>
           </div>
           <div class="summary-row" v-if="adminQQ">
-            <span>管理员 QQ</span>
+            <span>超级管理员 QQ</span>
             <span>{{ adminQQ }}</span>
           </div>
           <div class="summary-row">

@@ -373,17 +373,19 @@ async def get_wizard_status():
     if cfg.bot.wizard_skipped:
         return {"needs_setup": False, "wizard_skipped": True}
 
-    # 判断：api_key 为空 且 没有 admin_users 时，视为未配置
+    # 判断：api_key 为空 且 未配置任何管理员时，视为未配置
     api_key = cfg.config.api_key or ""
     llm_api_key = cfg.llm.api_key or ""
+    super_admin = cfg.bot.super_admin
     admin_users = cfg.bot.admin_users or []
 
-    needs_setup = not api_key and not llm_api_key and not admin_users
+    needs_setup = not api_key and not llm_api_key and not super_admin and not admin_users
     return {
         "needs_setup": needs_setup,
         "config_exists": cfg._path.exists(),
         "has_api_key": bool(api_key),
         "has_llm_key": bool(llm_api_key),
+        "has_super_admin": bool(super_admin),
         "has_admin_users": bool(admin_users),
     }
 
@@ -401,8 +403,9 @@ async def complete_wizard(data: dict):
             cfg = _get_config_manager()
             current = cfg.to_dict()
             configured_key = (cfg.config.api_key or "").strip()
+            configured_super = cfg.bot.super_admin
             configured_admins = cfg.bot.admin_users or []
-            if configured_key or configured_admins:
+            if configured_key or configured_super or configured_admins:
                 raise HTTPException(
                     status_code=403,
                     detail="配置已完成，向导仅限首次使用",
@@ -423,14 +426,14 @@ async def complete_wizard(data: dict):
             current["llm"]["api_url"] = preset["api_url"]
             current["llm"]["model"] = preset["model"]
 
-            # 管理员 QQ
+            # 超级管理员 QQ（唯一，拥有全部权限）
             if admin_qq is not None:
                 try:
                     qq = int(admin_qq)
                     if qq > 0:
-                        current["bot"]["admin_users"] = [qq]
+                        current["bot"]["super_admin"] = qq
                 except (ValueError, TypeError):
-                    raise HTTPException(status_code=400, detail="管理员 QQ 号格式无效") from None
+                    raise HTTPException(status_code=400, detail="超级管理员 QQ 号格式无效") from None
 
             # OneBot 端口
             if onebot_port is not None:

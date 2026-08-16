@@ -41,6 +41,7 @@ function resetForm() {
       name: bot.name || 'Qingci-Bot CE',
       trigger_mode: bot.trigger_mode || 'at',
       trigger_keywords: (bot.trigger_keywords || []).join(', '),
+      super_admin: bot.super_admin ? String(bot.super_admin) : '',
       admin_users: (bot.admin_users || []).join(', '),
       group_blacklist: (bot.group_blacklist || []).join(', '),
       user_blacklist: (bot.user_blacklist || []).join(', '),
@@ -82,6 +83,7 @@ async function saveConfig() {
     const newConfig = JSON.parse(JSON.stringify(store.config))
     newConfig.bot = {
       ...form.bot,
+      super_admin: form.bot.super_admin ? Number(form.bot.super_admin) : null,
       trigger_keywords: parseList(form.bot.trigger_keywords, false),
       admin_users: parseList(form.bot.admin_users),
       group_blacklist: parseList(form.bot.group_blacklist),
@@ -228,7 +230,11 @@ async function saveConfigJson() {
           <input v-model="form.bot.trigger_keywords" type="text" placeholder="/bot, /ai">
         </div>
         <div class="form-group">
-          <label>管理员 QQ（逗号分隔）</label>
+          <label>超级管理员 QQ（唯一，拥有全部权限）</label>
+          <input v-model="form.bot.super_admin" type="text" placeholder="123456789">
+        </div>
+        <div class="form-group">
+          <label>普通管理员 QQ（逗号分隔，可多个）</label>
           <input v-model="form.bot.admin_users" type="text" placeholder="123456789">
         </div>
         <div class="form-group">
