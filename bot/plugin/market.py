@@ -87,7 +87,12 @@ class MarketIndex:
                     "author": str(item.get("author", "")),
                     "type": str(item.get("type", "sdk")),
                     "source": source,
+                    "icon": str(item.get("icon", "") or ""),
+                    "homepage": str(item.get("homepage", "") or ""),
                     "tags": [str(t) for t in (item.get("tags") or [])],
+                    "requirements": [
+                        str(r) for r in (item.get("requirements") or [])
+                    ],
                     "updated_at": str(item.get("updated_at", "")),
                 }
             )
@@ -138,7 +143,8 @@ class MarketClient:
         self.url = url
         self.refresh_interval = refresh_interval
         self._cache: MarketIndex | None = None
-        self._fetched_at: float = 0.0
+        self._fetched_at: float = 0.0  # monotonic，用于 TTL 判断
+        self._fetched_wall: float = 0.0  # 墙钟时间，用于展示「索引更新于」
 
     def _cache_dir(self) -> Path:
         return data_root() / "market"
@@ -167,6 +173,7 @@ class MarketClient:
             self._save_cache(index)
             self._cache = index
             self._fetched_at = now
+            self._fetched_wall = time.time()
             logger.info(f"插件市场索引已更新: {index.name} ({len(index.plugins)} 个插件)")
             return index
         except Exception as e:
@@ -252,6 +259,20 @@ class MarketClient:
         self._cache = None
         self._fetched_at = 0.0
 
+    def fetched_at_epoch(self) -> float:
+        """最近一次成功拉取索引的时间（epoch 秒）
+
+        优先内存墙钟（本次运行），否则读磁盘缓存 meta（上次运行落盘）。
+        从未成功拉取过返回 0.0。
+        """
+        if self._fetched_wall > 0:
+            return self._fetched_wall
+        try:
+            meta = json.loads(self._cache_meta().read_text(encoding="utf-8"))
+            return float(meta.get("fetched_at", 0.0) or 0.0)
+        except (OSError, json.JSONDecodeError, ValueError):
+            return 0.0
+
 
 class MarketManager:
     """插件市场编排：合并状态 + 安装/更新"""
@@ -284,6 +305,15 @@ class MarketManager:
             entry["update_available"] = bool(cur) and is_newer(item["version"], cur)
             result.append(entry)
         return result
+
+    async def market_info(self) -> dict:
+        """市场元信息：名称 + 插件数 + 最近索引更新时间"""
+        index = await self.client.get_index()
+        return {
+            "name": index.name,
+            "plugin_count": len(index.plugins),
+            "fetched_at": self.client.fetched_at_epoch(),
+        }
 
     def _collect_installed(self, bot) -> dict[str, str]:
         """收集已安装插件版本：已加载插件优先，其次插件目录 plugin.json/元数据"""

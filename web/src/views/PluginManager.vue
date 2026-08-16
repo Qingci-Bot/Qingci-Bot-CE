@@ -13,9 +13,11 @@ const activeTab = ref('plugins')  // 'plugins' | 'commands' | 'market'
 
 // 插件市场
 const market = ref([])
+const marketInfo = ref(null)
 const marketLoading = ref(false)
 const marketSearch = ref('')
-const marketAction = ref('')  // 'install:name' | 'update:name' | 'refresh'
+const marketTag = ref('all')
+const marketAction = ref('')  // 'install:name' | 'update:name' | 'refresh' | 'uninstall:name'
 const marketError = ref('')
 
 // 命令管理
@@ -274,13 +276,22 @@ function switchTab(tab) {
 
 const filteredMarket = computed(() => {
   const q = marketSearch.value.trim().toLowerCase()
-  if (!q) return market.value
-  return market.value.filter(p =>
-    (p.name || '').toLowerCase().includes(q) ||
-    (p.title || '').toLowerCase().includes(q) ||
-    (p.description || '').toLowerCase().includes(q) ||
-    (p.tags || []).some(t => t.toLowerCase().includes(q))
-  )
+  const tag = marketTag.value
+  return market.value.filter(p => {
+    const matchTag = tag === 'all' || (p.tags || []).includes(tag)
+    if (!matchTag) return false
+    if (!q) return true
+    return (p.name || '').toLowerCase().includes(q) ||
+      (p.title || '').toLowerCase().includes(q) ||
+      (p.description || '').toLowerCase().includes(q) ||
+      (p.tags || []).some(t => t.toLowerCase().includes(q))
+  })
+})
+
+const marketTags = computed(() => {
+  const set = new Set()
+  for (const p of market.value) for (const t of (p.tags || [])) set.add(t)
+  return Array.from(set).sort()
 })
 
 const marketStats = computed(() => {
@@ -291,11 +302,24 @@ const marketStats = computed(() => {
 
 const marketTypeLabel = (t) => ({ sdk: 'SDK', builtin: '内置' }[t] || t || 'SDK')
 
+const marketUpdatedText = computed(() => {
+  const ts = marketInfo.value?.fetched_at
+  if (!ts) return ''
+  const d = new Date(ts * 1000)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+})
+
 async function fetchMarket() {
   marketLoading.value = true
   marketError.value = ''
   try {
-    market.value = await store.apiFetch('/api/plugins/market')
+    const [items, info] = await Promise.all([
+      store.apiFetch('/api/plugins/market'),
+      store.apiFetch('/api/plugins/market/info'),
+    ])
+    market.value = items
+    marketInfo.value = info
   } catch (e) {
     marketError.value = e.message || '获取市场失败'
     showToast('error', `获取插件市场失败：${e.message}`)
@@ -351,6 +375,24 @@ async function marketRefresh() {
   } finally {
     marketAction.value = ''
   }
+}
+
+async function marketUninstall(name) {
+  marketAction.value = `uninstall:${name}`
+  try {
+    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    showToast('success', `插件 ${name} 已卸载`)
+    await store.fetchStatus()
+    await fetchMarket()
+  } catch (e) {
+    showToast('error', `卸载失败：${e.message}`)
+  } finally {
+    marketAction.value = ''
+  }
+}
+
+function openHomepage(url) {
+  if (url) window.open(url, '_blank', 'noopener')
 }
 </script>
 
@@ -653,9 +695,12 @@ async function marketRefresh() {
       <div class="card fade-in">
         <div class="card-header">
           <div class="card-title">
-            插件市场
+            {{ marketInfo?.name || '插件市场' }}
             <span class="text-muted" style="font-size: 12px; margin-left: 10px;">
               共 {{ marketStats.total }} 个插件 · 已装 {{ marketStats.installed }} · 可更新 {{ marketStats.updatable }}
+            </span>
+            <span v-if="marketUpdatedText" class="text-muted" style="font-size: 12px; margin-left: 8px;">
+              索引更新于 {{ marketUpdatedText }}
             </span>
           </div>
           <div class="market-tools">
@@ -674,28 +719,54 @@ async function marketRefresh() {
             </button>
           </div>
         </div>
+        <div v-if="marketTags.length > 0" class="market-tag-row">
+          <button
+            :class="['tab-btn', { active: marketTag === 'all' }]"
+            @click="marketTag = 'all'"
+          >全部</button>
+          <button
+            v-for="t in marketTags" :key="t"
+            :class="['tab-btn', { active: marketTag === t }]"
+            @click="marketTag = t"
+          >{{ t }}</button>
+        </div>
         <div v-if="marketLoading" class="empty-state">加载市场中...</div>
         <div v-else-if="marketError" class="empty-state">
           <div class="icon">⚠</div>
           <div>市场加载失败：{{ marketError }}</div>
+          <button class="btn btn-secondary btn-sm" style="margin-top: 12px;" @click="fetchMarket">
+            <span>↻</span> 重试
+          </button>
         </div>
         <div v-else-if="filteredMarket.length === 0" class="empty-state">
           <div class="icon">◇</div>
-          <div>{{ marketSearch ? '未找到匹配的插件' : '市场暂无插件' }}</div>
+          <div>{{ marketSearch || marketTag !== 'all' ? '未找到匹配的插件' : '市场暂无插件' }}</div>
         </div>
         <div v-else>
           <div v-for="item in filteredMarket" :key="item.name" class="market-card">
             <div class="market-info">
               <div class="name">
+                <span class="market-icon">{{ item.icon || '📦' }}</span>
                 {{ item.title || item.name }}
                 <span class="tag tag-purple" style="font-size: 10px;">{{ marketTypeLabel(item.type) }}</span>
                 <span v-for="t in item.tags" :key="t" class="tag tag-accent" style="font-size: 10px; margin-left: 4px;">{{ t }}</span>
               </div>
               <div class="desc">{{ item.description || '无描述' }}</div>
+              <div v-if="item.requirements && item.requirements.length" class="market-meta-row">
+                <span v-for="r in item.requirements" :key="r" class="tag tag-blue" style="font-size: 10px;" title="依赖">⬡ {{ r }}</span>
+              </div>
               <div class="market-meta-row">
                 <span class="tag tag-blue" style="font-size: 11px;">{{ item.name }}</span>
                 <span class="tag tag-accent" style="font-size: 11px;">v{{ item.version }}</span>
                 <span v-if="item.author" class="text-muted" style="font-size: 11px;">{{ item.author }}</span>
+                <span v-if="item.updated_at" class="text-muted" style="font-size: 11px;">更新 {{ item.updated_at }}</span>
+                <a
+                  v-if="item.homepage"
+                  href="javascript:void(0)"
+                  class="market-link"
+                  style="font-size: 11px;"
+                  @click="openHomepage(item.homepage)"
+                >🔗 主页</a>
                 <span v-if="item.installed" class="status-badge green" style="font-size: 11px;">
                   已安装 v{{ item.installed_version }}
                 </span>
@@ -722,6 +793,15 @@ async function marketRefresh() {
               >
                 <span :class="{ spin: marketAction === `install:${item.name}` }">＋</span>
                 {{ item.installed ? '已安装' : (marketAction === `install:${item.name}` ? '安装中...' : '安装') }}
+              </button>
+              <button
+                v-if="item.installed"
+                class="btn btn-danger btn-sm"
+                :disabled="marketAction === `uninstall:${item.name}`"
+                @click="marketUninstall(item.name)"
+              >
+                <span :class="{ spin: marketAction === `uninstall:${item.name}` }">✕</span>
+                {{ marketAction === `uninstall:${item.name}` ? '卸载中...' : '卸载' }}
               </button>
             </div>
           </div>
@@ -1148,6 +1228,24 @@ async function marketRefresh() {
 }
 .market-card:hover { border-color: var(--border-active); }
 .market-info { flex: 1; min-width: 0; }
+.market-icon {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 15px;
+  vertical-align: -2px;
+}
+.market-tag-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.market-link {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+.market-link:hover { text-decoration: underline; }
 .market-meta-row {
   display: flex;
   align-items: center;

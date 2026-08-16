@@ -33,8 +33,11 @@ SAMPLE_INDEX = {
             "version": "1.2.0",
             "author": "tester",
             "type": "sdk",
+            "icon": "👋",
+            "homepage": "https://example.com/hello",
             "source": "https://example.com/hello.git",
             "tags": ["demo"],
+            "requirements": ["qingci-plugin-sdk>=1.0"],
         },
         {
             "name": "echo",
@@ -60,7 +63,14 @@ def sample_index() -> MarketIndex:
 def test_index_parse_filters_invalid(sample_index):
     names = [p["name"] for p in sample_index.plugins]
     assert names == ["hello", "echo"]
-    assert sample_index.get("hello")["version"] == "1.2.0"
+    hello = sample_index.get("hello")
+    assert hello["version"] == "1.2.0"
+    assert hello["icon"] == "👋"
+    assert hello["homepage"] == "https://example.com/hello"
+    assert hello["requirements"] == ["qingci-plugin-sdk>=1.0"]
+    # 缺省字段回退为空
+    assert sample_index.get("echo")["icon"] == ""
+    assert sample_index.get("echo")["requirements"] == []
     assert sample_index.get("missing") is None
 
 
@@ -250,3 +260,13 @@ async def test_refresh_force(tmp_path: Path, monkeypatch):
     manager = _make_manager(tmp_path, monkeypatch, data)
     index = await manager.refresh()
     assert index.get("hello") is not None
+
+
+async def test_market_info(tmp_path: Path, monkeypatch):
+    """market_info 返回名称/插件数/索引更新时间"""
+    data = json.dumps(SAMPLE_INDEX).encode()
+    manager = _make_manager(tmp_path, monkeypatch, data)
+    info = await manager.market_info()
+    assert info["name"] == "测试市场"
+    assert info["plugin_count"] == 2
+    assert info["fetched_at"] > 0  # 本次会话成功拉取过

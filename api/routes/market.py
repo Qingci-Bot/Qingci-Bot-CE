@@ -54,6 +54,19 @@ async def list_market():
     return items
 
 
+@router.get("/info", dependencies=[Depends(require_auth)])
+async def market_info():
+    """获取插件市场元信息（名称/插件数/索引更新时间）"""
+    bot = _get_bot_instance()
+    try:
+        return await _get_market_manager(bot).market_info()
+    except MarketError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from None
+    except Exception:
+        logger.exception("获取插件市场元信息失败")
+        raise HTTPException(status_code=500, detail="获取插件市场元信息失败") from None
+
+
 @router.post("/install", dependencies=[Depends(require_auth)])
 async def install_plugin(data: MarketActionRequest, request: Request):
     """安装市场插件（git 克隆/HTTP 归档 + 依赖隔离 + 加载）"""
