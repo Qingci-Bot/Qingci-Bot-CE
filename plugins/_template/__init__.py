@@ -264,7 +264,9 @@ class TemplatePlugin(PluginBase):
         now = datetime.now(tz)
         return now.strftime("%Y-%m-%d %H:%M:%S")
 
-    # ========== 旧式消息处理（兼容）==========
+    # ========== 旧式消息处理（已弃用，仅兼容参考）==========
+    # 新插件请使用 Matcher（on_message/on_command 装饰器），见上方注册示例。
+    # on_message/on_notice/on_request 已标记 deprecated，仅向后兼容旧插件。
 
     async def on_message(self, ctx):
         """旧式消息处理：Matcher 均未匹配时回退到此方法"""

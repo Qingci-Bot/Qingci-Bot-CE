@@ -47,8 +47,13 @@
 
 ### 依赖安全
 
-- 定期更新依赖：`uv pip install --upgrade qingci-bot`
+- 定期更新依赖：`uv pip install --upgrade qingci-bot-ce qingci-plugin-sdk`
 - 关注 [GitHub Advisory Database](https://github.com/advisories) 中的相关漏洞
+
+### 插件安全
+
+- 只安装可信来源的插件（`/plugin install` 支持 git/HTTP 归档/本地目录）
+- 插件声明的第三方依赖（`requirements.txt`）自动安装到实例隔离目录，生产环境如不需要可关闭 `bot.auto_install_plugin_deps`
 
 ## 致谢
 

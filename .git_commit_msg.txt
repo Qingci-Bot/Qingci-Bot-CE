@@ -1,0 +1,14 @@
+docs: 全面重构文档以匹配新架构
+
+- ARCHITECTURE.md：新增「协议层归属」「组合根」「DI 解析单例」章节，
+  项目结构标注薄转发目录，技术栈补 qingci_plugin_sdk，RAG 补 lancedb 可选依赖
+- docs/PROJECT_STRUCTURE.md：标注 bot/plugin 薄转发与协议层唯一来源，
+  目录结构补 composition.py，新增协议层依赖方向图
+- docs/CODING_STANDARDS.md：新增「协议层归属」「装配与单例」约束，
+  质量门禁 mypy 覆盖补 desktop，forward-ref 联合约定
+- README.md：顶部说明协议层归 SDK，特性/依赖分组补 vector 与 git 依赖，
+  rag 配置补 lancedb 可选与自动回退
+- PLUGIN_DEV.md：两种插件形态改为同一基类，示例五 Matcher 优先并标注
+  旧式回调 deprecated，DI 注入示例对齐 PEP 604
+- CONTRIBUTING.md / SECURITY.md：SDK 安装与协议层修改指引、插件安全建议
+- 插件模板（plugins/_template）标注旧式回调 deprecated

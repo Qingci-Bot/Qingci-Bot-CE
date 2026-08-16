@@ -91,21 +91,23 @@ Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，�
 
 ### 两种插件形态（内置 vs 独立 SDK）
 
-插件可用两种方式编写，加载入口统一：
+插件协议层（`PluginBase`/`Matcher`/`Permission`/`Rule`/`MessageContext`）统一由独立插件 SDK 维护，主项目 `bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 为薄转发。两种插件形态的基类是**同一个类**，只是导入入口不同：
 
 | 形态 | 基类导入 | 适用场景 |
 |------|----------|----------|
-| 内置式 | `from bot.plugin.base import PluginBase` | 与主项目同仓库开发的插件 |
+| 内置式 | `from bot.plugin.base import PluginBase` | 与主项目同仓库开发的插件（底层即转发 SDK） |
 | 独立 SDK 式（推荐） | `from qingci_plugin_sdk import PluginBase` | 独立工作区开发、可分发/版本化的插件 |
 
-SDK 式插件在 [Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) 工作区开发（SDK 已随 exe 打包，插件运行时无需另行安装），两类插件混用不受影响：`PluginManager` 自动识别 SDK 式 `PluginBase` 子类，并调用 `set_data_root()` 将数据目录重定向到当前实例（`data_root()/plugins/<name>/`），保持实例隔离。
+SDK 式插件在 [Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) 工作区开发（SDK 已随 exe 打包，插件运行时无需另行安装），两类插件混用不受影响：`PluginManager` 自动识别 SDK 式 `PluginBase` 子类，并调用 `set_data_root()` 将数据目录重定向到当前实例（`data_root()/plugins/<name>/`），保持实例隔离。由于内置插件的 `bot.plugin.base` 也是 SDK 转发，内置插件同样经此路径，实例隔离行为一致。
 
 ### 插件基类
 
-所有插件继承 `bot.plugin.base.PluginBase`：
+所有插件继承 `PluginBase`（可从 `bot.plugin.base` 或 `qingci_plugin_sdk` 导入，两者等价）：
 
 ```python
 from bot.plugin.base import PluginBase, PluginStatus
+# 或
+# from qingci_plugin_sdk import PluginBase, PluginStatus
 
 
 class MyPlugin(PluginBase):
@@ -135,8 +137,8 @@ class MyPlugin(PluginBase):
         """插件被启用时调用（可选，用于恢复定时任务等）"""
         pass
 
-    # 旧式消息处理（新式插件可省略或返回 None）
-    async def on_message(self, ctx: MessageContext) -> Optional[str]:
+    # 旧式消息处理（已弃用；新插件请用 Matcher，见「示例五」）
+    async def on_message(self, ctx: MessageContext) -> str | None:
         return None
 ```
 
@@ -190,15 +192,15 @@ class MyPlugin(PluginBase):
     name = "my_plugin"
     # 声明类型注解后，框架自动注入
     session_state: SessionStateManager
-    # 也支持 Optional[X] 类型
-    # db: Optional[Database] = None
-    # llm: Optional[LLMManager] = None
+    # 也支持 Optional 类型（PEP 604：X | None）
+    # db: Database | None = None
+    # llm: LLMManager | None = None
 ```
 
 `PluginManager._init_plugin` 会先调用 `await bot.di.inject(plugin)` 按类型自动注入，再手动赋值兜底保证兼容。
 
 **注入特性：**
-- 支持 `Optional[X]` 类型注解（自动提取内部类型）
+- 支持 `Optional[X]` / `X | None` 类型注解（自动提取内部类型）
 - 不会覆盖已设置的非 None 属性值
 - 支持 `register_as(InterfaceType, instance)` 接口绑定
 
@@ -968,17 +970,24 @@ class WelcomePlugin(PluginBase):
             )
 ```
 
-### 示例五：旧式 on_message（向后兼容）
+### 示例五：旧式 on_message（向后兼容，已弃用）
 
-旧式插件无需改动，继续工作：
+旧式插件无需改动，继续工作；但 `on_message`/`on_notice`/`on_request` 已标记 **deprecated**，新插件请优先使用 Matcher（`on_message(rule=...)` 装饰器等）：
 
 ```python
 # plugins/pingpong.py
-from typing import Optional
+from bot.plugin.matcher import on_message  # 装饰器位于 bot.plugin.matcher（转发 SDK）
 from bot.plugin.base import PluginBase
-from bot.core.dispatcher import MessageContext
+from qingci_plugin_sdk.context import MessageContext  # 或 bot.core.dispatcher.MessageContext（转发同一类型）
 
 
+# 新式（推荐）：Matcher 方式
+@on_message(rule=lambda bot, event, ctx: ctx.plain_text == "ping")
+async def ping(ctx: MessageContext) -> str:
+    return "pong!"
+
+
+# 旧式（兼容，deprecated）：重写 on_message
 class PingPongPlugin(PluginBase):
     name = "pingpong"
     version = "1.0.0"
@@ -990,11 +999,13 @@ class PingPongPlugin(PluginBase):
     async def on_unload(self):
         pass
 
-    async def on_message(self, ctx: MessageContext) -> Optional[str]:
+    async def on_message(self, ctx: MessageContext) -> str | None:
         if ctx.plain_text == "ping":
             return "pong!"
         return None
 ```
+
+> 注意：`MessageContext` 现由 SDK 定义（`qingci_plugin_sdk.context`），主项目 `bot.core.dispatcher` 为转发导出，两者是同一类型，任意导入路径均可。
 
 ### 插件测试工具（bot.testing）
 
@@ -1126,7 +1137,7 @@ reply = f"{at_code} 收到！"
 Bot 提供全局前置 / 后置钩子，用于横切统计、审计、预处理，建议在插件 `on_load` 中注册：
 
 ```python
-# 前置钩子：async (event, ctx) -> Optional[str]
+# 前置钩子：async (event, ctx) -> str | None
 # 返回非 None 时拦截该事件，返回值作为回复发送并终止分发
 async def pre_hook(event, ctx):
     return None

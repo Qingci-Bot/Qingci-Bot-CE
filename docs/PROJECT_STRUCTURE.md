@@ -8,6 +8,7 @@
 
 - 每个子项目自己管理自己的 `.git` 仓库与依赖；
 - **任何子项目的运行产物（缓存、构建产物等）不得写入根目录**，必须留在自身目录内。
+- 插件协议层（`PluginBase`/`Matcher`/`Permission`/`Rule`/`MessageContext`）的**唯一来源是 `Plugins-SDK`**；本仓库的 `bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `bot/core/dispatcher.py` 中的 `MessageContext` 均为薄转发（`from qingci_plugin_sdk.* import *`），修改协议请改 SDK 而非此处。
 
 ### 产物归属约定
 
@@ -34,17 +35,20 @@ Qingci-Bot-CE/
 │   ├── audit.py            # 登录/操作审计
 │   └── routes/             # REST 路由：auth/backup/bot/command/config/group/instances/log/plugin
 ├── bot/                    # Bot 核心逻辑（纯 Python 包）
-│   ├── core/               # 生命周期与调度：bot/connection/dispatcher/event_bus/
+│   ├── core/               # 生命周期与调度：bot/composition/connection/dispatcher/event_bus/
 │   │                       #   di/scheduler/session_state/filter/alerter/tasks/
 │   │                       #   broadcast/message/logformat
+│   │   ├── composition.py  # 组合根：assemble_bot() 组件装配 + DI 注册（__init__ 不再手写装配）
+│   │   ├── bot.py          # Bot 主类；get_bot() 经 DI 容器解析（resolve_sync），无模块级单例
+│   │   └── dispatcher.py   # MessageContext 转发 SDK（qingci_plugin_sdk.context）
 │   ├── plugin/             # 插件系统
-│   │   ├── base.py         # PluginBase 基类
-│   │   ├── manager.py      # 插件加载/卸载/依赖/元数据
-│   │   ├── matcher.py      # Matcher 与匹配器工厂
-│   │   ├── rule.py         # Rule 规则系统
-│   │   ├── permission.py   # Permission 权限
-│   │   ├── ratelimit.py    # RateLimiter 限流
-│   │   ├── llm_tool.py     # @llm_tool 插件级 LLM 工具声明
+│   │   ├── base.py         # 薄转发 SDK PluginBase（协议层唯一来源）
+│   │   ├── manager.py      # 插件加载/卸载/依赖/元数据 + SDK data_root 实例重定向
+│   │   ├── matcher.py      # 薄转发 SDK Matcher 与匹配器工厂
+│   │   ├── rule.py         # 薄转发 SDK Rule 规则系统
+│   │   ├── permission.py   # 薄转发 SDK Permission 权限
+│   │   ├── ratelimit.py    # 薄转发 SDK RateLimiter 限流
+│   │   ├── llm_tool.py     # @llm_tool 插件级 LLM 工具声明（注册到 ToolRegistry 的运行时逻辑，保留在本仓库）
 │   │   ├── watcher.py      # 插件自动热重载监听
 │   │   └── builtin/        # 内置插件：admin/chat/help/imagegen/knowledge
 │   ├── llm/                # LLM 管理、适配器、工具调用（Function Calling / MCP）
@@ -57,8 +61,8 @@ Qingci-Bot-CE/
 │   │   ├── database.py     # Database 会话/仓储
 │   │   ├── engine.py       # 数据库引擎
 │   │   └── models.py       # ORM 模型
-│   ├── rag/                # 知识库检索（关键词 + 向量）
-│   │   └── knowledge.py    # KnowledgeStore
+│   ├── rag/                # 知识库检索（关键词 + 向量；向量需可选依赖 lancedb）
+│   │   └── knowledge.py    # KnowledgeStore（lancedb 缺失时 vector 模式自动回退 keyword）
 │   ├── testing/            # TestBot 测试沙箱
 │   │   ├── bot.py          # TestBot
 │   │   └── events.py       # 事件工厂
@@ -90,9 +94,9 @@ Qingci-Bot-CE/
 │   └── plugin_pkg/         # 测试用插件包（dep/di/p1/p2 等）
 ├── scripts/                # 一次性/运维脚本（如 SQLite→PostgreSQL 迁移）
 ├── docs/                   # 规范文档（本文档 + CODING_STANDARDS.md）
-├── build.ps1               # Windows 构建脚本
-├── qingci-bot-ce.spec      # PyInstaller 打包配置
-├── pyproject.toml          # 依赖、ruff/mypy/pytest 配置
+├── build.ps1               # Windows 构建脚本（打包前 -e 安装 Plugins-SDK）
+├── qingci-bot-ce.spec      # PyInstaller 打包配置（collect_all 打包 SDK）
+├── pyproject.toml          # 依赖（含 git 依赖 qingci-plugin-sdk）、ruff/mypy/pytest 配置
 ├── alembic.ini             # 迁移配置
 ├── .pre-commit-config.yaml # pre-commit 钩子
 └── README.md / ARCHITECTURE.md / PLUGIN_DEV.md / CONTRIBUTING.md / CHANGELOG.md / SECURITY.md / LICENSE
@@ -103,8 +107,8 @@ Qingci-Bot-CE/
 | 目录 | 职责边界 | 禁止放入 |
 |------|----------|----------|
 | `api/` | 对外 HTTP 接口、鉴权、审计 | 业务逻辑（应下沉到 `bot/`） |
-| `bot/core/` | 生命周期、连接、调度、DI、事件总线等**框架层** | 具体业务功能 |
-| `bot/plugin/` | 插件系统机制 + `builtin/` 内置插件 | 框架强耦合的临时代码 |
+| `bot/core/` | 生命周期、连接、调度、DI、组合根装配、事件总线等**框架层** | 具体业务功能 |
+| `bot/plugin/` | 插件系统机制（协议层薄转发 SDK）+ `builtin/` 内置插件 | 框架强耦合的临时代码 |
 | `bot/llm|db|rag` | 领域能力模块 | 与框架调度耦合的逻辑 |
 | `web/` | 前端 UI | 后端逻辑 |
 | `tests/` | 所有测试，按 `test_<模块>.py` 命名 | 生产代码 |
@@ -117,6 +121,14 @@ web/  ──HTTP──▶  api/  ──调用──▶  bot/  ──依赖──
                                      ▲
                               bot/plugin 依赖框架层，框架层不反向依赖插件
 tests/ 可依赖任意模块，用于验证
+```
+
+**协议层依赖方向（唯一来源）：**
+
+```
+Plugins-SDK（qingci_plugin_sdk）  ──(正式依赖)──▶  bot/plugin/*.py（薄转发）
+                                                        │
+                        bot/core/dispatcher.py（MessageContext 转发） ◄──┘
 ```
 
 ## 4. 命名约定（结构层面）

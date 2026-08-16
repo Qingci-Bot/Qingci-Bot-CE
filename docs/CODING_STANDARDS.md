@@ -11,15 +11,15 @@
 # 在 Qingci-Bot-CE/ 目录下运行（产物留在本目录内）
 ruff check .          # 静态检查
 ruff format --check . # 格式检查
-mypy bot api          # 类型检查
+mypy api bot desktop  # 类型检查（覆盖 api/bot/desktop，与 CI 一致）
 pytest                # 测试（含覆盖率）
 ```
 
 | 工具 | 配置要点 | 说明 |
 |------|----------|------|
 | ruff | `target-version = py310`，`line-length = 100`，select `E F I W UP B C4` | 忽略 `E501`（行宽由 formatter 处理）、`B008` |
-| mypy | `python_version = "3.12"`，`warn_return_any = true` | 排除 `tests/`；覆盖 `bot/` 与 `api/` |
-| pytest | `asyncio_mode = "auto"`，`testpaths = ["tests"]` | 默认带 `--cov=bot --cov=api` |
+| mypy | `python_version = "3.12"`，`warn_return_any = true` | 排除 `tests/`；覆盖 `api/` `bot/` `desktop/` |
+| pytest | `asyncio_mode = "auto"`，`testpaths = ["tests"]` | 默认带 `--cov=bot --cov=api`，门槛 40% |
 
 ## 2. 类型与语法约定
 
@@ -29,6 +29,7 @@ pytest                # 测试（含覆盖率）
 - `except` 块抛出 `HTTPException` / `ValueError` 时用 `raise ... from None`，消除异常链噪音。
 - FastAPI 路由参数：`Request` 用 `request: Request = None`，**不要**写成 `Optional[Request]`（后者会导致路由注册失败）。
 - 显式返回类型：公开函数/方法标注返回类型；`warn_return_any` 开启，避免静默返回 `Any`（必要时用 `cast` 或在文件头 `# mypy: disable-error-code=...` 局部豁免）。
+- forward-ref 联合（`"SomeType" | None`）在模块级必须配合 `from __future__ import annotations`，否则运行时 `TypeError`。
 
 ## 3. 分层与依赖方向
 
@@ -39,18 +40,31 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
 ```
 
 - **`api/` 只做 HTTP 编排**（鉴权、参数校验、响应组装），业务逻辑下沉到 `bot/`。
-- **`bot/core/` 为框架层**：生命周期、连接、调度、DI、事件总线、会话状态。不含具体业务。
+- **`bot/core/` 为框架层**：生命周期、连接、调度、DI、组合根装配、事件总线、会话状态。不含具体业务。
 - **`bot/plugin/` 提供插件机制**；业务能力以内置插件（`builtin/`）或外部插件（`plugins/`）承载。
 - **禁止循环 import**：框架层不 import 插件；`bot/core` 内部模块间保持单向依赖。
 - 新增能力优先放在已有的领域模块（`llm`/`db`/`rag`），避免在 `core` 堆积单一模块。
+
+### 协议层归属（重要）
+
+插件协议层（`PluginBase`/`Matcher`/`MatcherContext`/`Permission`/`Rule`/`MessageContext`/`RateLimiter`）的**唯一实现在 `Plugins-SDK`**（`qingci_plugin_sdk` 包）。本仓库约束：
+
+- `bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `bot/core/dispatcher.py` 中的 `MessageContext` **只允许薄转发**（`from qingci_plugin_sdk.xxx import *` + 显式 `__all__`），不得新增协议层实现。
+- 修改协议行为（权限语义、匹配规则、基类方法等）必须改 `Plugins-SDK` 仓库，并同步主项目 git 依赖版本。
+- 主项目可在 `bot/plugin/llm_tool.py` 等保留**运行时专属逻辑**（如注册到 `ToolRegistry`），但协议定义本身不得在本仓库重复。
+
+### 装配与单例
+
+- 组件装配统一走 `bot/core/composition.py` 的 `assemble_bot(bot)`：创建服务 + `register_sync` 进 DI。`QingciBot.__init__` 不得手写组件创建。
+- 访问当前 bot 实例：优先通过 handler 参数注入（`QingciBot` 类型注解或 `Depends`）；模块级 `get_bot()` 仅用于非异步入口（如 API 路由同步代码），内部经 DI 容器 `resolve_sync` 解析，不新增模块级单例。
 
 ## 4. 命名约定
 
 | 对象 | 约定 | 示例 |
 |------|------|------|
-| 包 / 模块 | 小写下划线 `snake_case` | `event_bus.py`, `session_state.py` |
+| 包 / 模块 | 小写下划线 `snake_case` | `event_bus.py`, `session_state.py`, `composition.py` |
 | 类 | 大驼峰 `PascalCase` | `EventBus`, `PluginManager` |
-| 函数 / 方法 / 变量 | 小写下划线 | `resolve_handler_args`, `run_matchers` |
+| 函数 / 方法 / 变量 | 小写下划线 | `resolve_handler_args`, `run_matchers`, `assemble_bot` |
 | 私有成员 | 单下划线前缀 `_` | `_run_preprocessors`, `_plugin_tools` |
 | 常量 | 全大写 | `_MAX_PENDING_EVENTS`, `DEFAULT_SELF_ID` |
 | 测试文件 | `test_<被测模块>.py` | `test_plugin_manager.py` |
@@ -66,6 +80,7 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
 - 配置：用 `Config` 内嵌类（pydantic），框架自动生成 Web 表单与 JSON Schema。
 - 国际化：文案走 `self._(...)`，资源放 `i18n/<locale>.json`。
 - 插件级指标：框架自动记录 Matcher 耗时/错误，无需手动埋点。
+- 旧式回调 `on_message`/`on_notice`/`on_request` 已弃用，新代码一律使用 Matcher。
 
 ## 6. 前端约定（`web/`）
 
@@ -80,4 +95,5 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
   `feat:` / `fix:` / `docs:` / `refactor:` / `test:` / `chore:` / `perf:` / `build:`。
 - 分支命名：`feat/xxx`、`fix/xxx`。
 - 大改动同步更新 `CHANGELOG.md`（`[Unreleased]` 段）。
+- 协议层改动在 `Plugins-SDK` 仓库提交后，主项目通过 git 依赖版本锁定同步，两个仓库的 CHANGELOG 均需记录。
 - 不提交产物与缓存（见 `docs/PROJECT_STRUCTURE.md` 产物归属约定）。

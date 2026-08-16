@@ -48,8 +48,11 @@ uv venv
 .venv\Scripts\activate  # Windows
 source .venv/bin/activate  # Linux/macOS
 
-# 安装开发依赖
+# 安装开发依赖（含插件协议层 SDK，git 依赖自动安装）
 uv pip install -e ".[dev]"
+
+# 本地开发 Plugins-SDK 时，用 -e 安装覆盖 git 依赖版本（与 build.ps1 一致）
+uv pip install -e ..\Plugins-SDK
 
 # 运行测试
 pytest
@@ -59,8 +62,10 @@ ruff check .
 ruff format --check .
 
 # 类型检查
-mypy bot api
+mypy api bot desktop
 ```
+
+> **协议层说明**：`bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `dispatcher.MessageContext` 为 `qingci_plugin_sdk` 薄转发。修改权限语义、匹配规则、基类等协议行为时，请前往 [Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) 仓库修改并在主项目提升 git 依赖版本；主项目内只改运行时逻辑（如 `bot/plugin/manager.py`、`bot/plugin/llm_tool.py`）。
 
 ### 前端
 
@@ -89,11 +94,13 @@ Qingci-Bot-CE/
 │   ├── auth.py       # 鉴权 / 审计横切逻辑
 │   └── routes/       # REST 路由（auth/bot/config/group/log/plugin/...）
 ├── bot/              # Bot 核心逻辑
-│   ├── core/         # 生命周期、连接、调度、分发、DI、事件总线、会话状态
-│   ├── plugin/       # 插件系统（含 builtin/ 内置插件）
+│   ├── core/         # 生命周期、连接、调度、分发、DI、组合根装配、事件总线、会话状态
+│   │   ├── composition.py  # 组合根（assemble_bot 组件装配）
+│   │   └── bot.py          # Bot 主类（get_bot 经 DI 解析）
+│   ├── plugin/       # 插件系统（协议层薄转发 SDK，含 builtin/ 内置插件）
 │   ├── llm/          # LLM 管理、适配器、工具调用（Function Calling / MCP）
 │   ├── db/           # 数据库 ORM、仓储与迁移
-│   ├── rag/          # 知识库检索
+│   ├── rag/          # 知识库检索（lancedb 可选依赖）
 │   ├── testing/      # TestBot 测试沙箱
 │   ├── config.py     # 配置管理
 │   ├── i18n.py       # 国际化翻译器

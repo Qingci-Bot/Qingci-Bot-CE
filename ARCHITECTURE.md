@@ -28,6 +28,14 @@
 5. 回复通过 OneBot 连接发送回 LLBot，最终到达 QQ 用户
 6. **Web UI** 通过 HTTP/WebSocket 与 API 服务通信，管理配置、插件、日志等
 
+### 协议层归属
+
+插件系统的协议层（`PluginBase` / `Matcher` / `MatcherContext` / `Permission` / `Rule` / `MessageContext` / `RateLimiter`）**统一由独立插件 SDK 维护**（[Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) 的 `qingci_plugin_sdk` 包）。主项目的 `bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `bot/core/dispatcher.py` 中的 `MessageContext` 均为薄转发（`from qingci_plugin_sdk.* import *`），不保存任何协议层实现，从根本上消除两处定义漂移：
+
+- 内置插件与外部插件使用**同一个**基类与匹配器体系，行为完全一致
+- 修改权限语义、匹配规则等协议时只改 SDK 一处，主项目无需同步
+- SDK 是主项目的**正式依赖**（`pyproject.toml` 声明 git 依赖；构建/本地开发由 `build.ps1` 以 `-e` 安装优先）
+
 ## 项目结构
 
 ```
@@ -45,8 +53,9 @@ Qingci-Bot-CE/
 │   ├── i18n.py                # 国际化翻译器
 │   ├── core/
 │   │   ├── bot.py             # Bot 主类（生命周期、事件调度、全局钩子）
+│   │   ├── composition.py     # 组合根（assemble_bot：组件装配 + DI 注册）
 │   │   ├── connection.py      # OneBot 连接（aiocqhttp 反向 WS）
-│   │   ├── dispatcher.py      # 消息分发 + Matcher 调度
+│   │   ├── dispatcher.py      # 消息分发 + Matcher 调度（MessageContext 转发 SDK）
 │   │   ├── message.py         # 类型化消息构造器（Message/MessageSegment）
 │   │   ├── broadcast.py       # 消息广播
 │   │   ├── filter.py          # 敏感词过滤器
@@ -64,7 +73,7 @@ Qingci-Bot-CE/
 │   │   ├── tools.py           # Function Calling 工具注册表
 │   │   └── mcp.py             # MCP 服务器接入（stdio/HTTP）
 │   ├── rag/
-│   │   └── knowledge.py       # 知识库（keyword 关键词检索 + LanceDB 向量检索）
+│   │   └── knowledge.py       # 知识库（keyword 关键词检索 + vector 向量检索，后者需 lancedb）
 │   ├── db/
 │   │   ├── database.py        # 数据库仓储（基于 SQLModel）
 │   │   ├── engine.py          # 异步引擎 + 会话工厂（WAL 模式）
@@ -73,13 +82,13 @@ Qingci-Bot-CE/
 │   │   ├── bot.py             # TestBot 轻量测试环境
 │   │   └── events.py          # OneBot v11 事件构造器
 │   └── plugin/
-│       ├── base.py            # 插件基类（支持 matchers 属性、生命周期钩子、i18n/data_dir）
-│       ├── manager.py         # 插件管理器（热加载 + 模块级收集）
-│       ├── matcher.py         # Matcher + MatcherContext + 工厂函数（on_command 等）
-│       ├── rule.py            # 规则系统（startswith/command/subcommand/regex 等）
-│       ├── permission.py      # 权限系统（SUPERUSER/ADMIN 等，含 label 与 describe_permission）
-│       ├── ratelimit.py       # RateLimiter 限流
-│       ├── llm_tool.py        # @llm_tool 插件级 LLM 工具声明
+│       ├── base.py            # 薄转发 SDK PluginBase（协议层唯一来源）
+│       ├── manager.py         # 插件管理器（热加载 + 模块级收集 + SDK data_root 重定向）
+│       ├── matcher.py         # 薄转发 SDK Matcher/MatcherContext/工厂函数
+│       ├── rule.py            # 薄转发 SDK Rule 规则系统
+│       ├── permission.py      # 薄转发 SDK Permission 权限系统
+│       ├── ratelimit.py       # 薄转发 SDK RateLimiter 限流
+│       ├── llm_tool.py        # @llm_tool 插件级 LLM 工具声明（含注册到 ToolRegistry 的运行时逻辑）
 │       ├── watcher.py         # 插件自动热重载监听
 │       └── builtin/           # 内置插件（目录结构）
 │           ├── chat/          # LLM 对话（Matcher API）
@@ -131,38 +140,44 @@ Qingci-Bot-CE/
 | MCP | mcp (Model Context Protocol，stdio/HTTP) |
 | 数据库 | SQLModel + Alembic + aiosqlite (WAL 模式) |
 | 定时任务 | APScheduler |
-| 插件系统 | Matcher + Rule + Permission + require/export + 中间件 + 指标监控 (借鉴 NoneBot2) |
+| 插件协议层 | qingci_plugin_sdk（PluginBase/Matcher/Rule/Permission，主项目薄转发） |
 | 前端 | Vue 3 + Vite + Pinia |
 | 桌面 | PyWebView + pystray |
 
 ## 核心模块
 
-### Bot 主类 (`bot/core/bot.py`)
+### 组合根（`bot/core/composition.py`）
 
-生命周期管理、事件调度、全局钩子（前置/后置中间件）、事件并发限流（Semaphore）。
+`QingciBot.__init__` 不再手写组件装配：`assemble_bot(bot)` 集中创建全部核心服务（DB/连接/分发器/LLM/插件管理器/DI/会话状态/事件总线/限流器/调度器/工具注册表/知识库/敏感词过滤器）并注册进 DI 容器。`__init__` 只保留配置加载与状态字段初始化。测试可通过注入 fake 实现替换组件，或直接调用 `build_bot()` 便捷入口。
 
-### Dispatcher (`bot/core/dispatcher.py`)
+### Bot 主类（`bot/core/bot.py`）
+
+生命周期管理、事件调度、全局钩子（前置/后置中间件）、事件并发限流（Semaphore）。`set_bot()` 将 bot 的 DI 容器登记为进程级引用，`get_bot()` 通过 `container.resolve_sync(QingciBot)` 解析实例，不持有模块级 bot 单例。
+
+### Dispatcher（`bot/core/dispatcher.py`）
 
 - 收集所有已注册 Matcher，按 priority 升序排序
 - 依次检查 Rule + Permission，命中则执行 handler
 - 无 Matcher 匹配时回退到旧式 `on_message`
 - 支持 block 控制是否继续后续 Matcher
+- `MessageContext` 由 SDK 提供（字段与主项目历史版本完全一致，另含 `sender_name` 属性）
 
-### PluginManager (`bot/plugin/manager.py`)
+### PluginManager（`bot/plugin/manager.py`）
 
 - 插件热加载/卸载/重载（"先建后拆"策略）
 - 模块级装饰器自动收集（`on_command` 等）
 - 依赖解析（require），循环依赖检测
 - 路径白名单：仅允许 `plugins.*` 和 `bot.plugin.builtin.*`
+- 加载 SDK 式插件时调用 `qingci_plugin_sdk.paths.set_data_root()` 将插件数据目录重定向到当前实例（协议层转发后，内置插件同样经此路径，实例隔离一致）
 
-### LLMManager (`bot/llm/manager.py`)
+### LLMManager（`bot/llm/manager.py`）
 
 - 会话管理：按群聊/用户独立维护对话历史，内存 + 数据库双写
 - Token 裁剪：按条数与 Token 双重限制，超出自动裁剪
 - 会话摘要：可选的摘要压缩，保留最近 N 轮原文
 - 人格切换：`/persona` 命令会话级覆盖 system_prompt
 
-### Database (`bot/db/`)
+### Database（`bot/db/`）
 
 - SQLModel 模型定义 + Alembic 迁移管理
 - aiosqlite 异步引擎（WAL 模式，提升并发读性能）
@@ -174,6 +189,8 @@ Qingci-Bot-CE/
 ### 向量检索（RAG）初始化
 
 向量检索模式基于 LanceDB（嵌入式向量数据库）+ litellm embedding，无需额外服务端部署，但需要完成以下初始化步骤：
+
+> **依赖**：向量模式需要 `lancedb`（可选依赖，`pip install -e ".[vector]"` 或 `uv pip install lancedb`）。未安装时 `mode: vector` 自动回退为关键词检索并输出警告，Bot 不会崩溃。
 
 #### 1. 启用向量检索模式
 
@@ -225,7 +242,7 @@ curl http://localhost:8000/api/knowledge/documents
 
 - **embedding API 费用**：每次全量索引重建会调用 embedding API，文档量大时请注意 API 调用成本。日常增量添加文档也会触发全量重建（当前版本未实现增量索引）
 - **embedding 模型一致性**：索引重建时使用的 embedding 模型必须与检索时一致，否则向量维度不匹配会导致检索失败
-- **降级到 keyword 模式**：若 embedding API 不可用，可将 `mode` 改回 `keyword`，立即回退到关键词检索模式，无需重建索引
+- **降级到 keyword 模式**：若 embedding API 不可用，可将 `mode` 改回 `keyword`，立即回退到关键词检索模式，无需重建索引；若 `lancedb` 未安装，程序自动回退到 keyword 并告警
 
 ### 数据库迁移至 PostgreSQL
 
@@ -248,6 +265,7 @@ python scripts/migrate_sqlite_to_pg.py \
 ```
 
 脚本会自动：
+
 - 读取 SQLite 中所有表数据
 - 在 PostgreSQL 中创建表结构
 - 逐表迁移数据（messages / sessions / plugin_configs / group_configs / usage_logs / audit_logs）

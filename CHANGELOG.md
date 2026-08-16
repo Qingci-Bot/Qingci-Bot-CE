@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 配置模板 `config.example.yaml` 补充 `bot.wizard_skipped` 与 `log` 节（`level`/`log_file_enabled`/`log_file_max_bytes`/`log_file_backup_count`/`log_dir`）说明
 
 ### Docs
+- 全面重构文档以匹配新架构：`ARCHITECTURE.md` 新增「协议层归属」「组合根」「DI 解析单例」章节与依赖说明；`docs/PROJECT_STRUCTURE.md` 标注薄转发目录与协议层依赖方向；`docs/CODING_STANDARDS.md` 新增「协议层归属」「装配与单例」约束；`README.md` 补充 SDK 正式依赖与 `[vector]` 分组说明；`PLUGIN_DEV.md` 更新两种插件形态（基类同一来源）、示例五改为 Matcher 优先并标注旧式回调 deprecated、PEP 604 示例；`CONTRIBUTING.md` 补充 SDK 安装与协议层修改指引；插件模板同步标注旧式回调 deprecated
 - `PLUGIN_DEV.md` 修正实例目录功能版本描述（「自 v1.6 起」→「自 v1.5.1 起」），补充子命令/类型化参数等示例
 
 ## [1.5.1] - 2026-08-16
