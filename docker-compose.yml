@@ -1,0 +1,41 @@
+# . 使用说明
+#
+#   启动（前台）：
+#     docker compose up
+#   后台运行：
+#     docker compose up -d
+#   查看日志：
+#     docker compose logs -f
+#   停止：
+#     docker compose down
+#
+# 首次启动后，编辑挂载出来的 ./instances/default/config.yaml：
+#   - 填上 llm.api_key（WebUI 才可正常对话）
+#   - 若要外部 OneBot 前端（NapCat/LLBot）连入，把 onebot.host 改为 0.0.0.0
+#   - Telegram 平台请配置 platforms.telegram（默认关闭）
+# 改完配置需重启容器生效：
+#   docker compose restart
+
+services:
+  qingci-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: qingci-bot-ce:latest
+    container_name: qingci-bot
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"       # WebUI / API
+      - "3001:3001"       # OneBot 反向 WS（外部前端连入；需先将实例 onebot.host 改为 0.0.0.0）
+
+    volumes:
+      # 实例目录（config.yaml / data / plugins）持久化；不随镜像重建，避免写入镜像内丢失
+      - ./instances:/app/instances
+
+    environment:
+      # 与 Dockerfile 保持一致的时区
+      - TZ=Asia/Shanghai
+
+    # 覆盖默认启动参数（例如切换实例 / 监听地址）
+    command: ["python", "main.py", "--instance", "default", "--host", "0.0.0.0"]

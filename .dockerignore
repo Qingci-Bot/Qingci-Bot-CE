@@ -1,0 +1,31 @@
+# 构建上下文排除：避免把体积巨大的虚拟环境/缓存/产物打入镜像，
+# 并防止实例目录（可能含密钥的 config.yaml）被烘焙进镜像层。
+
+# VCS 与编辑器
+.git
+.gitignore
+.idea
+.vscode
+
+# Python 虚拟环境与缓存
+.venv
+venv
+__pycache__
+*.py[cod]
+*.egg-info
+.mypy_cache
+.ruff_cache
+.pytest_cache
+.coverage
+
+# 构建产物
+build
+dist
+*.spec
+
+# 实例数据（含密钥）：通过 docker-compose 以卷挂载，不进镜像
+instances
+
+# 前端构建中间件（仅排除 node_modules；web/dist 为已构建产物，需随镜像分发供 WebUI 使用）
+web/node_modules
+web/*.log
