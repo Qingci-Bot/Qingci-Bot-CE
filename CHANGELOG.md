@@ -5,7 +5,7 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.7.0] - 2026-08-17
 
 ### Added
 - **插件市场切换源 / 自定义源**：后端新增 `GET/PUT /api/plugins/market/source`——切换市场源时先持久化 `market.url`，清空旧源的内存与磁盘索引缓存（`MarketClient.clear_disk_cache()`），立即拉取新源校验，源不可用时自动回滚到原源并提示；WebUI 插件市场新增「切换源」面板，可查看当前源、输入自定义 git / HTTP 索引地址，并一键恢复官方默认（`DEFAULT_MARKET_URL`）
@@ -259,6 +259,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 完全离线运行（无 CDN 依赖）
 - 一键打包为 Windows EXE（PyInstaller）
 
+[1.7.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.7.0
 [1.6.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.6.0
 [1.5.1]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.5.1
 [1.5.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.5.0
