@@ -327,3 +327,167 @@ def test_get_status_platforms(bot):
     assert platforms["telegram"]["display_name"] == "Telegram"
     assert platforms["telegram"]["self_id"] == 12345
     assert platforms["telegram"]["connected"] is False  # 未启动
+
+
+# ---------- Telegram 增强：@提及 ----------
+
+
+def test_normalize_group_mention_bot(adapter):
+    """群聊 @Bot（mention entity）命中 → at 段 + is_at_bot=True"""
+    adapter.self_id = 12345
+    adapter.username = "MyBot"
+    msg = _message(
+        chat={"id": 20002, "type": "group", "title": "测试群"},
+        text="hi @MyBot repl",
+        entities=[{"type": "mention", "offset": 3, "length": 7}],
+    )
+    event = adapter._normalize_message(msg)
+    at_segs = [s for s in event["message"] if s["type"] == "at"]
+    assert event["is_at_bot"] is True
+    assert any(s["data"]["qq"] == 12345 for s in at_segs)
+
+
+def test_normalize_group_mention_other(adapter):
+    """群聊 @其他用户 → 不命中 Bot，无 at 段，is_at_bot=False"""
+    adapter.self_id = 12345
+    adapter.username = "MyBot"
+    msg = _message(
+        chat={"id": 20002, "type": "group", "title": "测试群"},
+        text="@Alice hi",
+        entities=[{"type": "mention", "offset": 0, "length": 7}],
+    )
+    event = adapter._normalize_message(msg)
+    assert event["is_at_bot"] is False
+    assert not [s for s in event["message"] if s["type"] == "at"]
+    assert event["at_list"]  # 其他用户提及仍记录到 at_list
+
+
+def test_normalize_group_text_mention_bot(adapter):
+    """text_mention entity 命中 Bot（无 @用户名文本）→ is_at_bot=True"""
+    adapter.self_id = 12345
+    msg = _message(
+        chat={"id": 20002, "type": "group", "title": "测试群"},
+        text="hi",
+        entities=[{"type": "text_mention", "offset": 0, "length": 2, "user": {"id": 12345}}],
+    )
+    event = adapter._normalize_message(msg)
+    assert event["is_at_bot"] is True
+    assert any(s["data"]["qq"] == 12345 for s in event["message"] if s["type"] == "at")
+
+
+def test_normalize_private_no_at_segment(adapter):
+    """私聊消息不注入 at 段（触发规则天然放行 private）"""
+    adapter.self_id = 12345
+    event = adapter._normalize_message(_message())
+    assert event["is_at_bot"] is True
+    assert not [s for s in event["message"] if s["type"] == "at"]
+    assert event["message"] == [{"type": "text", "data": {"text": "你好"}}]
+
+
+# ---------- Telegram 增强：图片 ----------
+
+
+def test_normalize_photo_adds_image_segment(adapter):
+    """photo（取末项最大）→ image 段 + images"""
+    adapter.self_id = 12345
+    msg = _message(
+        chat={"id": 20002, "type": "group", "title": "测试群"},
+        text="看",
+        photo=[
+            {"file_id": "P1", "width": 100, "height": 100},
+            {"file_id": "P2", "width": 800, "height": 800},
+        ],
+    )
+    event = adapter._normalize_message(msg)
+    assert event["images"] == ["P2"]
+    imgs = [s for s in event["message"] if s["type"] == "image"]
+    assert imgs and imgs[0]["data"]["file"] == "P2"
+    assert imgs[0]["data"]["url"] == "P2"
+
+
+def test_normalize_image_document(adapter):
+    """image/* document → image 段"""
+    adapter.self_id = 12345
+    msg = _message(
+        chat={"id": 20002, "type": "group", "title": "测试群"},
+        document={"file_id": "D1", "mime_type": "image/png", "file_name": "a.png"},
+    )
+    event = adapter._normalize_message(msg)
+    assert event["images"] == ["D1"]
+
+
+# ---------- Telegram 增强：发送 ----------
+
+
+async def test_send_msg_image_url_routes_photo(adapter, monkeypatch):
+    """send_msg 含 [CQ:image,file=URL] → sendPhoto（photo 参数 + caption）"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["method"], calls["params"] = method, params
+        return {"ok": True, "result": {}}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg("group", 20002, "看图 [CQ:image,file=https://x/a.png]")
+    assert calls["method"] == "sendPhoto"
+    assert calls["params"]["photo"] == "https://x/a.png"
+    assert calls["params"]["chat_id"] == 20002
+    assert calls["params"]["caption"] == "看图"
+
+
+async def test_send_msg_image_file_id(adapter, monkeypatch):
+    """非 URL/本地路径的引用按 Telegram file_id 传给 photo 参数"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["params"] = params
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg("private", 10001, "[CQ:image,file=AgACtgID]")
+    assert calls["params"]["photo"] == "AgACtgID"
+
+
+async def test_send_msg_base64_uploads(adapter, monkeypatch):
+    """base64:// 引用 → multipart 上传（files 带文件）"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["params"] = params
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg("private", 10001, "[CQ:image,file=base64://aGVsbG8=]")
+    files = calls["params"]["files"]
+    assert files  # multipart
+    assert files["photo"][1] == b"hello"
+
+
+async def test_call_api_group_msg_image(adapter, monkeypatch):
+    """call_api send_group_msg 含图片 → sendPhoto"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["method"] = method
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.call_api(
+        "send_group_msg", {"group_id": 20002, "message": "[CQ:image,file=http://a/b.jpg]"}
+    )
+    assert calls["method"] == "sendPhoto"
+
+
+def test_strip_cq_images_strips_other_cq(adapter):
+    """发送文本剔除不可渲染的其他 CQ 段并合并连续空格"""
+    imgs, text = TelegramAdapter._strip_cq_images("hi [CQ:face,id=1] [CQ:image,file=f] ok")
+    assert imgs == ["f"]
+    assert text == "hi ok"
+
+
+def test_resolve_image_refs(adapter):
+    """_resolve_image：URL/base64/未知引用分类正确"""
+    assert TelegramAdapter._resolve_image("https://a/b.png")[0] == "param"
+    assert TelegramAdapter._resolve_image("AgACtgID")[0] == "param"
+    kind, _, media = TelegramAdapter._resolve_image("base64://aGVsbG8=")
+    assert kind == "upload" and media[1] == b"hello"

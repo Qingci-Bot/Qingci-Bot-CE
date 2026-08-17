@@ -7,9 +7,13 @@
 - 消息事件：message → post_type=message；私聊/群聊 → message_type；
   user_id（from.id）、group_id（chat.id，仅群聊）、message_id、文本段
   （CQ 纯文本段）、raw_message、sender（first_name/username）
-- 发送：send_msg 走 sendMessage（Telegram 统一 chat_id）；
-  group/private 均按 chat_id 发送（群聊消息可加 @ 前缀提示）
-- 能力：call_api 映射 send_private_msg/send_group_msg → sendMessage，
+- @提及：解析 entities（mention / text_mention）识别群聊中的 @Bot，
+  命中时写入 at 段（qq=self_id）供 at 触发使用；私聊天然放行
+- 图片：photo / 图片 document → image 段 + images（file_id）
+- 发送：send_msg 走 sendMessage（Telegram 统一 chat_id）并识别
+  [CQ:image] 转发 sendPhoto（file_id / http(s) URL / base64 / 本地路径）；
+  group/private 均按 chat_id 发送；其余 CQ 段降级为纯文本
+- 能力：call_api 映射 send_private_msg/send_group_msg → sendMessage/sendPhoto，
   其余 action 透传为 Telegram 方法（小写方法名）
 - 状态：轮询运行即视为已连接；last_heartbeat 随每次成功轮询更新
 
@@ -18,8 +22,12 @@
 """
 
 import asyncio
+import base64
 import logging
+import mimetypes
+import re
 import time
+from pathlib import Path
 
 import httpx
 
@@ -34,6 +42,11 @@ API_BASE = "https://api.telegram.org/bot{token}/{method}"
 POLL_TIMEOUT = 30
 # 单次轮询最大更新数
 POLL_LIMIT = 100
+
+# CQ 图片段：capture file 引用
+_CQ_IMAGE_RE = re.compile(r"\[CQ:image,file=([^,\]$]+)\]")
+# 任意 CQ 段（用于把不可渲染的段从发送文本中剔除）
+_ANY_CQ_RE = re.compile(r"\[CQ:[^\[\]]*\]")
 
 
 class TelegramAdapter(PlatformAdapter):
@@ -51,6 +64,7 @@ class TelegramAdapter(PlatformAdapter):
         self._offset = 0
         self._last_heartbeat = 0.0
         self.self_id = 0
+        self.username = ""  # Bot @用户名（无 @ 前缀），用于 at 提及识别
         self._http: httpx.AsyncClient | None = None
 
     # ============ HTTP ============
@@ -60,12 +74,20 @@ class TelegramAdapter(PlatformAdapter):
             self._http = httpx.AsyncClient(timeout=httpx.Timeout(POLL_TIMEOUT + 10))
         return self._http
 
-    async def _api(self, method: str, **params) -> dict:
-        """调用 Telegram Bot API，返回 result 字段"""
+    async def _api(self, method: str, *, files: dict | None = None, **params) -> dict:
+        """调用 Telegram Bot API，返回 result 字段
+
+        files 非空时走 multipart（data=文本字段 + files=上传文件），
+        否则走 JSON。
+        """
         if not self.token:
             raise RuntimeError("Telegram bot token 未配置（platforms.telegram.token）")
         url = API_BASE.format(token=self.token, method=method)
-        resp = await self._client().post(url, json=params or None)
+        if files:
+            data = {k: str(v) for k, v in params.items() if v is not None}
+            resp = await self._client().post(url, data=data or None, files=files)
+        else:
+            resp = await self._client().post(url, json=params or None)
         resp.raise_for_status()
         data = resp.json()
         if not data.get("ok"):
@@ -80,8 +102,10 @@ class TelegramAdapter(PlatformAdapter):
         try:
             me = await self._api("getMe")
             self.self_id = self._safe_int(me.get("id"))
+            self.username = str(me.get("username", "") or "").strip()
+            username = f"@{self.username}" if self.username else ""
             logger.info(
-                f"Telegram 适配器已启动: @{me.get('username', '')} "
+                f"Telegram 适配器已启动: {username} "
                 f"(self_id={self.self_id}, poll_interval={self.poll_interval}s)"
             )
         except Exception as e:
@@ -174,10 +198,24 @@ class TelegramAdapter(PlatformAdapter):
         text = self._extract_text(message)
         raw_message = text
         segments: list[dict] = []
+
+        # @提及：解析 entities（mention / text_mention）识别 @Bot。
+        # 群聊命中时写入 at(self) 段，dispatcher 据此推导 ctx.is_at_bot；
+        # 私聊无需 at 段（SDK 触发规则已放行 message_type == "private"）。
+        at_segments, at_list = self._collect_at(message, text)
+        is_at_bot = bool(at_segments) or message_type == "private"
+        segments.extend(at_segments)
+
         if text:
             segments.append({"type": "text", "data": {"text": text}})
 
-        # 群聊消息中的 @Bot：Telegram 无显式 at_bot 标记，保持 false
+        # 图片：photo（末项最大）或 image/* document
+        images: list[str] = []
+        image_file = self._extract_image_file(message)
+        if image_file:
+            images.append(image_file)
+            segments.append({"type": "image", "data": {"file": image_file, "url": image_file}})
+
         event = {
             "post_type": "message",
             "message_type": message_type,
@@ -189,9 +227,9 @@ class TelegramAdapter(PlatformAdapter):
             "raw_message": raw_message,
             "message": segments,
             "plain_text": text,
-            "at_list": [],
-            "is_at_bot": False,
-            "images": [],
+            "at_list": at_list,
+            "is_at_bot": is_at_bot,
+            "images": images,
             "sender": {
                 "user_id": self._safe_int(from_user.get("id")),
                 "nickname": str(from_user.get("first_name", "") or ""),
@@ -206,20 +244,136 @@ class TelegramAdapter(PlatformAdapter):
         }
         return event
 
+    def _collect_at(self, message: dict, text: str) -> tuple[list[dict], list[dict]]:
+        """解析 entities，识别 @Bot 与提及的其他用户。
+
+        返回 (at_segments, at_list)：
+        - at_segments：可写入 message[] 的 at 段（仅命中 Bot 自身时）；
+        - at_list：事件级 at 提及清单（含被 @ 的其他用户，用户名用 qq 占位）。
+        """
+        at_segments: list[dict] = []
+        at_list: list[dict] = []
+        self_uname = (self.username or "").lower()
+        self_uid = getattr(self, "self_id", 0)
+        entities = message.get("entities") or []
+        for ent in entities:
+            if not isinstance(ent, dict):
+                continue
+            etype = ent.get("type")
+            if etype == "mention":
+                offset, length = ent.get("offset", 0), ent.get("length", 0)
+                token = str(text or "")[int(offset) : int(offset) + int(length)]
+                token = token.lstrip("@").rstrip()
+                if not token:
+                    continue
+                if token.lower() == self_uname:
+                    at_segments.append({"type": "at", "data": {"qq": self_uid}})
+                    at_list.append({"type": "at", "data": {"qq": self_uid}})
+                else:
+                    # 提及其他用户：仅记录到 at_list，不写入 message 段
+                    at_list.append({"type": "at", "data": {"qq": token}})
+            elif etype == "text_mention":
+                user = ent.get("user") or {}
+                uid = self._safe_int(user.get("id"))
+                if not uid:
+                    continue
+                if uid == self_uid:
+                    at_segments.append({"type": "at", "data": {"qq": self_uid}})
+                    at_list.append({"type": "at", "data": {"qq": self_uid}})
+                else:
+                    at_list.append({"type": "at", "data": {"qq": uid}})
+        return at_segments, at_list
+
+    @staticmethod
+    def _extract_image_file(message: dict) -> str:
+        """从 message 提取图片 file_id（photo 末项最大，或 image/* document）"""
+        photo = message.get("photo")
+        if isinstance(photo, list) and photo:
+            return str(photo[-1].get("file_id") or "")
+        doc = message.get("document")
+        if isinstance(doc, dict) and str(doc.get("mime_type") or "").startswith("image/"):
+            return str(doc.get("file_id") or "")
+        return ""
+
     # ============ 发送 ============
 
     async def send_msg(self, message_type: str, target_id: int, message: str) -> dict:
-        """发送消息（Telegram 统一 sendMessage，chat_id 即 target_id）"""
+        """发送消息：识别 [CQ:image] → sendPhoto，否则 sendMessage"""
         chat_id = self._safe_int(target_id)
         if chat_id <= 0:
             raise ValueError(f"Telegram 发送失败：无效的 chat_id={target_id}")
-        text = str(message or "")
+        return await self._route_send(chat_id, str(message or ""))
+
+    @staticmethod
+    def _strip_cq_images(message: str) -> tuple[list[str], str]:
+        """从发送内容中提取 [CQ:image,file=..] 的 file 列表与残留纯文本
+
+        残留文本会剔除其余 CQ 段（Telegram 无法渲染的面向其他平台的段），
+        并合并连续空白。
+        """
+        images = _CQ_IMAGE_RE.findall(message or "")
+        text = _ANY_CQ_RE.sub("", message or "")
+        text = re.sub(r"[ \t\n\r]+", " ", text).strip()
+        return images, text
+
+    async def _route_send(self, chat_id: int, message: str) -> dict:
+        """按内容路由：含图片 → _send_photo，否则 sendMessage 纯文本"""
+        images, text = self._strip_cq_images(message)
+        if images:
+            return await self._send_photo(chat_id, images, text)
         return await self._api(
             "sendMessage",
             chat_id=chat_id,
-            text=text,
+            text=text or "",
             disable_web_page_preview=True,
         )
+
+    async def _send_photo(self, chat_id: int, images: list[str], caption: str = "") -> dict:
+        """发送图片：file_id/http(s) URL 走 photo 参数，本地/base64 走 multipart 上传"""
+        result: dict = {}
+        for idx, raw in enumerate(images):
+            title = caption if idx == 0 else ""
+            kind, photo_val, media = self._resolve_image(raw)
+            if kind == "upload":
+                assert media is not None
+                result = await self._api(
+                    "sendPhoto",
+                    files={"photo": media},
+                    chat_id=chat_id,
+                    caption=title or None,
+                )
+            else:
+                result = await self._api(
+                    "sendPhoto", photo=photo_val, chat_id=chat_id, caption=title or None
+                )
+        return result or {}
+
+    @staticmethod
+    def _resolve_image(file: str) -> tuple[str, str, tuple[str, bytes, str] | None]:
+        """把 CQ image 的 file 引用解析为 (kind, param_value, media)
+
+        kind:
+        - "param"：直接作为 sendPhoto 的 photo 参数（http(s) URL / Telegram file_id）
+        - "upload"：需 multipart 上传（base64 / data URI / 本地路径），media=(name, bytes, mime)
+        """
+        f = str(file or "").strip()
+        if f.startswith(("http://", "https://")):
+            return "param", f, None
+        if f.startswith("base64://"):
+            payload = f[len("base64://") :]
+            content = base64.b64decode(payload)
+            return "upload", "", ("image.bin", content, "application/octet-stream")
+        if f.startswith("data:"):
+            header, _, payload = f.partition(",")
+            mime = header[len("data:") :].split(";")[0] or "application/octet-stream"
+            ext = mime.split("/")[-1] if "/" in mime else "bin"
+            return "upload", "", (f"image.{ext}", base64.b64decode(payload), mime)
+        p = Path(f)
+        if p.exists() and p.is_file():
+            mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+            return "upload", "", (p.name, p.read_bytes(), mime)
+        # 其余视为 Telegram file_id（params 传 file_id）
+        return "param", f, None
 
     # ============ 能力透传 ============
 
@@ -238,18 +392,14 @@ class TelegramAdapter(PlatformAdapter):
                 logger.exception(f"平台接口调用钩子异常: {action}")
                 raise
         if action == "send_private_msg":
-            method, mapped = (
-                "sendMessage",
-                {"chat_id": params.get("user_id"), "text": params.get("message", "")},
-            )
+            chat_id = self._safe_int(params.get("user_id"))
+            return await self._route_send(chat_id, str(params.get("message", "")))
         elif action == "send_group_msg":
-            method, mapped = (
-                "sendMessage",
-                {"chat_id": params.get("group_id"), "text": params.get("message", "")},
-            )
+            chat_id = self._safe_int(params.get("group_id"))
+            return await self._route_send(chat_id, str(params.get("message", "")))
         elif action == "get_group_info":
             # Telegram 无群资料 API，返回最小兼容结构
             return {"group_id": self._safe_int(params.get("group_id")), "group_name": "Telegram 群"}
         else:
             method, mapped = action, params
-        return await self._api(method, **mapped)
+            return await self._api(method, **mapped)

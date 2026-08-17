@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **插件市场切换源 / 自定义源**：后端新增 `GET/PUT /api/plugins/market/source`——切换市场源时先持久化 `market.url`，清空旧源的内存与磁盘索引缓存（`MarketClient.clear_disk_cache()`），立即拉取新源校验，源不可用时自动回滚到原源并提示；WebUI 插件市场新增「切换源」面板，可查看当前源、输入自定义 git / HTTP 索引地址，并一键恢复官方默认（`DEFAULT_MARKET_URL`）
 - **Web 关于页版本号动态化**：关于页版本号由硬编码改为从后端状态接口动态读取——`bot/__init__.py` 的 `__version__` 为唯一版本来源，`api/server.py`、`bot/core/bot.py`、`web/package.json` 与关于页统一引用，消除多处置 1.5.1/1.6.0 漂移
 - **Web 关于页鸣谢清单补全**：对照 `pyproject.toml` 依赖逐项核对，补齐 `pywebview` / `pystray`（桌面端运行依赖）鸣谢
+- **Telegram 增强：@提及触发与图片收发**：群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 `at` 段（`qq=self_id`）并置 `is_at_bot`，at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；`photo` / `image/*` document 归一化为 `image` 段 + `images`（file_id）；发送侧 `send_msg` / `call_api` 识别 `[CQ:image]` → `sendPhoto`（支持 Telegram file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，首图带 caption），其余不可渲染的 CQ 段降级为纯文本并合并连续空白；新增 14 个用例，`telegram.py` 覆盖升至 64%
 
 ### Changed
 - **版本号统一用脚本管理**：新增 `scripts/bump_version.py`——`python scripts/bump_version.py 1.7.0` 从单一输入同步升级 `pyproject.toml` / `bot/__init__.py` / `web/package.json` 三处，任一文件缺失或版本格式非法即报错；`--check` 模式可在提交前校验三处是否一致，防止漏改（用法见 `CONTRIBUTING.md`）
