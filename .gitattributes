@@ -1,0 +1,33 @@
+# 统一行尾规范，根治跨平台 CRLF 噪音
+# 文本文件默认自动检测（UTF-8 无 BOM）
+* text=auto
+
+# 源码/文档统一 LF（避免 Windows 检出 CRLF 造成无意义 diff）
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.vue text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.ts text eol=lf
+*.html text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.txt text eol=lf
+*.spec text eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf
+Makefile text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# Windows 脚本保留 CRLF（原生兼容）
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
