@@ -698,3 +698,144 @@ async def test_member_change_non_group_ignored(adapter, monkeypatch):
     upd["chat_member"]["chat"]["type"] = "channel"
     await adapter._handle_update(upd)
     assert seen == []
+
+
+# ---------- Telegram 增强：错误分类 ----------
+
+
+def test_api_error_classification():
+    """API 错误按 error_code 归类为对应异常子类"""
+    from bot.core.platforms.telegram import (
+        TelegramAPIError,
+        TelegramForbiddenError,
+        TelegramNotFoundError,
+        TelegramUnauthorizedError,
+        _telegram_error,
+    )
+
+    assert isinstance(
+        _telegram_error("m", {"error_code": 401, "description": "Unauthorized"}),
+        TelegramUnauthorizedError,
+    )
+    assert isinstance(
+        _telegram_error("m", {"error_code": 403, "description": "Forbidden"}),
+        TelegramForbiddenError,
+    )
+    assert isinstance(
+        _telegram_error("m", {"error_code": 404, "description": "Not Found"}),
+        TelegramNotFoundError,
+    )
+    # 未知/缺失错误码 → 基类
+    assert isinstance(_telegram_error("m", {"error_code": 429}), TelegramAPIError)
+    assert isinstance(_telegram_error("m", {}), TelegramAPIError)
+    # 子类应继承基类，便于统一捕获
+    assert issubclass(TelegramUnauthorizedError, TelegramAPIError)
+    assert issubclass(TelegramNotFoundError, TelegramAPIError)
+
+
+# ---------- Telegram 增强：Token 热更新 ----------
+
+
+def test_set_token_hot_update(adapter):
+    assert adapter.token == "test:token"
+    adapter.set_token("new:token")
+    assert adapter.token == "new:token"
+
+
+def test_set_token_same_noop(adapter):
+    adapter.set_token("test:token")
+    assert adapter.token == "test:token"
+
+
+def test_set_token_rejects_empty(adapter):
+    with pytest.raises(ValueError):
+        adapter.set_token("   ")
+    with pytest.raises(ValueError):
+        adapter.set_token("")
+
+
+# ---------- Telegram 增强：有限并发与 offset 推进 ----------
+
+
+async def test_consume_update_swallows_handler_error(adapter, monkeypatch):
+    """单条更新处理失败仅记日志，不向调用方抛异常（避免拖垮整批）"""
+
+    async def boom(_update: dict):
+        raise RuntimeError("handler failed")
+
+    monkeypatch.setattr(adapter, "_handle_update", boom)
+    await adapter._consume_update({"update_id": 1})  # 不应抛出
+
+
+async def test_poll_loop_advances_offset(adapter, monkeypatch):
+    """轮询消费后 offset 推进到 max(update_id)+1，事件全部发射"""
+    adapter._running = True
+    adapter.poll_interval = 0.01
+    calls = {"n": 0}
+
+    async def fake_api(method, **params):
+        if method == "getUpdates":
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return [
+                    {"update_id": 1, "message": _message(message_id=1, text="a")},
+                    {"update_id": 2, "message": _message(message_id=2, text="b")},
+                ]
+            return []
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    seen = []
+
+    async def rec(event: dict):
+        seen.append(event)
+
+    monkeypatch.setattr(adapter, "emit_event", rec)
+
+    task = asyncio.create_task(adapter._poll_loop())
+    await asyncio.sleep(0.1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert adapter._offset == 3  # max(1,2)+1
+    assert {e["message_id"] for e in seen} == {"1", "2"}
+    assert adapter.last_heartbeat > 0
+
+
+async def test_poll_loop_advances_offset_on_partial_failure(adapter, monkeypatch):
+    """某条更新处理失败时 offset 仍推进（避免无限重放）"""
+    adapter._running = True
+    adapter.poll_interval = 0.01
+    calls = {"n": 0}
+
+    async def fake_api(method, **params):
+        if method == "getUpdates":
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return [
+                    {"update_id": 5, "message": _message(message_id=5, text="ok")},
+                    {"update_id": 6, "message": _message(message_id=6, text="boom")},
+                ]
+            return []
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    seen = []
+
+    async def rec(event: dict):
+        seen.append(event)
+        if event.get("message_id") == "6":
+            raise RuntimeError("handler failure")
+
+    monkeypatch.setattr(adapter, "emit_event", rec)
+
+    task = asyncio.create_task(adapter._poll_loop())
+    await asyncio.sleep(0.1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # 失败也推进 offset，避免该 update_id 无限重放
+    assert adapter._offset == 7
+    assert {e["message_id"] for e in seen} == {"5", "6"}

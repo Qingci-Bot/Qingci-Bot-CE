@@ -15,7 +15,7 @@
 ## 特性
 
 - **OneBot 11 反向 WebSocket**：基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp)，完整支持 OneBot v11 协议（消息段解析、API 调用、事件总线）
-- **多平台适配器**：平台协议归一化为内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot 11 + Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `record`、video → `video` 段；发送识别 `[CQ:image]`/`[CQ:record]`/`[CQ:video]` 走 `sendPhoto`/`sendVoice`/`sendVideo`）、CQ 回复（`[CQ:reply]`）与成员变动通知（成员进出群/权限变更归一化为 `group_increase`/`group_decrease`/`group_admin` notice）
+- **多平台适配器**：平台协议归一化为内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot 11 + Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `record`、video → `video` 段；发送识别 `[CQ:image]`/`[CQ:record]`/`[CQ:video]` 走 `sendPhoto`/`sendVoice`/`sendVideo`）、CQ 回复（`[CQ:reply]`）与成员变动通知（成员进出群/权限变更归一化为 `group_increase`/`group_decrease`/`group_admin` notice）；长轮询采用有限并发消费（慢更新不阻塞同批）且失败更新自动确认跳过避免重放，Bot Token 支持运行时热更新，API 调用错误按 401/403/404 分类以便区分处理
 - **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 7 大提供商（OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义），含流式响应、Function Calling、多模态；填好 API Key 后可一键拉取提供商可用模型列表
 - **人格/人设系统**：可配置多组人格（system_prompt 集合），聊天中 `/persona` 命令随时切换（会话级覆盖），Web UI 可视化管理
 - **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪（可选摘要压缩）；Web UI 按会话分组可视化查看 / 删除

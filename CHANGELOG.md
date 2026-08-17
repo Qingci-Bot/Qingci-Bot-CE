@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Telegram 增强：语音/视频媒体与 CQ 回复**：接收侧 `voice` → `record`、`video` / `video_note` → `video` 段；发送侧识别 `[CQ:record]` → `sendVoice`、`[CQ:video]` → `sendVideo`（与图片共用 file_id / http(s) URL / `base64://` / 本地路径解析），`[CQ:reply,id=N]` → `reply_to_message_id` 回复指定消息；消息事件 `sub_type` 语义修正（私聊 `friend`）；新增 8 个用例
 
 ### Changed
+- **Telegram 轮询改为有限并发消费**：引入 `asyncio.Semaphore`（`_MAX_CONCURRENT_UPDATES=8`）控制单批更新内的并发度，慢更新不再阻塞同批其他更新，同时避免无限并发；offset 改为整批确认（`max(update_id)+1`）后再消费，单条处理失败仅记日志且仍被确认，杜绝同一 `update_id` 失败后无限重放
+- **Telegram API 调用错误分类**：新增 `TelegramAPIError` 及其子类（`TelegramUnauthorizedError`=401 / `TelegramForbiddenError`=403 / `TelegramNotFoundError`=404），`_api` 按 Telegram `error_code` 归类抛出，网络/超时等 HTTP 异常统一包装为 `TelegramAPIError`，便于上层区分 Token 失效、被禁言、目标不可达等场景
+- **Telegram Bot Token 热更新**：新增 `TelegramAdapter.set_token(token)`，运行时更新 `self.token` 无需重启适配器，下次 API 调用即生效（空值拒绝并抛 `ValueError`）；适配器的随附测试新增 7 个用例
 - **版本号统一用脚本管理**：新增 `scripts/bump_version.py`——`python scripts/bump_version.py 1.7.0` 从单一输入同步升级 `pyproject.toml` / `bot/__init__.py` / `web/package.json` 三处，任一文件缺失或版本格式非法即报错；`--check` 模式可在提交前校验三处是否一致，防止漏改（用法见 `CONTRIBUTING.md`）
 
 ### Fixed

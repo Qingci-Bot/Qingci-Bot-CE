@@ -65,11 +65,56 @@ _MEDIA_API: dict[str, tuple[str, str]] = {
 }
 
 
+class TelegramAPIError(RuntimeError):
+    """Telegram Bot API 调用失败"""
+
+    def __init__(self, message: str, *, error_code: int = 0, description: str = ""):
+        super().__init__(message)
+        self.error_code = error_code
+        self.description = description
+
+
+class TelegramUnauthorizedError(TelegramAPIError):
+    """Bot Token 无效/过期（error_code=401）"""
+
+
+class TelegramForbiddenError(TelegramAPIError):
+    """Bot 被禁言 / 无权限 / 目标不可达（error_code=403）"""
+
+
+class TelegramNotFoundError(TelegramAPIError):
+    """聊天/文件不存在或用户不可达（error_code=404）"""
+
+
+def _coerce_code(raw: Any) -> int:
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _telegram_error(method: str, data: dict) -> TelegramAPIError:
+    """按 Telegram error_code 归类调用失败，便于上层区分处理"""
+    code = _coerce_code(data.get("error_code"))
+    desc = str(data.get("description") or "") or "No description"
+    cls = TelegramAPIError
+    if code == 401:
+        cls = TelegramUnauthorizedError
+    elif code == 403:
+        cls = TelegramForbiddenError
+    elif code == 404:
+        cls = TelegramNotFoundError
+    return cls(f"Telegram API 错误 ({method}): {desc}", error_code=code, description=desc)
+
+
 class TelegramAdapter(PlatformAdapter):
     """Telegram Bot API 长轮询适配器"""
 
     name = "telegram"
     display_name = "Telegram"
+
+    # 单批内更新的有限并发数：避免单条慢处理阻塞同批其他更新，同时防无限并发
+    _MAX_CONCURRENT_UPDATES = 8
 
     def __init__(self, token: str = "", *, poll_interval: float = 1.0):
         super().__init__()
@@ -82,6 +127,8 @@ class TelegramAdapter(PlatformAdapter):
         self.self_id = 0
         self.username = ""  # Bot @用户名（无 @ 前缀），用于 at 提及识别
         self._http: httpx.AsyncClient | None = None
+        # 有限并发消费信号量：单批更新内并发度上限（见 _MAX_CONCURRENT_UPDATES）
+        self._update_sem = asyncio.Semaphore(self._MAX_CONCURRENT_UPDATES)
 
     # ============ HTTP ============
 
@@ -101,14 +148,29 @@ class TelegramAdapter(PlatformAdapter):
         url = API_BASE.format(token=self.token, method=method)
         if files:
             data = {k: str(v) for k, v in params.items() if v is not None}
-            resp = await self._client().post(url, data=data or None, files=files)
+            try:
+                resp = await self._client().post(url, data=data or None, files=files)
+            except httpx.HTTPError as exc:
+                raise TelegramAPIError(f"Telegram 请求失败 ({method}): {exc}") from None
         else:
-            resp = await self._client().post(url, json=params or None)
+            try:
+                resp = await self._client().post(url, json=params or None)
+            except httpx.HTTPError as exc:
+                raise TelegramAPIError(f"Telegram 请求失败 ({method}): {exc}") from None
         resp.raise_for_status()
         data = resp.json()
-        if not data.get("ok"):
-            raise RuntimeError(f"Telegram API 错误 ({method}): {data.get('description', '')}")
+        if data is None or data.get("ok") is not True:
+            raise _telegram_error(method, data if isinstance(data, dict) else {})
         return data.get("result", {}) or {}
+
+    def set_token(self, token: str) -> None:
+        """热更新 Bot Token（无需重启适配器，下次调用即生效）"""
+        token = str(token or "").strip()
+        if not token:
+            raise ValueError("Telegram Bot Token 不能为空")
+        if token != self.token:
+            self.token = token
+            logger.info("Telegram Bot Token 已热更新（self_id=%s）", self.self_id)
 
     # ============ 生命周期 ============
 
@@ -163,15 +225,17 @@ class TelegramAdapter(PlatformAdapter):
                 self._last_heartbeat = time.time()
                 consecutive_errors = 0
                 if isinstance(updates, list):
-                    for upd in updates:
-                        if not isinstance(upd, dict):
-                            continue
-                        try:
-                            await self._handle_update(upd)
-                        except Exception as e:  # 单条更新失败不影响整体轮询
-                            logger.error(f"Telegram Update-{upd.get('update_id')} 处理失败: {e}")
-                        # 无论成败均推进 offset：避免失败更新导致无限重放
-                        self._offset = max(self._offset, self._safe_int(upd.get("update_id")) + 1)
+                    pending = [u for u in updates if isinstance(u, dict)]
+                    if pending:
+                        # 先确认整批（推进 offset）再消费：即使某条更新处理失败
+                        # 也已被确认，避免同一 update_id 无限重放
+                        newest = max(
+                            (self._safe_int(u.get("update_id")) for u in pending), default=0
+                        )
+                        if newest:
+                            self._offset = newest + 1
+                        # 有限并发消费：慢更新不阻塞同批其他更新；单条失败不拖垮整批
+                        await asyncio.gather(*(self._consume_update(u) for u in pending))
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -184,6 +248,18 @@ class TelegramAdapter(PlatformAdapter):
                 await asyncio.sleep(min(30, self.poll_interval * 3))
                 continue
             await asyncio.sleep(self.poll_interval)
+
+    async def _consume_update(self, update: dict) -> None:
+        """在信号量控制下消费单条更新；单条失败仅记日志，不拖垮同批其他更新"""
+        async with self._update_sem:
+            try:
+                await self._handle_update(update)
+            except Exception as e:
+                logger.warning(
+                    "处理 Telegram 更新失败（update_id=%s，已确认跳过避免重放）: %s",
+                    self._safe_int(update.get("update_id")),
+                    e,
+                )
 
     async def _handle_update(self, update: dict) -> None:
         """处理单条 Update：message → 消息事件；成员变动 → notice 事件"""
