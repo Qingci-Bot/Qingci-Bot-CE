@@ -13,12 +13,16 @@
 - 发送：send_msg 走 sendMessage（Telegram 统一 chat_id）并识别
   [CQ:image] 转发 sendPhoto（file_id / http(s) URL / base64 / 本地路径）；
   group/private 均按 chat_id 发送；其余 CQ 段降级为纯文本
+- 通知：chat_member / my_chat_member 成员变动 → group_increase /
+  group_decrease / group_admin notice 事件（被邀请 sub_type=invite）
 - 能力：call_api 映射 send_private_msg/send_group_msg → sendMessage/sendPhoto，
   其余 action 透传为 Telegram 方法（小写方法名）
 - 状态：轮询运行即视为已连接；last_heartbeat 随每次成功轮询更新
 
-当前一期仅处理 message 类事件；notice/request 类型（如成员变动）
-预留接口，后续按需补充。
+说明：Telegram 的 edited_message / callback_query 承载其特有语义，
+在 OneBot-11 / 本框架事件模型中无等价事件，故暂不归一化（可由后续
+自定义事件机制承载）。offset 游标在处理单条更新后推进，处理失败也推进，
+避免无限重放。
 """
 
 import asyncio
@@ -150,10 +154,12 @@ class TelegramAdapter(PlatformAdapter):
                     for upd in updates:
                         if not isinstance(upd, dict):
                             continue
-                        update_id = self._safe_int(upd.get("update_id"))
-                        if update_id >= self._offset:
-                            self._offset = update_id + 1
-                        await self._handle_update(upd)
+                        try:
+                            await self._handle_update(upd)
+                        except Exception as e:  # 单条更新失败不影响整体轮询
+                            logger.error(f"Telegram Update-{upd.get('update_id')} 处理失败: {e}")
+                        # 无论成败均推进 offset：避免失败更新导致无限重放
+                        self._offset = max(self._offset, self._safe_int(upd.get("update_id")) + 1)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -168,12 +174,112 @@ class TelegramAdapter(PlatformAdapter):
             await asyncio.sleep(self.poll_interval)
 
     async def _handle_update(self, update: dict) -> None:
-        """处理单条 Update"""
+        """处理单条 Update：message → 消息事件；成员变动 → notice 事件"""
         message = update.get("message")
         if isinstance(message, dict):
             event = self._normalize_message(message)
             if event is not None:
                 await self.emit_event(event)
+            return
+
+        member_key = (
+            "chat_member" if isinstance(update.get("chat_member"), dict) else "my_chat_member"
+        )
+        member_item = update.get(member_key)
+        if isinstance(member_item, dict):
+            notice = self._normalize_member_notice(
+                update=update,
+                new_member=member_item.get("new_chat_member"),
+                old_member=member_item.get("old_chat_member"),
+                chat=member_item.get("chat"),
+                operator_user=member_item.get("from"),
+                bot_self=(member_key == "my_chat_member"),
+            )
+            if notice is not None:
+                await self.emit_event(notice)
+
+    # Telegram 成员状态集合：member/administrator/creator/restricted 视为在群，
+    # left/kicked/未知 视为不在群
+    _MEMBER = {"member", "administrator", "creator", "restricted"}
+    _ABSENT = {"", "left", "kicked"}
+
+    def _normalize_member_notice(
+        self,
+        update: dict,
+        *,
+        new_member: dict | None = None,
+        old_member: dict | None = None,
+        chat: dict | None = None,
+        operator_user: dict | None = None,
+        bot_self: bool = False,
+    ) -> dict | None:
+        """将 chat_member / my_chat_member 更新归一化为 OneBot notice 事件
+
+        群成员增加 → group_increase（被邀请时 sub_type=invite）；
+        成员离开/被踢 → group_decrease（被踢时 sub_type=kick）；
+        管理员权限变更 → group_admin（set / unset）。
+        """
+        if not isinstance(chat, dict):
+            return None
+        chat_type = str(chat.get("type", ""))
+        if chat_type not in ("group", "supergroup"):
+            return None
+        chat_id = self._safe_int(chat.get("id"))
+        if not chat_id:
+            return None
+
+        new_member = new_member or {}
+        old_member = old_member or {}
+        new_status = str(new_member.get("status") or "")
+        old_status = str(old_member.get("status") or "")
+        if new_status not in self._MEMBER and new_status not in self._ABSENT:
+            return None
+        if old_status not in self._MEMBER and old_status not in self._ABSENT:
+            return None
+
+        new_user = new_member.get("user") or {}
+        old_user = old_member.get("user") or {}
+        user_id = self._safe_int(new_user.get("id")) or self._safe_int(old_user.get("id"))
+        if bot_self:
+            user_id = self.self_id
+        operator_id = (
+            self._safe_int(operator_user.get("id")) if isinstance(operator_user, dict) else 0
+        )
+
+        notice = {
+            "post_type": "notice",
+            "notice_type": "",
+            "sub_type": "normal",
+            "message_id": str(update.get("update_id", "")),
+            "group_id": chat_id,
+            "user_id": user_id,
+            "operator_id": operator_id,
+            "self_id": self.self_id,
+            "platform": self.name,
+            "_telegram_chat": chat,
+            "_telegram_member": new_member or old_member,
+        }
+
+        if old_status in self._ABSENT and new_status in self._MEMBER:
+            notice["notice_type"] = "group_increase"
+            if operator_id and user_id and operator_id != user_id:
+                notice["sub_type"] = "invite"
+            return notice
+        if old_status in self._MEMBER and new_status in self._ABSENT:
+            notice["notice_type"] = "group_decrease"
+            return notice
+
+        was_admin = old_status in ("administrator", "creator")
+        is_admin = new_status in ("administrator", "creator")
+        if not was_admin and is_admin:
+            notice["notice_type"] = "group_admin"
+            notice["sub_type"] = "set"
+            return notice
+        if was_admin and not is_admin:
+            notice["notice_type"] = "group_admin"
+            notice["sub_type"] = "unset"
+            return notice
+        return None
 
     # ============ 归一化 ============
 

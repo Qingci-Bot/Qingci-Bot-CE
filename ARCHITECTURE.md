@@ -170,7 +170,7 @@ Qingci-Bot-CE/
 平台协议统一收敛为 `PlatformAdapter` 契约，插件对来源平台无感知；事件归一化为 OneBot-11 兼容的内部模型（注入 `platform` 字段），回复按 `MessageContext.platform` 路由回对应适配器：
 
 - **`base.py`**：定义 `PlatformAdapter` 契约（适配器名/展示名、启动与关闭、事件上报回调、发送消息、`get_status`/API 透传等），任何平台只需实现该契约即可接入
-- **`telegram.py`**：Telegram 平台实现——以 Bot API 长轮询（`getUpdates`）接入，由 `platforms.telegram.enabled/token/poll_interval` 控制；收到更新后归一化为 OneBot-11 兼容消息事件并注入 `platform: "telegram"`。关键能力：① 群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 `at` 段（`qq=self_id`）并置 `is_at_bot`，确保 at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；② `photo` / `image/*` document 归一化为 `image` 段 + `images`（file_id）；③ 发送识别 `[CQ:image]` → `sendPhoto`（file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，首图带 caption），其余不可渲染的 CQ 段降级为纯文本并合并连续空白，之外走 `sendMessage`
+- **`telegram.py`**：Telegram 平台实现——以 Bot API 长轮询（`getUpdates`）接入，由 `platforms.telegram.enabled/token/poll_interval` 控制；收到更新后归一化为 OneBot-11 兼容消息事件并注入 `platform: "telegram"`。关键能力：① 群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 `at` 段（`qq=self_id`）并置 `is_at_bot`，确保 at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；② `photo` / `image/*` document 归一化为 `image` 段 + `images`（file_id）；③ 发送识别 `[CQ:image]` → `sendPhoto`（file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，首图带 caption），其余不可渲染的 CQ 段降级为纯文本并合并连续空白，之外走 `sendMessage`；④ `chat_member` / `my_chat_member` 成员变动归一化为 OneBot `notice`（`group_increase` / `group_decrease` / `group_admin`，被邀请 `sub_type=invite`），由既有事件 Matcher 消费；⑤ 轮询 offset 在处理单条更新后推进，单条处理失败仅记录并仍推进，避免失败更新无限重放
 - **`OneBotConnection`**（`bot/core/connection.py`）升级为实现 `PlatformAdapter` 契约的「onebot」平台，与原反向 WS 行为完全兼容，回复路由与附加平台共用同一发送映射
 - 附加平台（Telegram）启动失败仅记录日志，不阻断主平台（OneBot）可用性
 

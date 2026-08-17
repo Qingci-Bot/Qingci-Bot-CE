@@ -15,7 +15,7 @@
 ## 特性
 
 - **OneBot 11 反向 WebSocket**：基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp)，完整支持 OneBot v11 协议（消息段解析、API 调用、事件总线）
-- **多平台适配器**：平台协议归一化为内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot 11 + Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）与图片收发（收到 photo / image document 归一化为 `image` 段，发送识别 `[CQ:image]` 走 `sendPhoto`）
+- **多平台适配器**：平台协议归一化为内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot 11 + Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片收发（收到 photo / image document 归一化为 `image` 段，发送识别 `[CQ:image]` 走 `sendPhoto`）与成员变动通知（成员进出群/权限变更归一化为 `group_increase`/`group_decrease`/`group_admin` notice）
 - **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 7 大提供商（OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义），含流式响应、Function Calling、多模态；填好 API Key 后可一键拉取提供商可用模型列表
 - **人格/人设系统**：可配置多组人格（system_prompt 集合），聊天中 `/persona` 命令随时切换（会话级覆盖），Web UI 可视化管理
 - **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪（可选摘要压缩）；Web UI 按会话分组可视化查看 / 删除
@@ -406,7 +406,7 @@ api_key: ''                        # API 鉴权密钥
 | `llm.provider` | 提供商联动 | `openai` | 切换 provider 自动带出预设 api_url/model（openai/deepseek/ollama/siliconflow/claude/gemini/custom 共 7 个）；`api_url` 非空统一走 OpenAI 兼容协议 |
 | `llm.timeout` / `llm.num_retries` | 请求超时与重试 | `60` / `2` | 单次 LLM 请求超时秒数与失败重试次数 |
 | `market` | 插件市场 | `url` 默认指向 Gitee 镜像（`https://gitee.com/qingci-bot/Plugin-Market.git`，GitHub 主仓库的国内自动同步镜像，拉取更快更稳；可用 `https://github.com/Qingci-Bot/Plugin-Market.git` 切换主仓库） | WebUI「插件管理 → 插件市场」浏览/搜索/一键安装/更新/刷新；`url` 可指向自定义市场索引仓库，`refresh_interval` 为索引缓存 TTL（秒） |
-| `platforms.telegram` | Telegram 平台适配器 | `enabled: false` | 启用后以 Bot API 长轮询接入 Telegram（`token` 由 @BotFather 获取）；事件归一化为内部模型，插件/命令零改动可用；回复自动路由到 Telegram；群聊 `@Bot` 可触发（支持 at 触发模式）；支持图片收发（收到 photo / image document 归一化为 `image` 段，发送识别 `[CQ:image]` 走 `sendPhoto`，支持 file_id / URL / base64 / 本地路径）；`poll_interval` 为轮询间隔（秒） |
+| `platforms.telegram` | Telegram 平台适配器 | `enabled: false` | 启用后以 Bot API 长轮询接入 Telegram（`token` 由 @BotFather 获取）；事件归一化为内部模型，插件/命令零改动可用；回复自动路由到 Telegram；群聊 `@Bot` 可触发（支持 at 触发模式）；支持图片收发（收到 photo / image document 归一化为 `image` 段，发送识别 `[CQ:image]` 走 `sendPhoto`，支持 file_id / URL / base64 / 本地路径）；成员进出群/权限变更归一化为 OneBot `notice`（`group_increase` / `group_decrease` / `group_admin`），事件插件可响应；`poll_interval` 为轮询间隔（秒） |
 | `bot.log_json` | 结构化 JSON 日志 | `false` | 面向机器可读的日志采集场景 |
 | `log.log_file_enabled` | 文件日志轮转 | `false` | 启用后日志写入 `log_dir/qingci-bot.log`，按 `log_file_max_bytes` 大小轮转，保留 `log_file_backup_count` 个备份 |
 

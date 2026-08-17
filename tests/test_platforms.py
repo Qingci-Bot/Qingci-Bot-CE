@@ -491,3 +491,104 @@ def test_resolve_image_refs(adapter):
     assert TelegramAdapter._resolve_image("AgACtgID")[0] == "param"
     kind, _, media = TelegramAdapter._resolve_image("base64://aGVsbG8=")
     assert kind == "upload" and media[1] == b"hello"
+
+
+# ---------- Telegram 增强：成员变动通知 ----------
+
+
+def _member_update(
+    update_id=10,
+    *,
+    chat_id=-10020002,
+    new_status="member",
+    old_status="left",
+    user_id=777,
+    operator_id=555,
+    key="chat_member",
+):
+    return {
+        "update_id": update_id,
+        key: {
+            "chat": {"id": chat_id, "type": "supergroup", "title": "测试群"},
+            "from": {"id": operator_id},
+            "new_chat_member": {"status": new_status, "user": {"id": user_id}},
+            "old_chat_member": {"status": old_status, "user": {"id": user_id}},
+        },
+    }
+
+
+async def test_member_increase_notice(adapter, monkeypatch):
+    """成员加入（被邀请）→ group_increase，sub_type=invite"""
+    adapter.self_id = 999
+    seen = []
+
+    async def rec(event: dict):
+        seen.append(event)
+
+    monkeypatch.setattr(adapter, "emit_event", rec)
+    await adapter._handle_update(_member_update())
+    assert len(seen) == 1
+    ev = seen[0]
+    assert ev["post_type"] == "notice"
+    assert ev["notice_type"] == "group_increase"
+    assert ev["sub_type"] == "invite"
+    assert ev["group_id"] == -10020002
+    assert ev["user_id"] == 777
+    assert ev["operator_id"] == 555
+    assert ev["self_id"] == 999
+
+
+async def test_member_decrease_notice(adapter, monkeypatch):
+    """成员离开 → group_decrease（操作者即本人 → sub_type=normal）"""
+    seen = []
+
+    async def rec(event: dict):
+        seen.append(event)
+
+    monkeypatch.setattr(adapter, "emit_event", rec)
+    await adapter._handle_update(
+        _member_update(new_status="left", old_status="member", operator_id=777)
+    )
+    assert seen and seen[0]["notice_type"] == "group_decrease"
+    assert seen[0]["user_id"] == 777
+
+
+async def test_member_admin_notice(adapter, monkeypatch):
+    """成员被设为管理员 → group_admin, sub_type=set"""
+    seen = []
+
+    async def rec(event: dict):
+        seen.append(event)
+
+    monkeypatch.setattr(adapter, "emit_event", rec)
+    await adapter._handle_update(_member_update(new_status="administrator", old_status="member"))
+    assert seen and seen[0]["notice_type"] == "group_admin"
+    assert seen[0]["sub_type"] == "set"
+
+
+async def test_my_member_notice_uses_self_id(adapter, monkeypatch):
+    """my_chat_member（Bot 自身被拉入群）→ user_id = self_id"""
+    adapter.self_id = 999
+    seen = []
+
+    async def rec(event: dict):
+        seen.append(event)
+
+    monkeypatch.setattr(adapter, "emit_event", rec)
+    await adapter._handle_update(_member_update(user_id=999, operator_id=555, key="my_chat_member"))
+    assert seen and seen[0]["notice_type"] == "group_increase"
+    assert seen[0]["user_id"] == 999
+
+
+async def test_member_change_non_group_ignored(adapter, monkeypatch):
+    """非群聊（如频道）成员变动不产生 notice"""
+    seen = []
+
+    async def rec(event: dict):
+        seen.append(event)
+
+    monkeypatch.setattr(adapter, "emit_event", rec)
+    upd = _member_update()
+    upd["chat_member"]["chat"]["type"] = "channel"
+    await adapter._handle_update(upd)
+    assert seen == []
