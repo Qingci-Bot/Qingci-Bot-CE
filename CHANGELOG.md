@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Telegram HTTP 超时/重试可配置化**：`TelegramAdapter` 新增 `request_timeout`（默认 `POLL_TIMEOUT+10=40s`，须大于长轮询 timeout）与 `max_retries`（默认 0，仅对 `httpx.TransportError` 网络层错误有限重试，业务错误绝无重试避免发送类重复），经 `platforms.telegram` 配置节透传入 `make_platform`
 - **Telegram Token 热更新后自动重验身份**：`set_token()` 更新后置 `_identity_dirty`，轮询下一轮自动调用 `getMe` 刷新 `self_id`/`username`（新增 `refresh_identity()`，`start()` 亦复用）；重验失败仅记日志下轮再试，不中断轮询
 - **版本号统一用脚本管理**：新增 `scripts/bump_version.py`——`python scripts/bump_version.py 1.7.0` 从单一输入同步升级 `pyproject.toml` / `bot/__init__.py` / `web/package.json` 三处，任一文件缺失或版本格式非法即报错；`--check` 模式可在提交前校验三处是否一致，防止漏改（用法见 `CONTRIBUTING.md`）
+- **LLM 子系统测试补强（消除覆盖黑洞）**：新增 `tests/test_llm_adapter.py`（26 个用例）、`tests/test_llm_manager.py`（25 个用例）、`tests/test_llm_mcp.py`（12 个用例）——`litellm_adapter.py` 覆盖 17%→93%、`llm/manager.py` 9%→69%、`llm/mcp.py` 0%→76%（mock `_get_litellm` / 假适配器与假 DB 隔离网络）；完整套件 358 passed，整体覆盖率 45.6%→51.9%
 
 ### Fixed
 - **群配置「添加群」无反应**：`type=number` 输入框的 `v-model` 会把值转为数字类型，直接调用 `.trim()` 抛 `TypeError` 中断新增逻辑；改为先将输入 `String()` 转换为字符串再校验纯数字，现可正常添加群
