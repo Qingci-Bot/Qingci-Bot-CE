@@ -10,7 +10,7 @@
 
 ### 报告 Bug
 
-1. 在 [Issues](https://atomgit.com/Qingci-Bot/Qingci-Bot-CE/issues) 中搜索是否已有相同问题
+1. 在 [Issues](https://github.com/Qingci-Bot/Qingci-Bot-CE/issues) 中搜索是否已有相同问题
 2. 如果没有，创建新 Issue，包含：
    - 清晰的问题描述
    - 复现步骤
@@ -40,7 +40,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://atomgit.com/Qingci-Bot/Qingci-Bot-CE.git
+git clone https://github.com/Qingci-Bot/Qingci-Bot-CE.git
 cd Qingci-Bot-CE
 
 # 创建虚拟环境
@@ -65,7 +65,7 @@ ruff format --check .
 mypy api bot desktop
 ```
 
-> **协议层说明**：`bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `dispatcher.MessageContext` 为 `qingci_plugin_sdk` 薄转发。修改权限语义、匹配规则、基类等协议行为时，请前往 [Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) 仓库修改并在主项目提升 git 依赖版本；主项目内只改运行时逻辑（如 `bot/plugin/manager.py`、`bot/plugin/llm_tool.py`）。
+> **协议层说明**：`bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `dispatcher.MessageContext` 为 `qingci_plugin_sdk` 薄转发。修改权限语义、匹配规则、基类等协议行为时，请前往 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 仓库修改并在主项目提升 git 依赖版本；主项目内只改运行时逻辑（如 `bot/plugin/manager.py`、`bot/plugin/llm_tool.py`）。
 
 ### 前端
 
@@ -122,7 +122,7 @@ Qingci-Bot-CE/
 
 ## 插件开发
 
-请参考 [Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) 独立开发仓库。
+请参考 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 独立开发仓库。
 
 ## 许可证
 

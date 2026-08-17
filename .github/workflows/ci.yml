@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  quality:
+    name: Lint / Type / Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Format check (ruff)
+        run: ruff format --check .
+
+      - name: Type check (mypy)
+        run: mypy api bot desktop
+
+      - name: Test with coverage
+        # --cov-fail-under 已在 pyproject addopts 中配置，低于门槛即失败
+        run: pytest -q
+
+  docker:
+    name: Docker build & smoke run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose config
+        run: docker compose config --quiet
+
+      - name: Build image
+        run: docker build -t qingci-bot-ce:ci .
+
+      - name: Smoke run (container)
+        run: |
+          docker run -d --name qc-smoke -p 18080:8080 qingci-bot-ce:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/api/bot/health >/dev/null 2>&1; then
+              echo "API ready after ${i}s"
+              docker logs qc-smoke | tail -n 20
+              docker rm -f qc-smoke >/dev/null
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::API 未在 30s 内就绪"
+          docker logs qc-smoke
+          docker rm -f qc-smoke >/dev/null
+          exit 1
+
+  install-script:
+    name: install.sh smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Shell syntax check
+        run: bash -n install.sh
+
+      - name: Run install.sh (skip system deps)
+        run: SKIP_SYS_DEPS=1 ./install.sh --dev
+
+      - name: Boot smoke test
+        run: |
+          .venv/bin/python main.py --instance default &
+          PID=$!
+          ok=0
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/api/bot/health >/dev/null 2>&1; then
+              echo "Boot OK after ${i}s"
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          kill $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
+          if [ "$ok" != "1" ]; then
+            echo "::error::main.py 未在 60s 内就绪"
+            exit 1
+          fi

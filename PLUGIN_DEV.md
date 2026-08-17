@@ -98,7 +98,7 @@ Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，�
 | 内置式 | `from bot.plugin.base import PluginBase` | 与主项目同仓库开发的插件（底层即转发 SDK） |
 | 独立 SDK 式（推荐） | `from qingci_plugin_sdk import PluginBase` | 独立工作区开发、可分发/版本化的插件 |
 
-SDK 式插件在 [Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) 工作区开发（SDK 已随 exe 打包，插件运行时无需另行安装），两类插件混用不受影响：`PluginManager` 自动识别 SDK 式 `PluginBase` 子类，并调用 `set_data_root()` 将数据目录重定向到当前实例（`data_root()/plugins/<name>/`），保持实例隔离。由于内置插件的 `bot.plugin.base` 也是 SDK 转发，内置插件同样经此路径，实例隔离行为一致。
+SDK 式插件在 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 工作区开发（SDK 已随 exe 打包，插件运行时无需另行安装），两类插件混用不受影响：`PluginManager` 自动识别 SDK 式 `PluginBase` 子类，并调用 `set_data_root()` 将数据目录重定向到当前实例（`data_root()/plugins/<name>/`），保持实例隔离。由于内置插件的 `bot.plugin.base` 也是 SDK 转发，内置插件同样经此路径，实例隔离行为一致。
 
 ### 插件基类
 

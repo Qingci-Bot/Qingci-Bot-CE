@@ -1,10 +1,10 @@
 # Qingci-Bot CE
 
-> 本项目底层核心代码由 [**Zhou Zhe (aka luoqingci)**](https://atomgit.com/luoqingci) 原创，并授予 [Qingci-Bot](https://atomgit.com/Qingci-Bot) 组织持续开发。
+> 本项目底层核心代码由 [**Zhou Zhe (aka luoqingci)**](https://github.com/luoqingciya) 原创，并授予 [Qingci-Bot](https://github.com/Qingci-Bot) 组织持续开发。
 
 基于 Python 的 QQ 机器人框架，对接 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot)（OneBot 11 协议），支持 LLM 智能对话、Web UI 和桌面应用。
 
-> 独立插件开发：[Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) — 零依赖插件开发 SDK，无需克隆主项目即可开发插件
+> 独立插件开发：[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) — 零依赖插件开发 SDK，无需克隆主项目即可开发插件
 >
 > 插件协议层（`PluginBase`/`Matcher`/`Permission`/`Rule`/`MessageContext`）统一由 Plugins-SDK 维护，主项目 `bot/plugin/` 下为薄转发，内置插件与外部插件共用同一套 API
 >
@@ -61,7 +61,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 >
 > 插件协议层 SDK（`qingci-plugin-sdk`）作为 git 依赖随核心依赖安装；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.ps1` 一致），覆盖 git 依赖版本。
 >
-> 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install git+https://atomgit.com/Qingci-Bot/Plugins-SDK.git` 安装 SDK）：
+> 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install git+https://github.com/Qingci-Bot/Plugins-SDK.git` 安装 SDK）：
 >
 > ```bash
 > uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiosqlite \
@@ -412,7 +412,7 @@ api_key: ''                        # API 鉴权密钥
 
 > 插件开发、API 接口、前端开发、打包详见 [PLUGIN_DEV.md](./PLUGIN_DEV.md)
 >
-> 独立插件开发 SDK：[Plugins-SDK](https://atomgit.com/Qingci-Bot/Plugins-SDK) — 零依赖插件开发工具包，无需克隆主项目即可开发插件
+> 独立插件开发 SDK：[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) — 零依赖插件开发工具包，无需克隆主项目即可开发插件
 
 ## 文档
 
