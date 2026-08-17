@@ -90,9 +90,7 @@ class MarketIndex:
                     "icon": str(item.get("icon", "") or ""),
                     "homepage": str(item.get("homepage", "") or ""),
                     "tags": [str(t) for t in (item.get("tags") or [])],
-                    "requirements": [
-                        str(r) for r in (item.get("requirements") or [])
-                    ],
+                    "requirements": [str(r) for r in (item.get("requirements") or [])],
                     "updated_at": str(item.get("updated_at", "")),
                 }
             )
@@ -161,11 +159,7 @@ class MarketClient:
         force=True 强制重新拉取（WebUI「刷新市场」按钮）。
         """
         now = time.monotonic()
-        if (
-            not force
-            and self._cache is not None
-            and now - self._fetched_at < self.refresh_interval
-        ):
+        if not force and self._cache is not None and now - self._fetched_at < self.refresh_interval:
             return self._cache
 
         try:
@@ -215,7 +209,12 @@ class MarketClient:
         tmp = tempfile.mkdtemp(prefix="qb-market-")
         try:
             proc = await asyncio.create_subprocess_exec(
-                "git", "clone", "--depth", "1", url, str(tmp),
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                url,
+                str(tmp),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
@@ -238,9 +237,7 @@ class MarketClient:
                 json.dumps(index.to_dict(), ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            self._cache_meta().write_text(
-                json.dumps({"fetched_at": time.time()}), encoding="utf-8"
-            )
+            self._cache_meta().write_text(json.dumps({"fetched_at": time.time()}), encoding="utf-8")
         except OSError as e:
             logger.warning(f"写入市场索引缓存失败: {e}")
 

@@ -134,9 +134,7 @@ class TelegramAdapter(PlatformAdapter):
                 raise
             except Exception as e:
                 consecutive_errors += 1
-                logger.warning(
-                    f"Telegram 轮询异常（第 {consecutive_errors} 次连续）: {e}"
-                )
+                logger.warning(f"Telegram 轮询异常（第 {consecutive_errors} 次连续）: {e}")
                 if consecutive_errors >= 5:
                     # 连续失败说明网络/token 异常，广播断连状态
                     logger.error("Telegram 轮询连续失败，标记平台离线")
@@ -240,9 +238,15 @@ class TelegramAdapter(PlatformAdapter):
                 logger.exception(f"平台接口调用钩子异常: {action}")
                 raise
         if action == "send_private_msg":
-            method, mapped = "sendMessage", {"chat_id": params.get("user_id"), "text": params.get("message", "")}
+            method, mapped = (
+                "sendMessage",
+                {"chat_id": params.get("user_id"), "text": params.get("message", "")},
+            )
         elif action == "send_group_msg":
-            method, mapped = "sendMessage", {"chat_id": params.get("group_id"), "text": params.get("message", "")}
+            method, mapped = (
+                "sendMessage",
+                {"chat_id": params.get("group_id"), "text": params.get("message", "")},
+            )
         elif action == "get_group_info":
             # Telegram 无群资料 API，返回最小兼容结构
             return {"group_id": self._safe_int(params.get("group_id")), "group_name": "Telegram 群"}

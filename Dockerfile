@@ -53,6 +53,7 @@ EXPOSE 8080 3001
 # 数据挂载点：实例配置(config.yaml)/数据(data)/插件(plugins) 持久化于此
 VOLUME ["/app/instances"]
 
-# 建议以 `python main.py` 启动（避免 console-script 的 sys.path 依赖）
+# 建议以 `python main.py` 启动（避免 console-script 的 sys.path 依赖）。
+# 不传 --instance：新容器空 /app/instances 下自动创建默认实例；否则会报"实例不存在"。
 # 外部 OneBot 前端连入前，请将实例 config.yaml 的 onebot.host 改为 0.0.0.0
-CMD ["python", "main.py", "--instance", "default", "--host", "0.0.0.0"]
+CMD ["python", "main.py", "--host", "0.0.0.0"]

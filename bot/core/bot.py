@@ -396,9 +396,7 @@ class QingciBot:
                 buffer = getattr(self, "event_buffer", None)
                 if buffer is not None:
                     try:
-                        buffer.record(
-                            parse_event(post_type, event) or event
-                        )
+                        buffer.record(parse_event(post_type, event) or event)
                     except Exception:
                         logger.debug("事件入缓冲失败，忽略", exc_info=True)
 

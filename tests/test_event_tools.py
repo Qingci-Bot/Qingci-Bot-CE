@@ -70,7 +70,9 @@ def test_record_request_event(buffer):
 
 def test_record_dict_fallback(buffer):
     """dict 兜底：非 SDK 事件也可记录"""
-    buffer.record({"post_type": "notice", "notice_type": "group_ban", "user_id": 10003, "group_id": 20003})
+    buffer.record(
+        {"post_type": "notice", "notice_type": "group_ban", "user_id": 10003, "group_id": 20003}
+    )
     entry = buffer.query()[0]
     assert entry["label"] == "禁言"
     assert entry["user_id"] == 10003
@@ -136,10 +138,24 @@ def _fake_registry():
             return name in self._tools
 
         def register(self, name, description, parameters, handler):
-            self._tools[name] = {"description": description, "parameters": parameters, "handler": handler}
+            self._tools[name] = {
+                "description": description,
+                "parameters": parameters,
+                "handler": handler,
+            }
 
         def get_openai_tools(self):
-            return [{"type": "function", "function": {"name": n, "description": s["description"], "parameters": s["parameters"]}} for n, s in self._tools.items()]
+            return [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": n,
+                        "description": s["description"],
+                        "parameters": s["parameters"],
+                    },
+                }
+                for n, s in self._tools.items()
+            ]
 
     return Reg()
 

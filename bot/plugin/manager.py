@@ -960,7 +960,8 @@ class PluginManager:
                 staging = Path(temp_dir) / "src"
                 # git 仓库识别：git+ / git@ / ssh:// 前缀，或 .git 结尾的 http(s) URL
                 is_git = source.startswith(("git+", "git@", "ssh://")) or (
-                    source.startswith(("http://", "https://")) and source.rstrip("/").endswith(".git")
+                    source.startswith(("http://", "https://"))
+                    and source.rstrip("/").endswith(".git")
                 )
                 if is_git:
                     repo = source[4:] if source.startswith("git+") else source

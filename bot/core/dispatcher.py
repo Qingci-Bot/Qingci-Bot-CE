@@ -226,9 +226,7 @@ class MessageDispatcher:
             return f"group:{ctx.group_id}:{ctx.user_id}"
         return f"private:{ctx.user_id}"
 
-    async def _try_resume_step(
-        self, bot: "QingciBot", ctx: MessageContext
-    ) -> tuple[Any, bool]:
+    async def _try_resume_step(self, bot: "QingciBot", ctx: MessageContext) -> tuple[Any, bool]:
         """尝试续接挂起中的会话阶梯
 
         命中则执行 handler（跳过 rule/permission），并按其控制流更新阶梯状态。

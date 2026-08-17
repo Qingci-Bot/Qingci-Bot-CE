@@ -148,7 +148,9 @@ def test_make_platform_disabled_returns_none():
 
 
 def test_make_platform_creates_telegram():
-    inst = make_platform(SimpleNamespace(name="telegram", enabled=True, token="t", poll_interval=2.0))
+    inst = make_platform(
+        SimpleNamespace(name="telegram", enabled=True, token="t", poll_interval=2.0)
+    )
     assert inst is not None
     assert inst.name == "telegram"
     assert inst.token == "t"
@@ -299,7 +301,15 @@ def test_dispatcher_platform_field():
     )
     assert ctx.platform == "telegram"
     # 默认 onebot
-    ctx2 = disp.dispatch({"post_type": "message", "message_type": "private", "message_id": "2", "user_id": 1, "self_id": 2})
+    ctx2 = disp.dispatch(
+        {
+            "post_type": "message",
+            "message_type": "private",
+            "message_id": "2",
+            "user_id": 1,
+            "self_id": 2,
+        }
+    )
     assert ctx2.platform == "onebot"
 
 

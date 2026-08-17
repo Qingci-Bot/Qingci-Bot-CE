@@ -62,7 +62,9 @@ class EventBuffer:
                 "sub_type": str(raw.get("sub_type", "")),
                 "user_id": int(raw.get("user_id", 0) or 0),
                 "group_id": int(raw.get("group_id", 0) or 0),
-                "label": self._label(post_type, str(raw.get("notice_type", raw.get("request_type", "")))),
+                "label": self._label(
+                    post_type, str(raw.get("notice_type", raw.get("request_type", "")))
+                ),
                 "detail": self._summarize_dict(raw),
             }
         else:
@@ -205,9 +207,7 @@ def register_event_tools(
         entries = buffer.query(group_id=gid, hours=h if h > 0 else None, limit=n)
         return buffer.format_entries(entries)
 
-    def get_member_events(
-        user_id: int, group_id: int = 0, hours: int = 24, limit: int = 10
-    ) -> str:
+    def get_member_events(user_id: int, group_id: int = 0, hours: int = 24, limit: int = 10) -> str:
         """查询指定成员最近的通知/请求事件（入群/退群/禁言/戳一戳等）"""
         uid = _parse_int(user_id)
         if uid <= 0:

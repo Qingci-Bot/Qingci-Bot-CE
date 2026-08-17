@@ -84,7 +84,7 @@ jobs:
 
       - name: Boot smoke test
         run: |
-          .venv/bin/python main.py --instance default &
+          .venv/bin/python main.py &
           PID=$!
           ok=0
           for i in $(seq 1 60); do

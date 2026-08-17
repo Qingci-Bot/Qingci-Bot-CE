@@ -133,7 +133,9 @@ class TestBotStatus:
         assert "platforms" in data
         assert isinstance(data["platforms"], list)
         for p in data["platforms"]:
-            assert {"name", "display_name", "connected", "last_heartbeat", "self_id"} <= set(p.keys())
+            assert {"name", "display_name", "connected", "last_heartbeat", "self_id"} <= set(
+                p.keys()
+            )
         if data["running"]:
             assert any(p["name"] == "onebot" for p in data["platforms"])
 
