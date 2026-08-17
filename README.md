@@ -96,6 +96,50 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 
 > **Web UI 未构建时**：若 `web/dist` 缺失或不完整，访问 `/` 会返回构建提示页（引导在 `web/` 目录执行 `npm install` 与 `npm run build`），API 服务本身仍正常可用。克隆仓库后首次启动前请先构建前端。
 
+### 2.1 Docker 容器部署（推荐，Linux 最省心）
+
+容器内以 **Headless 方式**运行后端（Bot + WebUI/API），不启用桌面 GUI 与启动画面。需要 [Docker](https://docs.docker.com/engine/install/) 与 Compose 插件：
+
+```bash
+# 在项目根目录
+docker compose up -d        # 构建 + 后台启动
+docker compose logs -f      # 查看日志
+docker compose restart      # 重启（改配置后生效）
+docker compose down         # 停止
+```
+
+- **端口**：`8080`（WebUI/API）、`3001`（OneBot 反向 WS）
+- **数据持久化**：`./instances:/app/instances` 卷挂载实例目录（config.yaml / data / 插件），不随镜像重建丢失
+- **首次启动**：自动创建 `instances/default/config.yaml`；设置 `llm.api_key` 后即可对话
+- **外部 OneBot 前端连入**：将该实例 `onebot.host` 改为 `0.0.0.0` 后 `docker compose restart`
+- 文件内容与完整说明见 `Dockerfile` / `docker-compose.yml`（`.dockerignore` 排除 venv/产物，实例目录不进镜像）
+
+> 构建依赖 `qingci-plugin-sdk`（atomgit git 依赖）需构建期联网；若改用了私有 SDK 克隆地址，请在构建前配置好凭据。
+
+### 2.2 Linux 源码部署（一键脚本 install.sh）
+
+核心运行（Bot + WebUI/API）为纯 Python，无需任何 GUI 系统依赖，Linux/macOS 均可直接跑：
+
+```bash
+chmod +x install.sh
+./install.sh                        # 核心依赖（自动检测 Python>=3.10，优先 uv，否则 pip）
+./install.sh --vector               # 追加向量知识库（lancedb）
+./install.sh --with-gui             # 追加桌面 GUI 系统库（仅需桌面模式时；可选）
+./install.sh --dev                  # 追加测试/构建/质量工具
+```
+
+脚本会：自动安装系统依赖（git / 编译工具；需 root，可用 `SKIP_SYS_DEPS=1` 跳过）→ 创建 `.venv` → 安装核心依赖。装完启动：
+
+```bash
+.venv/bin/python main.py --instance default
+```
+
+- WebUI：`http://127.0.0.1:8080/ui`
+- 编辑实例配置：`instances/default/config.yaml`
+- 外部 OneBot 前端连入前，把该实例 `onebot.host` 改为 `0.0.0.0`
+- **桌面 GUI（`--desktop`）**：Linux 下需要 GTK 系系统库（`libwebkit2gtk` / `libgtk-3` / `libappindicator`，Debian 系可看 `install.sh --with-gui` 列出的包名）；启动画面（splash）为 Windows 专属，Linux 自动跳过。**建议 Linux 优先使用 Docker 或 Headless + WebUI 模式**
+- 单实例保护基于 Windows 命名互斥量，Linux 下自动降级（允许多开，不阻塞启动）
+
 ## 3. 运行测试
 
 ```bash
