@@ -1,5 +1,7 @@
 # Qingci-Bot CE
 
+> **代码托管**：本仓库以 [GitHub](https://github.com/Qingci-Bot/Qingci-Bot-CE) 为权威主仓库，[AtomGit](https://atomgit.com/Qingci-Bot/Qingci-Bot-CE) 为自动同步的只读镜像；贡献与提 PR 一律以 GitHub 为准。
+
 > 本项目底层核心代码由 [**Zhou Zhe (aka luoqingci)**](https://github.com/luoqingciya) 原创，并授予 [Qingci-Bot](https://github.com/Qingci-Bot) 组织持续开发。
 
 基于 Python 的 QQ 机器人框架，对接 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot)（OneBot 11 协议），支持 LLM 智能对话、Web UI 和桌面应用。
