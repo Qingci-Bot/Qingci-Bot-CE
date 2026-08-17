@@ -264,6 +264,7 @@ async def on_load(self):
 # plugins/my_plugin/__init__.py
 import httpx  # requirements.txt 声明后可直接使用
 
+
 class MyPlugin(PluginBase):
     name = "my_plugin"
 ```
@@ -980,7 +981,9 @@ class WelcomePlugin(PluginBase):
 # plugins/pingpong.py
 from bot.plugin.matcher import on_message  # 装饰器位于 bot.plugin.matcher（转发 SDK）
 from bot.plugin.base import PluginBase
-from qingci_plugin_sdk.context import MessageContext  # 或 bot.core.dispatcher.MessageContext（转发同一类型）
+from qingci_plugin_sdk.context import (
+    MessageContext,
+)  # 或 bot.core.dispatcher.MessageContext（转发同一类型）
 
 
 # 新式（推荐）：Matcher 方式
