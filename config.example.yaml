@@ -18,6 +18,11 @@ onebot:
   host: 127.0.0.1
   port: 3001
   access_token: ''            # OneBot 接入令牌，留空则不校验
+platforms:
+  telegram:                    # Telegram 平台适配器（默认关闭）
+    enabled: false             # true 启用后接入 Telegram（Bot API 长轮询）
+    token: ''                  # Bot API token（@BotFather 获取）
+    poll_interval: 1.0         # 长轮询间隔（秒）
 llm:
   provider: deepseek          # openai / deepseek / ollama / siliconflow / claude / gemini / custom
   api_url: https://api.deepseek.com/v1

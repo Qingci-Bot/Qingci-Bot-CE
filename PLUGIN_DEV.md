@@ -806,7 +806,9 @@ self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 | `ctx.args` | `str` | 命令参数 / 前缀后的剩余文本 |
 | `ctx.match` | `re.Match` | 正则匹配结果（`regex` 规则写入） |
 
-基础字段（同 MessageContext）：`raw_event` / `message_type` / `message_id` / `user_id` / `group_id` / `self_id` / `plain_text` / `raw_message` / `is_at_bot` / `at_list` / `images` / `sender`
+基础字段（同 MessageContext）：`raw_event` / `message_type` / `message_id` / `user_id` / `group_id` / `self_id` / `plain_text` / `raw_message` / `is_at_bot` / `at_list` / `images` / `sender` / `platform`
+
+> **多平台说明**：`platform` 为来源平台标识（如 `"onebot"` / `"telegram"`），由适配器在事件入口归一化时注入。插件/命令无需感知来源平台——同一套 Matcher/Rule/Permission 逻辑自动适用于所有已接入平台；回复由框架按 `ctx.platform` 路由回对应适配器。默认（OneBot）环境下该字段为 `"onebot"`。
 
 ### 注册方式
 

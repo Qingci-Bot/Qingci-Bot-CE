@@ -21,12 +21,14 @@
 
 ### 数据流
 
-1. **LLBot**（QQ 协议端）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot CE
-2. **aiocqhttp** 解析事件，分发至 **Dispatcher**
+1. **LLBot**（QQ 协议端）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot CE；Telegram 由 `telegram.py` 适配器以 Bot API 长轮询接入
+2. **aiocqhttp** 解析事件，**telegram 适配器**归一化为 OneBot-11 兼容事件（注入 `platform` 字段），统一分发至 **Dispatcher**
 3. **Dispatcher** 按 priority 调度 **PluginManager** 中的 Matcher，匹配 Rule/Permission 后执行 handler
 4. 未匹配则回退到旧式 `on_message`；内置 chat 插件调用 **LLMManager** 生成回复
-5. 回复通过 OneBot 连接发送回 LLBot，最终到达 QQ 用户
-6. **Web UI** 通过 HTTP/WebSocket 与 API 服务通信，管理配置、插件、日志等
+5. 回复按 **MessageContext.platform** 路由到对应 **PlatformAdapter**，最终发送回 LLBot（QQ 用户）或 Telegram 对话
+6. **Web UI** 通过 HTTP/WebSocket 与 API 服务通信，管理配置、插件、日志等（侧边栏展示各平台实时连接状态）
+
+> **多平台原则**：事件在入口归一化、回复在出口路由，插件/命令对来源平台完全无感知——一套 Matcher/Rule/Permission 逻辑天然支持所有已接入平台。
 
 ### 协议层归属
 
@@ -54,7 +56,8 @@ Qingci-Bot-CE/
 │   ├── core/
 │   │   ├── bot.py             # Bot 主类（生命周期、事件调度、全局钩子）
 │   │   ├── composition.py     # 组合根（assemble_bot：组件装配 + DI 注册）
-│   │   ├── connection.py      # OneBot 连接（aiocqhttp 反向 WS）
+│   │   ├── connection.py      # OneBot 连接（aiocqhttp 反向 WS，实现 PlatformAdapter 契约）
+│   │   ├── platforms/         # 多平台适配器（base.py PlatformAdapter 契约 + telegram.py 长轮询）
 │   │   ├── dispatcher.py      # 消息分发 + Matcher 调度（MessageContext 转发 SDK）
 │   │   ├── message.py         # 类型化消息构造器（Message/MessageSegment）
 │   │   ├── broadcast.py       # 消息广播
@@ -135,7 +138,7 @@ Qingci-Bot-CE/
 | 层 | 技术 |
 |----|------|
 | 后端 | Python 3.12 + FastAPI + uvicorn |
-| QQ 协议 | aiocqhttp (OneBot 11 反向 WS) |
+| 平台接入 | OneBot 11（aiocqhttp 反向 WS）+ Telegram（Bot API 长轮询），统一 `PlatformAdapter` 契约 |
 | LLM | litellm (统一接口，延迟导入加速启动) |
 | MCP | mcp (Model Context Protocol，stdio/HTTP) |
 | 数据库 | SQLModel + Alembic + aiosqlite (WAL 模式) |
@@ -160,7 +163,16 @@ Qingci-Bot-CE/
 - 依次检查 Rule + Permission，命中则执行 handler
 - 无 Matcher 匹配时回退到旧式 `on_message`
 - 支持 block 控制是否继续后续 Matcher
-- `MessageContext` 由 SDK 提供（字段与主项目历史版本完全一致，另含 `sender_name` 属性）
+- `MessageContext` 由 SDK 提供（字段与主项目历史版本完全一致，另含 `sender_name` 属性与 `platform` 来源平台字段）
+
+### 多平台适配器（`bot/core/platforms/`）
+
+平台协议统一收敛为 `PlatformAdapter` 契约，插件对来源平台无感知；事件归一化为 OneBot-11 兼容的内部模型（注入 `platform` 字段），回复按 `MessageContext.platform` 路由回对应适配器：
+
+- **`base.py`**：定义 `PlatformAdapter` 契约（适配器名/展示名、启动与关闭、事件上报回调、发送消息、`get_status`/API 透传等），任何平台只需实现该契约即可接入
+- **`telegram.py`**：Telegram 平台实现——以 Bot API 长轮询（`getUpdates`）接入，由 `platforms.telegram.enabled/token/poll_interval` 控制；收到更新后归一化为 OneBot-11 兼容消息事件并注入 `platform: "telegram"`，发送时按 Chat id 调用 `sendMessage`
+- **`OneBotConnection`**（`bot/core/connection.py`）升级为实现 `PlatformAdapter` 契约的「onebot」平台，与原反向 WS 行为完全兼容，回复路由与附加平台共用同一发送映射
+- 附加平台（Telegram）启动失败仅记录日志，不阻断主平台（OneBot）可用性
 
 ### PluginManager（`bot/plugin/manager.py`）
 
