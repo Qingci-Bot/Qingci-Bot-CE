@@ -81,7 +81,7 @@ class SingleInstance:
 def bring_existing_to_front(title: str = WINDOW_TITLE) -> None:
     """将已运行的桌面窗口恢复并置前（若窗口存在）"""
     try:
-        user32 = ctypes.windll.user32
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]  # Windows-only API
         hwnd = user32.FindWindowW(None, title)
         if hwnd:
             user32.ShowWindow(hwnd, _SW_RESTORE)

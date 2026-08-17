@@ -24,9 +24,9 @@ BG_COLOR = 0x001E1E2E  # 深藏青 (BGR)
 TITLE_COLOR = 0x00CDD6F4  # 亮薰衣草 (BGR) — 实际是 RGB(0xF4, 0xD6, 0xCD)
 SUB_COLOR = 0x00A6ADC8  # 灰紫 (BGR)
 
-user32 = ctypes.windll.user32
-gdi32 = ctypes.windll.gdi32
-kernel32 = ctypes.windll.kernel32
+user32 = ctypes.windll.user32  # type: ignore[attr-defined]  # Windows-only API
+gdi32 = ctypes.windll.gdi32  # type: ignore[attr-defined]  # Windows-only API
+kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]  # Windows-only API
 
 
 # ctypes.wintypes 未定义 BLENDFUNCTION，需手动声明（UpdateLayeredWindow 的混合参数）

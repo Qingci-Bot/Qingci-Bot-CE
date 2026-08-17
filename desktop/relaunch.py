@@ -34,16 +34,16 @@ def _pid_alive(pid: int) -> bool:
 
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
         STILL_ACTIVE = 259
-        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)  # type: ignore[attr-defined]  # Windows-only API
         if not handle:
             return False
         try:
             code = ctypes.c_ulong()
-            if not ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            if not ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):  # type: ignore[attr-defined]  # Windows-only API
                 return False
             return code.value == STILL_ACTIVE
         finally:
-            ctypes.windll.kernel32.CloseHandle(handle)
+            ctypes.windll.kernel32.CloseHandle(handle)  # type: ignore[attr-defined]  # Windows-only API
     try:
         os.kill(pid, 0)
         return True
