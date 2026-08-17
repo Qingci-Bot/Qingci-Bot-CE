@@ -3339,7 +3339,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qingci-bot-ce", extras = ["test", "build", "vector"], marker = "extra == 'dev'" },
     { name = "qingci-plugin-sdk", git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=main" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
