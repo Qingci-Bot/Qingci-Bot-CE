@@ -5,7 +5,7 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.6.0] - 2026-08-17
 
 ### Added
 - **插件市场默认源设为 AtomGit 镜像**：运行时拉取插件市场默认指向国内可及的 AtomGit 镜像（`DEFAULT_MARKET_URL` / `MarketConfig.url` = `https://atomgit.com/Qingci-Bot/Plugin-Market.git`），其为 GitHub 主仓库的自动同步只读镜像，国内拉取更快更稳；`market.url` 可切换至 GitHub 主仓库
@@ -231,6 +231,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 完全离线运行（无 CDN 依赖）
 - 一键打包为 Windows EXE（PyInstaller）
 
+[1.6.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.6.0
 [1.5.1]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.5.1
 [1.5.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.5.0
 [1.4.1]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.4.1

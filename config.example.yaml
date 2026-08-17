@@ -23,6 +23,9 @@ platforms:
     enabled: false             # true 启用后接入 Telegram（Bot API 长轮询）
     token: ''                  # Bot API token（@BotFather 获取）
     poll_interval: 1.0         # 长轮询间隔（秒）
+market:
+  url: https://atomgit.com/Qingci-Bot/Plugin-Market.git  # 插件市场索引仓库（默认指 AtomGit 国内镜像，拉取更快；可改 https://github.com/Qingci-Bot/Plugin-Market.git 切换 GitHub 主仓库）
+  refresh_interval: 3600       # 索引缓存 TTL（秒）
 llm:
   provider: deepseek          # openai / deepseek / ollama / siliconflow / claude / gemini / custom
   api_url: https://api.deepseek.com/v1

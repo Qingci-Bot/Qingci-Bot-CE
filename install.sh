@@ -113,7 +113,6 @@ fi
 if command -v uv >/dev/null 2>&1; then
   echo ">> 使用 uv 安装依赖: uv pip install -e \"$PKG_SPEC\""
   UV=$(command -v uv)
-  "$UV" venv --python "$PY" --seed "$ENVDIR" 2>/dev/null || true
   "$UV" pip install -e "$PKG_SPEC" --python "$VENV_PY"
 else
   echo ">> 使用 pip 安装依赖: $VENV_PY -m pip install -e \"$PKG_SPEC\""
