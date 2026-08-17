@@ -36,6 +36,10 @@ jobs:
         # --cov-fail-under 已在 pyproject addopts 中配置，低于门槛即失败
         run: pytest -q
 
+      - name: Verify DB migrations (empty db)
+        # 空库 upgrade head + alembic check，防止模型改动后迁移脚本失效
+        run: python scripts/verify_migrations.py
+
   docker:
     name: Docker build & smoke run
     runs-on: ubuntu-latest
