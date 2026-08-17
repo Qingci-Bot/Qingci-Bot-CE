@@ -43,8 +43,8 @@ from ..paths import data_root
 
 logger = logging.getLogger("qingci-bot.market")
 
-# 官方插件市场默认索引仓库（AtomGit）
-DEFAULT_MARKET_URL = "https://atomgit.com/Qingci-Bot/Plugin-Market.git"
+# 官方插件市场默认索引仓库（GitHub）
+DEFAULT_MARKET_URL = "https://github.com/Qingci-Bot/Plugin-Market.git"
 # 索引 TTL（秒）：缓存有效期内不重复拉取
 DEFAULT_REFRESH_INTERVAL = 3600.0
 # 索引版本号（schema 演进时递增）

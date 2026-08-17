@@ -114,7 +114,7 @@ docker compose down         # 停止
 - **外部 OneBot 前端连入**：将该实例 `onebot.host` 改为 `0.0.0.0` 后 `docker compose restart`
 - 文件内容与完整说明见 `Dockerfile` / `docker-compose.yml`（`.dockerignore` 排除 venv/产物，实例目录不进镜像）
 
-> 构建依赖 `qingci-plugin-sdk`（atomgit git 依赖）需构建期联网；若改用了私有 SDK 克隆地址，请在构建前配置好凭据。
+> 构建依赖 `qingci-plugin-sdk`（GitHub git 依赖）需构建期联网；若改用了私有 SDK 克隆地址，请在构建前配置好凭据。
 
 ### 2.2 Linux 源码部署（一键脚本 install.sh）
 

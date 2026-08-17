@@ -298,7 +298,7 @@ class RAGConfig(BaseModel):
 class MarketConfig(BaseModel):
     """插件市场配置"""
 
-    url: str = "https://atomgit.com/Qingci-Bot/Plugin-Market.git"
+    url: str = "https://github.com/Qingci-Bot/Plugin-Market.git"
     refresh_interval: int = 3600  # 索引缓存 TTL（秒）
 
 
