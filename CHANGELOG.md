@@ -5,6 +5,19 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **插件市场切换源 / 自定义源**：后端新增 `GET/PUT /api/plugins/market/source`——切换市场源时先持久化 `market.url`，清空旧源的内存与磁盘索引缓存（`MarketClient.clear_disk_cache()`），立即拉取新源校验，源不可用时自动回滚到原源并提示；WebUI 插件市场新增「切换源」面板，可查看当前源、输入自定义 git / HTTP 索引地址，并一键恢复官方默认（`DEFAULT_MARKET_URL`）
+- **Web 关于页版本号动态化**：关于页版本号由硬编码改为从后端状态接口动态读取——`bot/__init__.py` 的 `__version__` 为唯一版本来源，`api/server.py`、`bot/core/bot.py`、`web/package.json` 与关于页统一引用，消除多处置 1.5.1/1.6.0 漂移
+- **Web 关于页鸣谢清单补全**：对照 `pyproject.toml` 依赖逐项核对，补齐 `pywebview` / `pystray`（桌面端运行依赖）鸣谢
+
+### Changed
+- **版本号统一用脚本管理**：新增 `scripts/bump_version.py`——`python scripts/bump_version.py 1.7.0` 从单一输入同步升级 `pyproject.toml` / `bot/__init__.py` / `web/package.json` 三处，任一文件缺失或版本格式非法即报错；`--check` 模式可在提交前校验三处是否一致，防止漏改（用法见 `CONTRIBUTING.md`）
+
+### Fixed
+- **群配置「添加群」无反应**：`type=number` 输入框的 `v-model` 会把值转为数字类型，直接调用 `.trim()` 抛 `TypeError` 中断新增逻辑；改为先将输入 `String()` 转换为字符串再校验纯数字，现可正常添加群
+
 ## [1.6.0] - 2026-08-17
 
 ### Added

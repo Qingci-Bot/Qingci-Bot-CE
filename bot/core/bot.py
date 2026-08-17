@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from .. import __version__
 from ..config import ConfigManager
 from ..paths import plugins_dir
 from ..plugin import PluginStatus
@@ -560,6 +561,7 @@ class QingciBot:
         return {
             "running": self._running,
             "connected": self.connection.is_connected,
+            "version": __version__,
             "last_heartbeat": self.connection.last_heartbeat,
             "platforms": [
                 {

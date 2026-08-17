@@ -19,6 +19,11 @@ const marketSearch = ref('')
 const marketTag = ref('all')
 const marketAction = ref('')  // 'install:name' | 'update:name' | 'refresh' | 'uninstall:name'
 const marketError = ref('')
+const marketSource = ref('')        // 当前市场源
+const marketDefaultSource = ref('') // 官方默认市场源
+const marketSourceInput = ref('')   // 自定义源输入框
+const showSourcePanel = ref(false)
+const sourceSaving = ref(false)
 
 // 命令管理
 const commands = ref([])
@@ -314,12 +319,15 @@ async function fetchMarket() {
   marketLoading.value = true
   marketError.value = ''
   try {
-    const [items, info] = await Promise.all([
+    const [items, info, source] = await Promise.all([
       store.apiFetch('/api/plugins/market'),
       store.apiFetch('/api/plugins/market/info'),
+      store.apiFetch('/api/plugins/market/source'),
     ])
     market.value = items
     marketInfo.value = info
+    marketSource.value = source.url || ''
+    marketDefaultSource.value = source.default_url || ''
   } catch (e) {
     marketError.value = e.message || '获取市场失败'
     showToast('error', `获取插件市场失败：${e.message}`)
@@ -374,6 +382,40 @@ async function marketRefresh() {
     showToast('error', `刷新失败：${e.message}`)
   } finally {
     marketAction.value = ''
+  }
+}
+
+async function marketToggleSource() {
+  showSourcePanel.value = !showSourcePanel.value
+  if (showSourcePanel.value) {
+    marketSourceInput.value = marketSource.value || marketDefaultSource.value || ''
+  } else {
+    marketSourceInput.value = ''
+  }
+}
+
+async function marketApplySource() {
+  const url = (marketSourceInput.value || '').trim()
+  if (!url) {
+    showToast('error', '请输入市场源地址')
+    return
+  }
+  sourceSaving.value = true
+  try {
+    const res = await store.apiFetch('/api/plugins/market/source', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+    showToast('success', res.message || '市场源已切换')
+    marketSource.value = res.url || url
+    showSourcePanel.value = false
+    marketSourceInput.value = ''
+    await fetchMarket()
+  } catch (e) {
+    showToast('error', `切换失败：${e.message}`)
+  } finally {
+    sourceSaving.value = false
   }
 }
 
@@ -707,6 +749,45 @@ function openHomepage(url) {
             >
               <span :class="{ spin: marketAction === 'refresh' }">↻</span> 刷新市场
             </button>
+            <button
+              class="btn btn-secondary btn-sm"
+              @click="marketToggleSource"
+            >
+              <span>⚙</span> 切换源
+            </button>
+          </div>
+        </div>
+        <div v-if="showSourcePanel" class="source-panel fade-in">
+          <div class="source-current">
+            <span class="source-label">当前市场源</span>
+            <span class="source-url" :title="marketSource">{{ marketSource || '—' }}</span>
+            <button
+              v-if="marketSource && marketSource !== marketDefaultSource"
+              class="btn btn-secondary btn-sm"
+              :disabled="sourceSaving"
+              @click="marketSourceInput = marketDefaultSource; marketApplySource()"
+            >恢复官方默认</button>
+          </div>
+          <div class="source-input-row">
+            <input
+              v-model="marketSourceInput"
+              type="text"
+              class="market-search"
+              placeholder="输入新版市场源地址（git 仓库或 HTTP 索引）"
+              @keyup.enter="marketApplySource"
+            >
+            <button
+              class="btn btn-primary btn-sm"
+              :disabled="sourceSaving"
+              @click="marketApplySource"
+            >
+              <span :class="{ spin: sourceSaving }">⇄</span>
+              {{ sourceSaving ? '切换中...' : '应用' }}
+            </button>
+          </div>
+          <div class="source-hint">
+            支持 git 仓库（如 <code>https://github.com/Qingci-Bot/Plugin-Market.git</code>）
+            或 HTTP 索引 JSON 地址。官方默认：<code>{{ marketDefaultSource }}</code>
           </div>
         </div>
         <div v-if="marketTags.length > 0" class="market-tag-row">
@@ -1175,5 +1256,55 @@ function openHomepage(url) {
 @keyframes market-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* 市场源切换面板 */
+.source-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  background: rgba(255,255,255,0.02);
+}
+.source-current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.source-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.source-url {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  max-width: 480px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.source-input-row .market-search { flex: 1; max-width: 100%; }
+.source-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+.source-hint code {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.05);
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 </style>

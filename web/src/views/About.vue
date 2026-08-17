@@ -1,4 +1,12 @@
 <script setup>
+import { onMounted } from 'vue'
+import { useAppStore } from '../stores/app'
+
+// 版本从后端 status 动态读取（bot/__init__.py __version__ 为唯一来源），避免硬编码漂移
+const store = useAppStore()
+onMounted(() => {
+  if (!store.appVersion) store.fetchStatus()
+})
 </script>
 
 <template>
@@ -131,12 +139,78 @@
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/r0x0r/pywebview" target="_blank" rel="noopener">PyWebView</a>
+              <a href="https://github.com/encode/uvicorn" target="_blank" rel="noopener">uvicorn</a>
+              &nbsp;/&nbsp;
+              <a href="https://github.com/python-websockets/websockets" target="_blank" rel="noopener">websockets</a>
+            </div>
+            <div class="thanks-desc">
+              uvicorn 作为 ASGI 服务器承载 FastAPI 应用；websockets 提供 WebSocket 通信能力，支撑实时状态推送。
+            </div>
+          </div>
+          <div class="thanks-item">
+            <div class="thanks-name">
+              <a href="https://github.com/sqlalchemy/sqlalchemy" target="_blank" rel="noopener">SQLAlchemy</a>
+              &nbsp;/&nbsp;
+              <a href="https://github.com/omnilib/aiosqlite" target="_blank" rel="noopener">aiosqlite</a>
+            </div>
+            <div class="thanks-desc">
+              SQLAlchemy 为 SQLModel 提供 ORM 底层；aiosqlite 实现异步 SQLite 存储，支撑消息、会话与配置持久化。
+            </div>
+          </div>
+          <div class="thanks-item">
+            <div class="thanks-name">
+              <a href="https://github.com/pydantic/pydantic" target="_blank" rel="noopener">pydantic</a>
+              &nbsp;/&nbsp;
+              <a href="https://github.com/yaml/pyyaml" target="_blank" rel="noopener">PyYAML</a>
+              &nbsp;/&nbsp;
+              <a href="https://github.com/encode/httpx" target="_blank" rel="noopener">httpx</a>
+            </div>
+            <div class="thanks-desc">
+              pydantic 提供数据校验与模型解析；PyYAML 解析实例配置；httpx 作为异步 HTTP 客户端支撑 API 调用。
+            </div>
+          </div>
+          <div class="thanks-item">
+            <div class="thanks-name">
+              <a href="https://github.com/agronholm/apscheduler" target="_blank" rel="noopener">APScheduler</a>
+            </div>
+            <div class="thanks-desc">
+              后台任务调度框架，支撑定时任务、自动清理等周期性能力。
+            </div>
+          </div>
+          <div class="thanks-item">
+            <div class="thanks-name">
+              <a href="https://github.com/python-pillow/Pillow" target="_blank" rel="noopener">Pillow</a>
+            </div>
+            <div class="thanks-desc">
+              图像处理库，用于托盘图标渲染与图片类插件的生成能力。
+            </div>
+          </div>
+          <div class="thanks-item">
+            <div class="thanks-name">
+              <a href="https://github.com/pyinstaller/pyinstaller" target="_blank" rel="noopener">PyInstaller</a>
+            </div>
+            <div class="thanks-desc">
+              Python 应用打包工具，将 Qingci-Bot CE 打包为跨平台桌面可执行文件。
+            </div>
+          </div>
+          <div class="thanks-item">
+            <div class="thanks-name">
+              <a href="https://github.com/r0x0r/pywebview" target="_blank" rel="noopener">pywebview</a>
               &nbsp;/&nbsp;
               <a href="https://github.com/moses-palmer/pystray" target="_blank" rel="noopener">pystray</a>
             </div>
             <div class="thanks-desc">
-              PyWebView 提供桌面应用 WebView 容器；pystray 实现系统托盘图标与后台驻留能力。
+              pywebview 将 Web UI 封装为原生桌面窗口；pystray 提供系统托盘支持，实现关闭驻留后台与开机自启。
+            </div>
+          </div>
+          <div class="thanks-item">
+            <div class="thanks-name">
+              <a href="https://github.com/lancedb/lancedb" target="_blank" rel="noopener">LanceDB</a>
+              &nbsp;/&nbsp;
+              <a href="https://github.com/modelcontextprotocol/python-sdk" target="_blank" rel="noopener">MCP</a>
+            </div>
+            <div class="thanks-desc">
+              LanceDB 为可选向量知识库提供本地向量检索；MCP SDK 提供 Model Context Protocol 能力支持。
             </div>
           </div>
         </div>
@@ -152,7 +226,7 @@
         <div class="version-grid">
           <div class="version-item">
             <span class="version-label">Qingci-Bot CE</span>
-            <span class="version-value">1.5.1</span>
+            <span class="version-value">{{ store.appVersion || '—' }}</span>
           </div>
           <div class="version-item">
             <span class="version-label">许可证</span>

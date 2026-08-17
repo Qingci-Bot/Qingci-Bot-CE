@@ -116,7 +116,7 @@ def chat_trigger() -> Rule:
 
 
 def chat_permission() -> Permission:
-    """聊天权限：非黑名单用户"""
+    """聊天权限：非黑名单用户（展示为"所有人"）"""
 
     async def _check(bot, event, ctx) -> bool:
         cfg = bot.config.bot
@@ -126,7 +126,7 @@ def chat_permission() -> Permission:
             return False
         return True
 
-    return Permission(_check)
+    return Permission(_check, label="EVERYONE")
 
 
 class ChatPlugin(PluginBase):

@@ -140,6 +140,7 @@ export const useAppStore = defineStore('app', () => {
   const error = ref('')
   const configLoaded = ref(false)
   const instances = ref([])
+  const appVersion = ref('')
 
   const statusText = computed(() => {
     if (!botRunning.value) return '未启动'
@@ -189,6 +190,7 @@ export const useAppStore = defineStore('app', () => {
       const data = await apiFetch('/api/bot/status')
       botRunning.value = data.running
       botConnected.value = data.connected
+      appVersion.value = data.version || ''
       platforms.value = data.platforms || []
       plugins.value = data.plugins || []
       error.value = ''
@@ -332,7 +334,7 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     botRunning, botConnected, platforms, plugins, config, llmPresets, logs, loading, error,
-    configLoaded, instances,
+    configLoaded, instances, appVersion,
     statusText, statusColor,
     fetchStatus, fetchConfig, fetchLLMPresets, startBot, stopBot, restartBot,
     saveConfig, testLLM, fetchLLMModels, fetchLogs, fetchMessageCount, addLog,

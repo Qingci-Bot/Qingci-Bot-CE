@@ -241,7 +241,7 @@ function onRename(inst) {
 /* 侧边栏底部状态区 */
 .sidebar-footer {
   margin-top: auto;
-  padding: 16px 12px 0;
+  padding: 16px 12px 12px;
   border-top: 1px solid var(--border-color);
 }
 .sidebar-status {

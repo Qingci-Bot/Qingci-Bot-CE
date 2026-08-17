@@ -256,6 +256,14 @@ class MarketClient:
         self._cache = None
         self._fetched_at = 0.0
 
+    def clear_disk_cache(self) -> None:
+        """清空磁盘索引缓存（切换市场源后调用，避免加载旧源的落后数据）"""
+        for p in (self._cache_file(), self._cache_meta()):
+            try:
+                p.unlink(missing_ok=True)
+            except OSError:
+                pass
+
     def fetched_at_epoch(self) -> float:
         """最近一次成功拉取索引的时间（epoch 秒）
 

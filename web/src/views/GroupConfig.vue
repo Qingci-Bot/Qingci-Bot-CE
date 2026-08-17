@@ -74,8 +74,10 @@ function onTriggerChange(group) {
 }
 
 async function addGroup() {
-  const id = Number(newGroupId.value.trim())
-  if (!id || !Number.isInteger(id)) {
+  // v-model 在 type=number 下会把值转成 number，先转字符串再校验
+  const raw = String(newGroupId.value ?? '').trim()
+  const id = Number(raw)
+  if (!raw || !Number.isInteger(id)) {
     showToast('error', '请输入有效的群号（纯数字）')
     return
   }

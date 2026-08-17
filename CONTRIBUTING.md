@@ -34,6 +34,18 @@
 4. 确保测试通过：`pytest`
 5. 提交 Pull Request
 
+### 版本号管理
+
+升级版本号时**不要手动逐文件修改**，使用统一脚本一次同步三处来源：
+`pyproject.toml`（打包/CI 读取）、`bot/__init__.py`（`__version__`，后端 `/api/bot/status` 及 Web 关于页据此动态显示）、`web/package.json`（前端构建）。
+
+```bash
+python scripts/bump_version.py 1.7.0      # 从单一输入同步升级三处
+python scripts/bump_version.py --check    # 提交前自查三处是否一致（防止漏改）
+```
+
+任一文件缺失版本字段、版本格式非法时脚本会明确报错，绝不静默漏改。升级版本后请同步更新 `CHANGELOG.md`（Keep a Changelog 风格）。
+
 ## 开发环境
 
 ### 后端
@@ -112,7 +124,7 @@ Qingci-Bot-CE/
 ├── plugins/          # 外部插件目录（_template 为插件模板，hello 为示例）
 ├── migrations/       # Alembic 数据库迁移
 ├── tests/            # pytest 测试（plugin_pkg/ 为测试插件）
-├── scripts/          # 工具脚本（如 SQLite→PostgreSQL 迁移）
+├── scripts/          # 工具脚本（如 bump_version 版本升级、SQLite→PostgreSQL 迁移）
 └── docs/             # 规范文档（结构 / 编码约定）
 ```
 

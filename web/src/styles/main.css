@@ -137,6 +137,8 @@ body::before {
   flex-direction: column;
   gap: 6px;
   flex: 1;
+  min-height: 0; /* 窗口较矮时允许收缩，内部滚动，避免把底部状态区挤出视口 */
+  overflow-y: auto;
 }
 
 .sidebar a {
@@ -488,6 +490,8 @@ body::before {
   padding: 8px 10px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: var(--radius-xs);
+  max-height: 108px; /* 平台较多时内部滚动，避免撑高侧边栏 */
+  overflow-y: auto;
 }
 .platform-row {
   display: flex;
