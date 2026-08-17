@@ -8,17 +8,17 @@ on:
 jobs:
   quality:
     name: Lint / Type / Test
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-24, x64, small]
     steps:
-      - uses: actions/checkout@v4
+      - uses: checkout
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: 设置 Python
+        uses: setup-python
         with:
           python-version: "3.12"
-          cache: pip
+          cache: "pip"
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
@@ -36,56 +36,44 @@ jobs:
         # --cov-fail-under 已在 pyproject addopts 中配置，低于门槛即失败
         run: pytest -q
 
-  docker:
-    name: Docker build & smoke run
-    runs-on: ubuntu-latest
+  docker-build:
+    name: Docker build 验证 (Kaniko)
+    # GitCode runner 无 Docker daemon（预装 Kaniko 无 daemon 构建 + Docker CLI 备用路径），
+    # 故以 Kaniko --no-push 构建导出 tar 验证 Dockerfile 可完整构建（含 git 依赖拉取）。
+    runs-on: [ubuntu-24, x64, medium]
     steps:
-      - uses: actions/checkout@v4
+      - uses: checkout
 
-      - name: Validate compose config
-        run: docker compose config --quiet
+      - name: 校验 docker-compose YAML
+        run: python3 -c "import yaml; yaml.safe_load(open('docker-compose.yml')); print('docker-compose YAML 校验通过')"
 
-      - name: Build image
-        # 构建期需联网拉取 atomgit 的 qingci-plugin-sdk git 依赖
-        run: docker build -t qingci-bot-ce:ci .
-
-      - name: Smoke run (container)
+      - name: Kaniko 构建镜像并导出（no-push）
         run: |
-          docker run -d --name qc-smoke -p 18080:8080 qingci-bot-ce:ci
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18080/api/bot/health >/dev/null 2>&1; then
-              echo "API ready after ${i}s"
-              docker logs qc-smoke | tail -n 20
-              docker rm -f qc-smoke >/dev/null
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "::error::API 未在 30s 内就绪"
-          docker logs qc-smoke
-          docker rm -f qc-smoke >/dev/null
-          exit 1
+          kaniko --context . \
+            --dockerfile Dockerfile \
+            --no-push \
+            --tar-path=/tmp/qingci-bot-ce.tar \
+            --destination qingci-bot-ce:ci
+
+      - name: 校验构建产物
+        run: |
+          ls -lh /tmp/qingci-bot-ce.tar
 
   install-script:
     name: install.sh smoke test
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-24, x64, small]
     steps:
-      - uses: actions/checkout@v4
+      - uses: checkout
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Shell syntax check
+      - name: Shell 语法检查
         run: bash -n install.sh
 
-      - name: Run install.sh (skip system deps)
+      - name: 执行 install.sh (跳过系统依赖)
         # runner 已具备 git/python，跳过 apt 系统依赖安装，只验证脚本的
         # Python 版本检测 / venv 创建 / 依赖安装（pip 分支）
         run: SKIP_SYS_DEPS=1 ./install.sh --dev
 
-      - name: Boot smoke test
+      - name: 启动冒烟测试
         run: |
           .venv/bin/python main.py --instance default &
           PID=$!
