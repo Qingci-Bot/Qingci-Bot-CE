@@ -44,7 +44,7 @@ from ..paths import data_root
 logger = logging.getLogger("qingci-bot.market")
 
 # 官方插件市场默认索引仓库（Gitee 镜像：GitHub 主仓库的国内自动同步只读镜像，拉取更快更稳）
-DEFAULT_MARKET_URL = "https://gitee.com/luoqingciya/Plugin-Market.git"
+DEFAULT_MARKET_URL = "https://gitee.com/qingci-bot/Plugin-Market.git"
 # 索引 TTL（秒）：缓存有效期内不重复拉取
 DEFAULT_REFRESH_INTERVAL = 3600.0
 # 索引版本号（schema 演进时递增）

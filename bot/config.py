@@ -299,7 +299,7 @@ class MarketConfig(BaseModel):
     """插件市场配置"""
 
     # 默认指 Gitee 镜像（GitHub 主仓库的国内同步镜像，拉取更快）；如遇镜像延迟，可改为 GitHub 主仓库 https://github.com/Qingci-Bot/Plugin-Market.git
-    url: str = "https://gitee.com/luoqingciya/Plugin-Market.git"
+    url: str = "https://gitee.com/qingci-bot/Plugin-Market.git"
     refresh_interval: int = 3600  # 索引缓存 TTL（秒）
 
 
