@@ -43,8 +43,8 @@ from ..paths import data_root
 
 logger = logging.getLogger("qingci-bot.market")
 
-# 官方插件市场默认索引仓库（AtomGit 镜像：GitHub 主仓库的国内自动同步只读镜像，拉取更快更稳）
-DEFAULT_MARKET_URL = "https://atomgit.com/Qingci-Bot/Plugin-Market.git"
+# 官方插件市场默认索引仓库（Gitee 镜像：GitHub 主仓库的国内自动同步只读镜像，拉取更快更稳）
+DEFAULT_MARKET_URL = "https://gitee.com/luoqingciya/Plugin-Market.git"
 # 索引 TTL（秒）：缓存有效期内不重复拉取
 DEFAULT_REFRESH_INTERVAL = 3600.0
 # 索引版本号（schema 演进时递增）
@@ -189,7 +189,7 @@ class MarketClient:
     async def _fetch_remote(self) -> MarketIndex:
         """拉取远端索引（git 仓库或 HTTP raw）
 
-        优先尝试 HTTP（快）；返回非 JSON（如 AtomGit 匿名 raw 被拦为 HTML）
+        优先尝试 HTTP（快）；返回非 JSON（如 Gitee 匿名 raw 被拦为 HTML）
         或 git 仓库地址时回退 git clone。
         """
         url = self.url.strip()

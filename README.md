@@ -1,6 +1,6 @@
 # Qingci-Bot CE
 
-> **代码托管**：本仓库以 [GitHub](https://github.com/Qingci-Bot/Qingci-Bot-CE) 为权威主仓库，[AtomGit](https://atomgit.com/Qingci-Bot/Qingci-Bot-CE) 为自动同步的只读镜像；贡献与提 PR 一律以 GitHub 为准。
+> **代码托管**：本项目以 [GitHub](https://github.com/Qingci-Bot/Qingci-Bot-CE) 为唯一仓库；贡献与提 PR 一律以 GitHub 为准。
 
 > 本项目底层核心代码由 [**Zhou Zhe (aka luoqingci)**](https://github.com/luoqingciya) 原创，并授予 [Qingci-Bot](https://github.com/Qingci-Bot) 组织持续开发。
 
@@ -405,7 +405,7 @@ api_key: ''                        # API 鉴权密钥
 | `llm.mcp_servers` | MCP 服务器 | `[]` | 连接外部 MCP 服务器（stdio/HTTP 传输），工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用；需开启 `enable_tools`，修改后重启 Bot 生效 |
 | `llm.provider` | 提供商联动 | `openai` | 切换 provider 自动带出预设 api_url/model（openai/deepseek/ollama/siliconflow/claude/gemini/custom 共 7 个）；`api_url` 非空统一走 OpenAI 兼容协议 |
 | `llm.timeout` / `llm.num_retries` | 请求超时与重试 | `60` / `2` | 单次 LLM 请求超时秒数与失败重试次数 |
-| `market` | 插件市场 | `url` 默认指向 AtomGit 镜像仓库（GitHub 主仓库的国内自动同步镜像，拉取更快更稳；可用 `https://github.com/Qingci-Bot/Plugin-Market.git` 切换主仓库） | WebUI「插件管理 → 插件市场」浏览/搜索/一键安装/更新/刷新；`url` 可指向自定义市场索引仓库，`refresh_interval` 为索引缓存 TTL（秒） |
+| `market` | 插件市场 | `url` 默认指向 Gitee 镜像（`https://gitee.com/luoqingciya/Plugin-Market.git`，GitHub 主仓库的国内自动同步镜像，拉取更快更稳；可用 `https://github.com/Qingci-Bot/Plugin-Market.git` 切换主仓库） | WebUI「插件管理 → 插件市场」浏览/搜索/一键安装/更新/刷新；`url` 可指向自定义市场索引仓库，`refresh_interval` 为索引缓存 TTL（秒） |
 | `platforms.telegram` | Telegram 平台适配器 | `enabled: false` | 启用后以 Bot API 长轮询接入 Telegram（`token` 由 @BotFather 获取）；事件归一化为内部模型，插件/命令零改动可用；回复自动路由到 Telegram；`poll_interval` 为轮询间隔（秒） |
 | `bot.log_json` | 结构化 JSON 日志 | `false` | 面向机器可读的日志采集场景 |
 | `log.log_file_enabled` | 文件日志轮转 | `false` | 启用后日志写入 `log_dir/qingci-bot.log`，按 `log_file_max_bytes` 大小轮转，保留 `log_file_backup_count` 个备份 |
