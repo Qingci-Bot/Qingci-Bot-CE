@@ -13,11 +13,18 @@
 import asyncio
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from bot.core.dispatcher import MessageDispatcher
 from bot.core.platforms.base import make_platform
-from bot.core.platforms.telegram import TelegramAdapter
+from bot.core.platforms.telegram import (
+    _BACKOFF_MAX,
+    _BACKOFF_MIN,
+    TelegramAdapter,
+    TelegramAPIError,
+    TelegramNotFoundError,
+)
 
 
 @pytest.fixture
@@ -839,3 +846,200 @@ async def test_poll_loop_advances_offset_on_partial_failure(adapter, monkeypatch
     # 失败也推进 offset，避免该 update_id 无限重放
     assert adapter._offset == 7
     assert {e["message_id"] for e in seen} == {"5", "6"}
+
+
+# ---------- Telegram 增强：自适应退避与恢复探测 ----------
+
+
+def test_backoff_delay_exponential(adapter):
+    """指数退避：无失败用轮询间隔，连续失败按 _BACKOFF_MIN^次方，封顶 _BACKOFF_MAX"""
+    assert adapter._backoff_delay() == pytest.approx(adapter.poll_interval)
+    adapter.consecutive_errors = 1
+    assert adapter._backoff_delay() == pytest.approx(_BACKOFF_MIN)
+    adapter.consecutive_errors = 3
+    assert adapter._backoff_delay() == pytest.approx(_BACKOFF_MIN * 4)
+    adapter.consecutive_errors = 99
+    assert adapter._backoff_delay() == pytest.approx(_BACKOFF_MAX)
+
+
+async def test_poll_loop_offline_then_reconnect(adapter, monkeypatch):
+    """连续失败触发 on_disconnect，恢复后触发 on_reconnect 并清零计数"""
+    adapter._running = True
+    adapter.poll_interval = 0.01
+    disconnects, reconnects = {"n": 0}, {"n": 0}
+
+    async def on_disconnect():
+        disconnects["n"] += 1
+
+    async def on_reconnect():
+        reconnects["n"] += 1
+
+    adapter.on_disconnect(on_disconnect)
+    adapter.on_reconnect(on_reconnect)
+    monkeypatch.setattr(adapter, "_backoff_delay", lambda: 0.01)
+    calls = {"n": 0}
+
+    async def fake_api(method, **params):
+        if method == "getUpdates":
+            calls["n"] += 1
+            if calls["n"] <= 6:
+                raise RuntimeError("network down")
+            return []
+        if method == "getMe":
+            return {"id": 1, "username": "b1"}
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    task = asyncio.create_task(adapter._poll_loop())
+    await asyncio.sleep(0.5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert disconnects["n"] >= 1  # 连续 >=5 失败广播断连
+    assert reconnects["n"] >= 1  # 恢复后广播重连
+    assert adapter._disconnected_notified is False
+    assert adapter.consecutive_errors == 0
+    assert adapter.error_count >= 6
+    assert adapter.last_disconnect_time > 0
+
+
+# ---------- Telegram 增强：Token 热更新自动重验 ----------
+
+
+def test_set_token_marks_identity_dirty(adapter):
+    adapter.set_token("new:tok")
+    assert adapter.token == "new:tok"
+    assert adapter._identity_dirty is True
+
+
+async def test_refresh_identity_updates_self_id(adapter, monkeypatch):
+    async def fake_api(method, **params):
+        assert method == "getMe"
+        return {"id": 555, "username": "botname"}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.refresh_identity()
+    assert adapter.self_id == 555
+    assert adapter.username == "botname"
+    assert adapter._identity_dirty is False
+
+
+async def test_poll_loop_auto_revalidates_after_token_hotswap(adapter, monkeypatch):
+    """set_token 后轮询下一轮自动重验身份并刷新 self_id/username"""
+    adapter._running = True
+    adapter.poll_interval = 0.01
+    adapter.set_token("new:tok")  # 置 _identity_dirty
+
+    async def fake_api(method, **params):
+        if method == "getUpdates":
+            return []
+        if method == "getMe":
+            return {"id": 555, "username": "botname"}
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    task = asyncio.create_task(adapter._poll_loop())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert adapter._identity_dirty is False
+    assert adapter.self_id == 555
+    assert adapter.username == "botname"
+
+
+# ---------- Telegram 增强：HTTP 超时/重试可配置化 ----------
+
+
+def test_request_timeout_used_by_client(adapter):
+    assert adapter._client().timeout.connect == pytest.approx(adapter.request_timeout)
+    assert adapter._client().timeout.read == pytest.approx(adapter.request_timeout)
+    # 未显式传参时默认 > 长轮询 timeout，避免提前断连
+    assert adapter.request_timeout == pytest.approx(40.0)
+
+
+def test_make_platform_passes_new_options():
+    inst = make_platform(
+        SimpleNamespace(
+            name="telegram",
+            enabled=True,
+            token="t",
+            poll_interval=2.0,
+            request_timeout=55.0,
+            max_retries=3,
+        )
+    )
+    assert inst.request_timeout == 55.0
+    assert inst.max_retries == 3
+
+
+async def test_api_retries_transport_error(adapter, monkeypatch):
+    adapter.max_retries = 2
+    attempt = {"n": 0}
+
+    async def no_sleep(_delay):
+        return None
+
+    async def flaky(url, **payload):
+        attempt["n"] += 1
+        if attempt["n"] < 3:
+            raise httpx.TransportError("boom")
+        return {"chat_id": 1}
+
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(adapter, "_api_once", flaky)
+    result = await adapter._api("getChatMemberCount", chat_id=1)
+    assert result == {"chat_id": 1}
+    assert attempt["n"] == 3  # 首次失败 + 2 次重试后成功
+
+
+async def test_api_retries_exhausted_raises(adapter, monkeypatch):
+    adapter.max_retries = 1
+
+    async def no_sleep(_delay):
+        return None
+
+    async def always_fail(url, **payload):
+        raise httpx.TransportError("boom")
+
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(adapter, "_api_once", always_fail)
+    with pytest.raises(TelegramAPIError):
+        await adapter._api("getChatMemberCount", chat_id=1)
+
+
+async def test_api_no_retry_on_business_error(adapter, monkeypatch):
+    """业务错误（ok=false）不重试，直接抛分类异常"""
+    adapter.max_retries = 3
+    attempt = {"n": 0}
+
+    async def fake_once(url, **payload):
+        attempt["n"] += 1
+        raise _telegram_404()
+
+    monkeypatch.setattr(adapter, "_api_once", fake_once)
+    with pytest.raises(TelegramNotFoundError):
+        await adapter._api("getChatMemberCount", chat_id=1)
+    assert attempt["n"] == 1  # 只调用一次，不因业务错误重试
+
+
+# ---------- Telegram 增强：可观测性 ----------
+
+
+def test_status_info_fields():
+    a = TelegramAdapter(token="t")
+    assert a.status_info()["connection_state"] == "stopped"
+    a._running = True
+    assert a.status_info()["connection_state"] == "connected"
+    a.consecutive_errors = 2
+    info = a.status_info()
+    assert info["connection_state"] == "connecting"
+    assert info["consecutive_errors"] == 2
+    assert info["backoff"] > 0
+    assert info["error_count"] == 0
+
+
+def _telegram_404() -> TelegramAPIError:
+    return TelegramNotFoundError("Telegram API 错误 (m): 404", error_code=404, description="404")

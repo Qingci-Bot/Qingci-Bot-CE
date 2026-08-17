@@ -310,6 +310,8 @@ class TelegramConfig(BaseModel):
     enabled: bool = False
     token: str = ""  # Bot API token（@BotFather 获取）
     poll_interval: float = 1.0  # 长轮询间隔（秒）
+    request_timeout: float = 40.0  # HTTP 请求超时（秒），须大于长轮询 timeout（30）
+    max_retries: int = 0  # 网络传输错误最多重试次数（0 不重试，避免发送类重复）
 
 
 class PlatformsConfig(BaseModel):

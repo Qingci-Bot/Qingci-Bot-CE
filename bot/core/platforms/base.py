@@ -56,6 +56,10 @@ class PlatformAdapter:
         """最近心跳时间（epoch 秒），无心跳机制返回 0"""
         return 0.0
 
+    def status_info(self) -> dict:
+        """扩展平台状态字段（各平台覆盖补充，合并进 get_status 的 platforms 项）"""
+        return {}
+
     # ============ 事件上报（子类调用） ============
 
     def on_event(self, handler: Callable) -> None:
@@ -194,6 +198,8 @@ def make_platform(platform_cfg: Any) -> PlatformAdapter | None:
         return TelegramAdapter(
             token=str(getattr(platform_cfg, "token", "") or ""),
             poll_interval=float(getattr(platform_cfg, "poll_interval", 1.0) or 1.0),
+            request_timeout=float(getattr(platform_cfg, "request_timeout", 40.0) or 40.0),
+            max_retries=int(getattr(platform_cfg, "max_retries", 0) or 0),
         )
     logger.warning(f"未知的平台适配器: {name}")
     return None

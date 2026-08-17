@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Telegram 轮询改为有限并发消费**：引入 `asyncio.Semaphore`（`_MAX_CONCURRENT_UPDATES=8`）控制单批更新内的并发度，慢更新不再阻塞同批其他更新，同时避免无限并发；offset 改为整批确认（`max(update_id)+1`）后再消费，单条处理失败仅记日志且仍被确认，杜绝同一 `update_id` 失败后无限重放
 - **Telegram API 调用错误分类**：新增 `TelegramAPIError` 及其子类（`TelegramUnauthorizedError`=401 / `TelegramForbiddenError`=403 / `TelegramNotFoundError`=404），`_api` 按 Telegram `error_code` 归类抛出，网络/超时等 HTTP 异常统一包装为 `TelegramAPIError`，便于上层区分 Token 失效、被禁言、目标不可达等场景
 - **Telegram Bot Token 热更新**：新增 `TelegramAdapter.set_token(token)`，运行时更新 `self.token` 无需重启适配器，下次 API 调用即生效（空值拒绝并抛 `ValueError`）；适配器的随附测试新增 7 个用例
+- **Telegram 轮询自适应退避与恢复探测**：连续失败按指数退避（`_BACKOFF_MIN=1.5s` 起步、封顶 `_BACKOFF_MAX=60s`），恢复后自动回到轮询间隔；判定离线（连续 ≥5 次失败触发 `notify_disconnected`）后一旦成功即广播 `notify_reconnected` 并从断连恢复，减少空闲期无效轮询开销
+- **Telegram 长轮询可观测性增强**：新增 `status_info()`（合并进 `GET /api/bot/status` 的 platforms 项）暴露 `connection_state`（connected/connecting/stopped）、`consecutive_errors`、`error_count`、`last_error_time`、`last_disconnect_time`、`identity_dirty`、`backoff`；`get_status` 统一追加 `**p.status_info()`（base 默认 `{}`）
+- **Telegram HTTP 超时/重试可配置化**：`TelegramAdapter` 新增 `request_timeout`（默认 `POLL_TIMEOUT+10=40s`，须大于长轮询 timeout）与 `max_retries`（默认 0，仅对 `httpx.TransportError` 网络层错误有限重试，业务错误绝无重试避免发送类重复），经 `platforms.telegram` 配置节透传入 `make_platform`
+- **Telegram Token 热更新后自动重验身份**：`set_token()` 更新后置 `_identity_dirty`，轮询下一轮自动调用 `getMe` 刷新 `self_id`/`username`（新增 `refresh_identity()`，`start()` 亦复用）；重验失败仅记日志下轮再试，不中断轮询
 - **版本号统一用脚本管理**：新增 `scripts/bump_version.py`——`python scripts/bump_version.py 1.7.0` 从单一输入同步升级 `pyproject.toml` / `bot/__init__.py` / `web/package.json` 三处，任一文件缺失或版本格式非法即报错；`--check` 模式可在提交前校验三处是否一致，防止漏改（用法见 `CONTRIBUTING.md`）
 
 ### Fixed

@@ -50,6 +50,12 @@ POLL_TIMEOUT = 30
 # 单次轮询最大更新数
 POLL_LIMIT = 100
 
+# 断连指数退避：起始/上限间隔（秒）
+_BACKOFF_MIN = 1.5
+_BACKOFF_MAX = 60.0
+# 连续失败达到该值即判定离线并广播断连
+_OFFLINE_AFTER = 5
+
 # CQ 图片段：capture file 引用
 _CQ_IMAGE_RE = re.compile(r"\[CQ:image,file=([^,\]$]+)\]")
 # 任意 CQ 段（用于把不可渲染的段从发送文本中剔除）
@@ -116,10 +122,23 @@ class TelegramAdapter(PlatformAdapter):
     # 单批内更新的有限并发数：避免单条慢处理阻塞同批其他更新，同时防无限并发
     _MAX_CONCURRENT_UPDATES = 8
 
-    def __init__(self, token: str = "", *, poll_interval: float = 1.0):
+    def __init__(
+        self,
+        token: str = "",
+        *,
+        poll_interval: float = 1.0,
+        request_timeout: float | None = None,
+        max_retries: int = 0,
+    ):
         super().__init__()
         self.token = str(token or "").strip()
         self.poll_interval = max(0.5, float(poll_interval or 1.0))
+        # httpx 客户端超时（秒）；须大于长轮询 timeout，否则会被提前打断
+        self.request_timeout = max(
+            10.0, float(request_timeout if request_timeout is not None else POLL_TIMEOUT + 10)
+        )
+        # 网络传输错误（httpx.TransportError）最多重试次数；默认 0 不重试，避免发送类重复
+        self.max_retries = max(0, int(max_retries or 0))
         self._running = False
         self._poll_task: asyncio.Task | None = None
         self._offset = 0
@@ -129,48 +148,111 @@ class TelegramAdapter(PlatformAdapter):
         self._http: httpx.AsyncClient | None = None
         # 有限并发消费信号量：单批更新内并发度上限（见 _MAX_CONCURRENT_UPDATES）
         self._update_sem = asyncio.Semaphore(self._MAX_CONCURRENT_UPDATES)
+        # --- 可观测性 / 连接健康 ---
+        self.consecutive_errors = 0  # 当前连续失败次数
+        self.error_count = 0  # 累计错误次数
+        self.last_error_time = 0.0  # 最近一次失败的 epoch 秒
+        self.last_disconnect_time = 0.0  # 最近一次判定离线的 epoch 秒
+        self._identity_dirty = False  # Token 热更新后待重验身份
+        self._disconnected_notified = False  # 是否已广播过断连（避免重复触发）
 
     # ============ HTTP ============
 
     def _client(self) -> httpx.AsyncClient:
         if self._http is None:
-            self._http = httpx.AsyncClient(timeout=httpx.Timeout(POLL_TIMEOUT + 10))
+            self._http = httpx.AsyncClient(timeout=httpx.Timeout(self.request_timeout))
         return self._http
 
     async def _api(self, method: str, *, files: dict | None = None, **params) -> dict:
         """调用 Telegram Bot API，返回 result 字段
 
-        files 非空时走 multipart（data=文本字段 + files=上传文件），
-        否则走 JSON。
+        files 非空时走 multipart（data=文本字段 + files=上传文件），否则走 JSON。
+        网络传输错误（httpx.TransportError）按 max_retries 有限重试；
+        业务错误（非 2xx / ok=false）不重试。
         """
         if not self.token:
             raise RuntimeError("Telegram bot token 未配置（platforms.telegram.token）")
         url = API_BASE.format(token=self.token, method=method)
         if files:
-            data = {k: str(v) for k, v in params.items() if v is not None}
-            try:
-                resp = await self._client().post(url, data=data or None, files=files)
-            except httpx.HTTPError as exc:
-                raise TelegramAPIError(f"Telegram 请求失败 ({method}): {exc}") from None
+            payload: dict = {
+                "data": {k: str(v) for k, v in params.items() if v is not None} or None,
+                "files": files,
+            }
         else:
+            payload = {"json": params or None, "files": None}
+        last_exc: httpx.TransportError | None = None
+        for attempt in range(self.max_retries + 1):
             try:
-                resp = await self._client().post(url, json=params or None)
-            except httpx.HTTPError as exc:
-                raise TelegramAPIError(f"Telegram 请求失败 ({method}): {exc}") from None
+                return await self._api_once(url, **payload)
+            except httpx.TransportError as exc:
+                last_exc = exc
+                if attempt >= self.max_retries:
+                    break
+                delay = 0.5 * (attempt + 2)
+                logger.warning(
+                    "Telegram 网络请求失败，将在 %.1fs 后重试 (method=%s, 第 %d 次): %s",
+                    delay,
+                    method,
+                    attempt + 1,
+                    exc,
+                )
+                await asyncio.sleep(delay)
+        raise TelegramAPIError(f"Telegram 请求失败 ({method}): {last_exc}") from None
+
+    async def _api_once(self, url: str, **payload) -> dict:
+        """执行单次 Telegram API 请求并校验 ok 字段（网络错误向上传播供重试）"""
+        if payload.get("files"):
+            resp = await self._client().post(url, data=payload.get("data"), files=payload["files"])
+        else:
+            resp = await self._client().post(url, json=payload.get("json"))
         resp.raise_for_status()
         data = resp.json()
         if data is None or data.get("ok") is not True:
+            method = url.rsplit("/", 1)[-1]
             raise _telegram_error(method, data if isinstance(data, dict) else {})
         return data.get("result", {}) or {}
 
     def set_token(self, token: str) -> None:
-        """热更新 Bot Token（无需重启适配器，下次调用即生效）"""
+        """热更新 Bot Token（无需重启适配器，下次调用即生效）
+
+        更新后标记身份待重验，轮询下一轮会自动调用 getMe 刷新 self_id/username。
+        """
         token = str(token or "").strip()
         if not token:
             raise ValueError("Telegram Bot Token 不能为空")
         if token != self.token:
             self.token = token
-            logger.info("Telegram Bot Token 已热更新（self_id=%s）", self.self_id)
+            self._identity_dirty = True
+            logger.info("Telegram Bot Token 已热更新，等待重验身份（self_id=%s）", self.self_id)
+
+    async def refresh_identity(self) -> None:
+        """调用 getMe 校验 Bot Token 并刷新 self_id/username；失败抛异常"""
+        me = await self._api("getMe")
+        self.self_id = self._safe_int(me.get("id"))
+        self.username = str(me.get("username", "") or "").strip()
+        self._identity_dirty = False
+        logger.info("Telegram 身份已重验: self_id=%s username=%s", self.self_id, self.username)
+
+    def status_info(self) -> dict:
+        """扩展平台状态字段（合并进 get_status 的 platforms 项，供可观测性）"""
+        state = "stopped"
+        if self._running:
+            state = "connecting" if self.consecutive_errors > 0 else "connected"
+        return {
+            "connection_state": state,
+            "consecutive_errors": self.consecutive_errors,
+            "error_count": self.error_count,
+            "last_error_time": self.last_error_time,
+            "last_disconnect_time": self.last_disconnect_time,
+            "identity_dirty": self._identity_dirty,
+            "backoff": round(self._backoff_delay(), 1),
+        }
+
+    def _backoff_delay(self) -> float:
+        """下一次失败退避间隔（指数退避，封顶 _BACKOFF_MAX）；无失败则用轮询间隔"""
+        if self.consecutive_errors <= 0:
+            return self.poll_interval
+        return min(_BACKOFF_MAX, _BACKOFF_MIN * (2.0 ** (self.consecutive_errors - 1)))
 
     # ============ 生命周期 ============
 
@@ -178,9 +260,7 @@ class TelegramAdapter(PlatformAdapter):
         self._running = True
         # 验证 token 并获取 Bot 自身信息（self_id）
         try:
-            me = await self._api("getMe")
-            self.self_id = self._safe_int(me.get("id"))
-            self.username = str(me.get("username", "") or "").strip()
+            await self.refresh_identity()
             username = f"@{self.username}" if self.username else ""
             logger.info(
                 f"Telegram 适配器已启动: {username} "
@@ -212,8 +292,12 @@ class TelegramAdapter(PlatformAdapter):
     # ============ 长轮询 ============
 
     async def _poll_loop(self) -> None:
-        """长轮询循环：getUpdates → 归一化 → emit_event"""
-        consecutive_errors = 0
+        """长轮询循环：getUpdates → 归一化 → emit_event
+
+        成功/失败自适应退避：连续失败指数退避（_BACKOFF_MIN.._BACKOFF_MAX），
+        恢复后回到轮询间隔；判定离线后再次成功会广播 on_reconnect。
+        Token 热更新（set_token）后自动调用 getMe 重验 self_id/username。
+        """
         while self._running:
             try:
                 updates = await self._api(
@@ -223,7 +307,19 @@ class TelegramAdapter(PlatformAdapter):
                     limit=POLL_LIMIT,
                 )
                 self._last_heartbeat = time.time()
-                consecutive_errors = 0
+                # 从失败中恢复：清零并广播重连（若此前广播过断连）
+                if self.consecutive_errors > 0:
+                    if self._disconnected_notified:
+                        self._disconnected_notified = False
+                        logger.info("Telegram 轮询已恢复，广播重连")
+                        await self.notify_reconnected()
+                    self.consecutive_errors = 0
+                # Token 热更新后自动重验身份（失败仅记日志，下轮再试）
+                if self._identity_dirty:
+                    try:
+                        await self.refresh_identity()
+                    except Exception as e:
+                        logger.warning("Telegram 身份重验失败，将稍后重试: %s", e)
                 if isinstance(updates, list):
                     pending = [u for u in updates if isinstance(u, dict)]
                     if pending:
@@ -239,13 +335,16 @@ class TelegramAdapter(PlatformAdapter):
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                consecutive_errors += 1
-                logger.warning(f"Telegram 轮询异常（第 {consecutive_errors} 次连续）: {e}")
-                if consecutive_errors >= 5:
-                    # 连续失败说明网络/token 异常，广播断连状态
+                self.consecutive_errors += 1
+                self.error_count += 1
+                self.last_error_time = time.time()
+                logger.warning("Telegram 轮询异常（第 %d 次连续）: %s", self.consecutive_errors, e)
+                if self.consecutive_errors >= _OFFLINE_AFTER and not self._disconnected_notified:
+                    self._disconnected_notified = True
+                    self.last_disconnect_time = self.last_error_time
                     logger.error("Telegram 轮询连续失败，标记平台离线")
                     await self.notify_disconnected()
-                await asyncio.sleep(min(30, self.poll_interval * 3))
+                await asyncio.sleep(self._backoff_delay())
                 continue
             await asyncio.sleep(self.poll_interval)
 

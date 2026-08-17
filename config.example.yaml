@@ -23,6 +23,8 @@ platforms:
     enabled: false             # true 启用后接入 Telegram（Bot API 长轮询）
     token: ''                  # Bot API token（@BotFather 获取）
     poll_interval: 1.0         # 长轮询间隔（秒）
+    request_timeout: 40.0      # HTTP 请求超时（秒），须大于长轮询 timeout（30）
+    max_retries: 0             # 网络传输错误最多重试次数（0 不重试，避免发送类重复）
 market:
   url: https://gitee.com/qingci-bot/Plugin-Market.git  # 插件市场索引仓库（默认指 Gitee 国内镜像，拉取更快；可改 https://github.com/Qingci-Bot/Plugin-Market.git 切换 GitHub 主仓库）
   refresh_interval: 3600       # 索引缓存 TTL（秒）

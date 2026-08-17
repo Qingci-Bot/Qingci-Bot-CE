@@ -570,6 +570,7 @@ class QingciBot:
                     "connected": bool(p.is_connected),
                     "last_heartbeat": p.last_heartbeat,
                     "self_id": int(getattr(p, "self_id", 0) or 0),
+                    **p.status_info(),
                 }
                 for p in self.platforms.values()
             ],
