@@ -478,11 +478,117 @@ async def test_call_api_group_msg_image(adapter, monkeypatch):
     assert calls["method"] == "sendPhoto"
 
 
-def test_strip_cq_images_strips_other_cq(adapter):
-    """发送文本剔除不可渲染的其他 CQ 段并合并连续空格"""
-    imgs, text = TelegramAdapter._strip_cq_images("hi [CQ:face,id=1] [CQ:image,file=f] ok")
-    assert imgs == ["f"]
+def test_parse_cq_message_media_text_reply(adapter):
+    """CQ 解析：提取媒体段、剔除不可渲染段、回传 reply_id"""
+    media, text, reply = TelegramAdapter._parse_cq_message("hi [CQ:face,id=1] [CQ:image,file=f] ok")
+    assert media == [{"type": "image", "file": "f"}]
     assert text == "hi ok"
+    assert reply == 0
+
+    media, text, reply = TelegramAdapter._parse_cq_message(
+        "[CQ:reply,id=42] [CQ:record,file=v1] [CQ:video,file=vd1] 说明"
+    )
+    assert media == [{"type": "record", "file": "v1"}, {"type": "video", "file": "vd1"}]
+    assert text == "说明"
+    assert reply == 42
+
+
+def test_normalize_voice_and_video(adapter):
+    """语音 → record 段，视频 → video 段"""
+    adapter.self_id = 12345
+    msg = _message(
+        chat={"id": -10020002, "type": "group", "title": "测试群"},
+        text="",
+        voice={"file_id": "VOICE1", "duration": 5},
+    )
+    event = adapter._normalize_message(msg)
+    assert [s["type"] for s in event["message"]] == ["record"]
+    assert event["message"][0]["data"]["file"] == "VOICE1"
+
+    msg2 = _message(
+        chat={"id": -10020002, "type": "group", "title": "测试群"},
+        text="",
+        video={"file_id": "VID1", "mime_type": "video/mp4"},
+    )
+    ev2 = adapter._normalize_message(msg2)
+    assert [s["type"] for s in ev2["message"]] == ["video"]
+    assert ev2["message"][0]["data"]["file"] == "VID1"
+
+
+def test_normalize_private_subtype_friend(adapter):
+    """私聊 sub_type=friend（OneBot 语义修正）"""
+    event = adapter._normalize_message(_message())
+    assert event["sub_type"] == "friend"
+
+
+def test_normalize_group_subtype_normal(adapter):
+    """群聊 sub_type=normal"""
+    event = adapter._normalize_message(
+        _message(chat={"id": -10020002, "type": "group", "title": "测试群"})
+    )
+    assert event["sub_type"] == "normal"
+
+
+async def test_send_msg_voice_routes_sendvoice(adapter, monkeypatch):
+    """send_msg 含 [CQ:record] → sendVoice"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["method"], calls["params"] = method, params
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg("private", 10001, "[CQ:record,file=AgVcID]")
+    assert calls["method"] == "sendVoice"
+    assert calls["params"]["voice"] == "AgVcID"
+
+
+async def test_send_msg_video_routes_sendvideo(adapter, monkeypatch):
+    """send_msg 含 [CQ:video] → sendVideo"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["method"], calls["params"] = method, params
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg("private", 10001, "[CQ:video,file=http://a/b.mp4]")
+    assert calls["method"] == "sendVideo"
+    assert calls["params"]["video"] == "http://a/b.mp4"
+
+
+async def test_send_text_with_reply(adapter, monkeypatch):
+    """纯文本 + [CQ:reply] → sendMessage 带 reply_to_message_id"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["params"] = params
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg("private", 10001, "[CQ:reply,id=7] 收到")
+    assert calls["params"]["reply_to_message_id"] == 7
+    assert calls["params"]["text"] == "收到"
+
+
+async def test_send_media_with_reply(adapter, monkeypatch):
+    """媒体 + reply → 首条媒体携带 reply_to_message_id 与 caption"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["method"], calls["params"] = method, params
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg(
+        "private",
+        10001,
+        "[CQ:reply,id=9] [CQ:image,file=AgABg] 配图",
+    )
+    assert calls["method"] == "sendPhoto"
+    assert calls["params"]["photo"] == "AgABg"
+    assert calls["params"]["reply_to_message_id"] == 9
+    assert calls["params"]["caption"] == "配图"
 
 
 def test_resolve_image_refs(adapter):

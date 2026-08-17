@@ -9,13 +9,15 @@
   （CQ 纯文本段）、raw_message、sender（first_name/username）
 - @提及：解析 entities（mention / text_mention）识别群聊中的 @Bot，
   命中时写入 at 段（qq=self_id）供 at 触发使用；私聊天然放行
-- 图片：photo / 图片 document → image 段 + images（file_id）
+- 媒体：photo / 图片 document → image 段 + images（file_id）；
+  voice → record，video / video_note → video 段
 - 发送：send_msg 走 sendMessage（Telegram 统一 chat_id）并识别
-  [CQ:image] 转发 sendPhoto（file_id / http(s) URL / base64 / 本地路径）；
-  group/private 均按 chat_id 发送；其余 CQ 段降级为纯文本
+  [CQ:image] / [CQ:record] / [CQ:video] → sendPhoto / sendVoice / sendVideo
+  （file_id / http(s) URL / base64 / 本地路径），group/private 均按 chat_id 发送；
+  [CQ:reply,id=N] → 回复指定消息；其余 CQ 段降级为纯文本
 - 通知：chat_member / my_chat_member 成员变动 → group_increase /
   group_decrease / group_admin notice 事件（被邀请 sub_type=invite）
-- 能力：call_api 映射 send_private_msg/send_group_msg → sendMessage/sendPhoto，
+- 能力：call_api 映射 send_private_msg/send_group_msg → sendMessage/sendPhoto/sendVoice/sendVideo，
   其余 action 透传为 Telegram 方法（小写方法名）
 - 状态：轮询运行即视为已连接；last_heartbeat 随每次成功轮询更新
 
@@ -32,6 +34,7 @@ import mimetypes
 import re
 import time
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -51,6 +54,15 @@ POLL_LIMIT = 100
 _CQ_IMAGE_RE = re.compile(r"\[CQ:image,file=([^,\]$]+)\]")
 # 任意 CQ 段（用于把不可渲染的段从发送文本中剔除）
 _ANY_CQ_RE = re.compile(r"\[CQ:[^\[\]]*\]")
+# CQ 段整体（解析音视频/回复等参数化的段）
+_CQ_SEG_RE = re.compile(r"\[CQ:[^\]]*\]")
+
+# OneBot 媒体段 → Telegram 发送方法与字段名
+_MEDIA_API: dict[str, tuple[str, str]] = {
+    "image": ("sendPhoto", "photo"),
+    "record": ("sendVoice", "voice"),
+    "video": ("sendVideo", "video"),
+}
 
 
 class TelegramAdapter(PlatformAdapter):
@@ -322,10 +334,17 @@ class TelegramAdapter(PlatformAdapter):
             images.append(image_file)
             segments.append({"type": "image", "data": {"file": image_file, "url": image_file}})
 
+        # 语音 / 视频
+        record_file, video_file = self._extract_media_files(message)
+        if record_file:
+            segments.append({"type": "record", "data": {"file": record_file, "url": record_file}})
+        if video_file:
+            segments.append({"type": "video", "data": {"file": video_file, "url": video_file}})
+
         event = {
             "post_type": "message",
             "message_type": message_type,
-            "sub_type": "normal",
+            "sub_type": "friend" if message_type == "private" else "normal",
             "message_id": str(message.get("message_id", "")),
             "user_id": self._safe_int(from_user.get("id")),
             "group_id": self._safe_int(chat.get("id")) if message_type == "group" else 0,
@@ -401,6 +420,22 @@ class TelegramAdapter(PlatformAdapter):
             return str(doc.get("file_id") or "")
         return ""
 
+    @staticmethod
+    def _extract_media_files(message: dict) -> tuple[str, str]:
+        """从 message 提取语音 / 视频 file_id（voice → record，video/video_note → video）"""
+        record = ""
+        voice = message.get("voice")
+        if isinstance(voice, dict):
+            record = str(voice.get("file_id") or "")
+        video = ""
+        note = message.get("video_note")
+        if isinstance(note, dict):
+            video = str(note.get("file_id") or "")
+        vid = message.get("video")
+        if isinstance(vid, dict) and not video:
+            video = str(vid.get("file_id") or "")
+        return record, video
+
     # ============ 发送 ============
 
     async def send_msg(self, message_type: str, target_id: int, message: str) -> dict:
@@ -411,47 +446,73 @@ class TelegramAdapter(PlatformAdapter):
         return await self._route_send(chat_id, str(message or ""))
 
     @staticmethod
-    def _strip_cq_images(message: str) -> tuple[list[str], str]:
-        """从发送内容中提取 [CQ:image,file=..] 的 file 列表与残留纯文本
+    def _parse_cq_message(message: str) -> tuple[list[dict], str, int]:
+        """把 OneBot CQ 字符串解析为 (media, text, reply_id)
 
-        残留文本会剔除其余 CQ 段（Telegram 无法渲染的面向其他平台的段），
-        并合并连续空白。
+        - media：list[{type: image/record/video, file}]；
+        - reply_id：遇到 [CQ:reply,id=N] 时回传，用于回复指定消息；
+        - text：剔除全部 CQ 段（不可渲染的段降级丢弃）并合并连续空白后的纯文本。
         """
-        images = _CQ_IMAGE_RE.findall(message or "")
-        text = _ANY_CQ_RE.sub("", message or "")
-        text = re.sub(r"[ \t\n\r]+", " ", text).strip()
-        return images, text
+        media: list[dict] = []
+        reply_id = 0
+        for match in _CQ_SEG_RE.finditer(message or ""):
+            inner = match.group(0)[1:-1]  # 去掉方括号
+            head, _, rest = inner.partition(",")
+            seg_type = head[len("CQ:") :] if head.startswith("CQ:") else head
+            kv = dict(re.findall(r"([A-Za-z_]+)=([^,]*)", rest))
+            if seg_type in _MEDIA_API:
+                f = str(kv.get("file") or "")
+                if f:
+                    media.append({"type": seg_type, "file": f})
+            elif seg_type == "reply":
+                try:
+                    reply_id = int(str(kv.get("id") or "0"))
+                except ValueError:
+                    reply_id = 0
+        text = re.sub(r"[ \t\n\r]+", " ", _ANY_CQ_RE.sub("", message or "")).strip()
+        return media, text, reply_id
 
     async def _route_send(self, chat_id: int, message: str) -> dict:
-        """按内容路由：含图片 → _send_photo，否则 sendMessage 纯文本"""
-        images, text = self._strip_cq_images(message)
-        if images:
-            return await self._send_photo(chat_id, images, text)
-        return await self._api(
-            "sendMessage",
-            chat_id=chat_id,
-            text=text or "",
-            disable_web_page_preview=True,
-        )
+        """按内容路由：含图片/语音/视频 → _send_media，否则 sendMessage 纯文本"""
+        media, text, reply_id = self._parse_cq_message(message)
+        if media:
+            return await self._send_media(chat_id, media, text, reply_id)
+        params: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": text or "",
+            "disable_web_page_preview": True,
+        }
+        if reply_id:
+            params["reply_to_message_id"] = reply_id
+        return await self._api("sendMessage", **params)
 
-    async def _send_photo(self, chat_id: int, images: list[str], caption: str = "") -> dict:
-        """发送图片：file_id/http(s) URL 走 photo 参数，本地/base64 走 multipart 上传"""
+    async def _send_media(
+        self,
+        chat_id: int,
+        media: list[dict],
+        caption: str = "",
+        reply_id: int = 0,
+    ) -> dict:
+        """发送媒体：file_id/http(s) URL 走参数，本地/base64 走 multipart 上传
+
+        image → sendPhoto，record → sendVoice，video → sendVideo；
+        caption 附着于首条媒体，reply_id 命中时回复指定消息。
+        """
         result: dict = {}
-        for idx, raw in enumerate(images):
-            title = caption if idx == 0 else ""
-            kind, photo_val, media = self._resolve_image(raw)
+        for idx, seg in enumerate(media):
+            action, field = _MEDIA_API.get(str(seg.get("type") or ""), _MEDIA_API["image"])
+            params: dict[str, Any] = {"chat_id": chat_id}
+            if caption and idx == 0:
+                params["caption"] = caption
+            if reply_id:
+                params["reply_to_message_id"] = reply_id
+            kind, val, media_file = self._resolve_image(str(seg.get("file") or ""))
             if kind == "upload":
-                assert media is not None
-                result = await self._api(
-                    "sendPhoto",
-                    files={"photo": media},
-                    chat_id=chat_id,
-                    caption=title or None,
-                )
+                assert media_file is not None
+                result = await self._api(action, files={field: media_file}, **params)
             else:
-                result = await self._api(
-                    "sendPhoto", photo=photo_val, chat_id=chat_id, caption=title or None
-                )
+                params[field] = val
+                result = await self._api(action, **params)
         return result or {}
 
     @staticmethod
