@@ -40,6 +40,10 @@ jobs:
         # 空库 upgrade head + alembic check，防止模型改动后迁移脚本失效
         run: python scripts/verify_migrations.py
 
+      - name: Directory coverage gate (bot/llm >= 70%)
+        # LLM 子系统为核心能力，目录级门槛防其覆盖率回退（当前 76%）
+        run: coverage report --include='bot/llm/*' --fail-under=70
+
   docker:
     name: Docker build & smoke run
     runs-on: ubuntu-latest

@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LLM 子系统测试补强（消除覆盖黑洞）**：新增 `tests/test_llm_adapter.py`（26 个用例）、`tests/test_llm_manager.py`（25 个用例）、`tests/test_llm_mcp.py`（12 个用例）——`litellm_adapter.py` 覆盖 17%→93%、`llm/manager.py` 9%→69%、`llm/mcp.py` 0%→76%（mock `_get_litellm` / 假适配器与假 DB 隔离网络）；完整套件 358 passed，整体覆盖率 45.6%→51.9%
 - **行尾规范化根治 CRLF 噪音**：新增 `.gitattributes`（源码/文档统一 `eol=lf`，`*.ps1`/`*.bat` 保留 `crlf`），`git add --renormalize` 后工作树 14 个 CRLF 假 `M` 全部消失，跨平台 diff 从此干净
 - **Alembic 迁移修复与 CI 冒烟**：`alembic check` 检出 `messages.message_id` 索引与模型声明漂移（迁移建表时为非唯一，模型声明 `unique=True`），新增迁移 `eebc4752a3af` 改为唯一索引（旧库若存在重复 message_id 会在此步报错暴露）；新增 `scripts/verify_migrations.py`——隔离临时库上执行 `upgrade head` + 表完整性断言 + `alembic check`，已接入 CI quality job，防止模型改动后迁移脚本失效
+- **覆盖率门槛上调**：全局 `--cov-fail-under` 40%→50%（当前 51.9%）；CI 新增 `bot/llm` 目录级门槛 70%（当前 76%），LLM 子系统覆盖率回退会被拦截
 
 ### Fixed
 - **群配置「添加群」无反应**：`type=number` 输入框的 `v-model` 会把值转为数字类型，直接调用 `.trim()` 抛 `TypeError` 中断新增逻辑；改为先将输入 `String()` 转换为字符串再校验纯数字，现可正常添加群
