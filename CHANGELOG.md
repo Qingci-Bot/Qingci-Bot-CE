@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.0] - 2026-08-17
 
 ### Added
+- **SDK git 依赖切换为 Gitee 镜像**：`pyproject.toml` 的 `qingci-plugin-sdk` git 依赖从 GitHub 主仓库切到 Gitee 镜像（`git+https://gitee.com/qingci-bot/Plugins-SDK.git@main`），国内源码安装 / Docker 构建克隆 SDK 更快更稳；本地 `build.ps1` 仍优先安装本地 SDK 源码
 - **插件市场默认源改为 Gitee 镜像**：运行时拉取插件市场默认指向国内可及的 Gitee 镜像（`DEFAULT_MARKET_URL` / `MarketConfig.url` = `https://gitee.com/luoqingciya/Plugin-Market.git`），其为 GitHub 主仓库的自动同步只读镜像，国内拉取更快更稳；`market.url` 可切换至 GitHub 主仓库
 - **代码托管迁移至 GitHub**：项目仓库自 AtomGit/GitCode 迁移至 GitHub 并统一文档与链接——`pyproject.toml` 的 SDK git 依赖、About 页托管信息与作者链接、README/CONTRIBUTING/CHANGELOG/ARCHITECTURE/PLUGIN_DEV 中所有 `atomgit.com` 链接统一改为 `github.com`；Plugin-Market 的 `index.json`（homepage/source）与 raw 索引地址分支同步（`master`→`main`）
 - **CI 恢复为 GitHub Actions**：项目迁移托管至 GitHub 后，CI 重新落在 `.github/workflows/ci.yml`（GitHub Actions 原生），三个 job：`quality`（ruff lint + format + mypy + pytest + 覆盖率门槛）；`docker`（`docker compose config` 校验 + 镜像构建 + 容器运行冒烟，`/api/bot/health` 30s 就绪判定）；`install-script`（`bash -n` + `SKIP_SYS_DEPS=1 ./install.sh --dev` + `main.py` 启动冒烟，60s 超时）；`docker`/`install-script` job 使用预装 Docker 的 runner 提供运行时验证，替代此前 GitCode 平台 Kaniko 无 daemon 构建的限制

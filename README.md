@@ -61,9 +61,9 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > | `[build]` | `uv pip install -e ".[build]"` | pyinstaller（`.\build.ps1` 依赖） |
 > | `[dev]` | `uv pip install -e ".[dev]"` | 以上全部 + ruff / mypy（代码质量工具） |
 >
-> 插件协议层 SDK（`qingci-plugin-sdk`）作为 git 依赖随核心依赖安装；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.ps1` 一致），覆盖 git 依赖版本。
+> 插件协议层 SDK（`qingci-plugin-sdk`）作为 git 依赖（默认指 [Gitee 镜像](https://gitee.com/qingci-bot/Plugins-SDK)，国内拉取更快）随核心依赖安装；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.ps1` 一致），覆盖 git 依赖版本。
 >
-> 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install git+https://github.com/Qingci-Bot/Plugins-SDK.git` 安装 SDK）：
+> 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install git+https://gitee.com/qingci-bot/Plugins-SDK.git` 安装 SDK）：
 >
 > ```bash
 > uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiosqlite \
