@@ -4,7 +4,7 @@
 
 > 本项目底层核心代码由 [**Zhou Zhe (aka luoqingci)**](https://github.com/luoqingciya) 原创，并授予 [Qingci-Bot](https://github.com/Qingci-Bot) 组织持续开发。
 
-基于 Python 的 QQ 机器人框架，对接 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot)（OneBot 11 协议），支持 LLM 智能对话、Web UI 和桌面应用。
+基于 Python 的多平台机器人框架，内部统一采用 **OneBot 12 事件模型**（`type` / `detail_type` / `message[]` 消息段），基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot)（OneBot 11 反向 WebSocket，作为兼容输入层自动翻译为 v12 事件），支持 LLM 智能对话、Web UI 和桌面应用。适配器将各平台归一化为 OneBot 12 内部模型，插件对来源平台完全无感知。
 
 > 独立插件开发：[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) — 零依赖插件开发 SDK，无需克隆主项目即可开发插件
 >
@@ -14,8 +14,8 @@
 
 ## 特性
 
-- **OneBot 11 反向 WebSocket**：基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp)，完整支持 OneBot v11 协议（消息段解析、API 调用、事件总线）
-- **多平台适配器**：平台协议归一化为内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot 11 + Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `record`、video → `video` 段；发送识别 `[CQ:image]`/`[CQ:record]`/`[CQ:video]` 走 `sendPhoto`/`sendVoice`/`sendVideo`）、CQ 回复（`[CQ:reply]`）与成员变动通知（成员进出群/权限变更归一化为 `group_increase`/`group_decrease`/`group_admin` notice）；长轮询采用有限并发消费（慢更新不阻塞同批）且失败更新自动确认跳过避免重放，连接失败指数退避并自动重连，Bot Token 支持运行时热更新（自动重验身份），HTTP 超时/重试可配置，API 调用错误按 401/403/404 分类，平台状态接口暴露连接健康指标（连续错误数/最近错误与断连时间/退避状态）
+- **OneBot 12 内核**：内部统一采用 OneBot 12 事件模型（`type` / `detail_type` / 标准 `{type,data}` 消息段，媒体以 `file_id` 引用）；基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot)（OneBot 11 反向 WebSocket），v11 事件在入口由 `v11_compat` 翻译层自动归一化为 v12 事件，并对存量插件保留 v11 兼容字段（`post_type` / `message_type` / `raw_message`）——OneBot 11 只是"众多平台之一"
+- **多平台适配器**：平台协议归一化为 OneBot 12 内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot（v11 输入）+ Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `voice`、video → `video` v12 段；发送将 v12 `image`/`voice`/`video` 段映射到 `sendPhoto`/`sendVoice`/`sendVideo`）、回复段与成员变动通知（成员进出群/权限变更归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_*` notice）；长轮询采用有限并发消费（慢更新不阻塞同批）且失败更新自动确认跳过避免重放，连接失败指数退避并自动重连，Bot Token 支持运行时热更新（自动重验身份），HTTP 超时/重试可配置，API 调用错误按 401/403/404 分类，平台状态接口暴露连接健康指标（连续错误数/最近错误与断连时间/退避状态）
 - **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 7 大提供商（OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义），含流式响应、Function Calling、多模态；填好 API Key 后可一键拉取提供商可用模型列表
 - **人格/人设系统**：可配置多组人格（system_prompt 集合），聊天中 `/persona` 命令随时切换（会话级覆盖），Web UI 可视化管理
 - **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪（可选摘要压缩）；Web UI 按会话分组可视化查看 / 删除
@@ -190,7 +190,7 @@ mypy bot api
 - 地址：`ws://127.0.0.1:3001/ws`（端口默认 3001，需与 `config.yaml` 的 `onebot.port` 保持一致）
 - Access Token：留空或与 `config.yaml` 中 `onebot.access_token` 保持一致
 
-LLBot 会自动携带 OneBot v11 标准的 `X-Client-Role: universal` 和 `X-Self-ID` header 连接。
+LLBot 会自动携带 OneBot v11 标准的 `X-Client-Role: universal` 和 `X-Self-ID` header 连接。接入的 v11 事件会由 `bot/core/v11_compat.py` 翻译层自动归一化为 OneBot 12 事件（`type`/`detail_type`）后进入核心调度，插件侧仍能读取兼容字段（`post_type`/`message_type`/`raw_message`）。
 
 ## 6. 配置 LLM
 
@@ -396,7 +396,7 @@ api_key: ''                        # API 鉴权密钥
 | `scheduler` | 定时任务调度器 | `enabled: true` | 调度器基座，由插件注册任务；无任务注册时零副作用 |
 | `hot_reload` | 插件自动热重载 | `enabled: false` | 开发期监听 `plugins/` 目录 `.py` 文件变更并自动重载对应插件；`interval` 为轮询间隔（秒）；生产环境建议关闭 |
 | `alert` | 错误告警 | `enabled: false` | 冷却窗口内 ERROR 日志达到 `error_threshold` 条时向管理员发消息告警，带 `cooldown_minutes` 冷却 |
-| `image` | 图片生成 | `enabled: false` | `/image <提示词>`（或 `/画图`）命令；`image.api_key` 为空时回退 `llm.api_key`；成功后以 CQ 图片段回复 |
+| `image` | 图片生成 | `enabled: false` | `/image <提示词>`（或 `/画图`）命令；`image.api_key` 为空时回退 `llm.api_key`；成功后以 v12 `image` 消息段回复 |
 | `rag` | 轻量知识库 | `enabled: false` | 双模式：`keyword`（纯 Python 关键词检索，无重型依赖）/ `vector`（LanceDB 向量检索 + litellm embedding，语义更精准；需可选依赖 `lancedb`，未安装时自动回退 keyword 并告警）；开启后对话自动注入检索到的参考资料；`/kb` 命令管理文档（add/list/search/remove/reload）。vector 模式的初始化步骤见 [ARCHITECTURE.md](./ARCHITECTURE.md#向量检索rag初始化) |
 | `session_summary` | 会话摘要 | `enabled: false` | 与 `llm.enable_summary` 等价，任一为 true 即启用；上下文超过条数/token 阈值时将较早消息摘要压缩，保留最近 N 轮原文 |
 | `log.usage_tracking` | LLM 用量入库 | `true` | 可退出的遥测：关闭后 chat/摘要/图片不再写 usage_logs，Dashboard 用量统计将为空 |
@@ -406,7 +406,7 @@ api_key: ''                        # API 鉴权密钥
 | `llm.provider` | 提供商联动 | `openai` | 切换 provider 自动带出预设 api_url/model（openai/deepseek/ollama/siliconflow/claude/gemini/custom 共 7 个）；`api_url` 非空统一走 OpenAI 兼容协议 |
 | `llm.timeout` / `llm.num_retries` | 请求超时与重试 | `60` / `2` | 单次 LLM 请求超时秒数与失败重试次数 |
 | `market` | 插件市场 | `url` 默认指向 Gitee 镜像（`https://gitee.com/qingci-bot/Plugin-Market.git`，GitHub 主仓库的国内自动同步镜像，拉取更快更稳；可用 `https://github.com/Qingci-Bot/Plugin-Market.git` 切换主仓库） | WebUI「插件管理 → 插件市场」浏览/搜索/一键安装/更新/刷新；`url` 可指向自定义市场索引仓库，`refresh_interval` 为索引缓存 TTL（秒） |
-| `platforms.telegram` | Telegram 平台适配器 | `enabled: false` | 启用后以 Bot API 长轮询接入 Telegram（`token` 由 @BotFather 获取）；事件归一化为内部模型，插件/命令零改动可用；回复自动路由到 Telegram；群聊 `@Bot` 可触发（支持 at 触发模式）；支持图片/语音/视频收发（photo → `image`、voice → `record`、video → `video` 段；发送识别 `[CQ:image]`/`[CQ:record]`/`[CQ:video]` 走 `sendPhoto`/`sendVoice`/`sendVideo`，支持 file_id / URL / base64 / 本地路径）；`[CQ:reply]` 回复指定消息；成员进出群/权限变更归一化为 OneBot `notice`（`group_increase` / `group_decrease` / `group_admin`），事件插件可响应；`poll_interval` 为轮询间隔（秒） |
+| `platforms.telegram` | Telegram 平台适配器 | `enabled: false` | 启用后以 Bot API 长轮询接入 Telegram（`token` 由 @BotFather 获取）；事件归一化为 OneBot 12 内部模型（`type`/`detail_type`/v12 消息段），插件/命令零改动可用；回复自动路由到 Telegram；群聊 `@Bot` 可触发（支持 at 触发模式）；收发支持 v12 `image`/`voice`/`video` 段（photo → `image`、voice → `voice`、video → `video`；发送 `image`/`voice`/`video` 段分别走 `sendPhoto`/`sendVoice`/`sendVideo`，支持 file_id / URL / base64 / 本地路径）与 `reply` 回复段；成员进出群/权限变更归一化为 OneBot `notice`（`group_member_increase` / `group_member_decrease` / `group_admin_set` / `group_admin_unset`），事件插件可响应；`poll_interval` 为轮询间隔（秒） |
 | `bot.log_json` | 结构化 JSON 日志 | `false` | 面向机器可读的日志采集场景 |
 | `log.log_file_enabled` | 文件日志轮转 | `false` | 启用后日志写入 `log_dir/qingci-bot.log`，按 `log_file_max_bytes` 大小轮转，保留 `log_file_backup_count` 个备份 |
 

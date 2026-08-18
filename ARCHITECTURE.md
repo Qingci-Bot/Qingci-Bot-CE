@@ -3,32 +3,36 @@
 ## 系统架构
 
 ```
-┌──────────┐   OneBot 11 WS   ┌──────────────────────────────────────────┐   HTTP/WS   ┌──────────┐
-│  LLBot   │ ◄──────────────► │            Qingci-Bot CE                │ ◄─────────► │  Web UI  │
-│ (协议层)  │  收发消息/事件    │  ┌──────────────────────────────────┐   │   API 推送   │  (管理端)  │
-└──────────┘                  │  │ aiocqhttp (反向 WS 服务端)        │   │            └──────────┘
-                              │  ├──────────────────────────────────┤   │
-                              │  │ Dispatcher (Matcher/Rule/Perm)   │   │
-                              │  ├──────────────────────────────────┤   │
-                              │  │ PluginManager (热加载/双轨调度)    │   │
-                              │  ├──────────────────────────────────┤   │
-                              │  │ LLMManager (litellm 多提供商)     │   │
-                              │  ├──────────────────────────────────┤   │
-                              │  │ Database (SQLModel + Alembic)    │   │
-                              │  └──────────────────────────────────┘   │
-                              └──────────────────────────────────────────┘
+┌──────────┐  OneBot 11 WS  ┌──────────────────────────────────────────┐   HTTP/WS   ┌──────────┐
+│  LLBot   │ ◄────────────► │            Qingci-Bot CE                │ ◄─────────► │  Web UI  │
+│ (QQ 协议端)│  收发消息/事件  │  ┌──────────────────────────────────┐   │   API 推送   │  (管理端)  │
+└──────────┘                 │  │ aiocqhttp (反向 WS 服务端)        │   │            └──────────┘
+                             │  ├──────────────────────────────────┤   │
+                             │  │ v11_compat (v11 事件 → v12 翻译) │   │
+                             │  ├──────────────────────────────────┤   │
+                             │  │ Telegram (长轮询 → OneBot 12 事件)│   │
+                             │  ├──────────────────────────────────┤   │
+                             │  │ Dispatcher (OneBot 12 事件模型)   │   │
+                             │  ├──────────────────────────────────┤   │
+                             │  │ PluginManager (热加载/双轨调度)    │   │
+                             │  ├──────────────────────────────────┤   │
+                             │  │ LLMManager (litellm 多提供商)     │   │
+                             │  ├──────────────────────────────────┤   │
+                             │  │ Database (SQLModel + Alembic)    │   │
+                             │  └──────────────────────────────────┘   │
+                             └──────────────────────────────────────────┘
 ```
 
 ### 数据流
 
 1. **LLBot**（QQ 协议端）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot CE；Telegram 由 `telegram.py` 适配器以 Bot API 长轮询接入
-2. **aiocqhttp** 解析事件，**telegram 适配器**归一化为 OneBot-11 兼容事件（注入 `platform` 字段），统一分发至 **Dispatcher**
-3. **Dispatcher** 按 priority 调度 **PluginManager** 中的 Matcher，匹配 Rule/Permission 后执行 handler
+2. **aiocqhttp** 收到 OneBot 11 事件，经 **v11_compat**（`bot/core/v11_compat.py`）翻译为 **OneBot 12** 事件（`type`/`detail_type`/`message[]`）；**telegram 适配器**直接将原生更新归一化为 OneBot 12 事件（注入 `platform` 字段），统一分发至 **Dispatcher**
+3. **Dispatcher** 以 OneBot 12 事件模型解析出 `MessageContext`（`Message.from_raw` 自动归一化 v11/v12 消息段），按 priority 调度 **PluginManager** 中的 Matcher，匹配 Rule/Permission 后执行 handler
 4. 未匹配则回退到旧式 `on_message`；内置 chat 插件调用 **LLMManager** 生成回复
-5. 回复按 **MessageContext.platform** 路由到对应 **PlatformAdapter**，最终发送回 LLBot（QQ 用户）或 Telegram 对话
+5. 回复按 **MessageContext.platform** 路由到对应 **PlatformAdapter**，最终发送回 LLBot（QQ 用户）或 Telegram 对话；发送层消费 OneBot 12 标准消息段（`send_message` 动作的 `message` 参数），由各适配器映射为平台私有格式
 6. **Web UI** 通过 HTTP/WebSocket 与 API 服务通信，管理配置、插件、日志等（侧边栏展示各平台实时连接状态）
 
-> **多平台原则**：事件在入口归一化、回复在出口路由，插件/命令对来源平台完全无感知——一套 Matcher/Rule/Permission 逻辑天然支持所有已接入平台。
+> **多平台原则**：事件在入口归一化为 OneBot 12、回复在出口路由回平台，插件/命令对来源平台完全无感知——一套 Matcher/Rule/Permission 逻辑基于统一事件模型天然支持所有已接入平台。
 
 ### 协议层归属
 
@@ -57,6 +61,7 @@ Qingci-Bot-CE/
 │   │   ├── bot.py             # Bot 主类（生命周期、事件调度、全局钩子）
 │   │   ├── composition.py     # 组合根（assemble_bot：组件装配 + DI 注册）
 │   │   ├── connection.py      # OneBot 连接（aiocqhttp 反向 WS，实现 PlatformAdapter 契约）
+│   │   ├── v11_compat.py      # OneBot 11 事件 → OneBot 12 事件翻译层（双模归一化入口）
 │   │   ├── platforms/         # 多平台适配器（base.py PlatformAdapter 契约 + telegram.py 长轮询）
 │   │   ├── dispatcher.py      # 消息分发 + Matcher 调度（MessageContext 转发 SDK）
 │   │   ├── message.py         # 类型化消息构造器（Message/MessageSegment）
@@ -138,7 +143,7 @@ Qingci-Bot-CE/
 | 层 | 技术 |
 |----|------|
 | 后端 | Python 3.12 + FastAPI + uvicorn |
-| 平台接入 | OneBot 11（aiocqhttp 反向 WS）+ Telegram（Bot API 长轮询），统一 `PlatformAdapter` 契约 |
+| 平台接入 | 内核统一 OneBot 12 事件模型；输入含 OneBot 11（aiocqhttp 反向 WS，v11_compat 翻译层）+ Telegram（Bot API 长轮询），统一 `PlatformAdapter` 契约 |
 | LLM | litellm (统一接口，延迟导入加速启动) |
 | MCP | mcp (Model Context Protocol，stdio/HTTP) |
 | 数据库 | SQLModel + Alembic + aiosqlite (WAL 模式) |
@@ -167,12 +172,21 @@ Qingci-Bot-CE/
 
 ### 多平台适配器（`bot/core/platforms/`）
 
-平台协议统一收敛为 `PlatformAdapter` 契约，插件对来源平台无感知；事件归一化为 OneBot-11 兼容的内部模型（注入 `platform` 字段），回复按 `MessageContext.platform` 路由回对应适配器：
+平台协议统一收敛为 `PlatformAdapter` 契约，插件对来源平台无感知；事件归一化为 **OneBot 12 内部模型**（`type`/`detail_type` + 标准消息段，注入 `platform` 字段），回复按 `MessageContext.platform` 路由回对应适配器：
 
 - **`base.py`**：定义 `PlatformAdapter` 契约（适配器名/展示名、启动与关闭、事件上报回调、发送消息、`get_status`/API 透传等），任何平台只需实现该契约即可接入
-- **`telegram.py`**：Telegram 平台实现——以 Bot API 长轮询（`getUpdates`）接入，由 `platforms.telegram.enabled/token/poll_interval` 控制；收到更新后归一化为 OneBot-11 兼容消息事件并注入 `platform: "telegram"`。关键能力：① 群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 `at` 段（`qq=self_id`）并置 `is_at_bot`，确保 at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；② `photo` / `image/*` document 归一化为 `image` 段 + `images`（file_id），`voice` → `record`、`video` / `video_note` → `video` 段，消息 `sub_type` 语义对齐 OneBot（私聊 `friend`）；③ 发送识别 `[CQ:image]` / `[CQ:record]` / `[CQ:video]` → `sendPhoto` / `sendVoice` / `sendVideo`（file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，caption 附着首条媒体），`[CQ:reply,id=N]` → 回复指定消息，其余不可渲染的 CQ 段降级为纯文本并合并连续空白，之外走 `sendMessage`；④ `chat_member` / `my_chat_member` 成员变动归一化为 OneBot `notice`（`group_increase` / `group_decrease` / `group_admin`，被邀请 `sub_type=invite`），由既有事件 Matcher 消费；⑤ 轮询 offset 在处理单条更新后推进，单条处理失败仅记录并仍推进，避免失败更新无限重放
-- **`OneBotConnection`**（`bot/core/connection.py`）升级为实现 `PlatformAdapter` 契约的「onebot」平台，与原反向 WS 行为完全兼容，回复路由与附加平台共用同一发送映射
+- **`telegram.py`**：Telegram 平台实现——以 Bot API 长轮询（`getUpdates`）接入，由 `platforms.telegram.enabled/token/poll_interval` 控制；收到更新后归一化为 **OneBot 12 消息事件**并注入 `platform: "telegram"`。关键能力：① 群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 v12 `mention` 段（`user_id=self_id`）并置 `is_at_bot`，确保 at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；② `photo` / `image/*` document 归一化为 `image` 段（`file_id`）+ `images`，`voice` → `voice`、`video` / `video_note` → `video` 段，消息 `sub_type` 语义对齐 OneBot（私聊 `friend`）；③ 发送消费 OneBot 12 标准段——`image` → `sendPhoto`、`voice` → `sendVoice`、`video` → `sendVideo`（file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，caption 附着首条媒体），`reply` 段 → 回复指定消息，其余不可渲染的段降级为纯文本并合并连续空白，之外走 `sendMessage`；④ `chat_member` / `my_chat_member` 成员变动归一化为 OneBot `notice`（`group_member_increase` / `group_member_decrease` / `group_admin_set` / `group_admin_unset`，被邀请 `sub_type=invite`），由既有事件 Matcher 消费；⑤ 轮询 offset 在处理单条更新后推进，单条处理失败仅记录并仍推进，避免失败更新无限重放
+- **`OneBotConnection`**（`bot/core/connection.py`）作为「onebot」平台接入 OneBot 11 反向 WebSocket，收到 v11 事件先经 `v11_compat.v11_event_to_v12()` 翻译为 v12 事件再上报（同时保留 `platform`/兼容字段），与原反向 WS 行为兼容，回复路由与附加平台共用同一发送映射
 - 附加平台（Telegram）启动失败仅记录日志，不阻断主平台（OneBot）可用性
+
+### 事件模型（OneBot 12 内核）
+
+核心统一消费 **OneBot 12 事件模型**——事件以 `{type, detail_type, ...}` 标识（`message` / `notice` / `request` / `meta`），消息以标准 `{type, data}` 段数组表达，媒体统一用 `file_id` 引用。为兼顾存量 OneBot 11 输入与旧插件兼容，采用**双模归一化**：
+
+- **`bot/core/v11_compat.py`**：纯函数翻译 v11 事件 → v12 事件。`message_type` → `detail_type`、`raw_message` → `alt_message`、`post_type` → `type`，ID 字段字符串化；notice 按 `notice_type`+`sub_type` 细分（`group_increase` → `group_member_increase`、`group_admin`+`set` → `group_admin_set`、`group_ban`+`lift_ban` → `group_member_unban` 等），与 SDK 事件映射表对称。无法识别的事件类型原样返回（防御性，不丢事件）
+- **`MessageContext`**（SDK `context.py`）：`from_v12_event` 以 v12 事件构造上下文，保留 v11 兼容字段（`post_type` / `message_type` 由 v12 字段派生），`post_type`/`message_type`/`raw_message` 供存量插件继续读取；`segments` 统一存 v12 标准段
+- **消息段双向转换**（SDK `segments.py`）：`Message.from_raw` 嗅探段数组，v11 段（`at`/`at_all`/`record`/`face`/`forward`/`reply: id`）自动归一化为 v12（`mention`/`mention_all`/`voice`/`text`/`reply: message_id`）；`segments_to_v11`/`as_v11_segments()` 提供 v11 兼容视图
+- **类型化事件**（SDK `events.py`）：notice/request 解析同时接受 v11（`notice_type`）与 v12（`detail_type`）两种事件 dict，v12 `detail_type` 自动映射回 v11 命名空间，插件侧事件类（`GroupIncreaseNotice` 等）保持不变
 
 ### PluginManager（`bot/plugin/manager.py`）
 

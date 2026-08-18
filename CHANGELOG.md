@@ -5,6 +5,23 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — 1.8.0（OneBot 12 迁移）
+
+### Added
+- **OneBot 12 内核**：内部事件模型全面迁移为 OneBot 12——事件以 `type` / `detail_type` 标识（`message`/`notice`/`request`/`meta`），消息以标准 `{type, data}` 段数组表达（媒体统一 `file_id` 引用），为后续跨平台开发奠定统一基础
+- **SDK 消息段抽象（`segments.py`）**：新增 `SegmentType` 常量、`MessageSegment` 工厂（`text`/`mention`/`mention_all`/`image`/`voice`/`audio`/`video`/`file`/`reply`/`location`）、`Message` 容器（纯文本提取/双模嗅探），以及 v11↔v12 段双向转换（`normalize_v11_segment`/`to_v11_segment`/`segments_to_v11`/`segments_to_v12`）
+- **SDK 双模事件上下文（`context.py`）**：新增 `MessageContext.from_v12_event`，以 v12 事件构造上下文并派生 v11 兼容字段；`segments` 统一存 v12 标准段，`as_v11_segments()` 提供兼容视图
+- **SDK 双模类型化事件（`events.py`）**：notice/request 解析同时接受 v11（`notice_type`）与 v12（`detail_type`）事件 dict，v12 `detail_type` 自动映射回 v11 命名空间，插件侧事件类（`GroupIncreaseNotice` 等）保持不变
+- **v11 事件翻译层（`bot/core/v11_compat.py`）**：纯函数将 OneBot 11 事件翻译为 OneBot 12（`message_type`→`detail_type`、`raw_message`→`alt_message`、ID 字符串化；notice 按 `notice_type`+`sub_type` 细分），无法识别类型原样返回（防御性不丢事件）
+- **v11 适配器翻译接入**：`OneBotConnection`（aiocqhttp 反向 WS）收到 v11 事件先经 `v11_event_to_v12()` 归一化为 v12 再上报，核心只消费 v12 事件模型；对存量插件保留 `post_type`/`message_type`/`raw_message` 兼容字段
+- **Telegram 适配器 v12 化**：`telegram.py` 归一化为 OneBot 12 事件（`mention` 段而非 `at`、`voice` 段而非 `record`），发送直接消费 v12 段数组（`image`/`voice`/`video` 段映射 `sendPhoto`/`sendVoice`/`sendVideo`）；成员变动归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_set`/`group_admin_unset`
+- **测试事件构造器双模**：`bot/testing/events.py` 新增 `make_v12_message_event`/`make_v12_notice_event`/`make_v12_request_event`，与 v11 构造器并存，供迁移后核心路径测试使用
+- **OneBot 12 回复段判别修复**：`Message.from_raw` 对 reply 段按字段判别（`message_id`/`id`），避免 v12 reply 段被误归一化（修复方案 A 迁移中发现的关键兼容问题）
+
+### Changed
+- **消息发送兼容**：`send_msg`/`send_group_msg`/`send_private_msg`/`call_api` 的 `message` 参数统一接受纯文本 / v11 段数组 / v12 段数组；发往 OneBot-11 协议端时由 `segments_to_cq` 将 v12 段自动转 CQ 码（`mention`→`at`、`voice`→`record` 等）
+- **文档同步**：README / ARCHITECTURE / PLUGIN_DEV 全面更新——产品定位改为 OneBot 12 内核 + 多平台，架构图补充 v11_compat 翻译层与事件模型章节，插件开发指南推荐 SDK v12 消息段（v11/CQ 路径标注为平台专用）
+
 ## [1.7.0] - 2026-08-17
 
 ### Added

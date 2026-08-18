@@ -807,9 +807,11 @@ self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 | `ctx.args` | `str` | 命令参数 / 前缀后的剩余文本 |
 | `ctx.match` | `re.Match` | 正则匹配结果（`regex` 规则写入） |
 
-基础字段（同 MessageContext）：`raw_event` / `message_type` / `message_id` / `user_id` / `group_id` / `self_id` / `plain_text` / `raw_message` / `is_at_bot` / `at_list` / `images` / `sender` / `platform`
+基础字段（同 MessageContext）：`type` / `detail_type`（v12 事件类型与详细类型）/ `raw_event` / `message_type` / `message_id` / `user_id` / `group_id` / `self_id` / `plain_text` / `raw_message` / `segments`（v12 标准段数组）/ `is_at_bot` / `at_list` / `images` / `sender` / `platform`
 
-> **多平台说明**：`platform` 为来源平台标识（如 `"onebot"` / `"telegram"`），由适配器在事件入口归一化时注入。插件/命令无需感知来源平台——同一套 Matcher/Rule/Permission 逻辑自动适用于所有已接入平台；回复由框架按 `ctx.platform` 路由回对应适配器。默认（OneBot）环境下该字段为 `"onebot"`。
+> **多平台说明**：`platform` 为来源平台标识（如 `"onebot"` / `"telegram"`），由适配器在事件入口归一化为 OneBot 12 时注入。`type`/`detail_type` 为 v12 事件标识（如 `type="message", detail_type="private"`）；`post_type`/`message_type` 由 v12 字段派生，保留供存量插件读取。插件/命令无需感知来源平台——同一套 Matcher/Rule/Permission 逻辑基于统一事件模型自动适用于所有已接入平台；回复由框架按 `ctx.platform` 路由回对应适配器。默认（OneBot）环境下该字段为 `"onebot"`。
+>
+> **v12 消息段访问**：`ctx.segments` 为 OneBot 12 标准段数组（`{type, data}`，媒体用 `file_id`）；`ctx.message` 为 SDK `Message` 容器（`extract_plain_text()` / `mentions()` / `images()` / `first_reply()` / `as_dicts()` / `as_v11()`）；`ctx.as_v12_segments()` / `ctx.as_v11_segments()` 提供 v12/v11 视图。
 
 ### 注册方式
 
@@ -945,7 +947,8 @@ class ReminderPlugin(PluginBase):
 # plugins/welcome.py
 from bot.plugin.base import PluginBase
 from bot.plugin.matcher import on_notice, MatcherContext
-from bot.plugin.rule import Rule
+from qingci_plugin_sdk.events import GroupIncreaseNotice
+from qingci_plugin_sdk.segments import Message, MessageSegment
 
 
 class WelcomePlugin(PluginBase):
@@ -959,19 +962,17 @@ class WelcomePlugin(PluginBase):
     async def on_unload(self):
         pass
 
-    async def _on_group_increase(self, ctx: MatcherContext) -> None:
-        event = ctx.raw_event
-        if event.get("notice_type") == "group_increase":
-            group_id = event.get("group_id")
-            user_id = event.get("user_id")
-            await self.connection.call_api(
-                "send_group_msg",
-                {
-                    "group_id": group_id,
-                    "message": f"[CQ:at,qq={user_id}] 欢迎加入本群！",
-                },
-            )
+    async def _on_group_increase(self, ctx: MatcherContext, event: GroupIncreaseNotice) -> None:
+        """类型化通知事件注入：勿再手写 notice_type / detail_type 判断，直接读字段"""
+        msg = Message(
+            MessageSegment.mention(event.user_id),  # v12 mention 段（@ 新人）
+            MessageSegment.text(" 欢迎加入本群！"),
+        )
+        # send_group_msg 接受文本 / v11 段 / v12 段数组（此处传 v12 段，自动转 CQ 发送）
+        await self.connection.send_group_msg(event.group_id, msg.as_dicts())
 ```
+
+> 通知事件统一由 SDK 类型化（`GroupIncreaseNotice` 等，`typedef 事件` handler 参数注入即自动填充）。框架内核为 OneBot 12 事件模型，但 `send_group_msg`/`send_private_msg` 等便捷发送仍接受 v12 段数组并自动转为平台 CQ 码，插件无需关心 v11/v12 差异。
 
 ### 示例五：旧式 on_message（向后兼容，已弃用）
 
@@ -1056,11 +1057,13 @@ async def test_group_and_permission(bot):
 
 | 函数 | 说明 |
 |------|------|
-| `private_message(text, user_id=10001, at_bot=False)` | 私聊消息 |
-| `group_message(text, user_id=10001, group_id=20001, at_bot=False)` | 群聊消息 |
+| `private_message(text, user_id=10001, at_bot=False)` | 私聊消息（v11 段） |
+| `group_message(text, user_id=10001, group_id=20001, at_bot=False)` | 群聊消息（v11 段） |
 | `make_message_event(text, ...)` | 通用消息事件（支持 images、sender 等） |
 | `make_notice_event(notice_type, ...)` | 通知事件（如 `group_increase`） |
 | `make_request_event(request_type, ...)` | 请求事件（如 `friend` / `group`） |
+
+> OneBot 12 事件/测试构造器见 `make_v12_message_event` / `make_v12_notice_event` / `make_v12_request_event`（构造 `type`/`detail_type` 的 v12 事件，其中消息段为 v12 标准段：`mention`/`image(file_id)` 等）。两类事件均可被 Dispatcher 以双模归一化正确解析。
 
 **特性：**
 - 完整走 Dispatcher 调度链路（Matcher + 旧式 `on_message` 回退），与生产行为一致
@@ -1102,40 +1105,33 @@ async def weather_log(ctx: MatcherContext) -> None:
 > 内置插件中 admin（priority=1）先于 chat（priority=50）执行。
 > 外部插件开发者若此前依赖旧的"大者优先"实际顺序，请自查 priority 配置。
 
-### 消息构造（类型化 Message / CQ 码）
+### 消息构造（SDK 类型化消息段）
 
-**推荐使用类型化消息构造器**（`bot/core/message.py`），自动处理 CQ 码转义：
+**推荐使用 OneBot 12 标准消息段**（`qingci_plugin_sdk.segments`），媒体统一以 `file_id` 引用：
 
 ```python
-from bot.core.message import Message, MessageSegment
+from qingci_plugin_sdk.segments import Message, MessageSegment
 
-# 回复 + @ + 文本 + 图片 组合
+# 回复 + @ + 文本 + 图片 组合（OneBot 12 段）
 msg = Message(
     MessageSegment.reply(ctx.message_id),
-    MessageSegment.at(ctx.user_id),
+    MessageSegment.mention(ctx.user_id),
     MessageSegment.text("请看这张图："),
-    MessageSegment.image("https://example.com/img.png"),
+    MessageSegment.image("file_id_xxx"),
 )
-await self.connection.send_msg("group", ctx.group_id, str(msg))
+# as_dicts() 返回标准 v12 段数组，直接作为发送动作参数
+await self.connection.send_msg("group", ctx.group_id, msg.as_dicts())
 ```
 
-支持的消息段：`text` / `at` / `at_all` / `image` / `face` / `voice` / `video` / `reply` / `forward`。`Message.extract_plain_text()` 可提取纯文本。
+支持的标准消息段：`text` / `mention` / `mention_all` / `image` / `voice` / `audio` / `video` / `file` / `reply` / `location`。`Message.extract_plain_text()` 提取纯文本，`Message.from_raw()` 自动识别 v11/v12 段。
 
-**手动 CQ 码**（简单场景仍可用）：
-
-| CQ 码 | 说明 |
-|-------|------|
-| `[CQ:at,qq=123456]` | @ 某人 |
-| `[CQ:face,id=178]` | QQ 表情 |
-| `[CQ:image,file=https://example.com/img.png]` | 图片 |
-| `[CQ:reply,id=消息ID]` | 回复消息 |
-
-```python
-from bot.core.dispatcher import MessageDispatcher
-
-at_code = MessageDispatcher.build_cq_at(ctx.user_id)
-reply = f"{at_code} 收到！"
-```
+> **兼容说明**：发送接口（`send_msg` / `send_group_msg` / `send_private_msg` / `call_api` 的 `message` 参数）同时接受**纯文本字符串** / **v11 段数组** / **v12 段数组**。发往 OneBot-11 协议端时由 `bot/core/message.py` 的 `segments_to_cq` 将 v12 段自动转为 CQ 码（`mention`→`[CQ:at]`、`voice`→`[CQ:record]`、`reply`→`[CQ:reply]` 等）。`bot/core/message.py` 的旧 `Message`/`MessageSegment` 仅保留给 OneBot-11 平台路径，新插件请统一使用 SDK 段：
+>
+> ```python
+> # 兼容：sdk 段也可取 v11 视图（供旧平台/旧 API 使用）
+> from qingci_plugin_sdk.segments import segments_to_v11
+> v11_segments = segments_to_v11(ctx.message.segments)
+> ```
 
 ### 全局事件钩子（消息中间件）
 
