@@ -165,6 +165,10 @@ body::before {
   flex: 1;
   min-height: 0; /* 窗口较矮时允许收缩，内部滚动，避免把底部状态区挤出视口 */
   overflow-y: auto;
+  /* 显式禁用横向滚动：overflow-y:auto 会让 overflow-x 隐式为 auto，
+     导航项 hover 位移（translateX(2px)）溢出时会闪现横向滚动条，
+     滚动条出现/消失与 hover 状态形成反馈循环导致疯狂抽搐 */
+  overflow-x: hidden;
 }
 
 .sidebar a {
@@ -562,6 +566,7 @@ body::before {
   border-radius: var(--radius-xs);
   max-height: 108px; /* 平台较多时内部滚动，避免撑高侧边栏 */
   overflow-y: auto;
+  overflow-x: hidden; /* 同 .sidebar-nav：禁用隐式横向滚动，防 hover 反馈循环 */
 }
 .platform-row {
   display: flex;
