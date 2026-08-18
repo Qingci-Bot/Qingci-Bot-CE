@@ -435,7 +435,7 @@ class MessageDispatcher:
             bot.plugin_manager.record_metric(matcher, elapsed, is_error=is_error)
 
     def _parse_message(self, event: dict) -> MessageContext:
-        """解析 OneBot 11 消息事件（v11 兼容路径，M3 平台适配器迁移后移除）
+        """解析 OneBot 11 消息事件（v11 兼容路径，保留供测试与防御性兜底）
 
         消息段统一归一化为 OneBot 12 段存储（Message.from_raw 自动识别
         v11 段：at -> mention、record -> voice 等）；
