@@ -1,58 +1,61 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { useAppStore } from '../stores/app'
+import { computed, onMounted, ref } from 'vue';
+import { useAppStore } from '../stores/app';
 
-const store = useAppStore()
-const messageCount = ref(0)
-const usage = ref(null)
-const usageLoading = ref(false)
+const store = useAppStore();
+const messageCount = ref(0);
+const usage = ref(null);
+const usageLoading = ref(false);
 
 onMounted(async () => {
   try {
-    const data = await store.fetchMessageCount()
-    messageCount.value = data?.count || 0
+    const data = await store.fetchMessageCount();
+    messageCount.value = data?.count || 0;
   } catch (e) {
-    messageCount.value = 0
+    messageCount.value = 0;
   }
-  loadUsage()
-})
+  loadUsage();
+});
 
 async function loadUsage() {
-  usageLoading.value = true
+  usageLoading.value = true;
   try {
-    usage.value = await store.apiFetch('/api/log/usage?days=30')
+    usage.value = await store.apiFetch('/api/log/usage?days=30');
   } catch (e) {
-    usage.value = null
+    usage.value = null;
   } finally {
-    usageLoading.value = false
+    usageLoading.value = false;
   }
 }
 
-const usageDaily = computed(() => usage.value?.daily || [])
-const usageSummary = computed(() => usage.value?.summary || { calls: 0, total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 })
-const maxTokens = computed(() => Math.max(1, ...usageDaily.value.map(d => d.total_tokens || 0)))
+const usageDaily = computed(() => usage.value?.daily || []);
+const usageSummary = computed(
+  () =>
+    usage.value?.summary || { calls: 0, total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 },
+);
+const maxTokens = computed(() => Math.max(1, ...usageDaily.value.map((d) => d.total_tokens || 0)));
 
 function formatNum(n) {
-  return (n || 0).toLocaleString('zh-CN')
+  return (n || 0).toLocaleString('zh-CN');
 }
 
 function barHeight(d) {
-  return `${Math.max(2, Math.round(((d.total_tokens || 0) / maxTokens.value) * 120))}px`
+  return `${Math.max(2, Math.round(((d.total_tokens || 0) / maxTokens.value) * 120))}px`;
 }
 
 function barTitle(d) {
-  return `${d.date}\n总 token：${formatNum(d.total_tokens)}（prompt ${formatNum(d.prompt_tokens)} / completion ${formatNum(d.completion_tokens)}）\n调用次数：${formatNum(d.calls)}`
+  return `${d.date}\n总 token：${formatNum(d.total_tokens)}（prompt ${formatNum(d.prompt_tokens)} / completion ${formatNum(d.completion_tokens)}）\n调用次数：${formatNum(d.calls)}`;
 }
 
 function showLabel(index) {
-  return index % 5 === 0 || index === usageDaily.value.length - 1
+  return index % 5 === 0 || index === usageDaily.value.length - 1;
 }
 
 const triggerDesc = {
   always: '所有消息都回复',
   at: '被 @ 时回复',
   keyword: '触发关键词时回复',
-}
+};
 </script>
 
 <template>
@@ -98,16 +101,23 @@ const triggerDesc = {
           <span style="display: inline-block" :class="{ spin: usageLoading }">↻</span> 刷新
         </button>
       </div>
-      <div v-if="usage" class="grid grid-2" style="margin-bottom: 18px;">
+      <div v-if="usage" class="grid grid-2" style="margin-bottom: 18px">
         <div class="stat-card">
           <div class="stat-label">总调用次数</div>
-          <div class="stat-value" style="color: var(--blue);">{{ formatNum(usageSummary.calls) }}</div>
+          <div class="stat-value" style="color: var(--blue)">
+            {{ formatNum(usageSummary.calls) }}
+          </div>
           <div class="stat-desc">近 {{ usage.days || 30 }} 天 LLM 调用总数</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">总 Token 用量</div>
-          <div class="stat-value" style="color: var(--accent);">{{ formatNum(usageSummary.total_tokens) }}</div>
-          <div class="stat-desc">prompt {{ formatNum(usageSummary.prompt_tokens) }} · completion {{ formatNum(usageSummary.completion_tokens) }}</div>
+          <div class="stat-value" style="color: var(--accent)">
+            {{ formatNum(usageSummary.total_tokens) }}
+          </div>
+          <div class="stat-desc">
+            prompt {{ formatNum(usageSummary.prompt_tokens) }} · completion
+            {{ formatNum(usageSummary.completion_tokens) }}
+          </div>
         </div>
       </div>
       <div v-if="usage && usageDaily.length === 0" class="empty-state">
@@ -115,13 +125,8 @@ const triggerDesc = {
         <div>近 30 天暂无用量数据</div>
       </div>
       <div v-else-if="usage" class="usage-chart">
-        <div
-          v-for="(d, i) in usageDaily"
-          :key="d.date"
-          class="usage-bar-wrap"
-          :title="barTitle(d)"
-        >
-          <div class="usage-bar" :style="{ height: barHeight(d) }"></div>
+        <div v-for="(d, i) in usageDaily" :key="d.date" class="usage-bar-wrap" :title="barTitle(d)">
+          <div class="usage-bar" :style="{ height: barHeight(d) }" />
           <div class="usage-date">{{ showLabel(i) ? d.date.slice(5) : '' }}</div>
         </div>
       </div>
@@ -136,24 +141,41 @@ const triggerDesc = {
         <div class="card-header">
           <div class="card-title">快捷操作</div>
         </div>
-        <div class="action-bar" style="margin-bottom: 18px;">
-          <button v-if="!store.botRunning" class="btn btn-success btn-sm" :disabled="store.loading" @click="store.startBot">
+        <div class="action-bar" style="margin-bottom: 18px">
+          <button
+            v-if="!store.botRunning"
+            class="btn btn-success btn-sm"
+            :disabled="store.loading"
+            @click="store.startBot"
+          >
             <span>▶</span> 启动 Bot
           </button>
-          <button v-else class="btn btn-danger btn-sm" :disabled="store.loading" @click="store.stopBot">
+          <button
+            v-else
+            class="btn btn-danger btn-sm"
+            :disabled="store.loading"
+            @click="store.stopBot"
+          >
             <span>■</span> 停止 Bot
           </button>
-          <button class="btn btn-secondary btn-sm" :disabled="store.loading || !store.botRunning" @click="store.restartBot">
+          <button
+            class="btn btn-secondary btn-sm"
+            :disabled="store.loading || !store.botRunning"
+            @click="store.restartBot"
+          >
             <span style="display: inline-block" :class="{ spin: store.loading }">↻</span> 重启 Bot
           </button>
         </div>
         <div class="hint-text">
           <template v-if="(store.currentInstance?.platform || 'onebot') === 'onebot'">
-            <strong>OneBot 反向 WS 地址：</strong>ws://{{ store.config.onebot?.host || '127.0.0.1' }}:{{ store.config.onebot?.port || 3001 }}<br>
-            当前实例平台为 <strong>OneBot</strong>；请在协议端（如 LLBot / NapCat）中添加该反向 WebSocket 连接。
+            <strong>OneBot 反向 WS 地址：</strong>ws://{{
+              store.config.onebot?.host || '127.0.0.1'
+            }}:{{ store.config.onebot?.port || 3001 }}<br />
+            当前实例平台为 <strong>OneBot</strong>；请在协议端（如 LLBot / NapCat）中添加该反向
+            WebSocket 连接。
           </template>
           <template v-else>
-            <strong>当前实例平台：</strong>{{ store.currentInstance?.platform }}<br>
+            <strong>当前实例平台：</strong>{{ store.currentInstance?.platform }}<br />
             该实例未启用 OneBot 反向 WS，请前往「系统设置」配置对应平台适配器。
           </template>
         </div>
@@ -172,7 +194,7 @@ const triggerDesc = {
             <div class="plugin-info">
               <div class="name">
                 {{ plugin.name }}
-                <span class="tag tag-accent" style="margin-left: 8px;">{{ plugin.version }}</span>
+                <span class="tag tag-accent" style="margin-left: 8px">{{ plugin.version }}</span>
               </div>
               <div class="desc">{{ plugin.description || '无描述' }}</div>
             </div>
@@ -187,17 +209,26 @@ const triggerDesc = {
       </div>
       <div class="grid grid-3">
         <div>
-          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">触发模式</div>
-          <div style="font-weight: 600;">{{ triggerDesc[store.config.bot?.trigger_mode] || store.config.bot?.trigger_mode || '-' }}</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px">触发模式</div>
+          <div style="font-weight: 600">
+            {{
+              triggerDesc[store.config.bot?.trigger_mode] || store.config.bot?.trigger_mode || '-'
+            }}
+          </div>
         </div>
         <div>
-          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">API 地址</div>
-          <div style="font-weight: 600; font-size: 13px;">{{ store.config.llm?.api_url || '-' }}</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px">API 地址</div>
+          <div style="font-weight: 600; font-size: 13px">
+            {{ store.config.llm?.api_url || '-' }}
+          </div>
         </div>
         <div>
-          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">系统提示词</div>
-          <div style="font-weight: 600; font-size: 13px; color: var(--text-secondary);">
-            {{ store.config.llm?.system_prompt?.slice(0, 40) || '-' }}{{ (store.config.llm?.system_prompt?.length || 0) > 40 ? '...' : '' }}
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px">
+            系统提示词
+          </div>
+          <div style="font-weight: 600; font-size: 13px; color: var(--text-secondary)">
+            {{ store.config.llm?.system_prompt?.slice(0, 40) || '-'
+            }}{{ (store.config.llm?.system_prompt?.length || 0) > 40 ? '...' : '' }}
           </div>
         </div>
       </div>

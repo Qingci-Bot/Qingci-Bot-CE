@@ -104,7 +104,7 @@ function onRename(inst) {
       </div>
       <div v-if="activeInstance" class="active-instance-card">
         <div class="active-instance-row">
-          <span class="status-dot green"></span>
+          <span class="status-dot green" />
           <span class="active-instance-name">{{ activeInstance.name }}</span>
           <span class="instance-badge">{{ platformLabel(activeInstance.platform) }}</span>
           <span class="active-instance-running">运行中</span>
@@ -181,7 +181,7 @@ function onRename(inst) {
             :class="{ 'row-active': inst.running }"
           >
             <td>
-              <span class="status-dot" :class="inst.running ? 'green' : 'gray'"></span>
+              <span class="status-dot" :class="inst.running ? 'green' : 'gray'" />
               <span class="status-label">{{ inst.running ? '运行中' : '已停止' }}</span>
             </td>
             <td class="td-name">{{ inst.name }}</td>

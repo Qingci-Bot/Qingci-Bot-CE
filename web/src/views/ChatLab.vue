@@ -1,120 +1,119 @@
 <script setup>
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { useAppStore } from '../stores/app'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { useAppStore } from '../stores/app';
 
-const store = useAppStore()
+const store = useAppStore();
 
 // 调试会话固定 user_id（与后端 /api/ws/chat 默认值一致，避免污染真实对话）
-const DEBUG_USER_ID = 900000001
+const DEBUG_USER_ID = 900000001;
 
-const messages = ref([])  // { role: 'user'|'assistant'|'error', text, streaming }
-const input = ref('')
-const wsConnected = ref(false)
-const streaming = ref(false)
-const chatBox = ref(null)
-let socket = null
-let reconnectTimer = null
-let shouldReconnect = true
+const messages = ref([]); // { role: 'user'|'assistant'|'error', text, streaming }
+const input = ref('');
+const wsConnected = ref(false);
+const streaming = ref(false);
+const chatBox = ref(null);
+let socket = null;
+let reconnectTimer = null;
+let shouldReconnect = true;
 
 onMounted(() => {
-  connect()
-})
+  connect();
+});
 onUnmounted(() => {
-  shouldReconnect = false
-  if (reconnectTimer) clearTimeout(reconnectTimer)
-  if (socket) socket.close()
-})
+  shouldReconnect = false;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  if (socket) socket.close();
+});
 
 function connect() {
-  if (!shouldReconnect) return
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const token = store.getApiKey() || ''
-  const protocols = token ? [`api-key.${token}`] : []
-  socket = new WebSocket(`${proto}//${location.host}/api/ws/chat`, protocols)
+  if (!shouldReconnect) return;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const token = store.getApiKey() || '';
+  const protocols = token ? [`api-key.${token}`] : [];
+  socket = new WebSocket(`${proto}//${location.host}/api/ws/chat`, protocols);
   socket.onopen = () => {
-    wsConnected.value = true
+    wsConnected.value = true;
     if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
     }
-  }
+  };
   socket.onclose = () => {
-    wsConnected.value = false
-    streaming.value = false
+    wsConnected.value = false;
+    streaming.value = false;
     // 正在流式时断开视为停止
-    const last = messages.value[messages.value.length - 1]
-    if (last) last.streaming = false
+    const last = messages.value[messages.value.length - 1];
+    if (last) last.streaming = false;
     if (shouldReconnect) {
-      reconnectTimer = setTimeout(connect, 3000)
+      reconnectTimer = setTimeout(connect, 3000);
     }
-  }
+  };
   socket.onmessage = (event) => {
-    let data
+    let data;
     try {
-      data = JSON.parse(event.data)
+      data = JSON.parse(event.data);
     } catch (e) {
-      return
+      return;
     }
     if (data.type === 'delta') {
-      const last = messages.value[messages.value.length - 1]
+      const last = messages.value[messages.value.length - 1];
       if (last && last.role === 'assistant' && last.streaming) {
-        last.text += data.text
+        last.text += data.text;
       } else {
-        messages.value.push({ role: 'assistant', text: data.text, streaming: true })
+        messages.value.push({ role: 'assistant', text: data.text, streaming: true });
       }
-      scrollDown()
+      scrollDown();
     } else if (data.type === 'done') {
-      const last = messages.value[messages.value.length - 1]
-      if (last) last.streaming = false
-      streaming.value = false
+      const last = messages.value[messages.value.length - 1];
+      if (last) last.streaming = false;
+      streaming.value = false;
     } else if (data.type === 'error') {
-      const last = messages.value[messages.value.length - 1]
+      const last = messages.value[messages.value.length - 1];
       if (last && last.streaming) {
-        last.text += `\n\n[错误] ${data.text}`
-        last.streaming = false
+        last.text += `\n\n[错误] ${data.text}`;
+        last.streaming = false;
       } else {
-        messages.value.push({ role: 'error', text: data.text, streaming: false })
+        messages.value.push({ role: 'error', text: data.text, streaming: false });
       }
-      streaming.value = false
+      streaming.value = false;
     }
-  }
+  };
 }
 
 function send() {
-  const text = input.value.trim()
-  if (!text || streaming.value || !socket || socket.readyState !== WebSocket.OPEN) return
-  messages.value.push({ role: 'user', text, streaming: false })
-  messages.value.push({ role: 'assistant', text: '', streaming: true })
-  streaming.value = true
-  socket.send(JSON.stringify({ message: text, user_id: DEBUG_USER_ID }))
-  input.value = ''
-  scrollDown()
+  const text = input.value.trim();
+  if (!text || streaming.value || !socket || socket.readyState !== WebSocket.OPEN) return;
+  messages.value.push({ role: 'user', text, streaming: false });
+  messages.value.push({ role: 'assistant', text: '', streaming: true });
+  streaming.value = true;
+  socket.send(JSON.stringify({ message: text, user_id: DEBUG_USER_ID }));
+  input.value = '';
+  scrollDown();
 }
 
 function stop() {
-  streaming.value = false
-  const last = messages.value[messages.value.length - 1]
-  if (last) last.streaming = false
-  if (socket) socket.close()
+  streaming.value = false;
+  const last = messages.value[messages.value.length - 1];
+  if (last) last.streaming = false;
+  if (socket) socket.close();
 }
 
 async function clearSession() {
-  if (!window.confirm('清空当前调试会话的历史记录？')) return
-  messages.value = []
+  if (!window.confirm('清空当前调试会话的历史记录？')) return;
+  messages.value = [];
   try {
-    await store.apiFetch(
-      `/api/log/sessions/one?key=private:${DEBUG_USER_ID}`,
-      { method: 'DELETE' },
-    )
+    await store.apiFetch(`/api/log/sessions/one?key=private:${DEBUG_USER_ID}`, {
+      method: 'DELETE',
+    });
   } catch (e) {
-    console.warn('清空调试会话失败:', e)
+    console.warn('清空调试会话失败:', e);
   }
 }
 
 function scrollDown() {
   nextTick(() => {
-    if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight
-  })
+    if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
+  });
 }
 </script>
 
@@ -134,25 +133,28 @@ function scrollDown() {
           </span>
         </div>
         <div class="action-bar">
-          <button class="btn btn-secondary btn-sm" :disabled="!messages.length" @click="clearSession">清空会话</button>
+          <button
+            class="btn btn-secondary btn-sm"
+            :disabled="!messages.length"
+            @click="clearSession"
+          >
+            清空会话
+          </button>
         </div>
       </div>
 
       <div ref="chatBox" class="chat-box">
-        <div v-if="messages.length === 0" class="empty-state" style="padding: 40px;">
+        <div v-if="messages.length === 0" class="empty-state" style="padding: 40px">
           <div class="icon">◉</div>
           <div>发送消息开始调试对话</div>
-          <div class="hint-text" style="margin-top: 8px;">
+          <div class="hint-text" style="margin-top: 8px">
             调试会话独立于平台真实对话（private:900000001），流式输出与 Bot 实机行为一致。
           </div>
         </div>
-        <div
-          v-for="(m, i) in messages"
-          :key="i"
-          class="chat-msg"
-          :class="m.role"
-        >
-          <span class="chat-label">{{ m.role === 'user' ? '我' : m.role === 'error' ? '错误' : 'Bot' }}</span>
+        <div v-for="(m, i) in messages" :key="i" class="chat-msg" :class="m.role">
+          <span class="chat-label">{{
+            m.role === 'user' ? '我' : m.role === 'error' ? '错误' : 'Bot'
+          }}</span>
           <div class="chat-bubble">
             {{ m.text }}
             <span v-if="m.streaming" class="cursor">▋</span>
@@ -165,23 +167,30 @@ function scrollDown() {
           v-model="input"
           type="text"
           placeholder="输入消息，Enter 发送（支持流式回复）"
-          @keyup.enter="send"
           :disabled="!wsConnected"
+          @keyup.enter="send"
+        />
+        <button
+          class="btn btn-secondary btn-sm"
+          :disabled="streaming || !wsConnected"
+          @click="send"
         >
-        <button class="btn btn-secondary btn-sm" :disabled="streaming || !wsConnected" @click="send">
           发送
         </button>
-        <button v-if="streaming" class="btn btn-danger btn-sm" @click="stop">
-          停止
-        </button>
+        <button v-if="streaming" class="btn btn-danger btn-sm" @click="stop">停止</button>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.tag-status { margin-left: 10px; }
-.chat-page { flex: 1; display: flex; }
+.tag-status {
+  margin-left: 10px;
+}
+.chat-page {
+  flex: 1;
+  display: flex;
+}
 .chat-card {
   flex: 1;
   display: flex;
@@ -209,8 +218,13 @@ function scrollDown() {
   gap: 10px;
   max-width: 85%;
 }
-.chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
-.chat-msg.error { align-self: center; }
+.chat-msg.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.chat-msg.error {
+  align-self: center;
+}
 
 .chat-label {
   font-size: 12px;
@@ -249,7 +263,9 @@ function scrollDown() {
   color: var(--accent);
 }
 @keyframes blink {
-  50% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
 }
 
 .chat-input-bar {

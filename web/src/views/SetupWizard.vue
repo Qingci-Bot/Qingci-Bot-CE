@@ -1,18 +1,18 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { invalidateWizardStatusCache } from '../router'
+import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
+import { invalidateWizardStatusCache } from '../router';
 
-const router = useRouter()
+const router = useRouter();
 
-const step = ref(1)
-const totalSteps = 3
-const loading = ref(false)
-const error = ref('')
-const testResult = ref(null)
+const step = ref(1);
+const totalSteps = 3;
+const loading = ref(false);
+const error = ref('');
+const testResult = ref(null);
 
 // Step 1: Provider
-const provider = ref('deepseek')
+const provider = ref('deepseek');
 const providers = [
   { value: 'deepseek', label: 'DeepSeek', desc: '国产高性价比，推荐' },
   { value: 'openai', label: 'OpenAI', desc: 'GPT 系列模型' },
@@ -21,74 +21,74 @@ const providers = [
   { value: 'claude', label: 'Claude', desc: 'Anthropic 系列模型' },
   { value: 'gemini', label: 'Gemini', desc: 'Google 系列模型' },
   { value: 'custom', label: '自定义', desc: '任意 OpenAI 兼容 API' },
-]
+];
 
 // Step 2: API Key
-const apiKey = ref('')
-const apiUrl = ref('')
-const model = ref('')
+const apiKey = ref('');
+const apiUrl = ref('');
+const model = ref('');
 
 // Step 3: Admin
-const adminId = ref('')
-const onebotPort = ref('3001')
+const adminId = ref('');
+const onebotPort = ref('3001');
 
 function nextStep() {
-  if (step.value === 1 && !provider.value) return
+  if (step.value === 1 && !provider.value) return;
   if (step.value === 2) {
     if (provider.value !== 'ollama' && !apiKey.value.trim()) {
-      error.value = '请填写 API Key'
-      return
+      error.value = '请填写 API Key';
+      return;
     }
   }
-  error.value = ''
+  error.value = '';
   if (step.value < totalSteps) {
-    step.value++
+    step.value++;
   }
 }
 
 function prevStep() {
   if (step.value > 1) {
-    step.value--
-    error.value = ''
+    step.value--;
+    error.value = '';
   }
 }
 
 function onProviderChange() {
-  error.value = ''
-  testResult.value = null
+  error.value = '';
+  testResult.value = null;
 }
 
 async function testConnection() {
-  loading.value = true
-  error.value = ''
-  testResult.value = null
+  loading.value = true;
+  error.value = '';
+  testResult.value = null;
   try {
-    const body = { provider: provider.value }
-    if (apiKey.value.trim()) body.api_key = apiKey.value.trim()
-    if (apiUrl.value.trim()) body.api_url = apiUrl.value.trim()
-    if (model.value.trim()) body.model = model.value.trim()
+    const body = { provider: provider.value };
+    if (apiKey.value.trim()) body.api_key = apiKey.value.trim();
+    if (apiUrl.value.trim()) body.api_url = apiUrl.value.trim();
+    if (model.value.trim()) body.model = model.value.trim();
 
     const res = await fetch('/api/config/llm/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    })
-    const data = await res.json()
+    });
+    const data = await res.json();
     if (res.ok && data.available) {
-      testResult.value = { ok: true, msg: '连接成功' }
+      testResult.value = { ok: true, msg: '连接成功' };
     } else {
-      testResult.value = { ok: false, msg: data.message || data.detail || '连接失败' }
+      testResult.value = { ok: false, msg: data.message || data.detail || '连接失败' };
     }
   } catch (e) {
-    testResult.value = { ok: false, msg: '网络错误: ' + e.message }
+    testResult.value = { ok: false, msg: '网络错误: ' + e.message };
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function completeSetup() {
-  loading.value = true
-  error.value = ''
+  loading.value = true;
+  error.value = '';
   try {
     const body = {
       provider: provider.value,
@@ -97,52 +97,52 @@ async function completeSetup() {
       model: model.value.trim() || undefined,
       admin_qq: adminId.value.trim() || undefined,
       onebot_port: onebotPort.value.trim() || undefined,
-    }
+    };
     const res = await fetch('/api/config/wizard', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    })
-    const data = await res.json()
+    });
+    const data = await res.json();
     if (!res.ok) {
-      error.value = data.detail || '配置失败'
-      loading.value = false
-      return
+      error.value = data.detail || '配置失败';
+      loading.value = false;
+      return;
     }
     // 配置完成，跳转首页
-    invalidateWizardStatusCache()
-    router.push('/')
+    invalidateWizardStatusCache();
+    router.push('/');
   } catch (e) {
-    error.value = '网络错误: ' + e.message
-    loading.value = false
+    error.value = '网络错误: ' + e.message;
+    loading.value = false;
   }
 }
 
 async function skipSetup() {
-  loading.value = true
-  error.value = ''
+  loading.value = true;
+  error.value = '';
   try {
-    const res = await fetch('/api/config/wizard/skip', { method: 'POST' })
+    const res = await fetch('/api/config/wizard/skip', { method: 'POST' });
     if (!res.ok) {
-      const data = await res.json()
-      error.value = data.detail || '跳过失败'
-      loading.value = false
-      return
+      const data = await res.json();
+      error.value = data.detail || '跳过失败';
+      loading.value = false;
+      return;
     }
-    invalidateWizardStatusCache()
-    router.push('/')
+    invalidateWizardStatusCache();
+    router.push('/');
   } catch (e) {
-    error.value = '网络错误: ' + e.message
-    loading.value = false
+    error.value = '网络错误: ' + e.message;
+    loading.value = false;
   }
 }
 
 const canTest = computed(() => {
-  if (provider.value === 'ollama') return true
-  return apiKey.value.trim().length > 0
-})
+  if (provider.value === 'ollama') return true;
+  return apiKey.value.trim().length > 0;
+});
 
-const progressPercent = computed(() => Math.round((step.value / totalSteps) * 100))
+const progressPercent = computed(() => Math.round((step.value / totalSteps) * 100));
 </script>
 
 <template>
@@ -153,7 +153,7 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
         <div class="wizard-subtitle">首次配置引导</div>
         <div class="wizard-progress">
           <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+            <div class="progress-fill" :style="{ width: progressPercent + '%' }" />
           </div>
           <div class="progress-text">步骤 {{ step }} / {{ totalSteps }}</div>
         </div>
@@ -169,7 +169,10 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
             :key="p.value"
             class="provider-card"
             :class="{ selected: provider === p.value }"
-            @click="provider = p.value; onProviderChange()"
+            @click="
+              provider = p.value;
+              onProviderChange();
+            "
           >
             <div class="provider-name">{{ p.label }}</div>
             <div class="provider-desc">{{ p.desc }}</div>
@@ -181,7 +184,11 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
       <div v-if="step === 2" class="wizard-step fade-in">
         <div class="step-title">配置 API 连接</div>
         <div class="step-desc">
-          {{ provider === 'ollama' ? 'Ollama 本地服务无需 API Key，确认地址后可直接测试连接' : '填写你的 API Key 以连接模型服务' }}
+          {{
+            provider === 'ollama'
+              ? 'Ollama 本地服务无需 API Key，确认地址后可直接测试连接'
+              : '填写你的 API Key 以连接模型服务'
+          }}
         </div>
 
         <div v-if="provider !== 'ollama'" class="form-group">
@@ -196,7 +203,9 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
         </div>
 
         <div class="form-group">
-          <label class="form-label">API 地址 <span class="optional">(可选，默认使用官方地址)</span></label>
+          <label class="form-label"
+            >API 地址 <span class="optional">(可选，默认使用官方地址)</span></label
+          >
           <input
             v-model="apiUrl"
             type="text"
@@ -206,7 +215,9 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
         </div>
 
         <div class="form-group">
-          <label class="form-label">模型名称 <span class="optional">(可选，默认使用推荐模型)</span></label>
+          <label class="form-label"
+            >模型名称 <span class="optional">(可选，默认使用推荐模型)</span></label
+          >
           <input
             v-model="model"
             type="text"
@@ -216,12 +227,20 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
         </div>
 
         <div class="test-section">
-          <button class="btn btn-secondary btn-sm" :disabled="loading || !canTest" @click="testConnection">
+          <button
+            class="btn btn-secondary btn-sm"
+            :disabled="loading || !canTest"
+            @click="testConnection"
+          >
             <span v-if="loading" class="spin">↻</span>
             <span v-else>⚡</span>
             测试连接
           </button>
-          <span v-if="testResult" class="test-result" :class="{ ok: testResult.ok, fail: !testResult.ok }">
+          <span
+            v-if="testResult"
+            class="test-result"
+            :class="{ ok: testResult.ok, fail: !testResult.ok }"
+          >
             {{ testResult.ok ? '✓' : '✗' }} {{ testResult.msg }}
           </span>
         </div>
@@ -233,36 +252,30 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
         <div class="step-desc">设置管理员信息与 OneBot 端口</div>
 
         <div class="form-group">
-          <label class="form-label">超级管理员 ID <span class="optional">(可选，唯一，拥有全部权限)</span></label>
-          <input
-            v-model="adminId"
-            type="text"
-            class="form-input"
-            placeholder="例如：user_001"
-          />
+          <label class="form-label"
+            >超级管理员 ID <span class="optional">(可选，唯一，拥有全部权限)</span></label
+          >
+          <input v-model="adminId" type="text" class="form-input" placeholder="例如：user_001" />
         </div>
 
         <div class="form-group">
-          <label class="form-label">OneBot 端口 <span class="optional">(协议端连接 ws://127.0.0.1:此端口/ws)</span></label>
-          <input
-            v-model="onebotPort"
-            type="text"
-            class="form-input"
-            placeholder="3001"
-          />
+          <label class="form-label"
+            >OneBot 端口 <span class="optional">(协议端连接 ws://127.0.0.1:此端口/ws)</span></label
+          >
+          <input v-model="onebotPort" type="text" class="form-input" placeholder="3001" />
         </div>
 
         <div class="summary-card">
           <div class="summary-title">配置摘要</div>
           <div class="summary-row">
             <span>提供商</span>
-            <span>{{ providers.find(p => p.value === provider)?.label || provider }}</span>
+            <span>{{ providers.find((p) => p.value === provider)?.label || provider }}</span>
           </div>
           <div class="summary-row">
             <span>API Key</span>
             <span>{{ apiKey ? '****' + apiKey.slice(-4) : '(未填写)' }}</span>
           </div>
-          <div class="summary-row" v-if="adminId">
+          <div v-if="adminId" class="summary-row">
             <span>超级管理员 ID</span>
             <span>{{ adminId }}</span>
           </div>
@@ -280,20 +293,9 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
       <div class="wizard-nav">
         <button v-if="step > 1" class="btn btn-secondary" @click="prevStep">上一步</button>
         <button v-else class="btn btn-ghost" :disabled="loading" @click="skipSetup">跳过</button>
-        <div class="spacer"></div>
-        <button
-          v-if="step < totalSteps"
-          class="btn btn-primary"
-          @click="nextStep"
-        >
-          下一步
-        </button>
-        <button
-          v-else
-          class="btn btn-accent"
-          :disabled="loading"
-          @click="completeSetup"
-        >
+        <div class="spacer" />
+        <button v-if="step < totalSteps" class="btn btn-primary" @click="nextStep">下一步</button>
+        <button v-else class="btn btn-accent" :disabled="loading" @click="completeSetup">
           <span v-if="loading" class="spin">↻</span>
           完成配置
         </button>
@@ -589,8 +591,12 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .fade-in {
@@ -598,7 +604,13 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

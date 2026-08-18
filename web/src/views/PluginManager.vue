@@ -1,123 +1,137 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useAppStore } from '../stores/app'
-import { useToast } from '../composables/useToast'
+import { ref, computed, onMounted } from 'vue';
+import { useAppStore } from '../stores/app';
+import { useToast } from '../composables/useToast';
 
-const store = useAppStore()
-const { showToast } = useToast()
-const modulePath = ref('')
-const loading = ref('')
-const activeCategory = ref('all')
-const expandedMetrics = ref('')
-const activeTab = ref('plugins')  // 'plugins' | 'commands' | 'market'
+const store = useAppStore();
+const { showToast } = useToast();
+const modulePath = ref('');
+const loading = ref('');
+const activeCategory = ref('all');
+const expandedMetrics = ref('');
+const activeTab = ref('plugins'); // 'plugins' | 'commands' | 'market'
 
 // 插件市场
-const market = ref([])
-const marketInfo = ref(null)
-const marketLoading = ref(false)
-const marketSearch = ref('')
-const marketTag = ref('all')
-const marketAction = ref('')  // 'install:name' | 'update:name' | 'refresh' | 'uninstall:name'
-const marketError = ref('')
-const marketSource = ref('')        // 当前市场源
-const marketDefaultSource = ref('') // 官方默认市场源
-const marketSourceInput = ref('')   // 自定义源输入框
-const showSourcePanel = ref(false)
-const sourceSaving = ref(false)
+const market = ref([]);
+const marketInfo = ref(null);
+const marketLoading = ref(false);
+const marketSearch = ref('');
+const marketTag = ref('all');
+const marketAction = ref(''); // 'install:name' | 'update:name' | 'refresh' | 'uninstall:name'
+const marketError = ref('');
+const marketSource = ref(''); // 当前市场源
+const marketDefaultSource = ref(''); // 官方默认市场源
+const marketSourceInput = ref(''); // 自定义源输入框
+const showSourcePanel = ref(false);
+const sourceSaving = ref(false);
 
 // 命令管理
-const commands = ref([])
-const commandLoading = ref('')
+const commands = ref([]);
+const commandLoading = ref('');
 
 // 插件管理页面抽屉
-const drawerOpen = ref(false)
-const drawerPlugin = ref(null)
-const drawerPage = ref(null)
+const drawerOpen = ref(false);
+const drawerPlugin = ref(null);
+const drawerPage = ref(null);
 
 // 插件配置抽屉（JSON Schema 自动生成表单）
-const configOpen = ref(false)
-const configPlugin = ref(null)
-const configSchema = ref(null)
-const configValues = ref({})
-const configSaving = ref(false)
-const configLoading = ref(false)
+const configOpen = ref(false);
+const configPlugin = ref(null);
+const configSchema = ref(null);
+const configValues = ref({});
+const configSaving = ref(false);
+const configLoading = ref(false);
 
 onMounted(() => {
-  store.fetchStatus()
-})
+  store.fetchStatus();
+});
 
 const categories = computed(() => {
-  const cats = new Set(store.plugins.map(p => p.category || '未分类'))
-  return ['all', ...Array.from(cats).sort()]
-})
+  const cats = new Set(store.plugins.map((p) => p.category || '未分类'));
+  return ['all', ...Array.from(cats).sort()];
+});
 
 const filteredPlugins = computed(() => {
-  if (activeCategory.value === 'all') return store.plugins
-  return store.plugins.filter(p => (p.category || '未分类') === activeCategory.value)
-})
+  if (activeCategory.value === 'all') return store.plugins;
+  return store.plugins.filter((p) => (p.category || '未分类') === activeCategory.value);
+});
 
 const drawerUrl = computed(() => {
-  if (!drawerPlugin.value) return ''
-  return `/api/plugin-data/${drawerPlugin.value.name}/`
-})
+  if (!drawerPlugin.value) return '';
+  return `/api/plugin-data/${drawerPlugin.value.name}/`;
+});
 
-const statusLabel = (s) => ({ loading: '加载中', loaded: '已加载', disabled: '已禁用', error: '错误', unloading: '卸载中' }[s] || s)
-const statusClass = (s) => ({ loaded: 'green', loading: 'yellow', disabled: 'gray', error: 'red', unloading: 'yellow' }[s] || 'gray')
+const statusLabel = (s) =>
+  ({ loading: '加载中', loaded: '已加载', disabled: '已禁用', error: '错误', unloading: '卸载中' })[
+    s
+  ] || s;
+const statusClass = (s) =>
+  ({ loaded: 'green', loading: 'yellow', disabled: 'gray', error: 'red', unloading: 'yellow' })[
+    s
+  ] || 'gray';
 
 // 权限等级中文映射（含组合标签，如 "(SUPERUSER & PRIVATE)"）
-const permZh = { SUPERUSER: '超级管理员', ADMIN: '管理员', EVERYONE: '所有人', MEMBER: '群成员', PRIVATE: '私聊', GROUP: '群聊', CUSTOM: '自定义' }
+const permZh = {
+  SUPERUSER: '超级管理员',
+  ADMIN: '管理员',
+  EVERYONE: '所有人',
+  MEMBER: '群成员',
+  PRIVATE: '私聊',
+  GROUP: '群聊',
+  CUSTOM: '自定义',
+};
 const permissionLabel = (p) => {
-  if (!p) return '-'
-  let s = String(p)
-  for (const [k, v] of Object.entries(permZh)) s = s.replaceAll(k, v)
-  return s
-}
+  if (!p) return '-';
+  let s = String(p);
+  for (const [k, v] of Object.entries(permZh)) s = s.replaceAll(k, v);
+  return s;
+};
 
 function openDrawer(plugin, page) {
-  drawerPlugin.value = plugin
-  drawerPage.value = page
-  drawerOpen.value = true
+  drawerPlugin.value = plugin;
+  drawerPage.value = page;
+  drawerOpen.value = true;
 }
 
 function closeDrawer() {
-  drawerOpen.value = false
-  drawerPlugin.value = null
-  drawerPage.value = null
+  drawerOpen.value = false;
+  drawerPlugin.value = null;
+  drawerPage.value = null;
 }
 
 function closeConfig() {
-  configOpen.value = false
-  configPlugin.value = null
-  configSchema.value = null
-  configValues.value = {}
+  configOpen.value = false;
+  configPlugin.value = null;
+  configSchema.value = null;
+  configValues.value = {};
 }
 
 async function openConfig(plugin) {
-  configPlugin.value = plugin
-  configOpen.value = true
-  configLoading.value = true
+  configPlugin.value = plugin;
+  configOpen.value = true;
+  configLoading.value = true;
   try {
-    const data = await store.apiFetch(`/api/plugin/${encodeURIComponent(plugin.name)}/config`)
-    configSchema.value = data.schema
+    const data = await store.apiFetch(`/api/plugin/${encodeURIComponent(plugin.name)}/config`);
+    configSchema.value = data.schema;
     // 以 schema 默认值补全，保证必填字段有初值
-    const merged = {}
-    const props = data.schema?.properties || {}
+    const merged = {};
+    const props = data.schema?.properties || {};
     for (const key of Object.keys(props)) {
-      merged[key] = props[key].default !== undefined ? props[key].default : ''
+      merged[key] = props[key].default !== undefined ? props[key].default : '';
     }
-    Object.assign(merged, data.values || {})
-    configValues.value = merged
+    Object.assign(merged, data.values || {});
+    configValues.value = merged;
   } catch (e) {
-    showToast('error', `获取配置失败：${e.message}`)
-    closeConfig()
+    showToast('error', `获取配置失败：${e.message}`);
+    closeConfig();
   } finally {
-    configLoading.value = false
+    configLoading.value = false;
   }
 }
 
 const configFields = computed(() => {
-  if (!configSchema.value?.properties) return []
-  const required = configSchema.value.required || []
+  if (!configSchema.value?.properties) return [];
+  const required = configSchema.value.required || [];
   return Object.entries(configSchema.value.properties).map(([key, prop]) => ({
     key,
     title: prop.title || key,
@@ -125,316 +139,329 @@ const configFields = computed(() => {
     description: prop.description || '',
     required: required.includes(key),
     default: prop.default,
-  }))
-})
+  }));
+});
 
 function configInputType(field) {
-  if (field.type === 'boolean') return 'checkbox'
-  if (field.type === 'integer' || field.type === 'number') return 'number'
-  return 'text'
+  if (field.type === 'boolean') return 'checkbox';
+  if (field.type === 'integer' || field.type === 'number') return 'number';
+  return 'text';
 }
 
 async function saveConfig() {
-  configSaving.value = true
+  configSaving.value = true;
   try {
-    const res = await store.apiFetch(`/api/plugin/${encodeURIComponent(configPlugin.value.name)}/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: configValues.value }),
-    })
-    configValues.value = res
-    showToast('success', `插件 ${configPlugin.value.name} 配置已保存`)
+    const res = await store.apiFetch(
+      `/api/plugin/${encodeURIComponent(configPlugin.value.name)}/config`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: configValues.value }),
+      },
+    );
+    configValues.value = res;
+    showToast('success', `插件 ${configPlugin.value.name} 配置已保存`);
   } catch (e) {
-    showToast('error', `保存失败：${e.message}`)
+    showToast('error', `保存失败：${e.message}`);
   } finally {
-    configSaving.value = false
+    configSaving.value = false;
   }
 }
 
 async function reload(name) {
-  loading.value = name
+  loading.value = name;
   try {
-    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}/reload`, { method: 'POST' })
-    await store.fetchStatus()
-    showToast('success', `插件 ${name} 已重载`)
+    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}/reload`, { method: 'POST' });
+    await store.fetchStatus();
+    showToast('success', `插件 ${name} 已重载`);
   } catch (e) {
-    showToast('error', `重载失败：${e.message}`)
+    showToast('error', `重载失败：${e.message}`);
   } finally {
-    loading.value = ''
+    loading.value = '';
   }
 }
 
 async function loadExternal() {
-  if (!modulePath.value.trim()) return
-  loading.value = '__load__'
+  if (!modulePath.value.trim()) return;
+  loading.value = '__load__';
   try {
     await store.apiFetch('/api/plugin/load', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ module_path: modulePath.value.trim() }),
-    })
-    modulePath.value = ''
-    await store.fetchStatus()
-    showToast('success', '插件已加载')
+    });
+    modulePath.value = '';
+    await store.fetchStatus();
+    showToast('success', '插件已加载');
   } catch (e) {
-    showToast('error', `加载失败：${e.message}`)
+    showToast('error', `加载失败：${e.message}`);
   } finally {
-    loading.value = ''
+    loading.value = '';
   }
 }
 
 async function unload(name) {
-  loading.value = name
+  loading.value = name;
   try {
-    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}`, { method: 'DELETE' })
-    await store.fetchStatus()
-    showToast('success', `插件 ${name} 已卸载`)
+    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    await store.fetchStatus();
+    showToast('success', `插件 ${name} 已卸载`);
   } catch (e) {
-    showToast('error', `卸载失败：${e.message}`)
+    showToast('error', `卸载失败：${e.message}`);
   } finally {
-    loading.value = ''
+    loading.value = '';
   }
 }
 
 async function toggleEnabled(plugin) {
-  loading.value = plugin.name
-  const action = plugin.enabled ? 'disable' : 'enable'
+  loading.value = plugin.name;
+  const action = plugin.enabled ? 'disable' : 'enable';
   try {
-    await store.apiFetch(`/api/plugin/${encodeURIComponent(plugin.name)}/${action}`, { method: 'POST' })
-    await store.fetchStatus()
-    showToast('success', `插件 ${plugin.name} 已${plugin.enabled ? '禁用' : '启用'}`)
+    await store.apiFetch(`/api/plugin/${encodeURIComponent(plugin.name)}/${action}`, {
+      method: 'POST',
+    });
+    await store.fetchStatus();
+    showToast('success', `插件 ${plugin.name} 已${plugin.enabled ? '禁用' : '启用'}`);
   } catch (e) {
-    showToast('error', `${action === 'disable' ? '禁用' : '启用'}失败：${e.message}`)
+    showToast('error', `${action === 'disable' ? '禁用' : '启用'}失败：${e.message}`);
   } finally {
-    loading.value = ''
+    loading.value = '';
   }
 }
 
 async function toggleMetrics(name) {
   if (expandedMetrics.value === name) {
-    expandedMetrics.value = ''
-    return
+    expandedMetrics.value = '';
+    return;
   }
-  expandedMetrics.value = name
+  expandedMetrics.value = name;
   try {
-    const data = await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}/metrics`)
-    const plugin = store.plugins.find(p => p.name === name)
-    if (plugin) plugin._metrics = data
+    const data = await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}/metrics`);
+    const plugin = store.plugins.find((p) => p.name === name);
+    if (plugin) plugin._metrics = data;
   } catch (e) {
-    showToast('error', `获取指标失败：${e.message}`)
-    expandedMetrics.value = ''
+    showToast('error', `获取指标失败：${e.message}`);
+    expandedMetrics.value = '';
   }
 }
 
 async function fetchCommands() {
   try {
-    commands.value = await store.apiFetch('/api/command/conflicts')
+    commands.value = await store.apiFetch('/api/command/conflicts');
   } catch (e) {
-    showToast('error', `获取命令列表失败：${e.message}`)
+    showToast('error', `获取命令列表失败：${e.message}`);
   }
 }
 
 async function toggleCommand(cmd) {
-  commandLoading.value = `${cmd.plugin}/${cmd.command}`
+  commandLoading.value = `${cmd.plugin}/${cmd.command}`;
   try {
-    const body = { disabled: !cmd.disabled }
-    const res = await store.apiFetch(`/api/command/${encodeURIComponent(cmd.plugin)}/${encodeURIComponent(cmd.command)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    cmd.disabled = res.disabled
-    showToast('success', `命令 ${cmd.plugin}/${cmd.command} 已${cmd.disabled ? '禁用' : '启用'}`)
+    const body = { disabled: !cmd.disabled };
+    const res = await store.apiFetch(
+      `/api/command/${encodeURIComponent(cmd.plugin)}/${encodeURIComponent(cmd.command)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    cmd.disabled = res.disabled;
+    showToast('success', `命令 ${cmd.plugin}/${cmd.command} 已${cmd.disabled ? '禁用' : '启用'}`);
   } catch (e) {
-    showToast('error', `操作失败：${e.message}`)
+    showToast('error', `操作失败：${e.message}`);
   } finally {
-    commandLoading.value = ''
+    commandLoading.value = '';
   }
 }
 
 async function updatePriority(cmd, newPriority) {
-  const val = parseInt(newPriority)
-  if (isNaN(val) || val < 0 || val > 100) return
-  commandLoading.value = `${cmd.plugin}/${cmd.command}`
+  const val = parseInt(newPriority);
+  if (isNaN(val) || val < 0 || val > 100) return;
+  commandLoading.value = `${cmd.plugin}/${cmd.command}`;
   try {
-    const res = await store.apiFetch(`/api/command/${encodeURIComponent(cmd.plugin)}/${encodeURIComponent(cmd.command)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ priority: val }),
-    })
-    cmd.priority = res.priority
-    showToast('success', `优先级已更新为 ${val}`)
+    const res = await store.apiFetch(
+      `/api/command/${encodeURIComponent(cmd.plugin)}/${encodeURIComponent(cmd.command)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: val }),
+      },
+    );
+    cmd.priority = res.priority;
+    showToast('success', `优先级已更新为 ${val}`);
   } catch (e) {
-    showToast('error', `更新失败：${e.message}`)
+    showToast('error', `更新失败：${e.message}`);
   } finally {
-    commandLoading.value = ''
+    commandLoading.value = '';
   }
 }
 
 function switchTab(tab) {
-  activeTab.value = tab
-  if (tab === 'commands') fetchCommands()
-  if (tab === 'market') fetchMarket()
+  activeTab.value = tab;
+  if (tab === 'commands') fetchCommands();
+  if (tab === 'market') fetchMarket();
 }
 
 // ---- 插件市场 ----
 
 const filteredMarket = computed(() => {
-  const q = marketSearch.value.trim().toLowerCase()
-  const tag = marketTag.value
-  return market.value.filter(p => {
-    const matchTag = tag === 'all' || (p.tags || []).includes(tag)
-    if (!matchTag) return false
-    if (!q) return true
-    return (p.name || '').toLowerCase().includes(q) ||
+  const q = marketSearch.value.trim().toLowerCase();
+  const tag = marketTag.value;
+  return market.value.filter((p) => {
+    const matchTag = tag === 'all' || (p.tags || []).includes(tag);
+    if (!matchTag) return false;
+    if (!q) return true;
+    return (
+      (p.name || '').toLowerCase().includes(q) ||
       (p.title || '').toLowerCase().includes(q) ||
       (p.description || '').toLowerCase().includes(q) ||
-      (p.tags || []).some(t => t.toLowerCase().includes(q))
-  })
-})
+      (p.tags || []).some((t) => t.toLowerCase().includes(q))
+    );
+  });
+});
 
 const marketTags = computed(() => {
-  const set = new Set()
-  for (const p of market.value) for (const t of (p.tags || [])) set.add(t)
-  return Array.from(set).sort()
-})
+  const set = new Set();
+  for (const p of market.value) for (const t of p.tags || []) set.add(t);
+  return Array.from(set).sort();
+});
 
 const marketStats = computed(() => {
-  const installed = market.value.filter(p => p.installed).length
-  const updatable = market.value.filter(p => p.update_available).length
-  return { total: market.value.length, installed, updatable }
-})
+  const installed = market.value.filter((p) => p.installed).length;
+  const updatable = market.value.filter((p) => p.update_available).length;
+  return { total: market.value.length, installed, updatable };
+});
 
-const marketTypeLabel = (t) => ({ sdk: 'SDK', builtin: '内置' }[t] || t || 'SDK')
+const marketTypeLabel = (t) => ({ sdk: 'SDK', builtin: '内置' })[t] || t || 'SDK';
 
 const marketUpdatedText = computed(() => {
-  const ts = marketInfo.value?.fetched_at
-  if (!ts) return ''
-  const d = new Date(ts * 1000)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-})
+  const ts = marketInfo.value?.fetched_at;
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+});
 
 async function fetchMarket() {
-  marketLoading.value = true
-  marketError.value = ''
+  marketLoading.value = true;
+  marketError.value = '';
   try {
     const [items, info, source] = await Promise.all([
       store.apiFetch('/api/plugins/market'),
       store.apiFetch('/api/plugins/market/info'),
       store.apiFetch('/api/plugins/market/source'),
-    ])
-    market.value = items
-    marketInfo.value = info
-    marketSource.value = source.url || ''
-    marketDefaultSource.value = source.default_url || ''
+    ]);
+    market.value = items;
+    marketInfo.value = info;
+    marketSource.value = source.url || '';
+    marketDefaultSource.value = source.default_url || '';
   } catch (e) {
-    marketError.value = e.message || '获取市场失败'
-    showToast('error', `获取插件市场失败：${e.message}`)
+    marketError.value = e.message || '获取市场失败';
+    showToast('error', `获取插件市场失败：${e.message}`);
   } finally {
-    marketLoading.value = false
+    marketLoading.value = false;
   }
 }
 
 async function marketInstall(name) {
-  marketAction.value = `install:${name}`
+  marketAction.value = `install:${name}`;
   try {
     await store.apiFetch('/api/plugins/market/install', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
-    })
-    showToast('success', `插件 ${name} 安装成功`)
-    await store.fetchStatus()
-    await fetchMarket()
+    });
+    showToast('success', `插件 ${name} 安装成功`);
+    await store.fetchStatus();
+    await fetchMarket();
   } catch (e) {
-    showToast('error', `安装失败：${e.message}`)
+    showToast('error', `安装失败：${e.message}`);
   } finally {
-    marketAction.value = ''
+    marketAction.value = '';
   }
 }
 
 async function marketUpdate(name) {
-  marketAction.value = `update:${name}`
+  marketAction.value = `update:${name}`;
   try {
     await store.apiFetch('/api/plugins/market/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
-    })
-    showToast('success', `插件 ${name} 更新成功`)
-    await store.fetchStatus()
-    await fetchMarket()
+    });
+    showToast('success', `插件 ${name} 更新成功`);
+    await store.fetchStatus();
+    await fetchMarket();
   } catch (e) {
-    showToast('error', `更新失败：${e.message}`)
+    showToast('error', `更新失败：${e.message}`);
   } finally {
-    marketAction.value = ''
+    marketAction.value = '';
   }
 }
 
 async function marketRefresh() {
-  marketAction.value = 'refresh'
+  marketAction.value = 'refresh';
   try {
-    const res = await store.apiFetch('/api/plugins/market/refresh', { method: 'POST' })
-    showToast('success', res.message || '市场已刷新')
-    await fetchMarket()
+    const res = await store.apiFetch('/api/plugins/market/refresh', { method: 'POST' });
+    showToast('success', res.message || '市场已刷新');
+    await fetchMarket();
   } catch (e) {
-    showToast('error', `刷新失败：${e.message}`)
+    showToast('error', `刷新失败：${e.message}`);
   } finally {
-    marketAction.value = ''
+    marketAction.value = '';
   }
 }
 
 async function marketToggleSource() {
-  showSourcePanel.value = !showSourcePanel.value
+  showSourcePanel.value = !showSourcePanel.value;
   if (showSourcePanel.value) {
-    marketSourceInput.value = marketSource.value || marketDefaultSource.value || ''
+    marketSourceInput.value = marketSource.value || marketDefaultSource.value || '';
   } else {
-    marketSourceInput.value = ''
+    marketSourceInput.value = '';
   }
 }
 
 async function marketApplySource() {
-  const url = (marketSourceInput.value || '').trim()
+  const url = (marketSourceInput.value || '').trim();
   if (!url) {
-    showToast('error', '请输入市场源地址')
-    return
+    showToast('error', '请输入市场源地址');
+    return;
   }
-  sourceSaving.value = true
+  sourceSaving.value = true;
   try {
     const res = await store.apiFetch('/api/plugins/market/source', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
-    })
-    showToast('success', res.message || '市场源已切换')
-    marketSource.value = res.url || url
-    showSourcePanel.value = false
-    marketSourceInput.value = ''
-    await fetchMarket()
+    });
+    showToast('success', res.message || '市场源已切换');
+    marketSource.value = res.url || url;
+    showSourcePanel.value = false;
+    marketSourceInput.value = '';
+    await fetchMarket();
   } catch (e) {
-    showToast('error', `切换失败：${e.message}`)
+    showToast('error', `切换失败：${e.message}`);
   } finally {
-    sourceSaving.value = false
+    sourceSaving.value = false;
   }
 }
 
 async function marketUninstall(name) {
-  marketAction.value = `uninstall:${name}`
+  marketAction.value = `uninstall:${name}`;
   try {
-    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}`, { method: 'DELETE' })
-    showToast('success', `插件 ${name} 已卸载`)
-    await store.fetchStatus()
-    await fetchMarket()
+    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    showToast('success', `插件 ${name} 已卸载`);
+    await store.fetchStatus();
+    await fetchMarket();
   } catch (e) {
-    showToast('error', `卸载失败：${e.message}`)
+    showToast('error', `卸载失败：${e.message}`);
   } finally {
-    marketAction.value = ''
+    marketAction.value = '';
   }
 }
 
 function openHomepage(url) {
-  if (url) window.open(url, '_blank', 'noopener')
+  if (url) window.open(url, '_blank', 'noopener');
 }
 </script>
 
@@ -450,205 +477,246 @@ function openHomepage(url) {
       <button
         :class="['main-tab-btn', { active: activeTab === 'plugins' }]"
         @click="switchTab('plugins')"
-      >插件管理</button>
+      >
+        插件管理
+      </button>
       <button
         :class="['main-tab-btn', { active: activeTab === 'commands' }]"
         @click="switchTab('commands')"
-      >命令管理</button>
+      >
+        命令管理
+      </button>
       <button
         :class="['main-tab-btn', { active: activeTab === 'market' }]"
         @click="switchTab('market')"
-      >插件市场</button>
+      >
+        插件市场
+      </button>
     </div>
 
     <!-- 插件管理 Tab -->
     <template v-if="activeTab === 'plugins'">
-    <div class="card fade-in">
-      <div class="card-header">
-        <div class="card-title">加载外部插件</div>
-      </div>
-      <div class="input-group">
-        <div class="form-group" style="flex: 1;">
-          <label>Python 模块路径</label>
-          <input v-model="modulePath" type="text" placeholder="例如：plugins.my_plugin">
+      <div class="card fade-in">
+        <div class="card-header">
+          <div class="card-title">加载外部插件</div>
         </div>
-        <button class="btn btn-primary" :disabled="loading === '__load__'" @click="loadExternal">
-          <span>＋</span> 加载
-        </button>
-      </div>
-    </div>
-
-    <div class="card fade-in">
-      <div class="card-header">
-        <div class="card-title">已加载插件</div>
-        <div class="category-tabs">
-          <button
-            v-for="cat in categories" :key="cat"
-            :class="['tab-btn', { active: activeCategory === cat }]"
-            @click="activeCategory = cat"
-          >
-            {{ cat === 'all' ? '全部' : cat }}
+        <div class="input-group">
+          <div class="form-group" style="flex: 1">
+            <label>Python 模块路径</label>
+            <input v-model="modulePath" type="text" placeholder="例如：plugins.my_plugin" />
+          </div>
+          <button class="btn btn-primary" :disabled="loading === '__load__'" @click="loadExternal">
+            <span>＋</span> 加载
           </button>
         </div>
       </div>
-      <div v-if="filteredPlugins.length === 0" class="empty-state">
-        <div class="icon">◇</div>
-        <div>{{ activeCategory === 'all' ? '暂无插件' : '该分类下暂无插件' }}</div>
-      </div>
-      <div v-else>
-        <div v-for="plugin in filteredPlugins" :key="plugin.name" class="plugin-card">
-          <div class="plugin-info">
-            <div class="name">
-              {{ plugin.name }}
-              <span class="tag tag-accent">{{ plugin.version }}</span>
-              <span v-if="plugin.category" class="tag tag-purple" style="margin-left: 6px;">{{ plugin.category }}</span>
-              <span v-if="plugin.author" class="tag tag-blue" style="margin-left: 6px;">{{ plugin.author }}</span>
+
+      <div class="card fade-in">
+        <div class="card-header">
+          <div class="card-title">已加载插件</div>
+          <div class="category-tabs">
+            <button
+              v-for="cat in categories"
+              :key="cat"
+              :class="['tab-btn', { active: activeCategory === cat }]"
+              @click="activeCategory = cat"
+            >
+              {{ cat === 'all' ? '全部' : cat }}
+            </button>
+          </div>
+        </div>
+        <div v-if="filteredPlugins.length === 0" class="empty-state">
+          <div class="icon">◇</div>
+          <div>{{ activeCategory === 'all' ? '暂无插件' : '该分类下暂无插件' }}</div>
+        </div>
+        <div v-else>
+          <div v-for="plugin in filteredPlugins" :key="plugin.name" class="plugin-card">
+            <div class="plugin-info">
+              <div class="name">
+                {{ plugin.name }}
+                <span class="tag tag-accent">{{ plugin.version }}</span>
+                <span v-if="plugin.category" class="tag tag-purple" style="margin-left: 6px">{{
+                  plugin.category
+                }}</span>
+                <span v-if="plugin.author" class="tag tag-blue" style="margin-left: 6px">{{
+                  plugin.author
+                }}</span>
+              </div>
+              <div class="desc">{{ plugin.description || '无描述' }}</div>
+              <div class="plugin-meta-row">
+                <span class="status-badge" :class="statusClass(plugin.status)">
+                  <span class="status-dot" :class="statusClass(plugin.status)" />
+                  {{ statusLabel(plugin.status) }}
+                </span>
+                <button
+                  class="btn-metrics"
+                  :title="expandedMetrics === plugin.name ? '收起指标' : '查看指标'"
+                  @click="toggleMetrics(plugin.name)"
+                >
+                  <span :class="{ spin: expandedMetrics === plugin.name && !plugin._metrics }"
+                    >⏱</span
+                  >
+                  指标
+                </button>
+              </div>
+              <!-- 指标面板 -->
+              <div v-if="expandedMetrics === plugin.name && plugin._metrics" class="metrics-panel">
+                <div v-if="plugin._metrics.length === 0" class="empty-state" style="padding: 12px">
+                  暂无指标数据
+                </div>
+                <table v-else class="metrics-table">
+                  <thead>
+                    <tr>
+                      <th>Handler</th>
+                      <th>事件</th>
+                      <th>优先级</th>
+                      <th>调用</th>
+                      <th>平均</th>
+                      <th>错误</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="m in plugin._metrics" :key="m.handler">
+                      <td>{{ m.handler }}</td>
+                      <td>
+                        <span class="tag tag-accent">{{ m.event_type }}</span>
+                      </td>
+                      <td>{{ m.priority }}</td>
+                      <td>{{ m.call_count }}</td>
+                      <td>{{ m.avg_time_ms }}ms</td>
+                      <td :class="{ 'text-danger': m.error_count > 0 }">{{ m.error_count }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div class="desc">{{ plugin.description || '无描述' }}</div>
-            <div class="plugin-meta-row">
-              <span class="status-badge" :class="statusClass(plugin.status)">
-                <span class="status-dot" :class="statusClass(plugin.status)"></span>
-                {{ statusLabel(plugin.status) }}
-              </span>
-              <button class="btn-metrics" @click="toggleMetrics(plugin.name)" :title="expandedMetrics === plugin.name ? '收起指标' : '查看指标'">
-                <span :class="{ spin: expandedMetrics === plugin.name && !plugin._metrics }">⏱</span> 指标
+            <div class="action-bar">
+              <label class="switch" :title="plugin.enabled ? '点击禁用' : '点击启用'">
+                <input
+                  type="checkbox"
+                  :checked="plugin.enabled"
+                  :disabled="loading === plugin.name"
+                  @change="toggleEnabled(plugin)"
+                />
+                <span class="slider round" />
+              </label>
+              <template v-if="plugin.pages && plugin.pages.length > 0">
+                <button
+                  v-for="page in plugin.pages"
+                  :key="page.title"
+                  class="btn btn-accent btn-sm"
+                  @click="openDrawer(plugin, page)"
+                >
+                  <span>{{ page.icon || '◇' }}</span> {{ page.title }}
+                </button>
+              </template>
+              <button
+                class="btn btn-secondary btn-sm"
+                :disabled="loading === plugin.name"
+                @click="reload(plugin.name)"
+              >
+                <span :class="{ spin: loading === plugin.name }">↻</span> 重载
+              </button>
+              <button
+                class="btn btn-secondary btn-sm"
+                :disabled="loading === plugin.name"
+                @click="openConfig(plugin)"
+              >
+                <span>⚙</span> 配置
+              </button>
+              <button
+                class="btn btn-danger btn-sm"
+                :disabled="loading === plugin.name"
+                @click="unload(plugin.name)"
+              >
+                卸载
               </button>
             </div>
-            <!-- 指标面板 -->
-            <div v-if="expandedMetrics === plugin.name && plugin._metrics" class="metrics-panel">
-              <div v-if="plugin._metrics.length === 0" class="empty-state" style="padding: 12px;">
-                暂无指标数据
-              </div>
-              <table v-else class="metrics-table">
-                <thead>
-                  <tr>
-                    <th>Handler</th>
-                    <th>事件</th>
-                    <th>优先级</th>
-                    <th>调用</th>
-                    <th>平均</th>
-                    <th>错误</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="m in plugin._metrics" :key="m.handler">
-                    <td>{{ m.handler }}</td>
-                    <td><span class="tag tag-accent">{{ m.event_type }}</span></td>
-                    <td>{{ m.priority }}</td>
-                    <td>{{ m.call_count }}</td>
-                    <td>{{ m.avg_time_ms }}ms</td>
-                    <td :class="{ 'text-danger': m.error_count > 0 }">{{ m.error_count }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="action-bar">
-            <label class="switch" :title="plugin.enabled ? '点击禁用' : '点击启用'">
-              <input type="checkbox" :checked="plugin.enabled"
-                     @change="toggleEnabled(plugin)" :disabled="loading === plugin.name">
-              <span class="slider round"></span>
-            </label>
-            <button
-              v-if="plugin.pages && plugin.pages.length > 0"
-              v-for="page in plugin.pages"
-              :key="page.title"
-              class="btn btn-accent btn-sm"
-              @click="openDrawer(plugin, page)"
-            >
-              <span>{{ page.icon || '◇' }}</span> {{ page.title }}
-            </button>
-            <button class="btn btn-secondary btn-sm" :disabled="loading === plugin.name" @click="reload(plugin.name)">
-              <span :class="{ spin: loading === plugin.name }">↻</span> 重载
-            </button>
-            <button class="btn btn-secondary btn-sm" :disabled="loading === plugin.name" @click="openConfig(plugin)">
-              <span>⚙</span> 配置
-            </button>
-            <button class="btn btn-danger btn-sm" :disabled="loading === plugin.name" @click="unload(plugin.name)">
-              卸载
-            </button>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- 插件管理页面抽屉 -->
-    <Teleport to="body">
-      <transition name="drawer">
-        <div v-if="drawerOpen" class="drawer-overlay" @click.self="closeDrawer">
-          <div class="drawer-panel">
-            <div class="drawer-header">
-              <div class="drawer-title">
-                <span>{{ drawerPage?.icon || '◇' }}</span>
-                <span>{{ drawerPlugin?.name }} - {{ drawerPage?.title }}</span>
-              </div>
-              <button class="drawer-close" @click="closeDrawer">✕</button>
-            </div>
-            <div class="drawer-body">
-              <iframe
-                :src="drawerUrl"
-                class="drawer-iframe"
-                sandbox="allow-scripts allow-same-origin allow-forms"
-                title="插件管理页面"
-              ></iframe>
-            </div>
-          </div>
-        </div>
-      </transition>
-    </Teleport>
-
-    <!-- 插件配置抽屉（JSON Schema 自动生成表单） -->
-    <Teleport to="body">
-      <transition name="drawer">
-        <div v-if="configOpen" class="drawer-overlay" @click.self="closeConfig">
-          <div class="drawer-panel">
-            <div class="drawer-header">
-              <div class="drawer-title">
-                <span>⚙</span>
-                <span>{{ configPlugin?.name }} - 配置</span>
-              </div>
-              <button class="drawer-close" @click="closeConfig">✕</button>
-            </div>
-            <div class="drawer-body config-drawer-body">
-              <div v-if="configLoading" class="empty-state">加载配置中...</div>
-              <div v-else-if="!configSchema" class="empty-state">
-                <div class="icon">◇</div>
-                <div>该插件未定义配置项（无 Config 内嵌类）</div>
-              </div>
-              <div v-else class="config-form">
-                <div v-if="configFields.length === 0" class="empty-state">该插件无配置字段</div>
-                <div v-for="field in configFields" :key="field.key" class="config-field">
-                  <label class="config-label">
-                    <span class="config-title">
-                      {{ field.title }}
-                      <span v-if="field.required" class="required-mark" title="必填">*</span>
-                    </span>
-                    <span v-if="field.description" class="config-desc">{{ field.description }}</span>
-                  </label>
-                  <label v-if="field.type === 'boolean'" class="switch">
-                    <input type="checkbox" v-model="configValues[field.key]">
-                    <span class="slider round"></span>
-                  </label>
-                  <input
-                    v-else
-                    :type="configInputType(field)"
-                    v-model="configValues[field.key]"
-                    class="config-input"
-                    :step="field.type === 'number' ? '0.1' : undefined"
-                  >
+      <!-- 插件管理页面抽屉 -->
+      <Teleport to="body">
+        <transition name="drawer">
+          <div v-if="drawerOpen" class="drawer-overlay" @click.self="closeDrawer">
+            <div class="drawer-panel">
+              <div class="drawer-header">
+                <div class="drawer-title">
+                  <span>{{ drawerPage?.icon || '◇' }}</span>
+                  <span>{{ drawerPlugin?.name }} - {{ drawerPage?.title }}</span>
                 </div>
-                <div class="config-actions">
-                  <button class="btn btn-secondary" :disabled="configSaving" @click="closeConfig">取消</button>
-                  <button class="btn btn-primary" :disabled="configSaving" @click="saveConfig">
-                    <span :class="{ spin: configSaving }">✓</span> 保存配置
-                  </button>
-                </div>
+                <button class="drawer-close" @click="closeDrawer">✕</button>
+              </div>
+              <div class="drawer-body">
+                <iframe
+                  :src="drawerUrl"
+                  class="drawer-iframe"
+                  sandbox="allow-scripts allow-same-origin allow-forms"
+                  title="插件管理页面"
+                />
               </div>
             </div>
           </div>
-        </div>
-      </transition>
-    </Teleport>
+        </transition>
+      </Teleport>
+
+      <!-- 插件配置抽屉（JSON Schema 自动生成表单） -->
+      <Teleport to="body">
+        <transition name="drawer">
+          <div v-if="configOpen" class="drawer-overlay" @click.self="closeConfig">
+            <div class="drawer-panel">
+              <div class="drawer-header">
+                <div class="drawer-title">
+                  <span>⚙</span>
+                  <span>{{ configPlugin?.name }} - 配置</span>
+                </div>
+                <button class="drawer-close" @click="closeConfig">✕</button>
+              </div>
+              <div class="drawer-body config-drawer-body">
+                <div v-if="configLoading" class="empty-state">加载配置中...</div>
+                <div v-else-if="!configSchema" class="empty-state">
+                  <div class="icon">◇</div>
+                  <div>该插件未定义配置项（无 Config 内嵌类）</div>
+                </div>
+                <div v-else class="config-form">
+                  <div v-if="configFields.length === 0" class="empty-state">该插件无配置字段</div>
+                  <div v-for="field in configFields" :key="field.key" class="config-field">
+                    <label class="config-label">
+                      <span class="config-title">
+                        {{ field.title }}
+                        <span v-if="field.required" class="required-mark" title="必填">*</span>
+                      </span>
+                      <span v-if="field.description" class="config-desc">{{
+                        field.description
+                      }}</span>
+                    </label>
+                    <label v-if="field.type === 'boolean'" class="switch">
+                      <input v-model="configValues[field.key]" type="checkbox" />
+                      <span class="slider round" />
+                    </label>
+                    <input
+                      v-else
+                      v-model="configValues[field.key]"
+                      :type="configInputType(field)"
+                      class="config-input"
+                      :step="field.type === 'number' ? '0.1' : undefined"
+                    />
+                  </div>
+                  <div class="config-actions">
+                    <button class="btn btn-secondary" :disabled="configSaving" @click="closeConfig">
+                      取消
+                    </button>
+                    <button class="btn btn-primary" :disabled="configSaving" @click="saveConfig">
+                      <span :class="{ spin: configSaving }">✓</span> 保存配置
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
+      </Teleport>
     </template>
 
     <!-- 命令管理 Tab -->
@@ -676,11 +744,16 @@ function openHomepage(url) {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(cmd, idx) in commands" :key="idx"
-                :class="{ 'conflict-row': cmd.has_conflict }">
+              <tr
+                v-for="(cmd, idx) in commands"
+                :key="idx"
+                :class="{ 'conflict-row': cmd.has_conflict }"
+              >
                 <td>
                   <span class="cmd-name">/{{ cmd.command }}</span>
-                  <span v-if="cmd.has_conflict" class="conflict-badge" title="存在同名命令冲突">⚠</span>
+                  <span v-if="cmd.has_conflict" class="conflict-badge" title="存在同名命令冲突"
+                    >⚠</span
+                  >
                 </td>
                 <td>
                   <span class="tag tag-accent">{{ cmd.plugin }}</span>
@@ -696,8 +769,9 @@ function openHomepage(url) {
                     type="number"
                     class="priority-input"
                     :value="cmd.priority"
-                    min="0" max="100"
-                    @change="updatePriority(cmd, ($event.target).value)"
+                    min="0"
+                    max="100"
+                    @change="updatePriority(cmd, $event.target.value)"
                   />
                 </td>
                 <td>
@@ -728,10 +802,11 @@ function openHomepage(url) {
         <div class="card-header">
           <div class="card-title">
             {{ marketInfo?.name || '插件市场' }}
-            <span class="text-muted" style="margin-left: 10px;">
-              共 {{ marketStats.total }} 个插件 · 已装 {{ marketStats.installed }} · 可更新 {{ marketStats.updatable }}
+            <span class="text-muted" style="margin-left: 10px">
+              共 {{ marketStats.total }} 个插件 · 已装 {{ marketStats.installed }} · 可更新
+              {{ marketStats.updatable }}
             </span>
-            <span v-if="marketUpdatedText" class="text-muted" style="margin-left: 8px;">
+            <span v-if="marketUpdatedText" class="text-muted" style="margin-left: 8px">
               索引更新于 {{ marketUpdatedText }}
             </span>
           </div>
@@ -741,7 +816,7 @@ function openHomepage(url) {
               type="text"
               class="market-search"
               placeholder="搜索插件名 / 描述 / 标签..."
-            >
+            />
             <button
               class="btn btn-secondary btn-sm"
               :disabled="marketAction === 'refresh'"
@@ -749,10 +824,7 @@ function openHomepage(url) {
             >
               <span :class="{ spin: marketAction === 'refresh' }">↻</span> 刷新市场
             </button>
-            <button
-              class="btn btn-secondary btn-sm"
-              @click="marketToggleSource"
-            >
+            <button class="btn btn-secondary btn-sm" @click="marketToggleSource">
               <span>⚙</span> 切换源
             </button>
           </div>
@@ -765,8 +837,13 @@ function openHomepage(url) {
               v-if="marketSource && marketSource !== marketDefaultSource"
               class="btn btn-secondary btn-sm"
               :disabled="sourceSaving"
-              @click="marketSourceInput = marketDefaultSource; marketApplySource()"
-            >恢复官方默认</button>
+              @click="
+                marketSourceInput = marketDefaultSource;
+                marketApplySource();
+              "
+            >
+              恢复官方默认
+            </button>
           </div>
           <div class="source-input-row">
             <input
@@ -775,7 +852,7 @@ function openHomepage(url) {
               class="market-search"
               placeholder="输入新版市场源地址（git 仓库或 HTTP 索引）"
               @keyup.enter="marketApplySource"
-            >
+            />
             <button
               class="btn btn-primary btn-sm"
               :disabled="sourceSaving"
@@ -786,26 +863,28 @@ function openHomepage(url) {
             </button>
           </div>
           <div class="source-hint">
-            支持 git 仓库（如 <code>https://github.com/Qingci-Bot/Plugin-Market.git</code>）
-            或 HTTP 索引 JSON 地址。官方默认：<code>{{ marketDefaultSource }}</code>
+            支持 git 仓库（如 <code>https://github.com/Qingci-Bot/Plugin-Market.git</code>） 或 HTTP
+            索引 JSON 地址。官方默认：<code>{{ marketDefaultSource }}</code>
           </div>
         </div>
         <div v-if="marketTags.length > 0" class="market-tag-row">
+          <button :class="['tab-btn', { active: marketTag === 'all' }]" @click="marketTag = 'all'">
+            全部
+          </button>
           <button
-            :class="['tab-btn', { active: marketTag === 'all' }]"
-            @click="marketTag = 'all'"
-          >全部</button>
-          <button
-            v-for="t in marketTags" :key="t"
+            v-for="t in marketTags"
+            :key="t"
             :class="['tab-btn', { active: marketTag === t }]"
             @click="marketTag = t"
-          >{{ t }}</button>
+          >
+            {{ t }}
+          </button>
         </div>
         <div v-if="marketLoading" class="empty-state">加载市场中...</div>
         <div v-else-if="marketError" class="empty-state">
           <div class="icon">⚠</div>
           <div>市场加载失败：{{ marketError }}</div>
-          <button class="btn btn-secondary btn-sm" style="margin-top: 12px;" @click="fetchMarket">
+          <button class="btn btn-secondary btn-sm" style="margin-top: 12px" @click="fetchMarket">
             <span>↻</span> 重试
           </button>
         </div>
@@ -820,11 +899,19 @@ function openHomepage(url) {
                 <span class="market-icon">{{ item.icon || '📦' }}</span>
                 {{ item.title || item.name }}
                 <span class="tag tag-purple">{{ marketTypeLabel(item.type) }}</span>
-                <span v-for="t in item.tags" :key="t" class="tag tag-accent" style="margin-left: 4px;">{{ t }}</span>
+                <span
+                  v-for="t in item.tags"
+                  :key="t"
+                  class="tag tag-accent"
+                  style="margin-left: 4px"
+                  >{{ t }}</span
+                >
               </div>
               <div class="desc">{{ item.description || '无描述' }}</div>
               <div v-if="item.requirements && item.requirements.length" class="market-meta-row">
-                <span v-for="r in item.requirements" :key="r" class="tag tag-blue" title="依赖">⬡ {{ r }}</span>
+                <span v-for="r in item.requirements" :key="r" class="tag tag-blue" title="依赖"
+                  >⬡ {{ r }}</span
+                >
               </div>
               <div class="market-meta-row">
                 <span class="tag tag-blue">{{ item.name }}</span>
@@ -836,7 +923,8 @@ function openHomepage(url) {
                   href="javascript:void(0)"
                   class="market-link"
                   @click="openHomepage(item.homepage)"
-                >🔗 主页</a>
+                  >🔗 主页</a
+                >
                 <span v-if="item.installed" class="status-badge green">
                   已安装 v{{ item.installed_version }}
                 </span>
@@ -862,7 +950,13 @@ function openHomepage(url) {
                 @click="marketInstall(item.name)"
               >
                 <span :class="{ spin: marketAction === `install:${item.name}` }">＋</span>
-                {{ item.installed ? '已安装' : (marketAction === `install:${item.name}` ? '安装中...' : '安装') }}
+                {{
+                  item.installed
+                    ? '已安装'
+                    : marketAction === `install:${item.name}`
+                      ? '安装中...'
+                      : '安装'
+                }}
               </button>
               <button
                 v-if="item.installed"
@@ -903,7 +997,9 @@ function openHomepage(url) {
   font-family: inherit;
 }
 .main-tab-btn:hover,
-.category-tabs .tab-btn:hover { color: var(--text-primary); }
+.category-tabs .tab-btn:hover {
+  color: var(--text-primary);
+}
 .main-tab-btn.active,
 .category-tabs .tab-btn.active {
   color: var(--accent);
@@ -923,15 +1019,22 @@ function openHomepage(url) {
   padding: 4px 12px;
   border-radius: 20px;
   border: 1px solid var(--border-color);
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
   font-family: inherit;
 }
-.tab-btn:hover { border-color: var(--border-active); color: var(--text-primary); }
-.tab-btn.active { background: var(--accent-bg); color: var(--accent); border-color: rgba(251, 191, 36, 0.3); }
+.tab-btn:hover {
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+.tab-btn.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: rgba(251, 191, 36, 0.3);
+}
 
 /* 插件元信息行 */
 .plugin-meta-row {
@@ -951,13 +1054,16 @@ function openHomepage(url) {
   font-family: inherit;
   transition: all 0.2s;
 }
-.btn-metrics:hover { color: var(--text-primary); border-color: var(--border-active); }
+.btn-metrics:hover {
+  color: var(--text-primary);
+  border-color: var(--border-active);
+}
 
 /* 指标面板 */
 .metrics-panel {
   margin-top: 10px;
   padding: 10px;
-  background: rgba(0,0,0,0.2);
+  background: rgba(0, 0, 0, 0.2);
   border-radius: var(--radius-xs);
   border: 1px solid var(--border-color);
 }
@@ -966,7 +1072,8 @@ function openHomepage(url) {
   border-collapse: collapse;
   font-size: 12px;
 }
-.metrics-table th, .metrics-table td {
+.metrics-table th,
+.metrics-table td {
   padding: 6px 10px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
@@ -976,8 +1083,12 @@ function openHomepage(url) {
   font-weight: 500;
   font-size: 11px;
 }
-.metrics-table td { color: var(--text-secondary); }
-.text-danger { color: var(--danger) !important; }
+.metrics-table td {
+  color: var(--text-secondary);
+}
+.text-danger {
+  color: var(--danger) !important;
+}
 
 /* 插件管理页面抽屉 */
 .drawer-overlay {
@@ -1088,7 +1199,7 @@ function openHomepage(url) {
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: rgba(0,0,0,0.2);
+  background: rgba(0, 0, 0, 0.2);
   color: var(--text-primary);
   font-size: 13px;
   font-family: inherit;
@@ -1134,7 +1245,8 @@ function openHomepage(url) {
   border-collapse: collapse;
   font-size: 13px;
 }
-.command-table th, .command-table td {
+.command-table th,
+.command-table td {
   padding: 10px 14px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
@@ -1145,7 +1257,9 @@ function openHomepage(url) {
   font-size: 12px;
   white-space: nowrap;
 }
-.command-table td { color: var(--text-secondary); }
+.command-table td {
+  color: var(--text-secondary);
+}
 .command-table .conflict-row {
   background: rgba(248, 113, 113, 0.08);
 }
@@ -1168,7 +1282,7 @@ function openHomepage(url) {
   padding: 3px 6px;
   border-radius: 4px;
   border: 1px solid var(--border-color);
-  background: rgba(0,0,0,0.2);
+  background: rgba(0, 0, 0, 0.2);
   color: var(--text-primary);
   font-size: 12px;
   text-align: center;
@@ -1185,8 +1299,14 @@ function openHomepage(url) {
   font-size: 11px;
   font-weight: 500;
 }
-.status-on { background: rgba(52, 211, 153, 0.15); color: var(--success); }
-.status-off { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+.status-on {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--success);
+}
+.status-off {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-muted);
+}
 
 /* 插件市场 */
 .market-tools {
@@ -1198,7 +1318,7 @@ function openHomepage(url) {
   padding: 6px 12px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: rgba(0,0,0,0.2);
+  background: rgba(0, 0, 0, 0.2);
   color: var(--text-primary);
   font-size: 13px;
   font-family: inherit;
@@ -1217,11 +1337,16 @@ function openHomepage(url) {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xs);
   margin-bottom: 10px;
-  background: rgba(255,255,255,0.02);
+  background: rgba(255, 255, 255, 0.02);
   transition: border-color 0.2s;
 }
-.market-card:hover { border-color: var(--border-active); }
-.market-info { flex: 1; min-width: 0; }
+.market-card:hover {
+  border-color: var(--border-active);
+}
+.market-info {
+  flex: 1;
+  min-width: 0;
+}
 .market-icon {
   display: inline-block;
   margin-right: 6px;
@@ -1239,7 +1364,9 @@ function openHomepage(url) {
   cursor: pointer;
   text-decoration: none;
 }
-.market-link:hover { text-decoration: underline; }
+.market-link:hover {
+  text-decoration: underline;
+}
 .market-meta-row {
   display: flex;
   align-items: center;
@@ -1252,10 +1379,17 @@ function openHomepage(url) {
   gap: 8px;
   flex-shrink: 0;
 }
-.spin { display: inline-block; animation: market-spin 1s linear infinite; }
+.spin {
+  display: inline-block;
+  animation: market-spin 1s linear infinite;
+}
 @keyframes market-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 市场源切换面板 */
@@ -1267,7 +1401,7 @@ function openHomepage(url) {
   margin-bottom: 14px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xs);
-  background: rgba(255,255,255,0.02);
+  background: rgba(255, 255, 255, 0.02);
 }
 .source-current {
   display: flex;
@@ -1294,7 +1428,10 @@ function openHomepage(url) {
   align-items: center;
   gap: 8px;
 }
-.source-input-row .market-search { flex: 1; max-width: 100%; }
+.source-input-row .market-search {
+  flex: 1;
+  max-width: 100%;
+}
 .source-hint {
   font-size: 12px;
   color: var(--text-muted);
@@ -1303,7 +1440,7 @@ function openHomepage(url) {
 .source-hint code {
   font-family: var(--font-mono);
   color: var(--text-secondary);
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
   padding: 1px 5px;
   border-radius: 4px;
 }

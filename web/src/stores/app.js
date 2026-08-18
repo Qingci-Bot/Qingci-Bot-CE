@@ -1,28 +1,28 @@
-import { defineStore } from 'pinia'
-import { ref, computed, reactive } from 'vue'
-import { invalidateAuthStatusCache } from '../router/index.js'
+import { defineStore } from 'pinia';
+import { ref, computed, reactive } from 'vue';
+import { invalidateAuthStatusCache } from '../router/index.js';
 
-const API = ''
+const API = '';
 
 function getApiKey() {
-  return localStorage.getItem('qingci_api_key') || ''
+  return localStorage.getItem('qingci_api_key') || '';
 }
 
 function setApiKey(key) {
   if (key) {
-    localStorage.setItem('qingci_api_key', key)
+    localStorage.setItem('qingci_api_key', key);
   } else {
-    localStorage.removeItem('qingci_api_key')
+    localStorage.removeItem('qingci_api_key');
   }
 }
 
 function authHeaders(extra = {}) {
-  const key = getApiKey()
-  const headers = { ...extra }
+  const key = getApiKey();
+  const headers = { ...extra };
   if (key) {
-    headers['X-API-Key'] = key
+    headers['X-API-Key'] = key;
   }
-  return headers
+  return headers;
 }
 
 // 默认值逐项与后端 bot/config.py 的模型定义保持一致
@@ -113,143 +113,143 @@ const defaultConfig = {
     usage_tracking: true,
   },
   api_key: '',
-}
+};
 
 function deepMerge(target, source) {
   for (const key of Object.keys(source)) {
     if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
       if (!target[key] || typeof target[key] !== 'object') {
-        target[key] = {}
+        target[key] = {};
       }
-      deepMerge(target[key], source[key])
+      deepMerge(target[key], source[key]);
     } else {
-      target[key] = source[key]
+      target[key] = source[key];
     }
   }
-  return target
+  return target;
 }
 
 export const useAppStore = defineStore('app', () => {
-  const botRunning = ref(false)
-  const botConnected = ref(false)
-  const platforms = ref([])
-  const plugins = ref([])
-  const config = reactive(JSON.parse(JSON.stringify(defaultConfig)))
-  const llmPresets = ref({})
-  const logs = ref([])
-  const loading = ref(false)
-  const error = ref('')
-  const configLoaded = ref(false)
-  const instances = ref([])
-  const appVersion = ref('')
+  const botRunning = ref(false);
+  const botConnected = ref(false);
+  const platforms = ref([]);
+  const plugins = ref([]);
+  const config = reactive(JSON.parse(JSON.stringify(defaultConfig)));
+  const llmPresets = ref({});
+  const logs = ref([]);
+  const loading = ref(false);
+  const error = ref('');
+  const configLoaded = ref(false);
+  const instances = ref([]);
+  const appVersion = ref('');
 
   const statusText = computed(() => {
-    if (!botRunning.value) return '未启动'
-    if (!botConnected.value) return '等待协议端连接'
-    return '运行中'
-  })
+    if (!botRunning.value) return '未启动';
+    if (!botConnected.value) return '等待协议端连接';
+    return '运行中';
+  });
 
   const statusColor = computed(() => {
-    if (!botRunning.value) return '#6b7280'
-    if (!botConnected.value) return '#f59e0b'
-    return '#10b981'
-  })
+    if (!botRunning.value) return '#6b7280';
+    if (!botConnected.value) return '#f59e0b';
+    return '#10b981';
+  });
 
   async function apiFetch(url, options = {}) {
     try {
-      const headers = authHeaders(options.headers || {})
-      const res = await fetch(`${API}${url}`, { ...options, headers })
+      const headers = authHeaders(options.headers || {});
+      const res = await fetch(`${API}${url}`, { ...options, headers });
       if (res.status === 401) {
-        error.value = 'API Key 鉴权失败，请在设置中配置正确的 API Key'
+        error.value = 'API Key 鉴权失败，请在设置中配置正确的 API Key';
         // 失效路由层的鉴权状态缓存，使跳转登录后能重新拉取最新状态
-        invalidateAuthStatusCache()
+        invalidateAuthStatusCache();
         // 跳转登录页（hash 模式直改 location，避免 store 与 router 循环依赖）
         if (window.location.hash !== '#/login') {
-          window.location.hash = '#/login'
+          window.location.hash = '#/login';
         }
-        throw new Error(error.value)
+        throw new Error(error.value);
       }
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || `HTTP ${res.status}`)
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
       }
-      if (res.status === 204) return null
+      if (res.status === 204) return null;
       try {
-        return await res.json()
+        return await res.json();
       } catch (parseErr) {
-        throw new Error(`HTTP ${res.status} 响应不是有效 JSON`)
+        throw new Error(`HTTP ${res.status} 响应不是有效 JSON`);
       }
     } catch (e) {
       // 仅在尚未设置错误信息时赋值，避免覆盖 401 分支已设置的提示
-      if (!error.value) error.value = e.message
-      throw e
+      if (!error.value) error.value = e.message;
+      throw e;
     }
   }
 
   async function fetchStatus() {
     try {
-      const data = await apiFetch('/api/bot/status')
-      botRunning.value = data.running
-      botConnected.value = data.connected
-      appVersion.value = data.version || ''
-      platforms.value = data.platforms || []
-      plugins.value = data.plugins || []
-      error.value = ''
-      return true
+      const data = await apiFetch('/api/bot/status');
+      botRunning.value = data.running;
+      botConnected.value = data.connected;
+      appVersion.value = data.version || '';
+      platforms.value = data.platforms || [];
+      plugins.value = data.plugins || [];
+      error.value = '';
+      return true;
     } catch (e) {
-      botRunning.value = false
-      botConnected.value = false
-      return false
+      botRunning.value = false;
+      botConnected.value = false;
+      return false;
     }
   }
 
   async function fetchConfig() {
     try {
-      const data = await apiFetch('/api/config')
-      deepMerge(config, data)
-      configLoaded.value = true
-      error.value = ''
+      const data = await apiFetch('/api/config');
+      deepMerge(config, data);
+      configLoaded.value = true;
+      error.value = '';
     } catch (e) {
-      console.warn('fetchConfig failed:', e.message)
+      console.warn('fetchConfig failed:', e.message);
     }
   }
 
   async function fetchLLMPresets() {
     try {
-      const data = await apiFetch('/api/config/llm/presets')
-      llmPresets.value = data.presets || {}
+      const data = await apiFetch('/api/config/llm/presets');
+      llmPresets.value = data.presets || {};
     } catch (e) {
-      console.warn('fetchLLMPresets failed:', e.message)
+      console.warn('fetchLLMPresets failed:', e.message);
     }
   }
 
   async function startBot() {
-    loading.value = true
+    loading.value = true;
     try {
-      await apiFetch('/api/bot/start', { method: 'POST' })
-      await fetchStatus()
+      await apiFetch('/api/bot/start', { method: 'POST' });
+      await fetchStatus();
     } finally {
-      loading.value = false
+      loading.value = false;
     }
   }
 
   async function stopBot() {
-    loading.value = true
+    loading.value = true;
     try {
-      await apiFetch('/api/bot/stop', { method: 'POST' })
-      await fetchStatus()
+      await apiFetch('/api/bot/stop', { method: 'POST' });
+      await fetchStatus();
     } finally {
-      loading.value = false
+      loading.value = false;
     }
   }
 
   async function restartBot() {
-    loading.value = true
+    loading.value = true;
     try {
-      await apiFetch('/api/bot/restart', { method: 'POST' })
-      await fetchStatus()
+      await apiFetch('/api/bot/restart', { method: 'POST' });
+      await fetchStatus();
     } finally {
-      loading.value = false
+      loading.value = false;
     }
   }
 
@@ -258,8 +258,8 @@ export const useAppStore = defineStore('app', () => {
       method: 'PUT',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(newConfig),
-    })
-    await fetchConfig()
+    });
+    await fetchConfig();
   }
 
   async function testLLM(cfg) {
@@ -267,7 +267,7 @@ export const useAppStore = defineStore('app', () => {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(cfg),
-    })
+    });
   }
 
   async function fetchLLMModels(cfg) {
@@ -275,34 +275,34 @@ export const useAppStore = defineStore('app', () => {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(cfg),
-    })
+    });
   }
 
   async function fetchLogs(keyword = '', limit = 50) {
-    const params = new URLSearchParams({ keyword, limit: String(limit) })
-    logs.value = await apiFetch(`/api/log/messages?${params}`)
+    const params = new URLSearchParams({ keyword, limit: String(limit) });
+    logs.value = await apiFetch(`/api/log/messages?${params}`);
   }
 
   async function fetchMessageCount() {
-    return await apiFetch('/api/log/messages/count')
+    return await apiFetch('/api/log/messages/count');
   }
 
   function addLog(log) {
-    logs.value.unshift(log)
-    if (logs.value.length > 200) logs.value.pop()
+    logs.value.unshift(log);
+    if (logs.value.length > 200) logs.value.pop();
   }
 
   // ---- 实例管理 ----
 
   // 当前运行中的实例（用于仪表盘等页面按平台展示提示）
-  const currentInstance = computed(() => instances.value.find((i) => i.running) || null)
+  const currentInstance = computed(() => instances.value.find((i) => i.running) || null);
 
   async function fetchInstances() {
     try {
-      instances.value = await apiFetch('/api/instances') || []
-      error.value = ''
+      instances.value = (await apiFetch('/api/instances')) || [];
+      error.value = '';
     } catch (e) {
-      console.warn('fetchInstances failed:', e.message)
+      console.warn('fetchInstances failed:', e.message);
     }
   }
 
@@ -311,14 +311,14 @@ export const useAppStore = defineStore('app', () => {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
-    })
-    await fetchInstances()
-    return inst
+    });
+    await fetchInstances();
+    return inst;
   }
 
   async function deleteInstance(name) {
-    await apiFetch(`/api/instances/${encodeURIComponent(name)}`, { method: 'DELETE' })
-    await fetchInstances()
+    await apiFetch(`/api/instances/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    await fetchInstances();
   }
 
   async function renameInstance(name, newName) {
@@ -326,23 +326,53 @@ export const useAppStore = defineStore('app', () => {
       method: 'PUT',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ new_name: newName }),
-    })
-    await fetchInstances()
-    return inst
+    });
+    await fetchInstances();
+    return inst;
   }
 
   function switchInstance(name) {
     // 触发后端重启进程到目标实例；当前连接将断开，页面随之刷新
-    apiFetch(`/api/instances/${encodeURIComponent(name)}/start`, { method: 'POST' }).catch(() => {})
+    apiFetch(`/api/instances/${encodeURIComponent(name)}/start`, { method: 'POST' }).catch(
+      () => {},
+    );
   }
 
   return {
-    botRunning, botConnected, platforms, plugins, config, llmPresets, logs, loading, error,
-    configLoaded, instances, appVersion,
-    statusText, statusColor, currentInstance,
-    fetchStatus, fetchConfig, fetchLLMPresets, startBot, stopBot, restartBot,
-    saveConfig, testLLM, fetchLLMModels, fetchLogs, fetchMessageCount, addLog,
-    fetchInstances, createInstance, deleteInstance, renameInstance, switchInstance,
-    apiFetch, getApiKey, setApiKey,
-  }
-})
+    botRunning,
+    botConnected,
+    platforms,
+    plugins,
+    config,
+    llmPresets,
+    logs,
+    loading,
+    error,
+    configLoaded,
+    instances,
+    appVersion,
+    statusText,
+    statusColor,
+    currentInstance,
+    fetchStatus,
+    fetchConfig,
+    fetchLLMPresets,
+    startBot,
+    stopBot,
+    restartBot,
+    saveConfig,
+    testLLM,
+    fetchLLMModels,
+    fetchLogs,
+    fetchMessageCount,
+    addLog,
+    fetchInstances,
+    createInstance,
+    deleteInstance,
+    renameInstance,
+    switchInstance,
+    apiFetch,
+    getApiKey,
+    setApiKey,
+  };
+});

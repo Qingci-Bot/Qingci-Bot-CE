@@ -1,44 +1,44 @@
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAppStore } from '../stores/app'
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { useAppStore } from '../stores/app';
 
-const router = useRouter()
-const store = useAppStore()
-const apiKey = ref('')
-const loading = ref(false)
-const errorMsg = ref('')
+const router = useRouter();
+const store = useAppStore();
+const apiKey = ref('');
+const loading = ref(false);
+const errorMsg = ref('');
 
 async function doLogin() {
   if (!apiKey.value.trim()) {
-    errorMsg.value = '请输入 API Key'
-    return
+    errorMsg.value = '请输入 API Key';
+    return;
   }
-  loading.value = true
-  errorMsg.value = ''
+  loading.value = true;
+  errorMsg.value = '';
   try {
     // 免鉴权接口，fetch 直连
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ api_key: apiKey.value.trim() }),
-    })
+    });
     if (!res.ok) {
-      const text = await res.text()
-      let msg = text || `HTTP ${res.status}`
+      const text = await res.text();
+      let msg = text || `HTTP ${res.status}`;
       try {
-        msg = JSON.parse(text).detail || msg
+        msg = JSON.parse(text).detail || msg;
       } catch (e) {
         // 非 JSON 响应体，直接使用原文本
       }
-      throw new Error(msg)
+      throw new Error(msg);
     }
-    store.setApiKey(apiKey.value.trim())
-    router.push('/')
+    store.setApiKey(apiKey.value.trim());
+    router.push('/');
   } catch (e) {
-    errorMsg.value = `登录失败：${e.message}`
+    errorMsg.value = `登录失败：${e.message}`;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 </script>
@@ -58,17 +58,22 @@ async function doLogin() {
             type="password"
             placeholder="请输入服务端配置的 API Key"
             autofocus
-          >
+          />
         </div>
-        <button class="btn btn-primary btn-lg" type="submit" style="width: 100%; margin-top: 16px;" :disabled="loading">
-          <span v-if="loading" class="spin" style="display: inline-block;">↻</span>
+        <button
+          class="btn btn-primary btn-lg"
+          type="submit"
+          style="width: 100%; margin-top: 16px"
+          :disabled="loading"
+        >
+          <span v-if="loading" class="spin" style="display: inline-block">↻</span>
           {{ loading ? '登录中' : '登 录' }}
         </button>
       </form>
       <div v-if="errorMsg" class="status-bar error">
         {{ errorMsg }}
       </div>
-      <div class="hint-text" style="margin-top: 14px;">
+      <div class="hint-text" style="margin-top: 14px">
         服务端已启用 API 鉴权，请输入 config.yaml 中配置的 api_key 登录。
       </div>
     </div>

@@ -1,10 +1,10 @@
 <script setup>
-import { useRouter } from 'vue-router'
+import { useRouter } from 'vue-router';
 
-const router = useRouter()
+const router = useRouter();
 
 function goHome() {
-  router.push('/')
+  router.push('/');
 }
 </script>
 
@@ -19,9 +19,7 @@ function goHome() {
       <div class="nf-icon">✦</div>
       <div class="nf-title">404 页面不存在</div>
       <div class="nf-desc">你访问的页面不存在或已被移除</div>
-      <button class="btn btn-primary" @click="goHome">
-        <span>◈</span> 返回首页
-      </button>
+      <button class="btn btn-primary" @click="goHome"><span>◈</span> 返回首页</button>
     </div>
   </div>
 </template>

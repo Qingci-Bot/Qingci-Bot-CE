@@ -1,12 +1,12 @@
 <script setup>
-import { onMounted } from 'vue'
-import { useAppStore } from '../stores/app'
+import { onMounted } from 'vue';
+import { useAppStore } from '../stores/app';
 
 // 版本从后端 status 动态读取（bot/__init__.py __version__ 为唯一来源），避免硬编码漂移
-const store = useAppStore()
+const store = useAppStore();
 onMounted(() => {
-  if (!store.appVersion) store.fetchStatus()
-})
+  if (!store.appVersion) store.fetchStatus();
+});
 </script>
 
 <template>
@@ -22,42 +22,61 @@ onMounted(() => {
         <div class="card-title">项目简介</div>
       </div>
       <div class="about-section">
-        <p><strong>Qingci-Bot CE</strong> 是一个基于 Python 的多平台机器人框架，支持 OneBot 11（反向 WebSocket）与 Telegram 等平台，提供 LLM 智能对话、Web UI 和桌面应用。</p>
-        <p>项目采用 <strong>GPLv3</strong> 开源许可，代码托管于 <a href="https://github.com/Qingci-Bot/Qingci-Bot-CE" target="_blank" rel="noopener">GitHub</a>。</p>
+        <p>
+          <strong>Qingci-Bot CE</strong> 是一个基于 Python 的多平台机器人框架，支持 OneBot 11（反向
+          WebSocket）与 Telegram 等平台，提供 LLM 智能对话、Web UI 和桌面应用。
+        </p>
+        <p>
+          项目采用 <strong>GPLv3</strong> 开源许可，代码托管于
+          <a href="https://github.com/Qingci-Bot/Qingci-Bot-CE" target="_blank" rel="noopener"
+            >GitHub</a
+          >。
+        </p>
         <div class="feature-grid">
           <div class="feature-item">
             <span class="feature-icon">✦</span>
             <div>
               <div class="feature-title">多提供商 LLM</div>
-              <div class="feature-desc">基于 litellm，支持 OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义</div>
+              <div class="feature-desc">
+                基于 litellm，支持 OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini /
+                自定义
+              </div>
             </div>
           </div>
           <div class="feature-item">
             <span class="feature-icon">◇</span>
             <div>
               <div class="feature-title">插件系统</div>
-              <div class="feature-desc">借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持热加载与依赖声明</div>
+              <div class="feature-desc">
+                借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持热加载与依赖声明
+              </div>
             </div>
           </div>
           <div class="feature-item">
             <span class="feature-icon">◈</span>
             <div>
               <div class="feature-title">多平台支持</div>
-              <div class="feature-desc">实例可绑定 OneBot / Telegram 等主平台，平台配置、ID 体系相互隔离</div>
+              <div class="feature-desc">
+                实例可绑定 OneBot / Telegram 等主平台，平台配置、ID 体系相互隔离
+              </div>
             </div>
           </div>
           <div class="feature-item">
             <span class="feature-icon">✧</span>
             <div>
               <div class="feature-title">Web 管理端</div>
-              <div class="feature-desc">Vue 3 + 原神风格暗色主题，仪表盘 / LLM 配置 / 对话调试 / 插件管理</div>
+              <div class="feature-desc">
+                Vue 3 + 原神风格暗色主题，仪表盘 / LLM 配置 / 对话调试 / 插件管理
+              </div>
             </div>
           </div>
           <div class="feature-item">
             <span class="feature-icon">▣</span>
             <div>
               <div class="feature-title">桌面应用</div>
-              <div class="feature-desc">PyWebView 套壳 + 系统托盘，开机自启，关闭窗口自动驻留后台</div>
+              <div class="feature-desc">
+                PyWebView 套壳 + 系统托盘，开机自启，关闭窗口自动驻留后台
+              </div>
             </div>
           </div>
         </div>
@@ -70,7 +89,7 @@ onMounted(() => {
         <div class="card-title">鸣谢</div>
       </div>
       <div class="about-section">
-        <p style="color: var(--text-secondary); margin-bottom: 18px;">
+        <p style="color: var(--text-secondary); margin-bottom: 18px">
           以下项目为本项目的开发提供了重要参考与支持，在此致以诚挚感谢。
         </p>
         <div class="thanks-list">
@@ -79,20 +98,26 @@ onMounted(() => {
               <a href="https://github.com/luoqingciya" target="_blank" rel="noopener">Qingci-Bot</a>
             </div>
             <div class="thanks-desc">
-              本项目的上游项目，由 Zhou Zhe (aka luoqingci) 原创开发。Qingci-Bot CE 基于其核心代码演进而来，感谢原项目为社区版奠定的坚实基础。
+              本项目的上游项目，由 Zhou Zhe (aka luoqingci) 原创开发。Qingci-Bot CE
+              基于其核心代码演进而来，感谢原项目为社区版奠定的坚实基础。
             </div>
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/nonebot/nonebot2" target="_blank" rel="noopener">NoneBot2</a>
+              <a href="https://github.com/nonebot/nonebot2" target="_blank" rel="noopener"
+                >NoneBot2</a
+              >
             </div>
             <div class="thanks-desc">
-              插件系统的 Matcher / Rule / Permission 设计借鉴了 NoneBot2 的架构思想，包括优先级调度、权限控制、命令注册器等核心概念。
+              插件系统的 Matcher / Rule / Permission 设计借鉴了 NoneBot2
+              的架构思想，包括优先级调度、权限控制、命令注册器等核心概念。
             </div>
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/LLOneBot/LuckyLilliaBot" target="_blank" rel="noopener">LLBot (LuckyLilliaBot)</a>
+              <a href="https://github.com/LLOneBot/LuckyLilliaBot" target="_blank" rel="noopener"
+                >LLBot (LuckyLilliaBot)</a
+              >
             </div>
             <div class="thanks-desc">
               OneBot 11 协议端实现，为本项目提供基于反向 WebSocket 的消息通信能力。
@@ -100,7 +125,9 @@ onMounted(() => {
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/nonebot/aiocqhttp" target="_blank" rel="noopener">aiocqhttp</a>
+              <a href="https://github.com/nonebot/aiocqhttp" target="_blank" rel="noopener"
+                >aiocqhttp</a
+              >
             </div>
             <div class="thanks-desc">
               OneBot 11 协议的 Python 异步实现，负责反向 WebSocket 连接、事件解析与 API 调用。
@@ -108,15 +135,20 @@ onMounted(() => {
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/BerriAI/litellm" target="_blank" rel="noopener">litellm</a>
+              <a href="https://github.com/BerriAI/litellm" target="_blank" rel="noopener"
+                >litellm</a
+              >
             </div>
             <div class="thanks-desc">
-              LLM 统一接口层，支持 100+ 模型提供商的统一调用格式，实现流式响应、Function Calling 与多模态能力。
+              LLM 统一接口层，支持 100+ 模型提供商的统一调用格式，实现流式响应、Function Calling
+              与多模态能力。
             </div>
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/fastapi/fastapi" target="_blank" rel="noopener">FastAPI</a>
+              <a href="https://github.com/fastapi/fastapi" target="_blank" rel="noopener"
+                >FastAPI</a
+              >
             </div>
             <div class="thanks-desc">
               高性能 Python Web 框架，为本项目提供 API 服务、WebSocket 支持与自动文档生成。
@@ -124,9 +156,13 @@ onMounted(() => {
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/tiangolo/sqlmodel" target="_blank" rel="noopener">SQLModel</a>
+              <a href="https://github.com/tiangolo/sqlmodel" target="_blank" rel="noopener"
+                >SQLModel</a
+              >
               &nbsp;/&nbsp;
-              <a href="https://github.com/sqlalchemy/alembic" target="_blank" rel="noopener">Alembic</a>
+              <a href="https://github.com/sqlalchemy/alembic" target="_blank" rel="noopener"
+                >Alembic</a
+              >
             </div>
             <div class="thanks-desc">
               SQLModel 提供 ORM 模型定义与异步会话支持；Alembic 负责数据库 schema 迁移管理。
@@ -148,53 +184,69 @@ onMounted(() => {
             <div class="thanks-name">
               <a href="https://github.com/encode/uvicorn" target="_blank" rel="noopener">uvicorn</a>
               &nbsp;/&nbsp;
-              <a href="https://github.com/python-websockets/websockets" target="_blank" rel="noopener">websockets</a>
+              <a
+                href="https://github.com/python-websockets/websockets"
+                target="_blank"
+                rel="noopener"
+                >websockets</a
+              >
             </div>
             <div class="thanks-desc">
-              uvicorn 作为 ASGI 服务器承载 FastAPI 应用；websockets 提供 WebSocket 通信能力，支撑实时状态推送。
+              uvicorn 作为 ASGI 服务器承载 FastAPI 应用；websockets 提供 WebSocket
+              通信能力，支撑实时状态推送。
             </div>
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/sqlalchemy/sqlalchemy" target="_blank" rel="noopener">SQLAlchemy</a>
+              <a href="https://github.com/sqlalchemy/sqlalchemy" target="_blank" rel="noopener"
+                >SQLAlchemy</a
+              >
               &nbsp;/&nbsp;
-              <a href="https://github.com/omnilib/aiosqlite" target="_blank" rel="noopener">aiosqlite</a>
+              <a href="https://github.com/omnilib/aiosqlite" target="_blank" rel="noopener"
+                >aiosqlite</a
+              >
             </div>
             <div class="thanks-desc">
-              SQLAlchemy 为 SQLModel 提供 ORM 底层；aiosqlite 实现异步 SQLite 存储，支撑消息、会话与配置持久化。
+              SQLAlchemy 为 SQLModel 提供 ORM 底层；aiosqlite 实现异步 SQLite
+              存储，支撑消息、会话与配置持久化。
             </div>
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/pydantic/pydantic" target="_blank" rel="noopener">pydantic</a>
+              <a href="https://github.com/pydantic/pydantic" target="_blank" rel="noopener"
+                >pydantic</a
+              >
               &nbsp;/&nbsp;
               <a href="https://github.com/yaml/pyyaml" target="_blank" rel="noopener">PyYAML</a>
               &nbsp;/&nbsp;
               <a href="https://github.com/encode/httpx" target="_blank" rel="noopener">httpx</a>
             </div>
             <div class="thanks-desc">
-              pydantic 提供数据校验与模型解析；PyYAML 解析实例配置；httpx 作为异步 HTTP 客户端支撑 API 调用。
+              pydantic 提供数据校验与模型解析；PyYAML 解析实例配置；httpx 作为异步 HTTP 客户端支撑
+              API 调用。
             </div>
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/agronholm/apscheduler" target="_blank" rel="noopener">APScheduler</a>
+              <a href="https://github.com/agronholm/apscheduler" target="_blank" rel="noopener"
+                >APScheduler</a
+              >
             </div>
-            <div class="thanks-desc">
-              后台任务调度框架，支撑定时任务、自动清理等周期性能力。
-            </div>
+            <div class="thanks-desc">后台任务调度框架，支撑定时任务、自动清理等周期性能力。</div>
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/python-pillow/Pillow" target="_blank" rel="noopener">Pillow</a>
+              <a href="https://github.com/python-pillow/Pillow" target="_blank" rel="noopener"
+                >Pillow</a
+              >
             </div>
-            <div class="thanks-desc">
-              图像处理库，用于托盘图标渲染与图片类插件的生成能力。
-            </div>
+            <div class="thanks-desc">图像处理库，用于托盘图标渲染与图片类插件的生成能力。</div>
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/pyinstaller/pyinstaller" target="_blank" rel="noopener">PyInstaller</a>
+              <a href="https://github.com/pyinstaller/pyinstaller" target="_blank" rel="noopener"
+                >PyInstaller</a
+              >
             </div>
             <div class="thanks-desc">
               Python 应用打包工具，将 Qingci-Bot CE 打包为跨平台桌面可执行文件。
@@ -202,22 +254,35 @@ onMounted(() => {
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/r0x0r/pywebview" target="_blank" rel="noopener">pywebview</a>
+              <a href="https://github.com/r0x0r/pywebview" target="_blank" rel="noopener"
+                >pywebview</a
+              >
               &nbsp;/&nbsp;
-              <a href="https://github.com/moses-palmer/pystray" target="_blank" rel="noopener">pystray</a>
+              <a href="https://github.com/moses-palmer/pystray" target="_blank" rel="noopener"
+                >pystray</a
+              >
             </div>
             <div class="thanks-desc">
-              pywebview 将 Web UI 封装为原生桌面窗口；pystray 提供系统托盘支持，实现关闭驻留后台与开机自启。
+              pywebview 将 Web UI 封装为原生桌面窗口；pystray
+              提供系统托盘支持，实现关闭驻留后台与开机自启。
             </div>
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/lancedb/lancedb" target="_blank" rel="noopener">LanceDB</a>
+              <a href="https://github.com/lancedb/lancedb" target="_blank" rel="noopener"
+                >LanceDB</a
+              >
               &nbsp;/&nbsp;
-              <a href="https://github.com/modelcontextprotocol/python-sdk" target="_blank" rel="noopener">MCP</a>
+              <a
+                href="https://github.com/modelcontextprotocol/python-sdk"
+                target="_blank"
+                rel="noopener"
+                >MCP</a
+              >
             </div>
             <div class="thanks-desc">
-              LanceDB 为可选向量知识库提供本地向量检索；MCP SDK 提供 Model Context Protocol 能力支持。
+              LanceDB 为可选向量知识库提供本地向量检索；MCP SDK 提供 Model Context Protocol
+              能力支持。
             </div>
           </div>
         </div>

@@ -1,12 +1,12 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { RouterView, RouterLink, useRoute } from 'vue-router';
 import { useAppStore } from './stores/app';
 import { useToast } from './composables/useToast';
 
 const route = useRoute();
 const store = useAppStore();
-const { toast, showToast } = useToast();
+const { toast } = useToast();
 let pollTimer = null;
 let pollDelay = 3000;
 let disposed = false;
@@ -98,7 +98,7 @@ onUnmounted(() => {
                 yellow: store.botRunning && !store.botConnected,
                 gray: !store.botRunning,
               }"
-            ></span>
+            />
             <span>{{ store.statusText }}</span>
           </div>
           <div v-if="activePlatforms.length" class="platform-status">
@@ -111,7 +111,7 @@ onUnmounted(() => {
               <span
                 class="status-dot"
                 :class="p.connected ? 'green' : store.botRunning ? 'yellow' : 'gray'"
-              ></span>
+              />
               <span class="platform-name">{{ p.display_name }}</span>
               <span class="platform-state">{{ p.connected ? '在线' : '离线' }}</span>
             </div>
