@@ -57,7 +57,7 @@ def assemble_bot(bot: "QingciBot") -> None:
     # （connection 保持主连接引用以兼容现有代码，同时注册到 platforms）
     bot.platforms = {"onebot": bot.connection}  # type: ignore[attr-defined]
     _platforms_cfg = config.platforms
-    for _attr in ("telegram",):
+    for _attr in ("telegram", "onebot12"):
         _cfg = getattr(_platforms_cfg, _attr, None)
         if _cfg is None or not getattr(_cfg, "enabled", False):
             continue

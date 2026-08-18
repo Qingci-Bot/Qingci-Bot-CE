@@ -77,7 +77,7 @@ class CreateInstanceRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
     description: str = Field(default="", max_length=256)
     port: int | None = Field(default=None, ge=1024, le=65535)
-    platform: str = Field(default="onebot", description="主平台：onebot / telegram")
+    platform: str = Field(default="onebot", description="主平台：onebot / onebot12 / telegram")
 
 
 @router.post("", dependencies=[Depends(require_auth)], status_code=201)

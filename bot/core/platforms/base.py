@@ -205,6 +205,15 @@ def make_platform(platform_cfg: Any) -> PlatformAdapter | None:
             request_timeout=float(getattr(platform_cfg, "request_timeout", 40.0) or 40.0),
             max_retries=int(getattr(platform_cfg, "max_retries", 0) or 0),
         )
+    if name == "onebot12":
+        from .onebot12 import OneBot12Adapter
+
+        return OneBot12Adapter(
+            host=str(getattr(platform_cfg, "host", "127.0.0.1") or "127.0.0.1"),
+            port=int(getattr(platform_cfg, "port", 3002) or 3002),
+            access_token=str(getattr(platform_cfg, "access_token", "") or ""),
+            enabled=enabled,
+        )
     logger.warning(f"未知的平台适配器: {name}")
     return None
 

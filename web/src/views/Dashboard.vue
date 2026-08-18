@@ -171,8 +171,15 @@ const triggerDesc = {
             <strong>OneBot 反向 WS 地址：</strong>ws://{{
               store.config.onebot?.host || '127.0.0.1'
             }}:{{ store.config.onebot?.port || 3001 }}<br />
-            当前实例平台为 <strong>OneBot</strong>；请在协议端（如 LLBot / NapCat）中添加该反向
+            当前实例平台为 <strong>OneBot 11</strong>；请在协议端（如 LLBot / NapCat）中添加该反向
             WebSocket 连接。
+          </template>
+          <template v-else-if="(store.currentInstance?.platform || 'onebot') === 'onebot12'">
+            <strong>OneBot 12 反向 WS 地址：</strong>ws://{{
+              store.config.platforms?.onebot12?.host || '127.0.0.1'
+            }}:{{ store.config.platforms?.onebot12?.port || 3002 }}<br />
+            当前实例平台为 <strong>OneBot 12</strong>；请在支持 OneBot 12 的协议端（如 NapCat /
+            Lagrange.OneBot）中添加该反向 WebSocket 连接。
           </template>
           <template v-else>
             <strong>当前实例平台：</strong>{{ store.currentInstance?.platform }}<br />

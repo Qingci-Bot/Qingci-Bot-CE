@@ -28,17 +28,21 @@ DEFAULT_INSTANCE_NAME = "default"
 DEFAULT_PLATFORM = "onebot"
 
 # 实例可绑定的主平台（创建实例时选定，驱动该实例默认启用的适配器）
-SUPPORTED_PLATFORMS = ("onebot", "telegram")
+SUPPORTED_PLATFORMS = ("onebot", "onebot12", "telegram")
 
 # 平台 → 创建实例时对 config.yaml 应用的最小覆盖（仅设启用开关，其余走模板默认）
 PLATFORM_DEFAULT_OVERLAY: dict[str, dict] = {
     "onebot": {
         "onebot": {"enabled": True},
-        "platforms": {"telegram": {"enabled": False}},
+        "platforms": {"telegram": {"enabled": False}, "onebot12": {"enabled": False}},
+    },
+    "onebot12": {
+        "onebot": {"enabled": False},
+        "platforms": {"telegram": {"enabled": False}, "onebot12": {"enabled": True}},
     },
     "telegram": {
         "onebot": {"enabled": False},
-        "platforms": {"telegram": {"enabled": True}},
+        "platforms": {"telegram": {"enabled": True}, "onebot12": {"enabled": False}},
     },
 }
 

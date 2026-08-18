@@ -336,10 +336,21 @@ class TelegramConfig(BaseModel):
     max_retries: int = 0  # 网络传输错误最多重试次数（0 不重试，避免发送类重复）
 
 
+class OneBot12Config(BaseModel):
+    """OneBot 12 平台适配器配置（原生反向 WebSocket，事件无需翻译）"""
+
+    name: str = "onebot12"
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 3002  # 与 v11 的 onebot.port 区分，避免端口冲突
+    access_token: str = ""
+
+
 class PlatformsConfig(BaseModel):
     """多平台适配器配置（onebot 为内置默认平台，走 onebot.* 配置）"""
 
     telegram: TelegramConfig = TelegramConfig()
+    onebot12: OneBot12Config = OneBot12Config()
 
 
 class AppConfig(BaseModel):

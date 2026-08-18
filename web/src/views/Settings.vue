@@ -10,6 +10,7 @@ const form = reactive({
   onebot: {},
   platforms: {
     telegram: { name: 'telegram', enabled: false, token: '', poll_interval: 1.0 },
+    onebot12: { name: 'onebot12', enabled: false, host: '127.0.0.1', port: 3002, access_token: '' },
   },
   api_key: '',
 });
@@ -48,6 +49,7 @@ function resetForm() {
   const bot = store.config.bot || {};
   const onebot = store.config.onebot || {};
   const telegram = (store.config.platforms || {}).telegram || {};
+  const onebot12 = (store.config.platforms || {}).onebot12 || {};
   Object.assign(form, {
     bot: {
       name: bot.name || 'Qingci-Bot CE',
@@ -70,6 +72,13 @@ function resetForm() {
         enabled: telegram.enabled || false,
         token: telegram.token || '',
         poll_interval: telegram.poll_interval || 1.0,
+      },
+      onebot12: {
+        name: 'onebot12',
+        enabled: onebot12.enabled || false,
+        host: onebot12.host || '127.0.0.1',
+        port: onebot12.port || 3002,
+        access_token: onebot12.access_token || '',
       },
     },
     api_key: store.config.api_key || '',
@@ -122,6 +131,11 @@ async function saveConfig() {
         ...form.platforms.telegram,
         name: 'telegram',
         poll_interval: Number(form.platforms.telegram.poll_interval) || 1.0,
+      },
+      onebot12: {
+        ...form.platforms.onebot12,
+        name: 'onebot12',
+        port: Number(form.platforms.onebot12.port) || 3002,
       },
     };
     newConfig.api_key = form.api_key;
@@ -325,7 +339,7 @@ async function saveConfigJson() {
       </div>
     </div>
 
-    <div v-else class="card fade-in">
+    <div v-else-if="currentPlatform === 'telegram'" class="card fade-in">
       <div class="card-header">
         <div class="card-title">Telegram 连接</div>
       </div>
@@ -374,6 +388,53 @@ async function saveConfigJson() {
         启用后以 Telegram Bot API 长轮询接入，现有插件/命令零改动可用；回复自动路由到对应平台。
         <strong>修改后需要重启 Bot 才能生效。</strong>Token 已配置时显示为
         <code>***</code>，留空保存不会清空原值。
+      </div>
+    </div>
+
+    <div v-else class="card fade-in">
+      <div class="card-header">
+        <div class="card-title">OneBot 12 连接</div>
+      </div>
+      <div class="platform-cfg">
+        <div class="platform-cfg-head">
+          <div class="form-group" style="margin: 0; flex: 1">
+            <label>OneBot 12（原生反向 WebSocket）</label>
+            <div class="switch-row">
+              <label class="switch">
+                <input v-model="form.platforms.onebot12.enabled" type="checkbox" />
+                <span class="slider" />
+              </label>
+              <span class="text-muted" style="font-size: 13px">
+                {{ form.platforms.onebot12.enabled ? '已启用' : '已停用' }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>监听地址</label>
+          <input v-model="form.platforms.onebot12.host" type="text" placeholder="127.0.0.1" />
+        </div>
+        <div class="form-group">
+          <label>监听端口</label>
+          <input v-model.number="form.platforms.onebot12.port" type="number" placeholder="3002" />
+        </div>
+        <div class="form-group">
+          <label>Access Token（可选）</label>
+          <input
+            v-model="form.platforms.onebot12.access_token"
+            type="password"
+            placeholder="留空表示不校验"
+          />
+        </div>
+      </div>
+      <div class="hint-text" style="margin-top: 16px">
+        <strong>反向 WebSocket 地址：</strong>ws://{{
+          form.platforms.onebot12.host || '127.0.0.1'
+        }}:{{ form.platforms.onebot12.port || 3002 }}<br />
+        事件以 OneBot 12 原生格式直通，无需 v11 翻译；请在支持 OneBot 12 的协议端（如 NapCat /
+        Lagrange.OneBot）中添加该反向连接。修改端口后需要重启 Bot 才能生效。
       </div>
     </div>
 

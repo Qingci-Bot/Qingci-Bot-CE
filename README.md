@@ -15,7 +15,7 @@
 ## 特性
 
 - **OneBot 12 内核**：内部统一采用 OneBot 12 事件模型（`type` / `detail_type` / 标准 `{type,data}` 消息段，媒体以 `file_id` 引用）；基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接任意 OneBot 11 反向 WebSocket 协议端（如 LLBot / NapCat / go-cqhttp），v11 事件在入口由 `v11_compat` 翻译层自动归一化为 v12 事件，并对存量插件保留 v11 兼容字段（`post_type` / `message_type` / `raw_message`）——OneBot 11 只是"众多平台之一"
-- **多平台适配器**：平台协议归一化为 OneBot 12 内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot（v11 输入）+ Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `voice`、video → `video` v12 段；发送将 v12 `image`/`voice`/`video` 段映射到 `sendPhoto`/`sendVoice`/`sendVideo`）、回复段与成员变动通知（成员进出群/权限变更归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_*` notice）；长轮询采用有限并发消费（慢更新不阻塞同批）且失败更新自动确认跳过避免重放，连接失败指数退避并自动重连，Bot Token 支持运行时热更新（自动重验身份），HTTP 超时/重试可配置，API 调用错误按 401/403/404 分类，平台状态接口暴露连接健康指标（连续错误数/最近错误与断连时间/退避状态）
+- **多平台适配器**：平台协议归一化为 OneBot 12 内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot 11（v11 反向 WS + `v11_compat` 翻译）+ **OneBot 12（原生反向 WS，事件直通无需翻译，动作 JSON-RPC）** + Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `voice`、video → `video` v12 段；发送将 v12 `image`/`voice`/`video` 段映射到 `sendPhoto`/`sendVoice`/`sendVideo`）、回复段与成员变动通知（成员进出群/权限变更归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_*` notice）；长轮询采用有限并发消费（慢更新不阻塞同批）且失败更新自动确认跳过避免重放，连接失败指数退避并自动重连，Bot Token 支持运行时热更新（自动重验身份），HTTP 超时/重试可配置，API 调用错误按 401/403/404 分类，平台状态接口暴露连接健康指标（连续错误数/最近错误与断连时间/退避状态）
 - **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 7 大提供商（OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义），含流式响应、Function Calling、多模态；填好 API Key 后可一键拉取提供商可用模型列表
 - **人格/人设系统**：可配置多组人格（system_prompt 集合），聊天中 `/persona` 命令随时切换（会话级覆盖），Web UI 可视化管理
 - **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪（可选摘要压缩）；Web UI 按会话分组可视化查看 / 删除
@@ -185,12 +185,23 @@ mypy bot api
 
 ## 5. 配置 OneBot 协议端
 
+### 5.1 OneBot 11（默认）
+
 在 OneBot 11 协议端（如 LLBot / NapCat / go-cqhttp）中添加反向 WebSocket 连接：
 
 - 地址：`ws://127.0.0.1:3001/ws`（端口默认 3001，需与 `config.yaml` 的 `onebot.port` 保持一致）
 - Access Token：留空或与 `config.yaml` 中 `onebot.access_token` 保持一致
 
 协议端会自动携带 OneBot v11 标准的 `X-Client-Role: universal` 和 `X-Self-ID` header 连接。接入的 v11 事件会由 `bot/core/v11_compat.py` 翻译层自动归一化为 OneBot 12 事件（`type`/`detail_type`）后进入核心调度，插件侧仍能读取兼容字段（`post_type`/`message_type`/`raw_message`）。
+
+### 5.2 OneBot 12（原生，无需翻译）
+
+创建实例时选择 `OneBot 12` 主平台（或手动设置 `platforms.onebot12.enabled: true`），在支持 OneBot 12 的协议端（如 NapCat / Lagrange.OneBot）中添加反向 WebSocket 连接：
+
+- 地址：`ws://127.0.0.1:3002/`（端口默认 3002，需与 `config.yaml` 的 `platforms.onebot12.port` 保持一致）
+- Access Token：留空或与 `config.yaml` 中 `platforms.onebot12.access_token` 保持一致（实现端以 `Authorization: Bearer` 或 `?access_token=` 携带）
+
+事件以 OneBot 12 标准格式（`type`/`detail_type`/`message[]`）直接进入核心调度，动作以 JSON-RPC（`send_message` 等）调用——与 v11 相比省去翻译层，回复段原生 v12 表达。
 
 ## 6. 配置 LLM
 
@@ -311,10 +322,20 @@ bot:
   user_blacklist: []               # 用户黑名单
   log_json: false                  # 结构化 JSON 日志（false 使用普通文本日志）
 onebot:
-  enabled: true                    # 是否启动 OneBot 反向 WS 服务端（Telegram 主平台实例可设为 false）
+  enabled: true                    # 是否启动 OneBot 反向 WS 服务端（Telegram/OneBot 12 主平台实例可设为 false）
   host: 127.0.0.1
   port: 3001                       # 协议端连接 ws://host:port/ws
   access_token: ''
+platforms:
+  onebot12:                        # OneBot 12 原生反向 WS 适配器（默认关闭）
+    enabled: false                 # true 启用后协议端（NapCat/Lagrange 等）连 ws://host:port/
+    host: 127.0.0.1
+    port: 3002                     # 与 onebot.port 区分
+    access_token: ''
+  telegram:                        # Telegram 平台适配器（默认关闭）
+    enabled: false
+    token: ''
+    poll_interval: 1.0
 llm:
   provider: openai                 # openai / deepseek / ollama / siliconflow / claude / gemini / custom
   api_url: https://api.openai.com/v1  # 留空则按 provider 直连官方

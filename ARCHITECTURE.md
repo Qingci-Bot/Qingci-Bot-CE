@@ -143,7 +143,7 @@ Qingci-Bot-CE/
 | 层 | 技术 |
 |----|------|
 | 后端 | Python 3.12 + FastAPI + uvicorn |
-| 平台接入 | 内核统一 OneBot 12 事件模型；输入含 OneBot 11（aiocqhttp 反向 WS，v11_compat 翻译层）+ Telegram（Bot API 长轮询），统一 `PlatformAdapter` 契约 |
+| 平台接入 | 内核统一 OneBot 12 事件模型；输入含 OneBot 11（aiocqhttp 反向 WS，v11_compat 翻译层）+ OneBot 12（原生反向 WS，事件直通）+ Telegram（Bot API 长轮询），统一 `PlatformAdapter` 契约 |
 | LLM | litellm (统一接口，延迟导入加速启动) |
 | MCP | mcp (Model Context Protocol，stdio/HTTP) |
 | 数据库 | SQLModel + Alembic + aiosqlite (WAL 模式) |
@@ -177,7 +177,8 @@ Qingci-Bot-CE/
 - **`base.py`**：定义 `PlatformAdapter` 契约（适配器名/展示名、启动与关闭、事件上报回调、发送消息、`get_status`/API 透传等），任何平台只需实现该契约即可接入
 - **`telegram.py`**：Telegram 平台实现——以 Bot API 长轮询（`getUpdates`）接入，由 `platforms.telegram.enabled/token/poll_interval` 控制；收到更新后归一化为 **OneBot 12 消息事件**并注入 `platform: "telegram"`。关键能力：① 群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 v12 `mention` 段（`user_id=self_id`）并置 `is_at_bot`，确保 at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；② `photo` / `image/*` document 归一化为 `image` 段（`file_id`）+ `images`，`voice` → `voice`、`video` / `video_note` → `video` 段，消息 `sub_type` 语义对齐 OneBot（私聊 `friend`）；③ 发送消费 OneBot 12 标准段——`image` → `sendPhoto`、`voice` → `sendVoice`、`video` → `sendVideo`（file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，caption 附着首条媒体），`reply` 段 → 回复指定消息，其余不可渲染的段降级为纯文本并合并连续空白，之外走 `sendMessage`；④ `chat_member` / `my_chat_member` 成员变动归一化为 OneBot `notice`（`group_member_increase` / `group_member_decrease` / `group_admin_set` / `group_admin_unset`，被邀请 `sub_type=invite`），由既有事件 Matcher 消费；⑤ 轮询 offset 在处理单条更新后推进，单条处理失败仅记录并仍推进，避免失败更新无限重放
 - **`OneBotConnection`**（`bot/core/connection.py`）作为「onebot」平台接入 OneBot 11 反向 WebSocket，收到 v11 事件先经 `v11_compat.v11_event_to_v12()` 翻译为 v12 事件再上报（同时保留 `platform`/兼容字段），与原反向 WS 行为兼容，回复路由与附加平台共用同一发送映射
-- 附加平台（Telegram）启动失败仅记录日志，不阻断主平台（OneBot）可用性
+- **`onebot12.py`**：OneBot 12 平台实现——aiohttp 反向 WebSocket 服务端（`platforms.onebot12.enabled/host/port/access_token` 控制），支持 OneBot 12 实现端（NapCat / Lagrange.OneBot 等）原生接入；事件以 v12 标准格式直通 Dispatcher（注入 `platform: "onebot12"`），动作以 JSON-RPC（`{action, params, echo}`）请求并通过 echo 匹配响应，`send_message` 动作消费 v12 段数组原生表达，与 v11 相比省去翻译层
+- 附加平台（Telegram / OneBot 12）启动失败仅记录日志，不阻断主平台（OneBot）可用性
 
 ### 事件模型（OneBot 12 内核）
 

@@ -10,8 +10,13 @@ const { showToast } = useToast();
 const platformOptions = [
   {
     value: 'onebot',
-    label: 'OneBot',
-    hint: '反向 WebSocket，对接 OneBot 协议端（如 LLBot / NapCat）',
+    label: 'OneBot 11',
+    hint: '反向 WebSocket，对接 OneBot 11 协议端（如 LLBot / NapCat）',
+  },
+  {
+    value: 'onebot12',
+    label: 'OneBot 12',
+    hint: '原生反向 WebSocket，对接 OneBot 12 协议端（如 NapCat / Lagrange.OneBot）',
   },
   { value: 'telegram', label: 'Telegram', hint: 'Bot API 长轮询（创建后在设置中填写 token）' },
 ];
@@ -222,7 +227,11 @@ function onRename(inst) {
         </p>
         <ul style="margin: 0 0 10px 16px; padding: 0; line-height: 1.8">
           <li>
-            <strong>OneBot</strong> — 反向 WebSocket，对接 OneBot 11 协议端（如 LLBot / NapCat）
+            <strong>OneBot 11</strong> — 反向 WebSocket，对接 OneBot 11 协议端（如 LLBot / NapCat）
+          </li>
+          <li>
+            <strong>OneBot 12</strong> — 原生反向 WebSocket，事件直通无需翻译，对接 NapCat /
+            Lagrange.OneBot 等实现端
           </li>
           <li><strong>Telegram</strong> — Bot API 长轮询，创建后在系统设置中填写 Bot Token</li>
         </ul>

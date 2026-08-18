@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **平台状态按实例隔离**：`GET /api/bot/status` 的 `platforms` 列表仅上报已启用的适配器（`enabled=False` 跳过）——Telegram 主平台实例不再混入已停用的 OneBot 状态；WebUI 侧边栏平台状态按当前激活实例主平台过滤展示
 - **系统设置按实例平台渲染**：WebUI 系统设置按当前实例主平台条件渲染连接配置——OneBot 实例仅显示「OneBot 连接」卡片，Telegram 实例仅显示「Telegram 连接」卡片（原同时展示两套平台配置）
 - **实例管理独立页面**：侧边栏实例列表移至独立「实例管理」页面（`/instances`），侧边栏导航新增该入口；侧边栏仅保留平台连接状态指示
+- **OneBot 12 原生对接（`onebot12.py`）**：新增 OneBot 12 平台适配器——aiohttp 反向 WebSocket 服务端（`platforms.onebot12.enabled/host/port/access_token` 配置，默认端口 3002），OneBot 12 实现端（NapCat / Lagrange.OneBot 等）原生接入；事件以 v12 标准格式直通 Dispatcher（无需 v11 翻译），动作以 JSON-RPC（`{action, params, echo}`）请求并通过 echo 匹配响应，`send_message` 原生消费 v12 段数组；`SUPPORTED_PLATFORMS` 新增 `onebot12` 主平台选项（创建实例可选，自动渲染对应配置），WebUI 实例管理/系统设置/仪表盘同步支持
 - **前端工程质量修复**：修复 `PluginManager.vue` 的 `v-if`/`v-for` 同元素冲突与 `App.vue` 未使用变量（lint 存量 2 error 清零）；eslint 关闭与 Prettier 冲突的格式规则（`vue/html-indent` / `vue/html-self-closing` / `vue/html-closing-bracket-newline`），`web/src` 全量统一 Prettier 格式；CI 新增 `frontend` job（eslint lint + prettier check + vite build）
 - **文档同步**：README / ARCHITECTURE / PLUGIN_DEV 全面更新——产品定位改为 OneBot 12 内核 + 多平台，架构图补充 v11_compat 翻译层与事件模型章节，插件开发指南推荐 SDK v12 消息段（v11/CQ 路径标注为平台专用）
 
