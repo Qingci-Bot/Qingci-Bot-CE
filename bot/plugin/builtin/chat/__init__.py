@@ -312,6 +312,7 @@ class ChatPlugin(PluginBase):
                             "content": message,
                             "message_type": ctx.message_type,
                             "role": "user",
+                            "platform": ctx.platform,
                         },
                         {
                             "message_id": f"{ctx.message_id}_reply",
@@ -320,6 +321,7 @@ class ChatPlugin(PluginBase):
                             "content": reply,
                             "message_type": ctx.message_type,
                             "role": "assistant",
+                            "platform": ctx.platform,
                         },
                     ]
                 )

@@ -33,6 +33,7 @@ from qingci_plugin_sdk.context import MessageContext
 from ..core.di import DIContainer
 from ..core.dispatcher import MessageDispatcher
 from ..core.event_bus import EventBus
+from ..core.message import segments_to_cq
 from ..core.platforms.base import PlatformAdapter
 from ..core.session_state import SessionStateManager
 from ..llm.tools import ToolRegistry
@@ -108,15 +109,15 @@ class FakeConnection(PlatformAdapter):
         self.api_calls.append((action, params or {}))
         return {}
 
-    async def send_private_msg(self, user_id: int, message: str) -> dict:
-        self.sent.append(("private", user_id, message))
+    async def send_private_msg(self, user_id: int, message: str | list) -> dict:
+        self.sent.append(("private", user_id, segments_to_cq(message)))
         return {"message_id": f"sent-{len(self.sent)}"}
 
-    async def send_group_msg(self, group_id: int, message: str) -> dict:
-        self.sent.append(("group", group_id, message))
+    async def send_group_msg(self, group_id: int, message: str | list) -> dict:
+        self.sent.append(("group", group_id, segments_to_cq(message)))
         return {"message_id": f"sent-{len(self.sent)}"}
 
-    async def send_msg(self, message_type: str, target_id: int, message: str) -> dict:
+    async def send_msg(self, message_type: str, target_id: int, message: str | list) -> dict:
         if message_type == "private":
             return await self.send_private_msg(target_id, message)
         if message_type == "group":

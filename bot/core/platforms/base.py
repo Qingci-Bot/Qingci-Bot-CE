@@ -142,13 +142,17 @@ class PlatformAdapter:
 
     # ============ 发送与能力（子类实现） ============
 
-    async def send_msg(self, message_type: str, target_id: int, message: str) -> dict:
+    async def send_msg(self, message_type: str, target_id: int, message: str | list) -> dict:
         """发送消息（平台统一入口）
+
+        OneBot 12 迁移（方案 A）：message 可为文本或 v12 段数组
+        （{type, data}，媒体用 file_id）。平台负责将段数组转换为
+        自身 API 调用；v11 平台先将段数组序列化为 CQ 码。
 
         Args:
             message_type: group / private
             target_id: 群号或用户号（Telegram 为 chat_id）
-            message: 文本内容（可能含 CQ 码段，由平台归一化处理）
+            message: 文本内容或 v12 段数组
         """
         raise NotImplementedError
 

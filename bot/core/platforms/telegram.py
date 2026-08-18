@@ -38,6 +38,7 @@ from typing import Any
 
 import httpx
 
+from ..message import segments_to_cq
 from .base import PlatformAdapter, cancel_and_await
 
 logger = logging.getLogger("qingci-bot.platforms.telegram")
@@ -613,11 +614,17 @@ class TelegramAdapter(PlatformAdapter):
 
     # ============ 发送 ============
 
-    async def send_msg(self, message_type: str, target_id: int, message: str) -> dict:
-        """发送消息：识别 [CQ:image] → sendPhoto，否则 sendMessage"""
+    async def send_msg(self, message_type: str, target_id: int, message: str | list) -> dict:
+        """发送消息：识别 [CQ:image] → sendPhoto，否则 sendMessage
+
+        OneBot 12 迁移：message 可为文本 / 段数组（段数组先序列化为
+        CQ 字符串再解析；M3 将改为直接消费 v12 段）。
+        """
         chat_id = self._safe_int(target_id)
         if chat_id <= 0:
             raise ValueError(f"Telegram 发送失败：无效的 chat_id={target_id}")
+        if isinstance(message, list):
+            message = segments_to_cq(message)
         return await self._route_send(chat_id, str(message or ""))
 
     @staticmethod

@@ -16,13 +16,24 @@ class Message(SQLModel, table=True):
     """消息记录表"""
 
     __tablename__ = "messages"
-    # 复合索引：按群 + 时间范围查询消息
-    __table_args__ = (Index("ix_messages_group_id_created_at", "group_id", "created_at"),)
+    # 复合索引：按群 + 时间范围查询消息；
+    # 组合索引：多平台下按 (platform, message_id) 定位消息（方案A迁移：
+    # message_id 不再全局唯一，同一 ID 在不同平台可并存）
+    __table_args__ = (
+        Index("ix_messages_group_id_created_at", "group_id", "created_at"),
+        Index(
+            "ix_messages_platform_message_id_created_at",
+            "platform",
+            "message_id",
+            "created_at",
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
-    message_id: str = Field(index=True, unique=True)
+    message_id: str = Field(index=True)  # 平台消息 ID（不再唯一）
     user_id: int = Field(index=True)
     group_id: int | None = Field(default=None, index=True)
+    platform: str = Field(default="onebot")  # 消息来源平台（onebot / telegram / ...）
     content: str
     message_type: str = Field(default="group")
     role: str = Field(default="user")

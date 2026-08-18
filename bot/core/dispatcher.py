@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 # 消息上下文统一由独立插件 SDK 定义（qingci_plugin_sdk.context.MessageContext），
 # 主项目与外部插件共用同一类型，避免协议层定义漂移。
 from qingci_plugin_sdk.context import MessageContext
+from qingci_plugin_sdk.segments import Message
 
 from ..plugin.events import parse_event
 from ..plugin.matcher import MatcherContext
@@ -74,7 +75,17 @@ class MessageDispatcher:
         Matcher 调度由 PluginManager + Dispatcher.run_matchers 完成。
         对 notice/request 等非消息事件也填充基础字段，使事件 Matcher 的
         权限/规则检查（如按 user_id/group_id 过滤）可用。
+
+        OneBot 12 迁移（方案 A）：双模事件输入。
+        - OneBot 12 事件（含 type 字段）→ MessageContext.from_v12_event
+          （post_type/message_type 由 type/detail_type 派生）
+        - OneBot 11 事件（post_type 字段，来自 aiocqhttp/telegram 旧适配器）
+          → 本模块的 v11 解析路径（M3 平台适配器迁移完成后此路径移除）
         """
+        # v12 事件：type 为必填基础字段
+        if event.get("type"):
+            return MessageContext.from_v12_event(event)
+
         post_type = event.get("post_type", "")
 
         ctx = MessageContext(raw_event=event)
@@ -420,14 +431,20 @@ class MessageDispatcher:
             bot.plugin_manager.record_metric(matcher, elapsed, is_error=is_error)
 
     def _parse_message(self, event: dict) -> MessageContext:
-        """解析消息内容，提取 CQ 码"""
+        """解析 OneBot 11 消息事件（v11 兼容路径，M3 平台适配器迁移后移除）
+
+        消息段统一归一化为 OneBot 12 段存储（Message.from_raw 自动识别
+        v11 段：at -> mention、record -> voice 等）；
+        at_list 保持 v11 语义（0 表示 @全体），is_at_bot 用 self_id 匹配。
+        """
         ctx = MessageContext(raw_event=event)
 
         ctx.post_type = event.get("post_type", "")
         ctx.message_type = event.get("message_type", "")
         ctx.sub_type = event.get("sub_type", "")
         # 消息缺失 message_id 时生成占位 id，避免空串在 messages 表的
-        # unique 约束下被静默丢弃（第二条起全部冲突）
+        # unique 约束下被静默丢弃（第二条起全部冲突）；
+        # DB 迁移为组合索引（M2-4）后可移除该占位
         raw_mid = event.get("message_id")
         if raw_mid not in (None, "", 0):
             ctx.message_id = str(raw_mid)
@@ -439,41 +456,29 @@ class MessageDispatcher:
         ctx.sender = event.get("sender", {}) or {}
         ctx.raw_message = event.get("raw_message", "")
 
-        # 解析 message 数组
-        message = event.get("message", [])
-        if isinstance(message, str):
-            message = [{"type": "text", "data": {"text": message}}]
-        elif not isinstance(message, list):
-            message = []
-        text_parts = []
-        for seg in message:
-            if not isinstance(seg, dict):
-                continue
-            ctx.segments.append(seg)
+        # 段归一化：字符串 / v11 段数组统一转为 v12 段数组
+        msg = Message.from_raw(event.get("message"))
+        ctx.segments = msg.as_dicts()
+        ctx.plain_text = msg.extract_plain_text()
+
+        # mention 统计（v11 at 段已由 Message 归一化为 mention/mention_all）
+        self_id_str = str(ctx.self_id or "")
+        for seg in ctx.segments:
             seg_type = seg.get("type", "")
             data = seg.get("data", {})
             if not isinstance(data, dict):
                 data = {}
-            if seg_type == "text":
-                text_parts.append(str(data.get("text") or ""))
-            elif seg_type == "at":
-                qq_val = data.get("qq", "0")
-                if qq_val == "all" or qq_val == 0 or qq_val == "0":
-                    ctx.at_list.append(0)  # 0 表示全体成员
-                else:
-                    try:
-                        target = int(qq_val)
-                    except (ValueError, TypeError):
-                        continue  # 跳过无效 @
-                    if target == 0:
-                        continue
-                    ctx.at_list.append(target)
-                    if ctx.self_id and target == ctx.self_id:
+            if seg_type == "mention":
+                uid = str(data.get("user_id", "") or "")
+                if uid:
+                    ctx.at_list.append(uid)
+                    if self_id_str and uid == self_id_str:
                         ctx.is_at_bot = True
+            elif seg_type == "mention_all":
+                ctx.at_list.append(0)  # 0 表示全体成员（v11 语义）
             elif seg_type == "image":
-                ctx.images.append(data.get("url") or "")
+                ctx.images.append(str(data.get("file_id") or data.get("url") or ""))
 
-        ctx.plain_text = "".join(text_parts).strip()
         return ctx
 
     @staticmethod

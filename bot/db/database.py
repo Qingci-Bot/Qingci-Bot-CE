@@ -47,6 +47,7 @@ class Database:
         message_type: str = "group",
         group_id: int | None = None,
         role: str = "user",
+        platform: str = "onebot",
     ) -> None:
         """保存一条消息记录"""
         try:
@@ -59,6 +60,7 @@ class Database:
                         message_type=message_type,
                         group_id=group_id,
                         role=role,
+                        platform=platform,
                     )
                 )
         except IntegrityError:
@@ -82,6 +84,7 @@ class Database:
                         message_type=r.get("message_type", "group"),
                         group_id=r.get("group_id"),
                         role=r.get("role", "user"),
+                        platform=r.get("platform", "onebot"),
                     )
                     for r in records
                 )

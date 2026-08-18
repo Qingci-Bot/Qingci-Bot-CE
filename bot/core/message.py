@@ -3,6 +3,10 @@
 提供类型化的消息段构造（text / at / image / face / voice / video /
 reply / forward），统一 CQ 码转义，替代手写 CQ 码字符串拼接。
 
+OneBot 12 迁移（方案 A）：本模块的 Message/MessageSegment 与 CQ 序列化
+仅保留给 OneBot-11 平台（aiocqhttp / telegram 旧路径）使用；
+框架核心的消息段统一由 SDK 的 qingci_plugin_sdk.segments 承担（v12 段）。
+
 用法:
     from bot.core.message import Message, MessageSegment
 
@@ -19,6 +23,8 @@ reply / forward），统一 CQ 码转义，替代手写 CQ 码字符串拼接。
 from dataclasses import dataclass, field
 from typing import Union
 
+from qingci_plugin_sdk.segments import to_v11_segment
+
 # CQ 码值转义：& 与 , 转义后 OneBot 实现端解析时还原
 _CQ_VALUE_TRANS = str.maketrans(
     {
@@ -33,6 +39,40 @@ _CQ_VALUE_TRANS = str.maketrans(
 def cq_escape(value) -> str:
     """转义 CQ 码值中的特殊字符"""
     return str(value).translate(_CQ_VALUE_TRANS)
+
+
+def _segment_to_cq(seg: dict) -> str:
+    """将单条消息段 dict 序列化为 CQ 码（v11 平台专用）
+
+    v12 段（mention/mention_all/voice 等）先经 SDK 转回 v11 段再序列化；
+    text 段直接输出纯文本（不包装为 CQ 码）。
+    """
+    v11 = to_v11_segment(seg)
+    seg_type = v11.get("type", "")
+    data = v11.get("data", {})
+    if not isinstance(data, dict):
+        data = {}
+    if seg_type == "text":
+        return str(data.get("text", ""))
+    parts = [f"[CQ:{seg_type}"]
+    for key, value in data.items():
+        if value is None or value == "":
+            continue
+        parts.append(f",{key}={cq_escape(value)}")
+    parts.append("]")
+    return "".join(parts)
+
+
+def segments_to_cq(message: str | list) -> str:
+    """将消息序列化为 OneBot 11 CQ 码字符串（v11 平台发送专用）
+
+    入参可为：纯文本字符串 / v11 段数组 / v12 段数组。
+    v12 段（mention -> at、mention_all -> at all、voice -> record）在
+    序列化前自动转回 v11 段。
+    """
+    if isinstance(message, str):
+        return message
+    return "".join(_segment_to_cq(seg) for seg in message if isinstance(seg, dict))
 
 
 @dataclass

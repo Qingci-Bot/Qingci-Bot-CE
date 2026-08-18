@@ -26,6 +26,7 @@ from collections.abc import Callable
 
 from aiocqhttp import CQHttp
 
+from .message import segments_to_cq
 from .platforms.base import PlatformAdapter
 
 logger = logging.getLogger("qingci-bot.connection")
@@ -330,28 +331,28 @@ class OneBotConnection(PlatformAdapter):
 
     # ============ 便捷 API ============
 
-    async def send_private_msg(self, user_id: int, message: str) -> dict:
-        """发送私聊消息"""
+    async def send_private_msg(self, user_id: int, message: str | list) -> dict:
+        """发送私聊消息（message 可为文本 / v11 段数组 / v12 段数组）"""
         return await self.call_api(
             "send_private_msg",
             {
                 "user_id": user_id,
-                "message": message,
+                "message": segments_to_cq(message),
             },
         )
 
-    async def send_group_msg(self, group_id: int, message: str) -> dict:
-        """发送群聊消息"""
+    async def send_group_msg(self, group_id: int, message: str | list) -> dict:
+        """发送群聊消息（message 可为文本 / v11 段数组 / v12 段数组）"""
         return await self.call_api(
             "send_group_msg",
             {
                 "group_id": group_id,
-                "message": message,
+                "message": segments_to_cq(message),
             },
         )
 
-    async def send_msg(self, message_type: str, target_id: int, message: str) -> dict:
-        """发送消息"""
+    async def send_msg(self, message_type: str, target_id: int, message: str | list) -> dict:
+        """发送消息（message 可为文本 / 段数组，段数组序列化为 CQ 码）"""
         if message_type == "private":
             return await self.send_private_msg(target_id, message)
         elif message_type == "group":

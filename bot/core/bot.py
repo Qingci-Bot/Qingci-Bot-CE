@@ -5,6 +5,9 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+# v12 消息段工厂（发送回复前缀组装用）
+from qingci_plugin_sdk.segments import MessageSegment
+
 from .. import __version__
 from ..config import ConfigManager
 from ..paths import plugins_dir
@@ -498,7 +501,12 @@ class QingciBot:
         )
 
     async def _send_reply(self, ctx: MessageContext, reply: str) -> None:
-        """发送插件回复（按 ctx.platform 路由到对应平台适配器）"""
+        """发送插件回复（按 ctx.platform 路由到对应平台适配器）
+
+        OneBot 12 迁移（方案 A）：群聊回复前缀不再拼 CQ 码字符串，
+        改为组装 v12 段数组 [reply][mention][text]，由平台适配器负责
+        序列化（v11 平台转 CQ，v12 平台原样透传）。
+        """
         target_id = ctx.group_id if ctx.message_type == "group" else ctx.user_id
         if not target_id:
             logger.warning(
@@ -506,12 +514,15 @@ class QingciBot:
                 f"user_id={ctx.user_id}, group_id={ctx.group_id})"
             )
             return
+
+        message: str | list = reply
         if ctx.message_type == "group" and ctx.user_id:
-            prefix = ""
+            segments: list = []
             if ctx.message_id:
-                prefix += MessageDispatcher.build_cq_reply(ctx.message_id)
-            prefix += MessageDispatcher.build_cq_at(ctx.user_id)
-            reply = prefix + " " + reply
+                segments.append(MessageSegment.reply(str(ctx.message_id)))
+            segments.append(MessageSegment.mention(str(ctx.user_id)))
+            segments.append(MessageSegment.text(reply))
+            message = segments
 
         # 按事件来源平台路由；未知平台回退主连接
         platform = getattr(ctx, "platform", "") or ""
@@ -519,7 +530,7 @@ class QingciBot:
 
         for attempt in range(3):
             try:
-                await conn.send_msg(ctx.message_type, target_id, reply)
+                await conn.send_msg(ctx.message_type, target_id, message)
                 return
             except Exception:
                 logger.exception(
