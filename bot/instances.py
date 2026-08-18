@@ -151,6 +151,41 @@ def get_instance(name: str) -> InstanceInfo | None:
     )
 
 
+def instance_disk_usage(name: str) -> int:
+    """实例 data 目录磁盘占用（字节）；目录不存在返回 0"""
+    data_dir = instance_path(name) / "data"
+    total = 0
+    if data_dir.is_dir():
+        for p in data_dir.rglob("*"):
+            if p.is_file():
+                try:
+                    total += p.stat().st_size
+                except OSError:
+                    pass
+    return total
+
+
+def instance_adapters(name: str) -> dict[str, bool]:
+    """实例启用的平台适配器摘要（读 config.yaml，异常时返回空）"""
+    try:
+        data = (
+            yaml.safe_load((instance_path(name) / "config.yaml").read_text(encoding="utf-8")) or {}
+        )
+    except (OSError, yaml.YAMLError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    onebot = data.get("onebot") or {}
+    platforms = data.get("platforms") or {}
+    if not isinstance(platforms, dict):
+        platforms = {}
+    return {
+        "onebot": bool(onebot.get("enabled", True)),
+        "onebot12": bool((platforms.get("onebot12") or {}).get("enabled", False)),
+        "telegram": bool((platforms.get("telegram") or {}).get("enabled", False)),
+    }
+
+
 def _next_free_port() -> int:
     """从 8080 起分配未被占用（DB 层面）的端口"""
     used = {inst.port for inst in list_instances()}

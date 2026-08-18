@@ -66,6 +66,32 @@ class TestListInstances:
         assert len(data) == 1
         assert data[0]["name"] == "alpha"
         assert data[0]["running"] is False
+        assert data[0]["disk_usage"] == 0  # 无 data 目录内容
+        assert data[0]["adapters"]["onebot"] is True  # 默认 onebot 主平台
+        assert data[0]["adapters"]["telegram"] is False
+
+    def test_list_includes_adapters_and_disk(self, client):
+        """增强字段：适配器摘要与磁盘占用"""
+        client.post(
+            "/api/instances",
+            json={"name": "beta", "description": "测试实例", "platform": "telegram"},
+            headers=_headers(),
+        )
+        # 写入 data 文件模拟磁盘占用
+        import bot.instances as inst
+
+        data_dir = inst.instance_path("beta") / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        (data_dir / "sample.bin").write_bytes(b"\x00" * 2048)
+
+        resp = client.get("/api/instances", headers=_headers())
+        data = resp.json()
+        assert len(data) == 1
+        item = data[0]
+        assert item["description"] == "测试实例"
+        assert item["platform"] == "telegram"
+        assert item["disk_usage"] == 2048
+        assert item["adapters"] == {"onebot": False, "onebot12": False, "telegram": True}
 
 
 class TestCreateInstance:

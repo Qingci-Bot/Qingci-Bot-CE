@@ -26,9 +26,37 @@ function platformLabel(value) {
   return opt ? opt.label : value;
 }
 
+// 适配器摘要（后端 instance_adapters 返回）→ 标签列表
+const adapterLabels = [
+  { key: 'onebot', label: 'OneBot 11' },
+  { key: 'onebot12', label: 'OneBot 12' },
+  { key: 'telegram', label: 'Telegram' },
+];
+
+function enabledAdapters(adapters) {
+  if (!adapters) return [];
+  return adapterLabels.filter((a) => adapters[a.key]);
+}
+
+// 字节数 → 人类可读
+function fmtBytes(n) {
+  const v = Number(n) || 0;
+  if (v <= 0) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  let size = v;
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
+    i++;
+  }
+  return `${size >= 100 || i === 0 ? Math.round(size) : size.toFixed(1)} ${units[i]}`;
+}
+
 const showCreateForm = ref(false);
 const createName = ref('');
 const createPlatform = ref('onebot');
+const createDescription = ref('');
+const createPort = ref('');
 
 // 当前激活实例
 const activeInstance = computed(() => store.currentInstance);
@@ -40,6 +68,8 @@ onMounted(async () => {
 function openCreateForm() {
   createName.value = '';
   createPlatform.value = 'onebot';
+  createDescription.value = '';
+  createPort.value = '';
   showCreateForm.value = true;
 }
 
@@ -51,8 +81,15 @@ function doCreate() {
   const name = createName.value.trim();
   if (!name) return;
   showToast('info', '正在创建实例...');
+  const payload = { name, platform: createPlatform.value };
+  const desc = createDescription.value.trim();
+  if (desc) payload.description = desc;
+  const port = Number(createPort.value);
+  if (createPort.value.trim() && port >= 1024 && port <= 65535) {
+    payload.port = port;
+  }
   store
-    .createInstance({ name, platform: createPlatform.value })
+    .createInstance(payload)
     .then(() => {
       showCreateForm.value = false;
       showToast('success', `实例「${name}」已创建`);
@@ -114,6 +151,17 @@ function onRename(inst) {
           <span class="instance-badge">{{ platformLabel(activeInstance.platform) }}</span>
           <span class="active-instance-running">运行中</span>
         </div>
+        <div class="active-instance-meta">
+          <span class="meta-item" :title="`端口 ${activeInstance.port}`">
+            <span class="meta-label">端口</span>{{ activeInstance.port }}
+          </span>
+          <span class="meta-item" :title="'data 目录占用'">
+            <span class="meta-label">数据</span>{{ fmtBytes(activeInstance.disk_usage) }}
+          </span>
+          <span v-if="activeInstance.description" class="meta-item">
+            <span class="meta-label">描述</span>{{ activeInstance.description }}
+          </span>
+        </div>
         <div class="hint-text" style="margin-top: 10px">
           实例目录：<code>instances/{{ activeInstance.name }}/</code><br />
           可在「系统设置」中配置该平台的连接参数。
@@ -157,6 +205,22 @@ function onRename(inst) {
           </button>
           <button class="btn btn-secondary btn-sm" @click="cancelCreate">取消</button>
         </div>
+        <div class="create-form-subrow">
+          <input
+            v-model="createDescription"
+            type="text"
+            placeholder="描述（可选）"
+            @keyup.enter="doCreate"
+          />
+          <input
+            v-model="createPort"
+            type="number"
+            min="1024"
+            max="65535"
+            placeholder="端口（可选，默认 8080 起自动分配）"
+            @keyup.enter="doCreate"
+          />
+        </div>
         <div class="create-form-hint">
           {{ platformOptions.find((o) => o.value === createPlatform)?.hint }}
         </div>
@@ -176,6 +240,9 @@ function onRename(inst) {
             <th class="col-status">状态</th>
             <th>名称</th>
             <th>平台</th>
+            <th class="col-num">端口</th>
+            <th>启用的适配器</th>
+            <th class="col-num">数据</th>
             <th class="col-actions">操作</th>
           </tr>
         </thead>
@@ -189,10 +256,25 @@ function onRename(inst) {
               <span class="status-dot" :class="inst.running ? 'green' : 'gray'" />
               <span class="status-label">{{ inst.running ? '运行中' : '已停止' }}</span>
             </td>
-            <td class="td-name">{{ inst.name }}</td>
+            <td class="td-name-cell">
+              <div class="td-name">{{ inst.name }}</div>
+              <div v-if="inst.description" class="td-desc">{{ inst.description }}</div>
+            </td>
             <td>
               <span class="instance-badge">{{ platformLabel(inst.platform) }}</span>
             </td>
+            <td class="td-mono">{{ inst.port }}</td>
+            <td>
+              <div class="adapter-tags">
+                <span v-for="a in enabledAdapters(inst.adapters)" :key="a.key" class="adapter-tag">
+                  {{ a.label }}
+                </span>
+                <span v-if="enabledAdapters(inst.adapters).length === 0" class="text-muted"
+                  >无</span
+                >
+              </div>
+            </td>
+            <td class="td-mono">{{ fmtBytes(inst.disk_usage) }}</td>
             <td class="td-actions">
               <button
                 class="btn btn-sm btn-success"
@@ -338,5 +420,79 @@ function onRename(inst) {
   margin-top: 8px;
   font-size: 12px;
   color: var(--text-muted);
+}
+.create-form-subrow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.create-form-subrow input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+.create-form-subrow input:focus {
+  border-color: var(--accent);
+}
+
+.active-instance-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 12px;
+  padding: 0 2px;
+}
+.meta-item {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+.meta-label {
+  margin-right: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+
+.col-num {
+  width: 90px;
+}
+.td-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.td-name-cell {
+  min-width: 120px;
+}
+.td-desc {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adapter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.adapter-tag {
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
 }
 </style>

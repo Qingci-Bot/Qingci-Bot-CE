@@ -21,6 +21,8 @@ from bot.instances import (
     create_instance,
     delete_instance,
     get_instance,
+    instance_adapters,
+    instance_disk_usage,
     instance_path,
     is_valid_name,
     list_instances,
@@ -69,6 +71,8 @@ async def get_instances() -> list[dict]:
     for inst in list_instances():
         info = inst.to_dict()
         info["running"] = inst.name == current
+        info["disk_usage"] = instance_disk_usage(inst.name)
+        info["adapters"] = instance_adapters(inst.name)
         result.append(info)
     return result
 
