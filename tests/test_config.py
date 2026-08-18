@@ -75,7 +75,7 @@ class TestConfigManager:
         cm = ConfigManager(Path(config_file))
         cm.load()
         assert cm.config.api_key == "test-key"
-        assert cm.config.bot.admin_users == [10001, 10002]
+        assert cm.config.bot.admin_users == ["10001", "10002"]
 
     def test_load_nonexistent_file(self, tmp_path):
         # 确保父目录存在（ConfigManager.save 需要写入）
@@ -110,7 +110,7 @@ class TestConfigManager:
         new_data = {"api_key": "new-key", "bot": {"admin_users": [99999]}}
         cm.update(new_data)
         assert cm.config.api_key == "new-key"
-        assert cm.config.bot.admin_users == [99999]
+        assert cm.config.bot.admin_users == ["99999"]
 
     def test_sensitive_mask(self, config_file):
         cm = ConfigManager(Path(config_file))
@@ -122,7 +122,7 @@ class TestConfigManager:
         assert "llm" in data
         assert "api_key" in data["llm"]
         # 非敏感字段应正常返回
-        assert data["bot"]["admin_users"] == [10001, 10002]
+        assert data["bot"]["admin_users"] == ["10001", "10002"]
 
     def test_admin_set_precompiled(self, config_file):
         """admin_set 预编译集合正确包含 super_admin + admin_users 并集"""
@@ -131,20 +131,20 @@ class TestConfigManager:
         cfg = cm.config.bot
 
         # 初始配置：super_admin=None, admin_users=[10001, 10002]
-        assert cfg.admin_set == frozenset({10001, 10002})
+        assert cfg.admin_set == frozenset({"10001", "10002"})
 
-        # 设置 super_admin 后应包含在内
+        # 设置 super_admin 后应包含在内（数字 ID 自动转字符串）
         new_data = {"bot": {"super_admin": 12345, "admin_users": [10001, 10002]}}
         cm.update(new_data)
         cfg = cm.config.bot
-        assert cfg.admin_set == frozenset({12345, 10001, 10002})
+        assert cfg.admin_set == frozenset({"12345", "10001", "10002"})
 
         # 清空 admin_users 后仍包含 super_admin
         new_data = {"bot": {"super_admin": 12345, "admin_users": []}}
         cm.update(new_data)
         cfg = cm.config.bot
-        assert cfg.admin_set == frozenset({12345})
+        assert cfg.admin_set == frozenset({"12345"})
 
         # 只有 super_admin 时，admin_set 仅为 super_admin
-        assert 12345 in cfg.admin_set
-        assert 99999 not in cfg.admin_set
+        assert "12345" in cfg.admin_set
+        assert "99999" not in cfg.admin_set

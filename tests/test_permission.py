@@ -108,8 +108,8 @@ class TestDescribePermission:
         assert describe_permission(PRIVATE) == "PRIVATE"
         assert describe_permission(GROUP) == "GROUP"
         assert describe_permission(MEMBER) == "MEMBER"
-        assert describe_permission(USER([1, 2])) == "USER([1, 2])"
-        assert describe_permission(GROUP_MEMBER([10, 20])) == "GROUP_MEMBER([10, 20])"
+        assert describe_permission(USER([1, 2])) == "USER(1, 2)"
+        assert describe_permission(GROUP_MEMBER([10, 20])) == "GROUP_MEMBER(10, 20)"
 
     async def test_composition_labels(self):
         assert describe_permission(SUPERUSER & PRIVATE) == "(SUPERUSER & PRIVATE)"

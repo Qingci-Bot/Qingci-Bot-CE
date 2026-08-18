@@ -52,6 +52,7 @@ function resetForm() {
       user_blacklist: (bot.user_blacklist || []).join(', '),
     },
     onebot: {
+      enabled: onebot.enabled !== false,
       host: onebot.host || '127.0.0.1',
       port: onebot.port || 3001,
       access_token: onebot.access_token || '',
@@ -96,11 +97,11 @@ async function saveConfig() {
     const newConfig = JSON.parse(JSON.stringify(store.config))
     newConfig.bot = {
       ...form.bot,
-      super_admin: form.bot.super_admin ? Number(form.bot.super_admin) : null,
+      super_admin: form.bot.super_admin ? String(form.bot.super_admin).trim() : null,
       trigger_keywords: parseList(form.bot.trigger_keywords, false),
-      admin_users: parseList(form.bot.admin_users),
-      group_blacklist: parseList(form.bot.group_blacklist),
-      user_blacklist: parseList(form.bot.user_blacklist),
+      admin_users: parseList(form.bot.admin_users, false),
+      group_blacklist: parseList(form.bot.group_blacklist, false),
+      user_blacklist: parseList(form.bot.user_blacklist, false),
     }
     newConfig.onebot = {
       ...form.onebot,
@@ -271,6 +272,22 @@ async function saveConfigJson() {
     <div class="card fade-in">
       <div class="card-header">
         <div class="card-title">OneBot 连接</div>
+      </div>
+      <div class="platform-cfg">
+        <div class="platform-cfg-head">
+          <div class="form-group" style="margin: 0; flex: 1;">
+            <label>OneBot（反向 WebSocket，QQ 平台）</label>
+            <div class="switch-row">
+              <label class="switch">
+                <input type="checkbox" v-model="form.onebot.enabled">
+                <span class="slider"></span>
+              </label>
+              <span class="text-muted" style="font-size: 13px;">
+                {{ form.onebot.enabled ? '已启用' : '已停用' }}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="form-grid">
         <div class="form-group">

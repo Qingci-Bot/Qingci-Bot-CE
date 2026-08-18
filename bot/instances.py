@@ -18,11 +18,53 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 from .paths import app_root, instances_dir
 
 INSTANCE_META = "instance.json"
 DEFAULT_PORT = 8080
 DEFAULT_INSTANCE_NAME = "default"
+DEFAULT_PLATFORM = "onebot"
+
+# 实例可绑定的主平台（创建实例时选定，驱动该实例默认启用的适配器）
+SUPPORTED_PLATFORMS = ("onebot", "telegram")
+
+# 平台 → 创建实例时对 config.yaml 应用的最小覆盖（仅设启用开关，其余走模板默认）
+PLATFORM_DEFAULT_OVERLAY: dict[str, dict] = {
+    "onebot": {
+        "onebot": {"enabled": True},
+        "platforms": {"telegram": {"enabled": False}},
+    },
+    "telegram": {
+        "onebot": {"enabled": False},
+        "platforms": {"telegram": {"enabled": True}},
+    },
+}
+
+
+def _apply_platform_overlay(config_path: Path, platform: str) -> None:
+    """按主平台覆盖 config.yaml 的适配器启用开关（缺失字段补齐）
+
+    覆盖采用浅层合并：只写入覆盖中的键，不影响模板已有的其余配置。
+    """
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        data = {}
+    overlay = PLATFORM_DEFAULT_OVERLAY.get(platform) or {}
+    for section, values in overlay.items():
+        if not isinstance(values, dict):
+            continue
+        cur = data.setdefault(section, {})
+        if not isinstance(cur, dict):
+            cur = data[section] = {}
+        for key, val in values.items():
+            cur[key] = val
+    config_path.write_text(
+        yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
+    )
 
 
 @dataclass
@@ -33,6 +75,7 @@ class InstanceInfo:
     port: int = DEFAULT_PORT
     description: str = ""
     created_at: str = ""
+    platform: str = DEFAULT_PLATFORM
     running: bool = False
 
     def to_dict(self) -> dict:
@@ -84,6 +127,7 @@ def list_instances() -> list[InstanceInfo]:
                 port=int(meta.get("port", DEFAULT_PORT)),
                 description=meta.get("description", ""),
                 created_at=meta.get("created_at", ""),
+                platform=meta.get("platform", DEFAULT_PLATFORM),
             )
         )
     return result
@@ -99,6 +143,7 @@ def get_instance(name: str) -> InstanceInfo | None:
         port=int(meta.get("port", DEFAULT_PORT)),
         description=meta.get("description", ""),
         created_at=meta.get("created_at", ""),
+        platform=meta.get("platform", DEFAULT_PLATFORM),
     )
 
 
@@ -116,6 +161,7 @@ def create_instance(
     description: str = "",
     port: int | None = None,
     template: Path | None = None,
+    platform: str = DEFAULT_PLATFORM,
 ) -> InstanceInfo:
     """创建实例目录（含 config.yaml 模板、plugins/、data/）
 
@@ -124,18 +170,21 @@ def create_instance(
         description: 描述
         port: 端口；缺省自动分配（≥8081）
         template: config.yaml 模板来源；缺省用 app_root()/config.example.yaml
+        platform: 主平台（onebot / telegram），驱动该实例默认启用的适配器
 
     Returns:
         新建的实例信息
 
     Raises:
-        ValueError: 名称非法或实例已存在
+        ValueError: 名称非法、实例已存在或平台不支持
     """
     if not is_valid_name(name):
         raise ValueError(f"非法实例名: {name!r}")
     path = instance_path(name)
     if path.exists():
         raise ValueError(f"实例已存在: {name}")
+    if platform not in SUPPORTED_PLATFORMS:
+        raise ValueError(f"不支持的主平台: {platform!r}（可选: {', '.join(SUPPORTED_PLATFORMS)}）")
 
     # 端口须在目录创建前分配：list_instances() 会把已建目录按默认端口计入，
     # 若先 mkdir 再分配会把当前实例误判为占用 8080，导致端口 +1 偏移。
@@ -143,10 +192,11 @@ def create_instance(
 
     path.mkdir(parents=True, exist_ok=True)
 
-    # config.yaml：从模板复制
+    # config.yaml：从模板复制，再按主平台覆盖适配器启用开关
     src = template or (app_root() / "config.example.yaml")
     if src.is_file():
         (path / "config.yaml").write_bytes(src.read_bytes())
+    _apply_platform_overlay(path / "config.yaml", platform)
 
     # plugins/ 与 data/ 目录
     (path / "plugins").mkdir(exist_ok=True)
@@ -158,6 +208,7 @@ def create_instance(
         "port": port,
         "description": description,
         "created_at": created_at,
+        "platform": platform,
     }
     _write_meta(path, meta)
     return InstanceInfo(
@@ -165,6 +216,7 @@ def create_instance(
         port=port,
         description=description,
         created_at=created_at,
+        platform=platform,
     )
 
 

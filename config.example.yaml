@@ -4,17 +4,18 @@
 
 bot:
   name: Qingci-Bot CE
-  super_admin: null             # 超级管理员 QQ 号（唯一），如 123456789
-  admin_users: []               # 普通管理员 QQ 号列表，如 [123456789, 987654321]
+  super_admin: null             # 超级管理员 ID（唯一；平台无关字符串标识，如 QQ 号/Telegram 用户 ID）
+  admin_users: []               # 普通管理员 ID 列表，如 ['123456789', '987654321']
   trigger_mode: at            # at / keyword / always
   trigger_keywords:
   - /bot
   - /ai
-  group_blacklist: []
-  user_blacklist: []
+  group_blacklist: []          # 群黑名单（平台无关字符串标识）
+  user_blacklist: []           # 用户黑名单
   log_json: false
   wizard_skipped: false        # 是否跳过了首次配置引导
 onebot:
+  enabled: true                # 是否启动 OneBot 反向 WS 服务端（Telegram 主平台实例可设为 false）
   host: 127.0.0.1
   port: 3001
   access_token: ''            # OneBot 接入令牌，留空则不校验
@@ -35,7 +36,7 @@ llm:
   model: deepseek-chat
   max_tokens: 2048
   temperature: 0.7
-  system_prompt: 你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。
+  system_prompt: 你是一个友好、乐于助人的机器人助手。请用简洁、自然的中文回复。
   personas: []                # 人格列表：[{name, description, system_prompt}]
   default_persona: ''         # 默认人格名，留空使用 system_prompt
   max_history: 20

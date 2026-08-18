@@ -46,7 +46,7 @@ class AlertHandler(logging.Handler):
     def __init__(self):
         super().__init__(level=logging.ERROR)
         self._connection = None  # OneBotConnection（attach 时注入）
-        self._admin_users: list[int] = []
+        self._admin_users: list[str] = []
         self._threshold: int = 5
         self._cooldown_seconds: float = 600.0
         self._error_times: deque = deque()  # 窗口内错误时间戳
@@ -154,7 +154,7 @@ class AlertHandler(logging.Handler):
         for user_id in self._admin_users:
             self._send_private(user_id, text)
 
-    def _send_private(self, user_id: int, text: str) -> None:
+    def _send_private(self, user_id: str, text: str) -> None:
         """fire-and-forget 发送：任何失败仅 print stderr，绝不抛出、不回 logging"""
         try:
             coro = self._connection.send_private_msg(user_id, text)
@@ -181,7 +181,7 @@ class AlertHandler(logging.Handler):
             _stderr(f"[AlertHandler] 告警发送调度失败 user={user_id}: {e}")
 
     @staticmethod
-    async def _guarded_send(coro, user_id: int) -> None:
+    async def _guarded_send(coro, user_id: str) -> None:
         """后台任务体：吞掉发送异常，仅 stderr 输出"""
         try:
             await coro

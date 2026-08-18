@@ -116,21 +116,20 @@ class AdminPlugin(PluginBase):
         return ok
 
     async def _cmd_blacklist(self, ctx: MatcherContext) -> str:
-        """黑名单管理: /blacklist add/remove <qq>"""
+        """黑名单管理: /blacklist add/remove <用户ID>"""
         assert self.config is not None  # 运行时由 on_bot_connect 注入，仅类型收缩
         args = ctx.args.strip()
         if not args:
-            return "格式: /blacklist add/remove <QQ号>"
+            return "格式: /blacklist add/remove <用户ID>"
 
         parts = args.split()
         if len(parts) < 2:
-            return "格式: /blacklist add/remove <QQ号>"
+            return "格式: /blacklist add/remove <用户ID>"
 
         action = parts[0]
-        try:
-            target = int(parts[1])
-        except ValueError:
-            return "格式: /blacklist add/remove <QQ号>"
+        target = parts[1].strip()
+        if not target:
+            return "格式: /blacklist add/remove <用户ID>"
 
         cfg = self.config.bot
         if action == "add":
@@ -156,7 +155,7 @@ class AdminPlugin(PluginBase):
                 return f"已将 {target} 移出黑名单。"
             return f"{target} 不在黑名单中。"
 
-        return "格式: /blacklist add/remove <QQ号>"
+        return "格式: /blacklist add/remove <用户ID>"
 
     async def _cmd_filter(self, ctx: MatcherContext) -> str:
         """敏感词过滤管理: /filter on|off|reload"""

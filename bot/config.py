@@ -18,6 +18,7 @@ class OneBotConfig(BaseModel):
 
     model_config = {"extra": "ignore"}
 
+    enabled: bool = True  # 是否启动反向 WS 服务端（Telegram 等主平台实例可关闭）
     host: str = "127.0.0.1"
     port: int = 3001
     access_token: str = ""
@@ -79,7 +80,7 @@ class LLMConfig(BaseModel):
     model: str = "gpt-4o-mini"
     max_tokens: int = 2048  # 单次回复最大 token
     temperature: float = 0.7
-    system_prompt: str = "你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。"
+    system_prompt: str = "你是一个友好、乐于助人的机器人助手。请用简洁、自然的中文回复。"
     # 人格列表与默认人格（default_persona 为空时使用 system_prompt）
     personas: list[PersonaConfig] = []
     default_persona: str = ""
@@ -131,12 +132,14 @@ class BotConfig(BaseModel):
     model_config = {"extra": "ignore"}
 
     name: str = "Qingci-Bot CE"
-    super_admin: int | None = None  # 超级管理员 QQ 号（唯一）
-    admin_users: list[int] = []  # 普通管理员 QQ 号列表
+    super_admin: str | None = (
+        None  # 超级管理员 ID（唯一；平台无关字符串标识，如 QQ 号 / Telegram 用户 ID）
+    )
+    admin_users: list[str] = []  # 普通管理员 ID 列表
     trigger_mode: Literal["at", "keyword", "always"] = "at"  # 触发方式
     trigger_keywords: list[str] = ["/bot", "/ai"]
-    group_blacklist: list[int] = []  # 群黑名单
-    user_blacklist: list[int] = []  # 用户黑名单
+    group_blacklist: list[str] = []  # 群黑名单（平台无关字符串标识）
+    user_blacklist: list[str] = []  # 用户黑名单
     log_json: bool = False  # 结构化 JSON 日志（默认关闭，使用普通文本日志）
     wizard_skipped: bool = False  # 是否跳过了首次配置引导
     # 自动安装外部插件声明的第三方依赖到实例隔离的 deps 目录（data_root()/deps）。
@@ -145,7 +148,26 @@ class BotConfig(BaseModel):
     auto_install_plugin_deps: bool = True
 
     # admin_set 缓存：super_admin + admin_users 的并集集合（权限检查 O(1) 成员判断）
-    _admin_set_cache: frozenset[int] | None = None
+    _admin_set_cache: frozenset[str] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_numeric_ids_to_str(cls, data):
+        """兼容旧配置：把数字 ID（int）统一为平台无关的字符串标识
+
+        OneBot 12 事件里 user_id / group_id 均为字符串；旧 config.yaml
+        中以 QQ 号（int）书写的管理员/黑白名单需在此归一为 str，避免
+        因类型不符导致配置校验失败回退为默认配置（损坏备份）。
+        """
+        if isinstance(data, dict):
+            v = data.get("super_admin")
+            if isinstance(v, int):
+                data["super_admin"] = str(v)
+            for key in ("admin_users", "group_blacklist", "user_blacklist"):
+                items = data.get(key)
+                if isinstance(items, list):
+                    data[key] = [str(x) for x in items if x is not None]
+        return data
 
     @model_validator(mode="after")
     def _invalidate_admin_set(self):
@@ -154,7 +176,7 @@ class BotConfig(BaseModel):
         return self
 
     @property
-    def admin_set(self) -> frozenset[int]:
+    def admin_set(self) -> frozenset[str]:
         """超级管理员 + 普通管理员的并集集合（仅读，权限检查用）
 
         预编译为 frozenset，将权限检查从 O(n) 列表成员判断降为 O(1)；

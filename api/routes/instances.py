@@ -77,20 +77,22 @@ class CreateInstanceRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
     description: str = Field(default="", max_length=256)
     port: int | None = Field(default=None, ge=1024, le=65535)
+    platform: str = Field(default="onebot", description="主平台：onebot / telegram")
 
 
 @router.post("", dependencies=[Depends(require_auth)], status_code=201)
 async def create_new_instance(req: CreateInstanceRequest) -> dict:
-    """创建实例（config.yaml 模板 + plugins/ + data/）"""
+    """创建实例（config.yaml 模板 + 按平台覆盖启用开关 + plugins/ + data/）"""
     try:
         inst = create_instance(
             name=req.name,
             description=req.description,
             port=req.port,
+            platform=req.platform,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
-    await record_audit("instance.create", f"创建实例 {req.name}")
+    await record_audit("instance.create", f"创建实例 {req.name}（主平台 {req.platform}）")
     return inst.to_dict()
 
 

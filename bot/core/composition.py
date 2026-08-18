@@ -51,6 +51,7 @@ def assemble_bot(bot: "QingciBot") -> None:
         host=config.onebot.host,
         port=config.onebot.port,
         access_token=config.onebot.access_token,
+        enabled=config.onebot.enabled,
     )
     # 平台适配器表：onebot 为默认平台，其余按 platforms 配置启用
     # （connection 保持主连接引用以兼容现有代码，同时注册到 platforms）

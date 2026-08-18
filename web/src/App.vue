@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { RouterView, RouterLink, useRoute } from 'vue-router'
 import { useAppStore } from './stores/app'
 import { useToast } from './composables/useToast'
@@ -10,6 +10,21 @@ const { toast, showToast } = useToast()
 let pollTimer = null
 let pollDelay = 3000
 let disposed = false
+
+// 实例可绑定主平台（与后端 bot/instances.py SUPPORTED_PLATFORMS 保持一致）
+const platformOptions = [
+  { value: 'onebot', label: 'OneBot（QQ）', hint: '反向 WebSocket，对接 LLBot/NapCat' },
+  { value: 'telegram', label: 'Telegram', hint: 'Bot API 长轮询（创建后在设置中填 token）' },
+]
+
+function platformLabel(value) {
+  const opt = platformOptions.find((o) => o.value === value)
+  return opt ? opt.label : value
+}
+
+const showCreateForm = ref(false)
+const createName = ref('')
+const createPlatform = ref('onebot')
 
 const navItems = [
   { path: '/', name: '仪表盘', icon: '◈' },
@@ -59,12 +74,25 @@ onUnmounted(() => {
 })
 
 // ---- 实例操作 ----
-function promptCreateInstance() {
-  const name = window.prompt('新实例名称（字母/数字/-/_，用于目录名）')
-  if (!name || !name.trim()) return
+function openCreateForm() {
+  createName.value = ''
+  createPlatform.value = 'onebot'
+  showCreateForm.value = true
+}
+
+function cancelCreate() {
+  showCreateForm.value = false
+}
+
+function doCreate() {
+  const name = createName.value.trim()
+  if (!name) return
   showToast('info', '正在创建实例...')
-  store.createInstance({ name: name.trim() })
-    .then(() => showToast('success', `实例「${name.trim()}」已创建`))
+  store.createInstance({ name, platform: createPlatform.value })
+    .then(() => {
+      showCreateForm.value = false
+      showToast('success', `实例「${name}」已创建`)
+    })
     .then(() => store.fetchInstances())
     .catch((e) => showToast('error', e.message || '创建失败'))
 }
@@ -114,7 +142,27 @@ function onRename(inst) {
       <div class="instance-section">
         <div class="instance-head">
           <span class="instance-title">实例</span>
-          <button class="instance-add" title="新建实例" @click="promptCreateInstance">＋</button>
+          <button class="instance-add" title="新建实例" @click="openCreateForm">＋</button>
+        </div>
+        <div v-if="showCreateForm" class="instance-create-form">
+          <input
+            v-model="createName"
+            type="text"
+            placeholder="实例名（字母/数字/-/_）"
+            @keyup.enter="doCreate"
+          >
+          <select v-model="createPlatform" class="instance-create-select">
+            <option v-for="opt in platformOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+          <div class="instance-create-hint">
+            {{ platformOptions.find((o) => o.value === createPlatform)?.hint }}
+          </div>
+          <div class="instance-create-actions">
+            <button class="btn btn-secondary btn-sm" @click="cancelCreate">取消</button>
+            <button class="btn btn-primary btn-sm" :disabled="!createName.trim()" @click="doCreate">创建</button>
+          </div>
         </div>
         <div class="instance-list" v-if="store.instances.length">
           <div
@@ -127,6 +175,7 @@ function onRename(inst) {
           >
             <span class="instance-dot" :class="inst.running ? 'green' : 'gray'"></span>
             <span class="instance-name">{{ inst.name }}</span>
+            <span class="instance-platform">{{ platformLabel(inst.platform) }}</span>
             <button
               class="instance-act"
               title="重命名实例"
@@ -142,7 +191,7 @@ function onRename(inst) {
         </div>
         <div class="instance-empty" v-else>
           <p class="instance-tip">还没有实例，创建第一个开始使用</p>
-          <button class="instance-create-first" @click="promptCreateInstance">＋ 新建实例</button>
+          <button class="instance-create-first" @click="openCreateForm">＋ 新建实例</button>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -411,6 +460,58 @@ function onRename(inst) {
   background: var(--accent-bg);
   border-color: rgba(251, 191, 36, 0.5);
   transform: translateY(-1px);
+}
+.instance-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 10px;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: var(--radius-xs);
+  background: var(--bg-hover);
+}
+.instance-create-form input,
+.instance-create-select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+.instance-create-form input:focus,
+.instance-create-select:focus {
+  border-color: var(--accent);
+}
+.instance-create-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.instance-create-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.instance-platform {
+  flex-shrink: 0;
+  margin-right: 2px;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 1.5;
+  border-radius: 8px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.instance-item.active .instance-platform {
+  background: rgba(251, 191, 36, 0.15);
 }
 
 .toast {

@@ -426,16 +426,11 @@ async def complete_wizard(data: dict):
             current["llm"]["api_url"] = preset["api_url"]
             current["llm"]["model"] = preset["model"]
 
-            # 超级管理员 QQ（唯一，拥有全部权限）
+            # 超级管理员 ID（唯一，拥有全部权限；平台无关字符串标识）
             if admin_qq is not None:
-                try:
-                    qq = int(admin_qq)
-                    if qq > 0:
-                        current["bot"]["super_admin"] = qq
-                except (ValueError, TypeError):
-                    raise HTTPException(
-                        status_code=400, detail="超级管理员 QQ 号格式无效"
-                    ) from None
+                admin_id = str(admin_qq).strip()
+                if admin_id:
+                    current["bot"]["super_admin"] = admin_id
 
             # OneBot 端口
             if onebot_port is not None:

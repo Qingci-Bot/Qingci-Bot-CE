@@ -43,7 +43,7 @@ const defaultConfig = {
     model: 'gpt-4o-mini',
     max_tokens: 2048,
     temperature: 0.7,
-    system_prompt: '你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。',
+    system_prompt: '你是一个友好、乐于助人的机器人助手。请用简洁、自然的中文回复。',
     personas: [],
     default_persona: '',
     max_history: 20,
@@ -56,6 +56,7 @@ const defaultConfig = {
     mcp_servers: [],
   },
   onebot: {
+    enabled: true,
     host: '127.0.0.1',
     port: 3001,
     access_token: '',

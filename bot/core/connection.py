@@ -45,10 +45,17 @@ class OneBotConnection(PlatformAdapter):
     name = "onebot"
     display_name = "OneBot 11"
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 3001, access_token: str = ""):
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 3001,
+        access_token: str = "",
+        enabled: bool = True,
+    ):
         self.host = host
         self.port = port
         self.access_token = access_token.strip() if access_token else ""
+        self.enabled = enabled
 
         # aiocqhttp 引擎（反向 WS 模式：不传 api_root）
         self._bot = CQHttp(
@@ -235,6 +242,11 @@ class OneBotConnection(PlatformAdapter):
         若启动过程中被取消（如 API 层 wait_for 超时），会先回收已创建的
         server task 再重新抛出 CancelledError，避免孤儿 task 占用端口。
         """
+        if not self.enabled:
+            logger.info(
+                f"OneBot 已禁用（onebot.enabled=false），跳过反向 WS 启动: {self.host}:{self.port}"
+            )
+            return
         self._running = True
         logger.info(f"OneBot WS 服务器启动: ws://{self.host}:{self.port}/ws")
         self._server_task = asyncio.create_task(
