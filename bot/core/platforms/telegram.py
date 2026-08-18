@@ -1,28 +1,28 @@
 """Telegram 平台适配器 — Bot API 长轮询
 
-将 Telegram Update 归一化为 OneBot-11 兼容事件 dict（含 platform=telegram），
+将 Telegram Update 归一化为 OneBot-12 兼容事件 dict（含 platform=telegram），
 使 Qingci-Bot 的插件/内置功能对 Telegram 零改动可用：
 
 - 长轮询 getUpdates（httpx 异步，poll_interval 间隔，offset 游标续传）
-- 消息事件：message → post_type=message；私聊/群聊 → message_type；
+- 消息事件：message → type=message；私聊/群聊 → detail_type；
   user_id（from.id）、group_id（chat.id，仅群聊）、message_id、文本段
-  （CQ 纯文本段）、raw_message、sender（first_name/username）
+  （v12 text 段）、alt_message、sender（first_name/username）
 - @提及：解析 entities（mention / text_mention）识别群聊中的 @Bot，
-  命中时写入 at 段（qq=self_id）供 at 触发使用；私聊天然放行
+  命中时写入 v12 mention 段（user_id=self_id）供 at 触发使用；私聊天然放行
 - 媒体：photo / 图片 document → image 段 + images（file_id）；
-  voice → record，video / video_note → video 段
-- 发送：send_msg 走 sendMessage（Telegram 统一 chat_id）并识别
-  [CQ:image] / [CQ:record] / [CQ:video] → sendPhoto / sendVoice / sendVideo
-  （file_id / http(s) URL / base64 / 本地路径），group/private 均按 chat_id 发送；
-  [CQ:reply,id=N] → 回复指定消息；其余 CQ 段降级为纯文本
-- 通知：chat_member / my_chat_member 成员变动 → group_increase /
-  group_decrease / group_admin notice 事件（被邀请 sub_type=invite）
+  voice → voice 段，video / video_note → video 段
+- 发送：send_msg 消费 v12 消息段并识别 image/voice/video → sendPhoto /
+  sendVoice / sendVideo（file_id / http(s) URL / base64 / 本地路径），
+  group/private 均按 chat_id 发送；reply 段 → 回复指定消息；
+  其余不可渲染段降级为纯文本
+- 通知：chat_member / my_chat_member 成员变动 → group_member_increase /
+  group_member_decrease / group_admin_set / group_admin_unset notice 事件
 - 能力：call_api 映射 send_private_msg/send_group_msg → sendMessage/sendPhoto/sendVoice/sendVideo，
   其余 action 透传为 Telegram 方法（小写方法名）
 - 状态：轮询运行即视为已连接；last_heartbeat 随每次成功轮询更新
 
 说明：Telegram 的 edited_message / callback_query 承载其特有语义，
-在 OneBot-11 / 本框架事件模型中无等价事件，故暂不归一化（可由后续
+在 OneBot 事件模型中无等价事件，故暂不归一化（可由后续
 自定义事件机制承载）。offset 游标在处理单条更新后推进，处理失败也推进，
 避免无限重放。
 """
@@ -37,8 +37,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from qingci_plugin_sdk.segments import Message
 
-from ..message import segments_to_cq
 from .base import PlatformAdapter, cancel_and_await
 
 logger = logging.getLogger("qingci-bot.platforms.telegram")
@@ -57,16 +57,10 @@ _BACKOFF_MAX = 60.0
 # 连续失败达到该值即判定离线并广播断连
 _OFFLINE_AFTER = 5
 
-# CQ 图片段：capture file 引用
-_CQ_IMAGE_RE = re.compile(r"\[CQ:image,file=([^,\]$]+)\]")
-# 任意 CQ 段（用于把不可渲染的段从发送文本中剔除）
-_ANY_CQ_RE = re.compile(r"\[CQ:[^\[\]]*\]")
-# CQ 段整体（解析音视频/回复等参数化的段）
-_CQ_SEG_RE = re.compile(r"\[CQ:[^\]]*\]")
-
-# OneBot 媒体段 → Telegram 发送方法与字段名
+# OneBot 媒体段 → Telegram 发送方法与字段名（v12 为 voice；兼容 v11 record 兜底）
 _MEDIA_API: dict[str, tuple[str, str]] = {
     "image": ("sendPhoto", "photo"),
+    "voice": ("sendVoice", "voice"),
     "record": ("sendVoice", "voice"),
     "video": ("sendVideo", "video"),
 }
@@ -401,11 +395,11 @@ class TelegramAdapter(PlatformAdapter):
         operator_user: dict | None = None,
         bot_self: bool = False,
     ) -> dict | None:
-        """将 chat_member / my_chat_member 更新归一化为 OneBot notice 事件
+        """将 chat_member / my_chat_member 更新归一化为 OneBot 12 notice 事件
 
-        群成员增加 → group_increase（被邀请时 sub_type=invite）；
-        成员离开/被踢 → group_decrease（被踢时 sub_type=kick）；
-        管理员权限变更 → group_admin（set / unset）。
+        群成员增加 → group_member_increase（被邀请时 sub_type=invite）；
+        成员离开/被踢 → group_member_decrease（被踢 sub_type=kick）；
+        管理员权限变更 → group_admin_set / group_admin_unset。
         """
         if not isinstance(chat, dict):
             return None
@@ -435,36 +429,44 @@ class TelegramAdapter(PlatformAdapter):
         )
 
         notice = {
-            "post_type": "notice",
-            "notice_type": "",
+            "type": "notice",
+            "detail_type": "",
             "sub_type": "normal",
-            "message_id": str(update.get("update_id", "")),
-            "group_id": chat_id,
-            "user_id": user_id,
-            "operator_id": operator_id,
-            "self_id": self.self_id,
+            "id": str(update.get("update_id", "")),
+            "impl": self.name,
             "platform": self.name,
+            "self_id": str(self.self_id),
+            "time": 0,
+            "message_id": str(update.get("update_id", "")),
+            "user_id": str(user_id),
+            "group_id": str(chat_id),
+            "operator_id": str(operator_id),
             "_telegram_chat": chat,
             "_telegram_member": new_member or old_member,
         }
 
         if old_status in self._ABSENT and new_status in self._MEMBER:
-            notice["notice_type"] = "group_increase"
-            if operator_id and user_id and operator_id != user_id:
-                notice["sub_type"] = "invite"
+            notice["detail_type"] = "group_member_increase"
+            # operator 与本人不同视为被邀请，否则为主动加入
+            notice["sub_type"] = (
+                "invite" if (operator_id and user_id and operator_id != user_id) else "join"
+            )
             return notice
         if old_status in self._MEMBER and new_status in self._ABSENT:
-            notice["notice_type"] = "group_decrease"
+            notice["detail_type"] = "group_member_decrease"
+            notice["sub_type"] = (
+                "kick_me" if bot_self else ("kick" if new_status == "kicked" else "leave")
+            )
             return notice
 
         was_admin = old_status in ("administrator", "creator")
         is_admin = new_status in ("administrator", "creator")
         if not was_admin and is_admin:
-            notice["notice_type"] = "group_admin"
+            notice["detail_type"] = "group_admin_set"
             notice["sub_type"] = "set"
             return notice
         if was_admin and not is_admin:
-            notice["notice_type"] = "group_admin"
+            notice["detail_type"] = "group_admin_unset"
             notice["sub_type"] = "unset"
             return notice
         return None
@@ -480,24 +482,30 @@ class TelegramAdapter(PlatformAdapter):
         return str(text or "")
 
     def _normalize_message(self, message: dict) -> dict | None:
-        """将 Telegram message 归一化为 OneBot-11 兼容消息事件 dict"""
+        """将 Telegram message 归一化为 OneBot 12 消息事件 dict
+
+        产出 v12 事件（type/detail_type，ID 字符串化，段为 v12 标准段）：
+        type=message，detail_type=private/group；另携带 alt_message、
+        at_list / is_at_bot / images 等便捷字段供上层直接读取。
+        """
         chat = message.get("chat") or {}
         from_user = message.get("from") or {}
         chat_type = str(chat.get("type", ""))
         if chat_type not in ("private", "group", "supergroup"):
             return None
-        message_type = "private" if chat_type == "private" else "group"
+        detail_type = "private" if chat_type == "private" else "group"
+        sub_type = "friend" if detail_type == "private" else "normal"
 
-        # 文本（纯文本 CQ 段）
+        # 文本（v12 text 段）
         text = self._extract_text(message)
         raw_message = text
         segments: list[dict] = []
 
         # @提及：解析 entities（mention / text_mention）识别 @Bot。
-        # 群聊命中时写入 at(self) 段，dispatcher 据此推导 ctx.is_at_bot；
-        # 私聊无需 at 段（SDK 触发规则已放行 message_type == "private"）。
+        # 群聊命中时写入 mention 段，dispatcher 据此推导 ctx.is_at_bot；
+        # 私聊无需 mention 段（SDK 触发规则已放行 message_type == "private"）。
         at_segments, at_list = self._collect_at(message, text)
-        is_at_bot = bool(at_segments) or message_type == "private"
+        is_at_bot = bool(at_segments) or detail_type == "private"
         segments.extend(at_segments)
 
         if text:
@@ -508,52 +516,60 @@ class TelegramAdapter(PlatformAdapter):
         image_file = self._extract_image_file(message)
         if image_file:
             images.append(image_file)
-            segments.append({"type": "image", "data": {"file": image_file, "url": image_file}})
+            segments.append({"type": "image", "data": {"file_id": image_file}})
 
         # 语音 / 视频
         record_file, video_file = self._extract_media_files(message)
         if record_file:
-            segments.append({"type": "record", "data": {"file": record_file, "url": record_file}})
+            segments.append({"type": "voice", "data": {"file_id": record_file}})
         if video_file:
-            segments.append({"type": "video", "data": {"file": video_file, "url": video_file}})
+            segments.append({"type": "video", "data": {"file_id": video_file}})
+
+        user_id = self._safe_int(from_user.get("id"))
+        chip_id = self._safe_int(chat.get("id"))
 
         event = {
-            "post_type": "message",
-            "message_type": message_type,
-            "sub_type": "friend" if message_type == "private" else "normal",
+            "type": "message",
+            "detail_type": detail_type,
+            "sub_type": sub_type,
+            "id": str(message.get("message_id", "")),
+            "impl": self.name,
+            "platform": self.name,
+            "self_id": str(getattr(self, "self_id", 0) or ""),
+            "time": message.get("date", 0),
             "message_id": str(message.get("message_id", "")),
-            "user_id": self._safe_int(from_user.get("id")),
-            "group_id": self._safe_int(chat.get("id")) if message_type == "group" else 0,
-            "self_id": getattr(self, "self_id", 0),
-            "raw_message": raw_message,
             "message": segments,
-            "plain_text": text,
-            "at_list": at_list,
-            "is_at_bot": is_at_bot,
-            "images": images,
+            "alt_message": raw_message,
+            "user_id": str(user_id),
+            "group_id": str(chip_id) if detail_type == "group" else "",
             "sender": {
-                "user_id": self._safe_int(from_user.get("id")),
+                "user_id": str(user_id),
                 "nickname": str(from_user.get("first_name", "") or ""),
                 "card": str(from_user.get("first_name", "") or ""),
                 "username": str(from_user.get("username", "") or ""),
                 "platform": self.name,
             },
-            "platform": self.name,
+            # 便捷字段（与 v11 输出保持同一语义，供上层/插件直接读取）
+            "raw_message": raw_message,
+            "plain_text": text,
+            "at_list": at_list,
+            "is_at_bot": is_at_bot,
+            "images": images,
             # Telegram 原始 chat 信息（供适配器内部/高级插件使用）
             "_telegram_chat": chat,
             "_telegram_message": message,
         }
         return event
 
-    def _collect_at(self, message: dict, text: str) -> tuple[list[dict], list[dict]]:
+    def _collect_at(self, message: dict, text: str) -> tuple[list[dict], list[str]]:
         """解析 entities，识别 @Bot 与提及的其他用户。
 
         返回 (at_segments, at_list)：
-        - at_segments：可写入 message[] 的 at 段（仅命中 Bot 自身时）；
-        - at_list：事件级 at 提及清单（含被 @ 的其他用户，用户名用 qq 占位）。
+        - at_segments：可写入 message[] 的 v12 mention 段（仅命中 Bot 自身时）；
+        - at_list：事件级 @ 提及清单（含被 @ 的其他用户，user_id 字符串）。
         """
         at_segments: list[dict] = []
-        at_list: list[dict] = []
+        at_list: list[str] = []
         self_uname = (self.username or "").lower()
         self_uid = getattr(self, "self_id", 0)
         entities = message.get("entities") or []
@@ -568,21 +584,21 @@ class TelegramAdapter(PlatformAdapter):
                 if not token:
                     continue
                 if token.lower() == self_uname:
-                    at_segments.append({"type": "at", "data": {"qq": self_uid}})
-                    at_list.append({"type": "at", "data": {"qq": self_uid}})
+                    at_segments.append({"type": "mention", "data": {"user_id": str(self_uid)}})
+                    at_list.append(str(self_uid))
                 else:
                     # 提及其他用户：仅记录到 at_list，不写入 message 段
-                    at_list.append({"type": "at", "data": {"qq": token}})
+                    at_list.append(token)
             elif etype == "text_mention":
                 user = ent.get("user") or {}
                 uid = self._safe_int(user.get("id"))
                 if not uid:
                     continue
                 if uid == self_uid:
-                    at_segments.append({"type": "at", "data": {"qq": self_uid}})
-                    at_list.append({"type": "at", "data": {"qq": self_uid}})
+                    at_segments.append({"type": "mention", "data": {"user_id": str(self_uid)}})
+                    at_list.append(str(self_uid))
                 else:
-                    at_list.append({"type": "at", "data": {"qq": uid}})
+                    at_list.append(str(uid))
         return at_segments, at_list
 
     @staticmethod
@@ -615,48 +631,52 @@ class TelegramAdapter(PlatformAdapter):
     # ============ 发送 ============
 
     async def send_msg(self, message_type: str, target_id: int, message: str | list) -> dict:
-        """发送消息：识别 [CQ:image] → sendPhoto，否则 sendMessage
+        """发送消息：识别 image/voice/video 段 → sendPhoto/sendVoice/sendVideo，否则 sendMessage
 
-        OneBot 12 迁移：message 可为文本 / 段数组（段数组先序列化为
-        CQ 字符串再解析；M3 将改为直接消费 v12 段）。
+        OneBot 12 迁移：message 为文本或 v12 消息段数组，直接消费段发送
+        （不再经 CQ 字符串编解码）。
         """
         chat_id = self._safe_int(target_id)
         if chat_id <= 0:
             raise ValueError(f"Telegram 发送失败：无效的 chat_id={target_id}")
-        if isinstance(message, list):
-            message = segments_to_cq(message)
-        return await self._route_send(chat_id, str(message or ""))
+        return await self._route_send(chat_id, message)
 
     @staticmethod
-    def _parse_cq_message(message: str) -> tuple[list[dict], str, int]:
-        """把 OneBot CQ 字符串解析为 (media, text, reply_id)
+    def _parse_v12_segments(message: str | list) -> tuple[list[dict], str, int]:
+        """把 v12 消息段数组解析为 (media, text, reply_id)
 
-        - media：list[{type: image/record/video, file}]；
-        - reply_id：遇到 [CQ:reply,id=N] 时回传，用于回复指定消息；
-        - text：剔除全部 CQ 段（不可渲染的段降级丢弃）并合并连续空白后的纯文本。
+        - media：list[{type: image/voice/record/video, file: file_id}]；
+        - reply_id：reply 段的 message_id，用于回复指定消息；
+        - text：拼接 text 段并将 mention/mention_all 渲染为可见文本；
+          不可渲染的段（如 face/forward）降级忽略。
         """
         media: list[dict] = []
         reply_id = 0
-        for match in _CQ_SEG_RE.finditer(message or ""):
-            inner = match.group(0)[1:-1]  # 去掉方括号
-            head, _, rest = inner.partition(",")
-            seg_type = head[len("CQ:") :] if head.startswith("CQ:") else head
-            kv = dict(re.findall(r"([A-Za-z_]+)=([^,]*)", rest))
+        text_parts: list[str] = []
+        for seg in Message.from_raw(message).as_dicts():
+            seg_type = seg.get("type", "")
+            data = seg.get("data", {}) if isinstance(seg.get("data"), dict) else {}
             if seg_type in _MEDIA_API:
-                f = str(kv.get("file") or "")
+                f = str(data.get("file_id") or data.get("file") or data.get("url") or "")
                 if f:
                     media.append({"type": seg_type, "file": f})
             elif seg_type == "reply":
                 try:
-                    reply_id = int(str(kv.get("id") or "0"))
+                    reply_id = int(str(data.get("message_id") or data.get("id") or "0"))
                 except ValueError:
                     reply_id = 0
-        text = re.sub(r"[ \t\n\r]+", " ", _ANY_CQ_RE.sub("", message or "")).strip()
+            elif seg_type == "text":
+                text_parts.append(str(data.get("text", "")))
+            elif seg_type == "mention":
+                text_parts.append(f"@{data.get('user_id', '')}")
+            elif seg_type == "mention_all":
+                text_parts.append("@所有人")
+        text = re.sub(r"[ \t\n\r]+", " ", "".join(text_parts)).strip()
         return media, text, reply_id
 
-    async def _route_send(self, chat_id: int, message: str) -> dict:
+    async def _route_send(self, chat_id: int, message: str | list) -> dict:
         """按内容路由：含图片/语音/视频 → _send_media，否则 sendMessage 纯文本"""
-        media, text, reply_id = self._parse_cq_message(message)
+        media, text, reply_id = self._parse_v12_segments(message)
         if media:
             return await self._send_media(chat_id, media, text, reply_id)
         params: dict[str, Any] = {
@@ -740,12 +760,10 @@ class TelegramAdapter(PlatformAdapter):
             except Exception:
                 logger.exception(f"平台接口调用钩子异常: {action}")
                 raise
-        if action == "send_private_msg":
-            chat_id = self._safe_int(params.get("user_id"))
-            return await self._route_send(chat_id, str(params.get("message", "")))
-        elif action == "send_group_msg":
-            chat_id = self._safe_int(params.get("group_id"))
-            return await self._route_send(chat_id, str(params.get("message", "")))
+        if action in ("send_private_msg", "send_group_msg"):
+            key = "user_id" if action == "send_private_msg" else "group_id"
+            chat_id = self._safe_int(params.get(key))
+            return await self._route_send(chat_id, params.get("message", ""))
         elif action == "get_group_info":
             # Telegram 无群资料 API，返回最小兼容结构
             return {"group_id": self._safe_int(params.get("group_id")), "group_name": "Telegram 群"}

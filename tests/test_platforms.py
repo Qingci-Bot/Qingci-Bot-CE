@@ -1,7 +1,7 @@
 """多平台适配器测试
 
 验证：
-- Telegram Update 归一化为 OneBot-11 兼容事件 dict（私聊/群聊）
+- Telegram Update 归一化为 OneBot-12 兼容事件 dict（私聊/群聊）
 - 未知 chat 类型忽略、文本提取（text/caption）
 - send_msg / call_api 映射（sendMessage / OneBot action 别名）
 - emit_event 自动注入 platform 字段
@@ -50,12 +50,12 @@ def _message(**kw) -> dict:
 def test_normalize_private_message(adapter):
     event = adapter._normalize_message(_message())
     assert event is not None
-    assert event["post_type"] == "message"
-    assert event["message_type"] == "private"
-    assert event["user_id"] == 10001
-    assert event["group_id"] == 0
+    assert event["type"] == "message"
+    assert event["detail_type"] == "private"
+    assert event["user_id"] == "10001"
+    assert event["group_id"] == ""
     assert event["message_id"] == "42"
-    assert event["raw_message"] == "你好"
+    assert event["alt_message"] == "你好"
     assert event["plain_text"] == "你好"
     assert event["message"] == [{"type": "text", "data": {"text": "你好"}}]
     assert event["sender"]["nickname"] == "Alice"
@@ -68,16 +68,16 @@ def test_normalize_group_message(adapter):
         text="群消息",
     )
     event = adapter._normalize_message(msg)
-    assert event["message_type"] == "group"
-    assert event["group_id"] == 20002
-    assert event["user_id"] == 10001
+    assert event["detail_type"] == "group"
+    assert event["group_id"] == "20002"
+    assert event["user_id"] == "10001"
 
 
 def test_normalize_caption_fallback(adapter):
     """图片消息无 text 时用 caption"""
     msg = _message(text=None, caption="图片说明")
     event = adapter._normalize_message(msg)
-    assert event["raw_message"] == "图片说明"
+    assert event["alt_message"] == "图片说明"
 
 
 def test_normalize_ignores_unknown_chat(adapter):
@@ -236,6 +236,55 @@ async def test_bot_reply_routes_to_platform(bot):
     assert tg.sent == [(10001, "pong")]
 
 
+async def test_v12_telegram_event_dispatch(bot):
+    """Telegram v12 事件（type/detail_type）经 v12 归一化后正常触发回复"""
+    from qingci_plugin_sdk import PluginBase, on_command
+
+    tg = FakeTelegram()
+    bot.platforms["telegram"] = tg
+
+    class V12Plugin(PluginBase):
+        name = "v12echo"
+        version = "1.0.0"
+
+        async def on_load(self):
+            pass
+
+        async def on_unload(self):
+            pass
+
+    async def ping_handler(ctx):
+        return "pong-v12"
+
+    p = V12Plugin()
+    p.matchers = [on_command("ping")(ping_handler)]
+    _register(bot, p)
+
+    # 与 TelegramAdapter._normalize_message 产出一致的 v12 事件
+    v12_event = {
+        "type": "message",
+        "detail_type": "private",
+        "sub_type": "friend",
+        "id": "99",
+        "impl": "telegram",
+        "platform": "telegram",
+        "self_id": "12345",
+        "message_id": "99",
+        "message": [{"type": "text", "data": {"text": "/ping"}}],
+        "alt_message": "/ping",
+        "user_id": "10001",
+        "group_id": "",
+    }
+    reply = await bot.send(v12_event)
+    assert reply == "pong-v12"
+    ctx = bot.dispatcher.dispatch(v12_event)
+    assert ctx.platform == "telegram"
+    assert ctx.message_type == "private"  # 由 detail_type 派生
+    assert ctx.message_id == "99"
+    await bot._send_reply(ctx, reply)
+    assert tg.sent == [(10001, "pong-v12")]  # 回复路由回 Telegram 适配器
+
+
 def _register(bot, plugin):
     """将测试插件注册进 bot 的 PluginManager（模拟 _init_plugin 后的状态）"""
     from bot.plugin import PluginStatus
@@ -340,7 +389,7 @@ def test_get_status_platforms(bot):
 
 
 def test_normalize_group_mention_bot(adapter):
-    """群聊 @Bot（mention entity）命中 → at 段 + is_at_bot=True"""
+    """群聊 @Bot（mention entity）命中 → mention 段 + is_at_bot=True"""
     adapter.self_id = 12345
     adapter.username = "MyBot"
     msg = _message(
@@ -349,13 +398,13 @@ def test_normalize_group_mention_bot(adapter):
         entities=[{"type": "mention", "offset": 3, "length": 7}],
     )
     event = adapter._normalize_message(msg)
-    at_segs = [s for s in event["message"] if s["type"] == "at"]
+    at_segs = [s for s in event["message"] if s["type"] == "mention"]
     assert event["is_at_bot"] is True
-    assert any(s["data"]["qq"] == 12345 for s in at_segs)
+    assert any(s["data"]["user_id"] == "12345" for s in at_segs)
 
 
 def test_normalize_group_mention_other(adapter):
-    """群聊 @其他用户 → 不命中 Bot，无 at 段，is_at_bot=False"""
+    """群聊 @其他用户 → 不命中 Bot，无 mention 段，is_at_bot=False"""
     adapter.self_id = 12345
     adapter.username = "MyBot"
     msg = _message(
@@ -365,7 +414,7 @@ def test_normalize_group_mention_other(adapter):
     )
     event = adapter._normalize_message(msg)
     assert event["is_at_bot"] is False
-    assert not [s for s in event["message"] if s["type"] == "at"]
+    assert not [s for s in event["message"] if s["type"] == "mention"]
     assert event["at_list"]  # 其他用户提及仍记录到 at_list
 
 
@@ -379,15 +428,15 @@ def test_normalize_group_text_mention_bot(adapter):
     )
     event = adapter._normalize_message(msg)
     assert event["is_at_bot"] is True
-    assert any(s["data"]["qq"] == 12345 for s in event["message"] if s["type"] == "at")
+    assert any(s["data"]["user_id"] == "12345" for s in event["message"] if s["type"] == "mention")
 
 
 def test_normalize_private_no_at_segment(adapter):
-    """私聊消息不注入 at 段（触发规则天然放行 private）"""
+    """私聊消息不注入 mention 段（触发规则天然放行 private）"""
     adapter.self_id = 12345
     event = adapter._normalize_message(_message())
     assert event["is_at_bot"] is True
-    assert not [s for s in event["message"] if s["type"] == "at"]
+    assert not [s for s in event["message"] if s["type"] == "mention"]
     assert event["message"] == [{"type": "text", "data": {"text": "你好"}}]
 
 
@@ -408,8 +457,7 @@ def test_normalize_photo_adds_image_segment(adapter):
     event = adapter._normalize_message(msg)
     assert event["images"] == ["P2"]
     imgs = [s for s in event["message"] if s["type"] == "image"]
-    assert imgs and imgs[0]["data"]["file"] == "P2"
-    assert imgs[0]["data"]["url"] == "P2"
+    assert imgs and imgs[0]["data"]["file_id"] == "P2"
 
 
 def test_normalize_image_document(adapter):
@@ -427,7 +475,7 @@ def test_normalize_image_document(adapter):
 
 
 async def test_send_msg_image_url_routes_photo(adapter, monkeypatch):
-    """send_msg 含 [CQ:image,file=URL] → sendPhoto（photo 参数 + caption）"""
+    """send_msg 含 image 段（URL）→ sendPhoto（photo 参数 + caption）"""
     calls = {}
 
     async def fake_api(method, **params):
@@ -435,7 +483,14 @@ async def test_send_msg_image_url_routes_photo(adapter, monkeypatch):
         return {"ok": True, "result": {}}
 
     monkeypatch.setattr(adapter, "_api", fake_api)
-    await adapter.send_msg("group", 20002, "看图 [CQ:image,file=https://x/a.png]")
+    await adapter.send_msg(
+        "group",
+        20002,
+        [
+            {"type": "text", "data": {"text": "看图"}},
+            {"type": "image", "data": {"file_id": "https://x/a.png"}},
+        ],
+    )
     assert calls["method"] == "sendPhoto"
     assert calls["params"]["photo"] == "https://x/a.png"
     assert calls["params"]["chat_id"] == 20002
@@ -451,7 +506,7 @@ async def test_send_msg_image_file_id(adapter, monkeypatch):
         return {}
 
     monkeypatch.setattr(adapter, "_api", fake_api)
-    await adapter.send_msg("private", 10001, "[CQ:image,file=AgACtgID]")
+    await adapter.send_msg("private", 10001, [{"type": "image", "data": {"file_id": "AgACtgID"}}])
     assert calls["params"]["photo"] == "AgACtgID"
 
 
@@ -464,7 +519,9 @@ async def test_send_msg_base64_uploads(adapter, monkeypatch):
         return {}
 
     monkeypatch.setattr(adapter, "_api", fake_api)
-    await adapter.send_msg("private", 10001, "[CQ:image,file=base64://aGVsbG8=]")
+    await adapter.send_msg(
+        "private", 10001, [{"type": "image", "data": {"file_id": "base64://aGVsbG8="}}]
+    )
     files = calls["params"]["files"]
     assert files  # multipart
     assert files["photo"][1] == b"hello"
@@ -480,28 +537,57 @@ async def test_call_api_group_msg_image(adapter, monkeypatch):
 
     monkeypatch.setattr(adapter, "_api", fake_api)
     await adapter.call_api(
-        "send_group_msg", {"group_id": 20002, "message": "[CQ:image,file=http://a/b.jpg]"}
+        "send_group_msg",
+        {
+            "group_id": 20002,
+            "message": [{"type": "image", "data": {"file_id": "http://a/b.jpg"}}],
+        },
     )
     assert calls["method"] == "sendPhoto"
 
 
-def test_parse_cq_message_media_text_reply(adapter):
-    """CQ 解析：提取媒体段、剔除不可渲染段、回传 reply_id"""
-    media, text, reply = TelegramAdapter._parse_cq_message("hi [CQ:face,id=1] [CQ:image,file=f] ok")
+def test_parse_v12_segments_media_text_reply(adapter):
+    """v12 段解析：提取媒体段、渲染 mention、回传 reply_id"""
+    media, text, reply = TelegramAdapter._parse_v12_segments(
+        [
+            {"type": "text", "data": {"text": "hi "}},
+            {"type": "mention", "data": {"user_id": "10001"}},
+            {"type": "image", "data": {"file_id": "f"}},
+        ]
+    )
     assert media == [{"type": "image", "file": "f"}]
-    assert text == "hi ok"
+    assert text == "hi @10001"
     assert reply == 0
 
-    media, text, reply = TelegramAdapter._parse_cq_message(
-        "[CQ:reply,id=42] [CQ:record,file=v1] [CQ:video,file=vd1] 说明"
+    media, text, reply = TelegramAdapter._parse_v12_segments(
+        [
+            {"type": "reply", "data": {"message_id": "42"}},
+            {"type": "voice", "data": {"file_id": "v1"}},
+            {"type": "video", "data": {"file_id": "vd1"}},
+            {"type": "text", "data": {"text": "说明"}},
+        ]
     )
-    assert media == [{"type": "record", "file": "v1"}, {"type": "video", "file": "vd1"}]
+    assert media == [{"type": "voice", "file": "v1"}, {"type": "video", "file": "vd1"}]
     assert text == "说明"
     assert reply == 42
 
 
+async def test_send_msg_text_string_still_works(adapter, monkeypatch):
+    """纯文本字符串仍按文本发送（兼容旧调用方）"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["method"], calls["params"] = method, params
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg("private", 10001, "hi")
+    assert calls["method"] == "sendMessage"
+    assert calls["params"]["text"] == "hi"
+
+
 def test_normalize_voice_and_video(adapter):
-    """语音 → record 段，视频 → video 段"""
+    """语音 → voice 段，视频 → video 段（v12 段）"""
     adapter.self_id = 12345
     msg = _message(
         chat={"id": -10020002, "type": "group", "title": "测试群"},
@@ -509,8 +595,8 @@ def test_normalize_voice_and_video(adapter):
         voice={"file_id": "VOICE1", "duration": 5},
     )
     event = adapter._normalize_message(msg)
-    assert [s["type"] for s in event["message"]] == ["record"]
-    assert event["message"][0]["data"]["file"] == "VOICE1"
+    assert [s["type"] for s in event["message"]] == ["voice"]
+    assert event["message"][0]["data"]["file_id"] == "VOICE1"
 
     msg2 = _message(
         chat={"id": -10020002, "type": "group", "title": "测试群"},
@@ -519,7 +605,7 @@ def test_normalize_voice_and_video(adapter):
     )
     ev2 = adapter._normalize_message(msg2)
     assert [s["type"] for s in ev2["message"]] == ["video"]
-    assert ev2["message"][0]["data"]["file"] == "VID1"
+    assert ev2["message"][0]["data"]["file_id"] == "VID1"
 
 
 def test_normalize_private_subtype_friend(adapter):
@@ -537,7 +623,7 @@ def test_normalize_group_subtype_normal(adapter):
 
 
 async def test_send_msg_voice_routes_sendvoice(adapter, monkeypatch):
-    """send_msg 含 [CQ:record] → sendVoice"""
+    """send_msg 含 voice 段 → sendVoice"""
     calls = {}
 
     async def fake_api(method, **params):
@@ -545,13 +631,13 @@ async def test_send_msg_voice_routes_sendvoice(adapter, monkeypatch):
         return {}
 
     monkeypatch.setattr(adapter, "_api", fake_api)
-    await adapter.send_msg("private", 10001, "[CQ:record,file=AgVcID]")
+    await adapter.send_msg("private", 10001, [{"type": "voice", "data": {"file_id": "AgVcID"}}])
     assert calls["method"] == "sendVoice"
     assert calls["params"]["voice"] == "AgVcID"
 
 
 async def test_send_msg_video_routes_sendvideo(adapter, monkeypatch):
-    """send_msg 含 [CQ:video] → sendVideo"""
+    """send_msg 含 video 段 → sendVideo"""
     calls = {}
 
     async def fake_api(method, **params):
@@ -559,13 +645,15 @@ async def test_send_msg_video_routes_sendvideo(adapter, monkeypatch):
         return {}
 
     monkeypatch.setattr(adapter, "_api", fake_api)
-    await adapter.send_msg("private", 10001, "[CQ:video,file=http://a/b.mp4]")
+    await adapter.send_msg(
+        "private", 10001, [{"type": "video", "data": {"file_id": "http://a/b.mp4"}}]
+    )
     assert calls["method"] == "sendVideo"
     assert calls["params"]["video"] == "http://a/b.mp4"
 
 
 async def test_send_text_with_reply(adapter, monkeypatch):
-    """纯文本 + [CQ:reply] → sendMessage 带 reply_to_message_id"""
+    """纯文本 + reply 段 → sendMessage 带 reply_to_message_id"""
     calls = {}
 
     async def fake_api(method, **params):
@@ -573,7 +661,14 @@ async def test_send_text_with_reply(adapter, monkeypatch):
         return {}
 
     monkeypatch.setattr(adapter, "_api", fake_api)
-    await adapter.send_msg("private", 10001, "[CQ:reply,id=7] 收到")
+    await adapter.send_msg(
+        "private",
+        10001,
+        [
+            {"type": "reply", "data": {"message_id": "7"}},
+            {"type": "text", "data": {"text": "收到"}},
+        ],
+    )
     assert calls["params"]["reply_to_message_id"] == 7
     assert calls["params"]["text"] == "收到"
 
@@ -590,7 +685,11 @@ async def test_send_media_with_reply(adapter, monkeypatch):
     await adapter.send_msg(
         "private",
         10001,
-        "[CQ:reply,id=9] [CQ:image,file=AgABg] 配图",
+        [
+            {"type": "reply", "data": {"message_id": "9"}},
+            {"type": "image", "data": {"file_id": "AgABg"}},
+            {"type": "text", "data": {"text": "配图"}},
+        ],
     )
     assert calls["method"] == "sendPhoto"
     assert calls["params"]["photo"] == "AgABg"
@@ -631,7 +730,7 @@ def _member_update(
 
 
 async def test_member_increase_notice(adapter, monkeypatch):
-    """成员加入（被邀请）→ group_increase，sub_type=invite"""
+    """成员加入（被邀请）→ group_member_increase，sub_type=invite"""
     adapter.self_id = 999
     seen = []
 
@@ -642,17 +741,31 @@ async def test_member_increase_notice(adapter, monkeypatch):
     await adapter._handle_update(_member_update())
     assert len(seen) == 1
     ev = seen[0]
-    assert ev["post_type"] == "notice"
-    assert ev["notice_type"] == "group_increase"
+    assert ev["type"] == "notice"
+    assert ev["detail_type"] == "group_member_increase"
     assert ev["sub_type"] == "invite"
-    assert ev["group_id"] == -10020002
-    assert ev["user_id"] == 777
-    assert ev["operator_id"] == 555
-    assert ev["self_id"] == 999
+    assert ev["group_id"] == "-10020002"
+    assert ev["user_id"] == "777"
+    assert ev["operator_id"] == "555"
+    assert ev["self_id"] == "999"
+
+
+async def test_member_join_self(adapter, monkeypatch):
+    """成员主动加入（无操作者）→ sub_type=join"""
+    adapter.self_id = 999
+    seen = []
+
+    async def rec(event: dict):
+        seen.append(event)
+
+    monkeypatch.setattr(adapter, "emit_event", rec)
+    await adapter._handle_update(_member_update(operator_id=0))
+    assert seen and seen[0]["detail_type"] == "group_member_increase"
+    assert seen[0]["sub_type"] == "join"
 
 
 async def test_member_decrease_notice(adapter, monkeypatch):
-    """成员离开 → group_decrease（操作者即本人 → sub_type=normal）"""
+    """成员离开 → group_member_decrease（leave）"""
     seen = []
 
     async def rec(event: dict):
@@ -662,12 +775,25 @@ async def test_member_decrease_notice(adapter, monkeypatch):
     await adapter._handle_update(
         _member_update(new_status="left", old_status="member", operator_id=777)
     )
-    assert seen and seen[0]["notice_type"] == "group_decrease"
-    assert seen[0]["user_id"] == 777
+    assert seen and seen[0]["detail_type"] == "group_member_decrease"
+    assert seen[0]["user_id"] == "777"
+
+
+async def test_member_kick_notice(adapter, monkeypatch):
+    """成员被踢（left->new_status=kicked）→ group_member_decrease sub_type=kick"""
+    seen = []
+
+    async def rec(event: dict):
+        seen.append(event)
+
+    monkeypatch.setattr(adapter, "emit_event", rec)
+    await adapter._handle_update(_member_update(new_status="kicked", old_status="member"))
+    assert seen and seen[0]["detail_type"] == "group_member_decrease"
+    assert seen[0]["sub_type"] == "kick"
 
 
 async def test_member_admin_notice(adapter, monkeypatch):
-    """成员被设为管理员 → group_admin, sub_type=set"""
+    """成员被设为管理员 → group_admin_set, sub_type=set"""
     seen = []
 
     async def rec(event: dict):
@@ -675,7 +801,7 @@ async def test_member_admin_notice(adapter, monkeypatch):
 
     monkeypatch.setattr(adapter, "emit_event", rec)
     await adapter._handle_update(_member_update(new_status="administrator", old_status="member"))
-    assert seen and seen[0]["notice_type"] == "group_admin"
+    assert seen and seen[0]["detail_type"] == "group_admin_set"
     assert seen[0]["sub_type"] == "set"
 
 
@@ -689,8 +815,8 @@ async def test_my_member_notice_uses_self_id(adapter, monkeypatch):
 
     monkeypatch.setattr(adapter, "emit_event", rec)
     await adapter._handle_update(_member_update(user_id=999, operator_id=555, key="my_chat_member"))
-    assert seen and seen[0]["notice_type"] == "group_increase"
-    assert seen[0]["user_id"] == 999
+    assert seen and seen[0]["detail_type"] == "group_member_increase"
+    assert seen[0]["user_id"] == "999"
 
 
 async def test_member_change_non_group_ignored(adapter, monkeypatch):
