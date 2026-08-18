@@ -24,7 +24,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 from aiohttp import WSMsgType, web
 
@@ -275,7 +275,7 @@ class OneBot12Adapter(PlatformAdapter):
         if isinstance(message, str):
             return message
         if hasattr(message, "as_dicts"):
-            return message.as_dicts()
+            return cast(list, message.as_dicts())
         return message
 
     async def send_msg(self, message_type: str, target_id: int, message: str | list) -> dict:

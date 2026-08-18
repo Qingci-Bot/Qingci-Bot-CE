@@ -3271,6 +3271,7 @@ version = "1.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiocqhttp" },
+    { name = "aiohttp" },
     { name = "aiosqlite" },
     { name = "alembic" },
     { name = "apscheduler" },
@@ -3318,6 +3319,7 @@ vector = [
 [package.metadata]
 requires-dist = [
     { name = "aiocqhttp", specifier = ">=1.4.4" },
+    { name = "aiohttp", specifier = ">=3.9.0" },
     { name = "aiosqlite", specifier = ">=0.20.0" },
     { name = "alembic", specifier = ">=1.13" },
     { name = "apscheduler", specifier = ">=3.10,<4" },
