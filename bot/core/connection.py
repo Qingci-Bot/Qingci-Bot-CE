@@ -15,7 +15,7 @@ OneBotConnection 作为外观层，保持与旧 API 兼容：
 - is_connected / last_heartbeat 状态查询
 
 OneBot 实现端（如 LLBot/NapCat）需连接 ws://host:port/ws。
-断连时 Qingci-Bot CE Web UI 与 API 保持可用，LLBot 重连后自动恢复消息收发。
+断连时 Qingci-Bot CE Web UI 与 API 保持可用，协议端重连后自动恢复消息收发。
 """
 
 import asyncio
@@ -108,7 +108,7 @@ class OneBotConnection(PlatformAdapter):
                 return
             # 生命周期事件（连接建立）
             if event.get("meta_event_type") == "lifecycle":
-                logger.info(f"LLBot 生命周期事件: {event.get('sub_type', '')}")
+                logger.info(f"协议端生命周期事件: {event.get('sub_type', '')}")
             await self._trigger_callbacks(self._on_metaevent_callbacks, event)
             await self._dispatch_event(event)
 
@@ -138,12 +138,12 @@ class OneBotConnection(PlatformAdapter):
     # ============ 连接状态回调 ============
 
     def on_disconnect(self, handler: Callable) -> None:
-        """注册断连回调（async callable，LLBot 断开时触发）"""
+        """注册断连回调（async callable，协议端断开时触发）"""
         if handler not in self._on_disconnect_callbacks:
             self._on_disconnect_callbacks.append(handler)
 
     def on_reconnect(self, handler: Callable) -> None:
-        """注册重连回调（async callable，LLBot 重新连接时触发）"""
+        """注册重连回调（async callable，协议端重新连接时触发）"""
         if handler not in self._on_reconnect_callbacks:
             self._on_reconnect_callbacks.append(handler)
 
@@ -210,11 +210,11 @@ class OneBotConnection(PlatformAdapter):
                 connected = self.is_connected
                 if not connected and self._was_connected:
                     logger.warning(
-                        "LLBot 连接已断开（WebSocket 客户端全部离开），Web UI 与 API 仍可用"
+                        "协议端连接已断开（WebSocket 客户端全部离开），Web UI 与 API 仍可用"
                     )
                     await self._trigger_callbacks(self._on_disconnect_callbacks)
                 elif connected and not self._was_connected:
-                    logger.info("LLBot 已重新连接，恢复消息收发")
+                    logger.info("协议端已重新连接，恢复消息收发")
                     await self._trigger_callbacks(self._on_reconnect_callbacks)
                     # 初始连接与重连均触发 on_connect（插件级 on_bot_connect）
                     await self._trigger_callbacks(self._on_connect_callbacks)

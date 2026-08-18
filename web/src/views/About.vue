@@ -22,7 +22,7 @@ onMounted(() => {
         <div class="card-title">项目简介</div>
       </div>
       <div class="about-section">
-        <p><strong>Qingci-Bot CE</strong> 是一个基于 Python 的 QQ 机器人框架，对接 LLBot（OneBot 11 协议），支持 LLM 智能对话、Web UI 和桌面应用。</p>
+        <p><strong>Qingci-Bot CE</strong> 是一个基于 Python 的多平台机器人框架，支持 OneBot 11（反向 WebSocket）与 Telegram 等平台，提供 LLM 智能对话、Web UI 和桌面应用。</p>
         <p>项目采用 <strong>GPLv3</strong> 开源许可，代码托管于 <a href="https://github.com/Qingci-Bot/Qingci-Bot-CE" target="_blank" rel="noopener">GitHub</a>。</p>
         <div class="feature-grid">
           <div class="feature-item">
@@ -41,6 +41,13 @@ onMounted(() => {
           </div>
           <div class="feature-item">
             <span class="feature-icon">◈</span>
+            <div>
+              <div class="feature-title">多平台支持</div>
+              <div class="feature-desc">实例可绑定 OneBot / Telegram 等主平台，平台配置、ID 体系相互隔离</div>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">✧</span>
             <div>
               <div class="feature-title">Web 管理端</div>
               <div class="feature-desc">Vue 3 + 原神风格暗色主题，仪表盘 / LLM 配置 / 对话调试 / 插件管理</div>
@@ -88,7 +95,7 @@ onMounted(() => {
               <a href="https://github.com/LLOneBot/LuckyLilliaBot" target="_blank" rel="noopener">LLBot (LuckyLilliaBot)</a>
             </div>
             <div class="thanks-desc">
-              QQ 协议端，实现 OneBot 11 标准协议，为本项目提供与 QQ 平台的通信能力。
+              OneBot 11 协议端实现，为本项目提供基于反向 WebSocket 的消息通信能力。
             </div>
           </div>
           <div class="thanks-item">

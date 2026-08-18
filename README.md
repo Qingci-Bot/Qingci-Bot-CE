@@ -4,7 +4,7 @@
 
 > 本项目底层核心代码由 [**Zhou Zhe (aka luoqingci)**](https://github.com/luoqingciya) 原创，并授予 [Qingci-Bot](https://github.com/Qingci-Bot) 组织持续开发。
 
-基于 Python 的多平台机器人框架，内部统一采用 **OneBot 12 事件模型**（`type` / `detail_type` / `message[]` 消息段），基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot)（OneBot 11 反向 WebSocket，作为兼容输入层自动翻译为 v12 事件），支持 LLM 智能对话、Web UI 和桌面应用。适配器将各平台归一化为 OneBot 12 内部模型，插件对来源平台完全无感知。
+基于 Python 的多平台机器人框架，内部统一采用 **OneBot 12 事件模型**（`type` / `detail_type` / `message[]` 消息段），基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接任意 OneBot 11 反向 WebSocket 协议端（如 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot) / NapCat / go-cqhttp，作为兼容输入层自动翻译为 v12 事件），支持 LLM 智能对话、Web UI 和桌面应用。适配器将各平台归一化为 OneBot 12 内部模型，插件对来源平台完全无感知。
 
 > 独立插件开发：[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) — 零依赖插件开发 SDK，无需克隆主项目即可开发插件
 >
@@ -14,7 +14,7 @@
 
 ## 特性
 
-- **OneBot 12 内核**：内部统一采用 OneBot 12 事件模型（`type` / `detail_type` / 标准 `{type,data}` 消息段，媒体以 `file_id` 引用）；基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot)（OneBot 11 反向 WebSocket），v11 事件在入口由 `v11_compat` 翻译层自动归一化为 v12 事件，并对存量插件保留 v11 兼容字段（`post_type` / `message_type` / `raw_message`）——OneBot 11 只是"众多平台之一"
+- **OneBot 12 内核**：内部统一采用 OneBot 12 事件模型（`type` / `detail_type` / 标准 `{type,data}` 消息段，媒体以 `file_id` 引用）；基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接任意 OneBot 11 反向 WebSocket 协议端（如 LLBot / NapCat / go-cqhttp），v11 事件在入口由 `v11_compat` 翻译层自动归一化为 v12 事件，并对存量插件保留 v11 兼容字段（`post_type` / `message_type` / `raw_message`）——OneBot 11 只是"众多平台之一"
 - **多平台适配器**：平台协议归一化为 OneBot 12 内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot（v11 输入）+ Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `voice`、video → `video` v12 段；发送将 v12 `image`/`voice`/`video` 段映射到 `sendPhoto`/`sendVoice`/`sendVideo`）、回复段与成员变动通知（成员进出群/权限变更归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_*` notice）；长轮询采用有限并发消费（慢更新不阻塞同批）且失败更新自动确认跳过避免重放，连接失败指数退避并自动重连，Bot Token 支持运行时热更新（自动重验身份），HTTP 超时/重试可配置，API 调用错误按 401/403/404 分类，平台状态接口暴露连接健康指标（连续错误数/最近错误与断连时间/退避状态）
 - **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 7 大提供商（OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义），含流式响应、Function Calling、多模态；填好 API Key 后可一键拉取提供商可用模型列表
 - **人格/人设系统**：可配置多组人格（system_prompt 集合），聊天中 `/persona` 命令随时切换（会话级覆盖），Web UI 可视化管理
@@ -34,7 +34,7 @@
 ## 环境要求
 
 - Python 3.10+（推荐 3.12）
-- [LLBot](https://github.com/LLOneBot/LuckyLilliaBot)（QQ 协议端）
+- 任意 OneBot 11 协议端（如 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot) / NapCat / go-cqhttp）
 - Node.js 18+（仅构建 Web UI 时需要，`web/dist` 已存在可跳过）
 - 桌面模式额外依赖系统 WebView2 运行时（见「打包为 exe」注意事项）
 
@@ -183,14 +183,14 @@ mypy bot api
 >
 > 配置文件 `.pre-commit-config.yaml` 已包含 ruff 格式检查和通用文件检查（YAML/TOML/JSON 语法、行尾空格、大文件等）。
 
-## 5. 配置 LLBot
+## 5. 配置 OneBot 协议端
 
-在 LLBot 中添加反向 WebSocket 连接：
+在 OneBot 11 协议端（如 LLBot / NapCat / go-cqhttp）中添加反向 WebSocket 连接：
 
 - 地址：`ws://127.0.0.1:3001/ws`（端口默认 3001，需与 `config.yaml` 的 `onebot.port` 保持一致）
 - Access Token：留空或与 `config.yaml` 中 `onebot.access_token` 保持一致
 
-LLBot 会自动携带 OneBot v11 标准的 `X-Client-Role: universal` 和 `X-Self-ID` header 连接。接入的 v11 事件会由 `bot/core/v11_compat.py` 翻译层自动归一化为 OneBot 12 事件（`type`/`detail_type`）后进入核心调度，插件侧仍能读取兼容字段（`post_type`/`message_type`/`raw_message`）。
+协议端会自动携带 OneBot v11 标准的 `X-Client-Role: universal` 和 `X-Self-ID` header 连接。接入的 v11 事件会由 `bot/core/v11_compat.py` 翻译层自动归一化为 OneBot 12 事件（`type`/`detail_type`）后进入核心调度，插件侧仍能读取兼容字段（`post_type`/`message_type`/`raw_message`）。
 
 ## 6. 配置 LLM
 
@@ -313,7 +313,7 @@ bot:
 onebot:
   enabled: true                    # 是否启动 OneBot 反向 WS 服务端（Telegram 主平台实例可设为 false）
   host: 127.0.0.1
-  port: 3001                       # LLBot 连接 ws://host:port/ws
+  port: 3001                       # 协议端连接 ws://host:port/ws
   access_token: ''
 llm:
   provider: openai                 # openai / deepseek / ollama / siliconflow / claude / gemini / custom

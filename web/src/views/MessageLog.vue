@@ -149,7 +149,7 @@ function formatDate(ts) {
         </div>
         <div class="input-group search-bar">
           <div class="form-group">
-            <input v-model="keyword" type="text" placeholder="搜索关键词 / QQ / 群号" @keyup.enter="search">
+            <input v-model="keyword" type="text" placeholder="搜索关键词 / 用户 ID / 群组 ID" @keyup.enter="search">
           </div>
           <button class="btn btn-secondary btn-sm" @click="search">搜索</button>
         </div>
@@ -169,7 +169,7 @@ function formatDate(ts) {
           <span class="time">{{ formatTime(log.created_at) }}</span>
           <span class="meta">
             {{ log.role === 'user' ? '用户' : 'Bot' }}
-            {{ log.group_id ? `群 ${log.group_id}` : `私聊 ${log.user_id}` }}
+            {{ log.group_id ? `群组 ${log.group_id}` : `私聊 ${log.user_id}` }}
           </span>
           <span class="content">{{ log.content }}</span>
         </div>
@@ -196,7 +196,7 @@ function formatDate(ts) {
         >
           <div class="session-main">
             <div class="session-title">
-              {{ s.group_id ? `群 ${s.group_id} · 用户 ${s.user_id}` : `私聊 ${s.user_id}` }}
+              {{ s.group_id ? `群组 ${s.group_id} · 用户 ${s.user_id}` : `私聊 ${s.user_id}` }}
               <span class="tag" style="margin-left: 8px;">{{ s.message_count }} 条</span>
             </div>
             <div class="session-meta">

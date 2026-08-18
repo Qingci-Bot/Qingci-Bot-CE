@@ -48,7 +48,7 @@ async function doLogin() {
     <div class="card login-card">
       <div class="login-logo">
         <div class="title">Qingci-Bot CE</div>
-        <span class="subtitle">QQ Bot Framework</span>
+        <span class="subtitle">Multi-Platform Bot Framework</span>
       </div>
       <form @submit.prevent="doLogin">
         <div class="form-group">

@@ -145,7 +145,7 @@ export const useAppStore = defineStore('app', () => {
 
   const statusText = computed(() => {
     if (!botRunning.value) return '未启动'
-    if (!botConnected.value) return '等待 LLBot 连接'
+    if (!botConnected.value) return '等待协议端连接'
     return '运行中'
   })
 
@@ -294,6 +294,9 @@ export const useAppStore = defineStore('app', () => {
 
   // ---- 实例管理 ----
 
+  // 当前运行中的实例（用于仪表盘等页面按平台展示提示）
+  const currentInstance = computed(() => instances.value.find((i) => i.running) || null)
+
   async function fetchInstances() {
     try {
       instances.value = await apiFetch('/api/instances') || []
@@ -336,7 +339,7 @@ export const useAppStore = defineStore('app', () => {
   return {
     botRunning, botConnected, platforms, plugins, config, llmPresets, logs, loading, error,
     configLoaded, instances, appVersion,
-    statusText, statusColor,
+    statusText, statusColor, currentInstance,
     fetchStatus, fetchConfig, fetchLLMPresets, startBot, stopBot, restartBot,
     saveConfig, testLLM, fetchLLMModels, fetchLogs, fetchMessageCount, addLog,
     fetchInstances, createInstance, deleteInstance, renameInstance, switchInstance,

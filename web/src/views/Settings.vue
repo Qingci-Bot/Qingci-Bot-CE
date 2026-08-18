@@ -225,7 +225,7 @@ async function saveConfigJson() {
 <template>
   <div class="page-header">
     <h1>系统设置</h1>
-    <p>配置 Bot 行为、触发条件与 OneBot 连接参数</p>
+    <p>配置 Bot 行为、触发条件与各平台连接参数</p>
   </div>
 
   <div class="page-body">
@@ -251,20 +251,20 @@ async function saveConfigJson() {
           <input v-model="form.bot.trigger_keywords" type="text" placeholder="/bot, /ai">
         </div>
         <div class="form-group">
-          <label>超级管理员 QQ（唯一，拥有全部权限）</label>
-          <input v-model="form.bot.super_admin" type="text" placeholder="123456789">
+          <label>超级管理员 ID（唯一，拥有全部权限）</label>
+          <input v-model="form.bot.super_admin" type="text" placeholder="user_001">
         </div>
         <div class="form-group">
-          <label>普通管理员 QQ（逗号分隔，可多个）</label>
-          <input v-model="form.bot.admin_users" type="text" placeholder="123456789">
+          <label>普通管理员 ID（逗号分隔，可多个）</label>
+          <input v-model="form.bot.admin_users" type="text" placeholder="user_001, user_002">
         </div>
         <div class="form-group">
-          <label>群黑名单（逗号分隔）</label>
-          <input v-model="form.bot.group_blacklist" type="text" placeholder="123456789">
+          <label>群组黑名单（逗号分隔）</label>
+          <input v-model="form.bot.group_blacklist" type="text" placeholder="group_001, group_002">
         </div>
         <div class="form-group">
           <label>用户黑名单（逗号分隔）</label>
-          <input v-model="form.bot.user_blacklist" type="text" placeholder="123456789">
+          <input v-model="form.bot.user_blacklist" type="text" placeholder="user_003">
         </div>
       </div>
     </div>
@@ -276,7 +276,7 @@ async function saveConfigJson() {
       <div class="platform-cfg">
         <div class="platform-cfg-head">
           <div class="form-group" style="margin: 0; flex: 1;">
-            <label>OneBot（反向 WebSocket，QQ 平台）</label>
+            <label>OneBot（反向 WebSocket）</label>
             <div class="switch-row">
               <label class="switch">
                 <input type="checkbox" v-model="form.onebot.enabled">

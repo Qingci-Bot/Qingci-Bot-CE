@@ -290,7 +290,7 @@ class QingciBot:
     # ============ 生命周期钩子回调 ============
 
     async def _on_bot_connect(self) -> None:
-        """LLBot 连接建立时（初始连接与重连）触发分发 on_bot_connect"""
+        """协议端连接建立时（初始连接与重连）触发分发 on_bot_connect"""
         await self.plugin_manager.dispatch_lifecycle("on_bot_connect")
 
     async def _on_metaevent(self, event: dict) -> None:

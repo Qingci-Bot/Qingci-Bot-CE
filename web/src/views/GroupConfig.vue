@@ -49,7 +49,7 @@ async function updateGroup(group, payload) {
     })
     group.enabled = data.enabled !== false
     group.triggerValue = data.trigger_mode || ''
-    showToast('success', `群 ${group.group_id} 配置已更新`)
+    showToast('success', `群组 ${group.group_id} 配置已更新`)
   } catch (e) {
     showToast('error', `保存失败：${e.message}`)
     await loadGroups()
@@ -74,15 +74,13 @@ function onTriggerChange(group) {
 }
 
 async function addGroup() {
-  // v-model 在 type=number 下会把值转成 number，先转字符串再校验
-  const raw = String(newGroupId.value ?? '').trim()
-  const id = Number(raw)
-  if (!raw || !Number.isInteger(id)) {
-    showToast('error', '请输入有效的群号（纯数字）')
+  const id = String(newGroupId.value ?? '').trim()
+  if (!id) {
+    showToast('error', '请输入有效的群组 ID')
     return
   }
-  if (groups.value.some(g => g.group_id === id)) {
-    showToast('info', `群 ${id} 已在列表中`)
+  if (groups.value.some(g => String(g.group_id) === id)) {
+    showToast('info', `群组 ${id} 已在列表中`)
     newGroupId.value = ''
     return
   }
@@ -95,18 +93,18 @@ async function addGroup() {
 
 <template>
   <div class="page-header">
-    <h1>群配置</h1>
-    <p>按群粒度覆盖启用状态与触发模式（未单独配置的群跟随全局设置）</p>
+    <h1>群组配置</h1>
+    <p>按群组粒度覆盖启用状态与触发模式（未单独配置的群组跟随全局设置）</p>
   </div>
 
   <div class="page-body">
     <div class="card fade-in">
       <div class="card-header">
-        <div class="card-title">群列表</div>
+        <div class="card-title">群组列表</div>
         <div class="action-bar">
           <div class="input-group">
             <div class="form-group">
-              <input v-model="newGroupId" type="number" placeholder="输入群号添加" @keyup.enter="addGroup">
+              <input v-model="newGroupId" type="text" placeholder="输入群组 ID 添加" @keyup.enter="addGroup">
             </div>
             <button class="btn btn-secondary btn-sm" :disabled="savingId !== null" @click="addGroup">
               <span>＋</span> 添加群
@@ -127,13 +125,13 @@ async function addGroup() {
       <div v-if="groups.length === 0" class="empty-state">
         <div class="icon">▣</div>
         <div>暂无已配置的群</div>
-        <div style="font-size: 12px; margin-top: 6px;">可在上方输入群号手动添加</div>
+        <div style="font-size: 12px; margin-top: 6px;">可在上方输入群组 ID 手动添加</div>
       </div>
 
       <table v-else class="table">
         <thead>
           <tr>
-            <th class="col-group-id">群号</th>
+            <th class="col-group-id">群组 ID</th>
             <th class="col-enabled">启用</th>
             <th>触发模式</th>
           </tr>

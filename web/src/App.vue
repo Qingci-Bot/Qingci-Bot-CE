@@ -13,7 +13,7 @@ let disposed = false
 
 // 实例可绑定主平台（与后端 bot/instances.py SUPPORTED_PLATFORMS 保持一致）
 const platformOptions = [
-  { value: 'onebot', label: 'OneBot（QQ）', hint: '反向 WebSocket，对接 LLBot/NapCat' },
+  { value: 'onebot', label: 'OneBot', hint: '反向 WebSocket，对接 OneBot 协议端（如 LLBot / NapCat）' },
   { value: 'telegram', label: 'Telegram', hint: 'Bot API 长轮询（创建后在设置中填 token）' },
 ]
 
@@ -30,7 +30,7 @@ const navItems = [
   { path: '/', name: '仪表盘', icon: '◈' },
   { path: '/config', name: 'LLM 配置', icon: '✦' },
   { path: '/lab', name: '对话调试', icon: '✎' },
-  { path: '/groups', name: '群配置', icon: '▣' },
+  { path: '/groups', name: '群组配置', icon: '▣' },
   { path: '/plugins', name: '插件管理', icon: '◇' },
   { path: '/logs', name: '消息日志', icon: '✉' },
   { path: '/settings', name: '系统设置', icon: '⚙' },
@@ -137,7 +137,7 @@ function onRename(inst) {
     <aside class="sidebar">
       <div class="sidebar-logo">
         <div class="title">Qingci-Bot CE</div>
-        <span class="subtitle">QQ Bot Framework</span>
+        <span class="subtitle">Multi-Platform Bot Framework</span>
       </div>
       <div class="instance-section">
         <div class="instance-head">

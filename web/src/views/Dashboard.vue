@@ -67,7 +67,7 @@ const triggerDesc = {
         <span class="stat-icon">◉</span>
         <div class="stat-label">Bot 状态</div>
         <div class="stat-value" :style="{ color: store.statusColor }">{{ store.statusText }}</div>
-        <div class="stat-desc">{{ store.botConnected ? 'LLBot 已连接' : '等待协议端连接' }}</div>
+        <div class="stat-desc">{{ store.botConnected ? '协议端已连接' : '等待协议端连接' }}</div>
       </div>
       <div class="card stat-card">
         <span class="stat-icon" style="color: var(--blue)">◇</span>
@@ -148,8 +148,14 @@ const triggerDesc = {
           </button>
         </div>
         <div class="hint-text">
-          <strong>OneBot 反向 WS 地址：</strong>ws://{{ store.config.onebot?.host || '127.0.0.1' }}:{{ store.config.onebot?.port || 3001 }}<br>
-          在 LLBot 中添加该反向 WebSocket 连接，即可让 QQ 消息流入本框架。
+          <template v-if="(store.currentInstance?.platform || 'onebot') === 'onebot'">
+            <strong>OneBot 反向 WS 地址：</strong>ws://{{ store.config.onebot?.host || '127.0.0.1' }}:{{ store.config.onebot?.port || 3001 }}<br>
+            当前实例平台为 <strong>OneBot</strong>；请在协议端（如 LLBot / NapCat）中添加该反向 WebSocket 连接。
+          </template>
+          <template v-else>
+            <strong>当前实例平台：</strong>{{ store.currentInstance?.platform }}<br>
+            该实例未启用 OneBot 反向 WS，请前往「系统设置」配置对应平台适配器。
+          </template>
         </div>
       </div>
 

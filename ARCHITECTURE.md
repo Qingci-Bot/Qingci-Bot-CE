@@ -4,8 +4,8 @@
 
 ```
 ┌──────────┐  OneBot 11 WS  ┌──────────────────────────────────────────┐   HTTP/WS   ┌──────────┐
-│  LLBot   │ ◄────────────► │            Qingci-Bot CE                │ ◄─────────► │  Web UI  │
-│ (QQ 协议端)│  收发消息/事件  │  ┌──────────────────────────────────┐   │   API 推送   │  (管理端)  │
+│  OneBot  │ ◄────────────► │            Qingci-Bot CE                │ ◄─────────► │  Web UI  │
+│(OneBot 11)│  收发消息/事件  │  ┌──────────────────────────────────┐   │   API 推送   │  (管理端)  │
 └──────────┘                 │  │ aiocqhttp (反向 WS 服务端)        │   │            └──────────┘
                              │  ├──────────────────────────────────┤   │
                              │  │ v11_compat (v11 事件 → v12 翻译) │   │
@@ -25,11 +25,11 @@
 
 ### 数据流
 
-1. **LLBot**（QQ 协议端）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot CE；Telegram 由 `telegram.py` 适配器以 Bot API 长轮询接入
+1. **OneBot 11 协议端**（如 LLBot / NapCat / go-cqhttp）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot CE；Telegram 由 `telegram.py` 适配器以 Bot API 长轮询接入
 2. **aiocqhttp** 收到 OneBot 11 事件，经 **v11_compat**（`bot/core/v11_compat.py`）翻译为 **OneBot 12** 事件（`type`/`detail_type`/`message[]`）；**telegram 适配器**直接将原生更新归一化为 OneBot 12 事件（注入 `platform` 字段），统一分发至 **Dispatcher**
 3. **Dispatcher** 以 OneBot 12 事件模型解析出 `MessageContext`（`Message.from_raw` 自动归一化 v11/v12 消息段），按 priority 调度 **PluginManager** 中的 Matcher，匹配 Rule/Permission 后执行 handler
 4. 未匹配则回退到旧式 `on_message`；内置 chat 插件调用 **LLMManager** 生成回复
-5. 回复按 **MessageContext.platform** 路由到对应 **PlatformAdapter**，最终发送回 LLBot（QQ 用户）或 Telegram 对话；发送层消费 OneBot 12 标准消息段（`send_message` 动作的 `message` 参数），由各适配器映射为平台私有格式
+5. 回复按 **MessageContext.platform** 路由到对应 **PlatformAdapter**，最终发送回 OneBot 协议端（QQ 用户）或 Telegram 对话；发送层消费 OneBot 12 标准消息段（`send_message` 动作的 `message` 参数），由各适配器映射为平台私有格式
 6. **Web UI** 通过 HTTP/WebSocket 与 API 服务通信，管理配置、插件、日志等（侧边栏展示各平台实时连接状态）
 
 > **多平台原则**：事件在入口归一化为 OneBot 12、回复在出口路由回平台，插件/命令对来源平台完全无感知——一套 Matcher/Rule/Permission 逻辑基于统一事件模型天然支持所有已接入平台。
@@ -323,9 +323,9 @@ alembic upgrade head
 
 > 注意：PostgreSQL 的 `expire_on_commit=False` 配置与 SQLite 一致，无需改动。
 
-### LLBot 断连恢复
+### 协议端断连恢复
 
-Qingci-Bot CE 启动后会自动监测 LLBot 的 WebSocket 连接状态。若 LLBot 异常退出或重启：
+Qingci-Bot CE 启动后会自动监测协议端（OneBot 11 客户端）的 WebSocket 连接状态。若协议端异常退出或重启：
 
 - **自动重连**：检测到断连后，以指数退避策略（初始 1s，上限 60s）自动尝试重连，无需手动干预
 - **优雅降级**：断连期间 Web UI 与 API 服务正常可用，Bot 状态显示为"未连接"

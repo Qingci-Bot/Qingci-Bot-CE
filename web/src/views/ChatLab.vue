@@ -143,7 +143,7 @@ function scrollDown() {
           <div class="icon">◉</div>
           <div>发送消息开始调试对话</div>
           <div class="hint-text" style="margin-top: 8px;">
-            会话独立于 QQ 真实对话（private:900000001），流式输出与 Bot 实机行为一致。
+            调试会话独立于平台真实对话（private:900000001），流式输出与 Bot 实机行为一致。
           </div>
         </div>
         <div

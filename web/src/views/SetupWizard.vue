@@ -27,10 +27,9 @@ const providers = [
 const apiKey = ref('')
 const apiUrl = ref('')
 const model = ref('')
-const showAdvanced = ref(false)
 
 // Step 3: Admin
-const adminQQ = ref('')
+const adminId = ref('')
 const onebotPort = ref('3001')
 
 function nextStep() {
@@ -96,7 +95,7 @@ async function completeSetup() {
       api_key: apiKey.value.trim(),
       api_url: apiUrl.value.trim() || undefined,
       model: model.value.trim() || undefined,
-      admin_qq: adminQQ.value.trim() || undefined,
+      admin_qq: adminId.value.trim() || undefined,
       onebot_port: onebotPort.value.trim() || undefined,
     }
     const res = await fetch('/api/config/wizard', {
@@ -234,17 +233,17 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
         <div class="step-desc">设置管理员信息与 OneBot 端口</div>
 
         <div class="form-group">
-          <label class="form-label">超级管理员 QQ <span class="optional">(可选，唯一，拥有全部权限)</span></label>
+          <label class="form-label">超级管理员 ID <span class="optional">(可选，唯一，拥有全部权限)</span></label>
           <input
-            v-model="adminQQ"
+            v-model="adminId"
             type="text"
             class="form-input"
-            placeholder="例如：123456789"
+            placeholder="例如：user_001"
           />
         </div>
 
         <div class="form-group">
-          <label class="form-label">OneBot 端口 <span class="optional">(LLBot 连接 ws://127.0.0.1:此端口/ws)</span></label>
+          <label class="form-label">OneBot 端口 <span class="optional">(协议端连接 ws://127.0.0.1:此端口/ws)</span></label>
           <input
             v-model="onebotPort"
             type="text"
@@ -263,9 +262,9 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
             <span>API Key</span>
             <span>{{ apiKey ? '****' + apiKey.slice(-4) : '(未填写)' }}</span>
           </div>
-          <div class="summary-row" v-if="adminQQ">
-            <span>超级管理员 QQ</span>
-            <span>{{ adminQQ }}</span>
+          <div class="summary-row" v-if="adminId">
+            <span>超级管理员 ID</span>
+            <span>{{ adminId }}</span>
           </div>
           <div class="summary-row">
             <span>OneBot 端口</span>

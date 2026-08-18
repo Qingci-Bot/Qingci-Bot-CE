@@ -290,7 +290,7 @@ bot:
 |------|----------|------|
 | `on_startup()` | Bot 启动完成、所有插件加载完毕后 | 连接数据库、注册后台任务等耗时初始化 |
 | `on_shutdown()` | Bot 停止时（在 `on_unload` 之前） | 释放 `on_startup` 中申请的资源 |
-| `on_bot_connect()` | 有 QQ 会话（LLBot）连接到反向 WebSocket | 初始连接与重连均触发，用于初始化会话资源 |
+| `on_bot_connect()` | 有 OneBot 11 会话（协议端）连接到反向 WebSocket | 初始连接与重连均触发，用于初始化会话资源 |
 | `on_metaevent(event)` | 元事件到达（heartbeat / lifecycle 等） | 返回 `True` 表示已消费 |
 
 ```python
@@ -302,7 +302,7 @@ class MyPlugin(PluginBase):
         pass
 
     async def on_bot_connect(self):
-        # LLBot 连接上时向管理员打招呼
+        # 协议端连接上时向管理员打招呼
         pass
 
     async def on_shutdown(self):
