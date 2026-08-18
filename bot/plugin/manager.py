@@ -16,6 +16,7 @@ from typing import Any, Union, cast, get_args, get_origin
 from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from ._proc import NO_WINDOW_FLAG
 from .base import PluginBase, PluginStatus
 from .deps import ensure_dependencies, ensure_in_sys_path
 from .matcher import Matcher, begin_module_collection, end_module_collection
@@ -1020,6 +1021,7 @@ class PluginManager:
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
+                creationflags=NO_WINDOW_FLAG,
             )
             stdout, _ = await proc.communicate()
             if proc.returncode != 0:

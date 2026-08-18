@@ -20,6 +20,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from ._proc import NO_WINDOW_FLAG
+
 logger = logging.getLogger("qingci-bot.plugin.deps")
 
 
@@ -129,6 +131,7 @@ async def _install_subprocess(target: Path, reqs: list[str]) -> bool:
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            creationflags=NO_WINDOW_FLAG,
         )
         stdout, _ = await proc.communicate()
         if proc.returncode != 0:

@@ -40,6 +40,7 @@ import time
 from pathlib import Path
 
 from ..paths import data_root
+from ._proc import NO_WINDOW_FLAG
 
 logger = logging.getLogger("qingci-bot.market")
 
@@ -217,6 +218,7 @@ class MarketClient:
                 str(tmp),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
+                creationflags=NO_WINDOW_FLAG,
             )
             stdout, _ = await proc.communicate()
             if proc.returncode != 0:

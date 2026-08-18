@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **实例管理独立页面**：侧边栏实例列表移至独立「实例管理」页面（`/instances`），侧边栏导航新增该入口；侧边栏仅保留平台连接状态指示
 - **OneBot 12 原生对接（`onebot12.py`）**：新增 OneBot 12 平台适配器——aiohttp 反向 WebSocket 服务端（`platforms.onebot12.enabled/host/port/access_token` 配置，默认端口 3002），OneBot 12 实现端（NapCat / Lagrange.OneBot 等）原生接入；事件以 v12 标准格式直通 Dispatcher（无需 v11 翻译），动作以 JSON-RPC（`{action, params, echo}`）请求并通过 echo 匹配响应，`send_message` 原生消费 v12 段数组；`SUPPORTED_PLATFORMS` 新增 `onebot12` 主平台选项（创建实例可选，自动渲染对应配置），WebUI 实例管理/系统设置/仪表盘同步支持
 - **实例管理页增强**：`GET /api/instances` 每实例补充 `port`/`disk_usage`（data 目录字节数）/`adapters`（config.yaml 启用的适配器摘要）；WebUI 实例表格新增端口、启用的适配器标签、数据大小列与描述小字，当前实例卡片展示端口/数据/描述元信息，创建表单新增描述与端口输入（后端 `description`/`port` 字段此前已支持但前端未暴露）
+- **修复：插件安装/拉取不再弹出 cmd 窗口**：Windows 桌面模式下 `asyncio.create_subprocess_exec` 启动 git/uv/pip 时未指定 `creationflags`，每个子进程都会弹出独立的控制台窗口；新增 `bot/plugin/_proc.py` 统一导出 `NO_WINDOW_FLAG`（`CREATE_NO_WINDOW`），插件市场索引拉取（`market.py`）、插件安装（`manager.py`）、依赖安装（`deps.py`）三处子进程调用全部传入该标志，非 Windows 平台自动退化为 0 无影响
 - **前端工程质量修复**：修复 `PluginManager.vue` 的 `v-if`/`v-for` 同元素冲突与 `App.vue` 未使用变量（lint 存量 2 error 清零）；eslint 关闭与 Prettier 冲突的格式规则（`vue/html-indent` / `vue/html-self-closing` / `vue/html-closing-bracket-newline`），`web/src` 全量统一 Prettier 格式；CI 新增 `frontend` job（eslint lint + prettier check + vite build）
 - **文档同步**：README / ARCHITECTURE / PLUGIN_DEV 全面更新——产品定位改为 OneBot 12 内核 + 多平台，架构图补充 v11_compat 翻译层与事件模型章节，插件开发指南推荐 SDK v12 消息段（v11/CQ 路径标注为平台专用）
 
