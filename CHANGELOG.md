@@ -5,7 +5,7 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — 1.8.0（OneBot 12 迁移）
+## [1.8.0] - 2026-08-18（OneBot 12 迁移）
 
 ### Added
 - **OneBot 12 内核**：内部事件模型全面迁移为 OneBot 12——事件以 `type` / `detail_type` 标识（`message`/`notice`/`request`/`meta`），消息以标准 `{type, data}` 段数组表达（媒体统一 `file_id` 引用），为后续跨平台开发奠定统一基础
