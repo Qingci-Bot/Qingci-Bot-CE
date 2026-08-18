@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterView, RouterLink, useRoute } from 'vue-router'
 import { useAppStore } from './stores/app'
 import { useToast } from './composables/useToast'
@@ -21,6 +21,12 @@ function platformLabel(value) {
   const opt = platformOptions.find((o) => o.value === value)
   return opt ? opt.label : value
 }
+
+// 左下角平台状态：仅显示当前激活实例的主平台（与侧边栏实例切换保持一致）
+const activePlatforms = computed(() => {
+  const main = store.currentInstance?.platform || 'onebot'
+  return store.platforms.filter((p) => p.name === main)
+})
 
 const showCreateForm = ref(false)
 const createName = ref('')
@@ -214,9 +220,9 @@ function onRename(inst) {
           }"></span>
           <span>{{ store.statusText }}</span>
         </div>
-        <div v-if="store.platforms.length" class="platform-status">
+        <div v-if="activePlatforms.length" class="platform-status">
           <div
-            v-for="p in store.platforms"
+            v-for="p in activePlatforms"
             :key="p.name"
             class="platform-row"
             :title="`${p.display_name}${p.self_id ? ' · self_id ' + p.self_id : ''}${p.last_heartbeat ? ' · 心跳 ' + fmtHeartbeat(p.last_heartbeat) : ''}`"

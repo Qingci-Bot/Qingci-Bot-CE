@@ -187,6 +187,8 @@ class TestBot:
                     "self_id": int(getattr(p, "self_id", 0) or 0),
                 }
                 for p in self.platforms.values()
+                # 与真实 QingciBot.get_status 对齐：仅上报已启用的适配器
+                if getattr(p, "enabled", True)
             ],
             "plugins": [
                 {

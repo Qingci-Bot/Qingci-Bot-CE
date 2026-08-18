@@ -385,6 +385,13 @@ def test_get_status_platforms(bot):
     assert platforms["telegram"]["connected"] is False  # 未启动
 
 
+def test_get_status_skips_disabled_platforms(bot):
+    """get_status 过滤 enabled=False 的适配器（如 Telegram 主平台实例下 OneBot 已停用）"""
+    bot.connection.enabled = False
+    status = bot.get_status()
+    assert all(p["name"] != "onebot" for p in status["platforms"])
+
+
 # ---------- Telegram 增强：@提及 ----------
 
 

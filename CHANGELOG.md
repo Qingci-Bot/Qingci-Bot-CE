@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **消息发送兼容**：`send_msg`/`send_group_msg`/`send_private_msg`/`call_api` 的 `message` 参数统一接受纯文本 / v11 段数组 / v12 段数组；发往 OneBot-11 协议端时由 `segments_to_cq` 将 v12 段自动转 CQ 码（`mention`→`at`、`voice`→`record` 等）
+- **平台状态按实例隔离**：`GET /api/bot/status` 的 `platforms` 列表仅上报已启用的适配器（`enabled=False` 跳过）——Telegram 主平台实例不再混入已停用的 OneBot 状态；WebUI 侧边栏平台状态按当前激活实例主平台过滤展示
+- **系统设置按实例平台渲染**：WebUI 系统设置按当前实例主平台条件渲染连接配置——OneBot 实例仅显示「OneBot 连接」卡片，Telegram 实例仅显示「Telegram 连接」卡片（原同时展示两套平台配置）
 - **文档同步**：README / ARCHITECTURE / PLUGIN_DEV 全面更新——产品定位改为 OneBot 12 内核 + 多平台，架构图补充 v11_compat 翻译层与事件模型章节，插件开发指南推荐 SDK v12 消息段（v11/CQ 路径标注为平台专用）
 
 ## [1.7.0] - 2026-08-17

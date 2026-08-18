@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useAppStore } from '../stores/app'
 import { useToast } from '../composables/useToast'
 
@@ -24,9 +24,13 @@ const exporting = ref(false)
 const auditLogs = ref([])
 const auditLoading = ref(false)
 
+// 当前实例主平台：onebot 实例只显示 OneBot 连接配置，telegram 实例只显示 Telegram 配置
+const currentPlatform = computed(() => store.currentInstance?.platform || 'onebot')
+
 onMounted(async () => {
   // 先等待配置加载完成再填充表单，避免用默认值覆盖服务端真实配置
   await store.fetchConfig()
+  await store.fetchInstances()
   resetForm()
   apiKeyInput.value = store.getApiKey()
   loadAuditLogs()
@@ -269,7 +273,7 @@ async function saveConfigJson() {
       </div>
     </div>
 
-    <div class="card fade-in">
+    <div class="card fade-in" v-if="currentPlatform === 'onebot'">
       <div class="card-header">
         <div class="card-title">OneBot 连接</div>
       </div>
@@ -309,9 +313,9 @@ async function saveConfigJson() {
       </div>
     </div>
 
-    <div class="card fade-in">
+    <div class="card fade-in" v-else>
       <div class="card-header">
-        <div class="card-title">平台适配器</div>
+        <div class="card-title">Telegram 连接</div>
       </div>
       <div class="platform-cfg">
         <div class="platform-cfg-head">

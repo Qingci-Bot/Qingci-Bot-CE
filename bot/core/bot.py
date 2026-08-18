@@ -584,6 +584,9 @@ class QingciBot:
                     **p.status_info(),
                 }
                 for p in self.platforms.values()
+                # 仅上报已启用的适配器：如 Telegram 主平台实例下 OneBot 已停用
+                # （enabled=False），不应出现在平台状态列表中
+                if getattr(p, "enabled", True)
             ],
             "plugins": [
                 {
