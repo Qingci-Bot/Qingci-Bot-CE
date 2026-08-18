@@ -22,11 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **权限/黑名单标识字符串化**：`bot.super_admin` / `bot.admin_users` / `group_blacklist` / `user_blacklist` 由数字 ID 升级为平台无关字符串（支持 QQ 号、Telegram 用户 ID 等任意平台 ID）；`before-validator` 自动将存量数字配置转为字符串，旧 config.yaml 无需手动迁移；`/blacklist` 命令、首次向导、WebUI 系统设置同步改为字符串输入
 - **SDK 权限函数支持字符串 ID**：`USER` / `GROUP_MEMBER` 接受 `int` / `str` / 混合序列，内部归一化为字符串比较，与 OneBot 12 字符串 ID 语义对齐（见 Plugins-SDK 变更记录）
 
-### Changed
-- **消息发送兼容**：`send_msg`/`send_group_msg`/`send_private_msg`/`call_api` 的 `message` 参数统一接受纯文本 / v11 段数组 / v12 段数组；发往 OneBot-11 协议端时由 `segments_to_cq` 将 v12 段自动转 CQ 码（`mention`→`at`、`voice`→`record` 等）
-- **平台状态按实例隔离**：`GET /api/bot/status` 的 `platforms` 列表仅上报已启用的适配器（`enabled=False` 跳过）——Telegram 主平台实例不再混入已停用的 OneBot 状态；WebUI 侧边栏平台状态按当前激活实例主平台过滤展示
-- **系统设置按实例平台渲染**：WebUI 系统设置按当前实例主平台条件渲染连接配置——OneBot 实例仅显示「OneBot 连接」卡片，Telegram 实例仅显示「Telegram 连接」卡片（原同时展示两套平台配置）
-- **文档同步**：README / ARCHITECTURE / PLUGIN_DEV 全面更新——产品定位改为 OneBot 12 内核 + 多平台，架构图补充 v11_compat 翻译层与事件模型章节，插件开发指南推荐 SDK v12 消息段（v11/CQ 路径标注为平台专用）
+### Changed\n- **消息发送兼容**：`send_msg`/`send_group_msg`/`send_private_msg`/`call_api` 的 `message` 参数统一接受纯文本 / v11 段数组 / v12 段数组；发往 OneBot-11 协议端时由 `segments_to_cq` 将 v12 段自动转 CQ 码（`mention`→`at`、`voice`→`record` 等）\n- **平台状态按实例隔离**：`GET /api/bot/status` 的 `platforms` 列表仅上报已启用的适配器（`enabled=False` 跳过）——Telegram 主平台实例不再混入已停用的 OneBot 状态；WebUI 侧边栏平台状态按当前激活实例主平台过滤展示\n- **系统设置按实例平台渲染**：WebUI 系统设置按当前实例主平台条件渲染连接配置——OneBot 实例仅显示「OneBot 连接」卡片，Telegram 实例仅显示「Telegram 连接」卡片（原同时展示两套平台配置）\n- **实例管理独立页面**：侧边栏实例列表移至独立「实例管理」页面（`/instances`），侧边栏导航新增该入口；侧边栏仅保留平台连接状态指示\n- **文档同步**：README / ARCHITECTURE / PLUGIN_DEV 全面更新——产品定位改为 OneBot 12 内核 + 多平台，架构图补充 v11_compat 翻译层与事件模型章节，插件开发指南推荐 SDK v12 消息段（v11/CQ 路径标注为平台专用）
 
 ## [1.7.0] - 2026-08-17
 

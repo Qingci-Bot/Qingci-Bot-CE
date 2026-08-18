@@ -10,6 +10,7 @@ const routes = [
   { path: '/settings', name: 'settings', component: () => import('../views/Settings.vue') },
   { path: '/about', name: 'about', component: () => import('../views/About.vue') },
   { path: '/setup', name: 'setup', component: () => import('../views/SetupWizard.vue') },
+  { path: '/instances', name: 'instances', component: () => import('../views/Instances.vue') },
   { path: '/login', name: 'login', component: () => import('../views/Login.vue') },
   { path: '/:pathMatch(.*)*', name: 'notFound', component: () => import('../views/NotFound.vue') },
 ]

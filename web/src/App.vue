@@ -1,38 +1,24 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { RouterView, RouterLink, useRoute } from 'vue-router'
-import { useAppStore } from './stores/app'
-import { useToast } from './composables/useToast'
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { RouterView, RouterLink, useRoute } from 'vue-router';
+import { useAppStore } from './stores/app';
+import { useToast } from './composables/useToast';
 
-const route = useRoute()
-const store = useAppStore()
-const { toast, showToast } = useToast()
-let pollTimer = null
-let pollDelay = 3000
-let disposed = false
+const route = useRoute();
+const store = useAppStore();
+const { toast, showToast } = useToast();
+let pollTimer = null;
+let pollDelay = 3000;
+let disposed = false;
 
-// 实例可绑定主平台（与后端 bot/instances.py SUPPORTED_PLATFORMS 保持一致）
-const platformOptions = [
-  { value: 'onebot', label: 'OneBot', hint: '反向 WebSocket，对接 OneBot 协议端（如 LLBot / NapCat）' },
-  { value: 'telegram', label: 'Telegram', hint: 'Bot API 长轮询（创建后在设置中填 token）' },
-]
-
-function platformLabel(value) {
-  const opt = platformOptions.find((o) => o.value === value)
-  return opt ? opt.label : value
-}
-
-// 左下角平台状态：仅显示当前激活实例的主平台（与侧边栏实例切换保持一致）
+// 左下角平台状态：仅显示当前激活实例的主平台
 const activePlatforms = computed(() => {
-  const main = store.currentInstance?.platform || 'onebot'
-  return store.platforms.filter((p) => p.name === main)
-})
-
-const showCreateForm = ref(false)
-const createName = ref('')
-const createPlatform = ref('onebot')
+  const main = store.currentInstance?.platform || 'onebot';
+  return store.platforms.filter((p) => p.name === main);
+});
 
 const navItems = [
+  { path: '/instances', name: '实例管理', icon: '⊞' },
   { path: '/', name: '仪表盘', icon: '◈' },
   { path: '/config', name: 'LLM 配置', icon: '✦' },
   { path: '/lab', name: '对话调试', icon: '✎' },
@@ -41,97 +27,43 @@ const navItems = [
   { path: '/logs', name: '消息日志', icon: '✉' },
   { path: '/settings', name: '系统设置', icon: '⚙' },
   { path: '/about', name: '关于', icon: '♢' },
-]
+];
 
 function isActive(path) {
-  return route.path === path
+  return route.path === path;
 }
 
 // 心跳时间（epoch 秒）→ 相对时间文本
 function fmtHeartbeat(ts) {
-  const diff = Date.now() / 1000 - ts
-  if (diff < 60) return '刚刚'
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-  return `${Math.floor(diff / 86400)} 天前`
+  const diff = Date.now() / 1000 - ts;
+  if (diff < 60) return '刚刚';
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+  return `${Math.floor(diff / 86400)} 天前`;
 }
 
 // setTimeout 链式调度：成功维持 3000ms；失败间隔翻倍（上限 30000ms），成功即重置
 async function pollStatus() {
-  if (disposed) return
+  if (disposed) return;
   if (document.visibilityState === 'visible') {
-    const ok = await store.fetchStatus()
-    pollDelay = ok ? 3000 : Math.min(pollDelay * 2, 30000)
+    const ok = await store.fetchStatus();
+    pollDelay = ok ? 3000 : Math.min(pollDelay * 2, 30000);
   }
   if (!disposed) {
-    pollTimer = setTimeout(pollStatus, pollDelay)
+    pollTimer = setTimeout(pollStatus, pollDelay);
   }
 }
 
 onMounted(() => {
-  store.fetchConfig()
-  store.fetchInstances()
-  pollStatus()
-})
+  store.fetchConfig();
+  store.fetchInstances();
+  pollStatus();
+});
 
 onUnmounted(() => {
-  disposed = true
-  if (pollTimer) clearTimeout(pollTimer)
-})
-
-// ---- 实例操作 ----
-function openCreateForm() {
-  createName.value = ''
-  createPlatform.value = 'onebot'
-  showCreateForm.value = true
-}
-
-function cancelCreate() {
-  showCreateForm.value = false
-}
-
-function doCreate() {
-  const name = createName.value.trim()
-  if (!name) return
-  showToast('info', '正在创建实例...')
-  store.createInstance({ name, platform: createPlatform.value })
-    .then(() => {
-      showCreateForm.value = false
-      showToast('success', `实例「${name}」已创建`)
-    })
-    .then(() => store.fetchInstances())
-    .catch((e) => showToast('error', e.message || '创建失败'))
-}
-
-function onSwitch(inst) {
-  if (inst.running) return
-  if (window.confirm(`切换到实例「${inst.name}」？应用将重启以加载该实例。`)) {
-    store.switchInstance(inst.name)
-  }
-}
-
-function onDelete(inst) {
-  if (inst.running) return
-  if (window.confirm(`删除实例「${inst.name}」及其 config/data/plugins 全部数据？此操作不可恢复。`)) {
-    store.deleteInstance(inst.name)
-      .then(() => showToast('success', `实例「${inst.name}」已删除`))
-      .catch((e) => showToast('error', e.message || '删除失败'))
-  }
-}
-
-function onRename(inst) {
-  const newName = window.prompt(`将实例「${inst.name}」重命名为（字母/数字/-/_）`, inst.name)
-  if (!newName || !newName.trim() || newName.trim() === inst.name) return
-  if (inst.running) {
-    // 重命名运行中实例会触发应用重启到新名称，连接随之断开（fire-and-forget）
-    showToast('info', `正在重命名并重启到「${newName.trim()}」...`)
-    store.renameInstance(inst.name, newName.trim()).catch(() => {})
-    return
-  }
-  store.renameInstance(inst.name, newName.trim())
-    .then(() => showToast('success', `已重命名为「${newName.trim()}」`))
-    .catch((e) => showToast('error', e.message || '重命名失败'))
-}
+  disposed = true;
+  if (pollTimer) clearTimeout(pollTimer);
+});
 </script>
 
 <template>
@@ -140,143 +72,95 @@ function onRename(inst) {
     <RouterView v-if="route.path === '/login' || route.path === '/setup'" />
 
     <template v-else>
-    <aside class="sidebar">
-      <div class="sidebar-logo">
-        <div class="title">Qingci-Bot CE</div>
-        <span class="subtitle">Multi-Platform Bot Framework</span>
-      </div>
-      <div class="instance-section">
-        <div class="instance-head">
-          <span class="instance-title">实例</span>
-          <button class="instance-add" title="新建实例" @click="openCreateForm">＋</button>
+      <aside class="sidebar">
+        <div class="sidebar-logo">
+          <div class="title">Qingci-Bot CE</div>
+          <span class="subtitle">Multi-Platform Bot Framework</span>
         </div>
-        <div v-if="showCreateForm" class="instance-create-form">
-          <input
-            v-model="createName"
-            type="text"
-            placeholder="实例名（字母/数字/-/_）"
-            @keyup.enter="doCreate"
-          >
-          <select v-model="createPlatform" class="instance-create-select">
-            <option v-for="opt in platformOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-          <div class="instance-create-hint">
-            {{ platformOptions.find((o) => o.value === createPlatform)?.hint }}
-          </div>
-          <div class="instance-create-actions">
-            <button class="btn btn-secondary btn-sm" @click="cancelCreate">取消</button>
-            <button class="btn btn-primary btn-sm" :disabled="!createName.trim()" @click="doCreate">创建</button>
-          </div>
-        </div>
-        <div class="instance-list" v-if="store.instances.length">
-          <div
-            v-for="inst in store.instances"
-            :key="inst.name"
-            class="instance-item"
-            :class="{ active: inst.running }"
-            :title="inst.running ? '当前实例' : '点击切换到此实例'"
-            @click="onSwitch(inst)"
-          >
-            <span class="instance-dot" :class="inst.running ? 'green' : 'gray'"></span>
-            <span class="instance-name">{{ inst.name }}</span>
-            <span class="instance-platform">{{ platformLabel(inst.platform) }}</span>
-            <button
-              class="instance-act"
-              title="重命名实例"
-              @click.stop="onRename(inst)"
-            >✎</button>
-            <button
-              class="instance-del"
-              title="删除实例"
-              :disabled="inst.running"
-              @click.stop="onDelete(inst)"
-            >✕</button>
-          </div>
-        </div>
-        <div class="instance-empty" v-else>
-          <p class="instance-tip">还没有实例，创建第一个开始使用</p>
-          <button class="instance-create-first" @click="openCreateForm">＋ 新建实例</button>
-        </div>
-      </div>
-      <nav class="sidebar-nav">
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          :class="{ active: isActive(item.path) }"
-        >
-          <span class="icon">{{ item.icon }}</span>
-          <span>{{ item.name }}</span>
-        </RouterLink>
-      </nav>
-      <div class="sidebar-footer">
-        <div class="status-badge sidebar-status">
-          <span class="status-dot" :class="{
-            green: store.botRunning && store.botConnected,
-            yellow: store.botRunning && !store.botConnected,
-            gray: !store.botRunning
-          }"></span>
-          <span>{{ store.statusText }}</span>
-        </div>
-        <div v-if="activePlatforms.length" class="platform-status">
-          <div
-            v-for="p in activePlatforms"
-            :key="p.name"
-            class="platform-row"
-            :title="`${p.display_name}${p.self_id ? ' · self_id ' + p.self_id : ''}${p.last_heartbeat ? ' · 心跳 ' + fmtHeartbeat(p.last_heartbeat) : ''}`"
-          >
-            <span class="status-dot" :class="p.connected ? 'green' : (store.botRunning ? 'yellow' : 'gray')"></span>
-            <span class="platform-name">{{ p.display_name }}</span>
-            <span class="platform-state">{{ p.connected ? '在线' : '离线' }}</span>
-          </div>
-        </div>
-      </div>
-    </aside>
 
-    <main class="main-content">
-      <header class="topbar">
-        <div class="left">
-          <span class="breadcrumb">Qingci-Bot CE</span>
-          <span class="breadcrumb-sep">/</span>
-          <span class="breadcrumb breadcrumb-current">
-            {{ navItems.find(n => n.path === route.path)?.name || '仪表盘' }}
-          </span>
+        <nav class="sidebar-nav">
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.path"
+            :to="item.path"
+            :class="{ active: isActive(item.path) }"
+          >
+            <span class="icon">{{ item.icon }}</span>
+            <span>{{ item.name }}</span>
+          </RouterLink>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="status-badge sidebar-status">
+            <span
+              class="status-dot"
+              :class="{
+                green: store.botRunning && store.botConnected,
+                yellow: store.botRunning && !store.botConnected,
+                gray: !store.botRunning,
+              }"
+            ></span>
+            <span>{{ store.statusText }}</span>
+          </div>
+          <div v-if="activePlatforms.length" class="platform-status">
+            <div
+              v-for="p in activePlatforms"
+              :key="p.name"
+              class="platform-row"
+              :title="`${p.display_name}${p.self_id ? ' · self_id ' + p.self_id : ''}${p.last_heartbeat ? ' · 心跳 ' + fmtHeartbeat(p.last_heartbeat) : ''}`"
+            >
+              <span
+                class="status-dot"
+                :class="p.connected ? 'green' : store.botRunning ? 'yellow' : 'gray'"
+              ></span>
+              <span class="platform-name">{{ p.display_name }}</span>
+              <span class="platform-state">{{ p.connected ? '在线' : '离线' }}</span>
+            </div>
+          </div>
         </div>
-        <div class="action-bar">
-          <button
-            v-if="!store.botRunning"
-            class="btn btn-success btn-sm"
-            :disabled="store.loading"
-            @click="store.startBot"
-          >
-            <span>▶</span> 启动 Bot
-          </button>
-          <button
-            v-else
-            class="btn btn-danger btn-sm"
-            :disabled="store.loading"
-            @click="store.stopBot"
-          >
-            <span>■</span> 停止 Bot
-          </button>
-          <button
-            class="btn btn-secondary btn-sm"
-            :disabled="store.loading || !store.botRunning"
-            @click="store.restartBot"
-          >
-            <span class="spin-btn-icon" :class="{ spin: store.loading }">↻</span> 重启
-          </button>
-        </div>
-      </header>
+      </aside>
 
-      <div class="route-container">
-        <RouterView v-slot="{ Component }">
-          <component :is="Component" :key="route.fullPath" />
-        </RouterView>
-      </div>
-    </main>
+      <main class="main-content">
+        <header class="topbar">
+          <div class="left">
+            <span class="breadcrumb">Qingci-Bot CE</span>
+            <span class="breadcrumb-sep">/</span>
+            <span class="breadcrumb breadcrumb-current">
+              {{ navItems.find((n) => n.path === route.path)?.name || '仪表盘' }}
+            </span>
+          </div>
+          <div class="action-bar">
+            <button
+              v-if="!store.botRunning"
+              class="btn btn-success btn-sm"
+              :disabled="store.loading"
+              @click="store.startBot"
+            >
+              <span>▶</span> 启动 Bot
+            </button>
+            <button
+              v-else
+              class="btn btn-danger btn-sm"
+              :disabled="store.loading"
+              @click="store.stopBot"
+            >
+              <span>■</span> 停止 Bot
+            </button>
+            <button
+              class="btn btn-secondary btn-sm"
+              :disabled="store.loading || !store.botRunning"
+              @click="store.restartBot"
+            >
+              <span class="spin-btn-icon" :class="{ spin: store.loading }">↻</span> 重启
+            </button>
+          </div>
+        </header>
+
+        <div class="route-container">
+          <RouterView v-slot="{ Component }">
+            <component :is="Component" :key="route.fullPath" />
+          </RouterView>
+        </div>
+      </main>
     </template>
 
     <transition name="toast">
@@ -317,207 +201,9 @@ function onRename(inst) {
   display: inline-block;
 }
 
-.instance-section {
-  padding: 12px 12px 4px;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 8px;
-}
-.instance-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-.instance-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 1px;
-}
-.instance-add {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-hover);
-  color: var(--accent);
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0;
-  transition: all 0.2s ease;
-}
-.instance-add:hover {
-  background: var(--accent-bg);
-  border-color: rgba(251, 191, 36, 0.3);
-  transform: translateY(-1px);
-}
-.instance-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-.instance-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border-radius: var(--radius-xs);
-  border: 1px solid transparent;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-secondary);
-  transition: all 0.2s ease;
-}
-.instance-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-.instance-item.active {
-  background: var(--accent-bg);
-  color: var(--accent);
-  border-color: rgba(251, 191, 36, 0.2);
-  box-shadow: 0 0 12px var(--accent-glow);
-}
-.instance-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 0 6px currentColor;
-}
-.instance-dot.green {
-  background: var(--success);
-  color: var(--success);
-}
-.instance-dot.gray {
-  background: var(--text-muted);
-  color: var(--text-muted);
-}
-.instance-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-}
-.instance-item.active .instance-name {
-  font-weight: 600;
-}
-.instance-act,
-.instance-del {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 0;
-  opacity: 1;
-  transition: all 0.2s ease;
-}
-.instance-act:hover:not(:disabled) {
-  background: var(--blue-bg);
-  color: var(--blue);
-}
-.instance-del {
-  color: var(--text-muted);
-}
-.instance-del:hover:not(:disabled) {
-  background: var(--danger-bg);
-  color: var(--danger);
-}
-.instance-act:disabled,
-.instance-del:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-.instance-empty {
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 4px 8px 10px;
-}
-.instance-tip {
-  margin: 0 0 8px;
-}
-.instance-create-first {
-  width: 100%;
-  padding: 7px 0;
-  border: 1px dashed rgba(251, 191, 36, 0.35);
-  border-radius: var(--radius-xs);
-  background: var(--bg-hover);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.instance-create-first:hover {
-  background: var(--accent-bg);
-  border-color: rgba(251, 191, 36, 0.5);
-  transform: translateY(-1px);
-}
-.instance-create-form {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 4px 0 8px;
-  padding: 10px;
-  border: 1px solid rgba(251, 191, 36, 0.25);
-  border-radius: var(--radius-xs);
-  background: var(--bg-hover);
-}
-.instance-create-form input,
-.instance-create-select {
-  width: 100%;
-  padding: 6px 8px;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--border);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 12px;
-  outline: none;
-}
-.instance-create-form input:focus,
-.instance-create-select:focus {
-  border-color: var(--accent);
-}
-.instance-create-hint {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-.instance-create-actions {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
 .btn-sm {
   padding: 4px 10px;
   font-size: 12px;
-}
-.instance-platform {
-  flex-shrink: 0;
-  margin-right: 2px;
-  padding: 1px 6px;
-  font-size: 10px;
-  line-height: 1.5;
-  border-radius: 8px;
-  background: var(--accent-bg);
-  color: var(--accent);
-  white-space: nowrap;
-}
-.instance-item.active .instance-platform {
-  background: rgba(251, 191, 36, 0.15);
 }
 
 .toast {
@@ -543,7 +229,9 @@ function onRename(inst) {
 }
 .toast-enter-active,
 .toast-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
 }
 .toast-enter-from,
 .toast-leave-to {
