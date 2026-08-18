@@ -92,7 +92,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 .venv\Scripts\python main.py --instance <name>
 ```
 
-启动必须绑定一个实例（无全局模式）：未指定 `--instance` 时自动选择默认实例（`default` 优先，其次名称排序第一个）；若实例数为 0 则自动创建 `default` 实例。每个实例是 `instances/<name>/` 下的自包含目录，侧边栏「实例」区块可新建/删除/切换实例；切换会以目标实例重启进程。
+启动必须绑定一个实例（无全局模式）：未指定 `--instance` 时自动选择默认实例（`default` 优先，其次名称排序第一个）；若实例数为 0 则自动创建 `default` 实例。每个实例是 `instances/<name>/` 下的自包含目录，侧边栏「实例」区块可新建/删除/切换实例；切换会以目标实例重启进程。**创建实例时可绑定主平台**（OneBot/QQ 或 Telegram）：创建后系统设置即针对该平台语义落位——OneBot 主平台实例启动反向 WS 服务端（`onebot.enabled`），Telegram 主平台实例自动关闭反向 WS 并启用 Telegram 适配器，`super_admin` / 管理员 / 黑白名单均以平台无关字符串 ID 配置。
 
 启动后访问 `http://127.0.0.1:8080/ui` 进入管理界面。
 
@@ -202,7 +202,7 @@ llm:
   api_url: https://api.deepseek.com/v1  # 留空则按 provider 直连官方
   api_key: sk-your-key
   model: deepseek-chat
-  system_prompt: 你是一个友好的 QQ 机器人助手。
+  system_prompt: 你是一个友好、乐于助人的机器人助手。
   max_context_tokens: 8192        # 上下文窗口 token 上限，超出自动裁剪历史
   timeout: 60                     # 单次 LLM 请求超时（秒）
   num_retries: 2                  # 请求失败重试次数
@@ -252,19 +252,19 @@ LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不�
 
 管理员分为两级：**超级管理员**（唯一，`bot.super_admin`）与**普通管理员**（多个，`bot.admin_users`，超级管理员自动继承普通管理员权限）。
 
-**普通管理员命令**（`bot.admin_users` 中的 QQ 号）：
+**普通管理员命令**（`bot.admin_users` 中的平台无关用户 ID，如 QQ 号 / Telegram 用户 ID）：
 
 | 命令 | 说明 |
 |------|------|
 | `/status` | 查看 Bot 运行状态（OneBot 连接 / LLM 可用性 / 消息记录数） |
 | `/clear` | 清除当前会话历史 |
 
-**超级管理员命令**（仅 `bot.super_admin` 的 QQ 号）：
+**超级管理员命令**（仅 `bot.super_admin` 对应的平台无关用户 ID）：
 
 | 命令 | 说明 |
 |------|------|
-| `/blacklist add <QQ>` | 添加用户到黑名单 |
-| `/blacklist remove <QQ>` | 从黑名单移除用户 |
+| `/blacklist add <用户ID>` | 添加用户到黑名单（平台无关用户 ID） |
+| `/blacklist remove <用户ID>` | 从黑名单移除用户 |
 | `/filter on\|off\|reload` | 敏感词过滤开关 / 重载词库（词库为空时会提示编辑 `data/sensitive_words.txt`） |
 | `/group on\|off` | 当前群 Bot 开关 |
 | `/kb add\|list\|search\|remove\|reload` | 知识库管理（需开启 `rag.enabled`） |
@@ -303,14 +303,15 @@ api_key: your-secret-key
 ```yaml
 bot:
   name: Qingci-Bot CE
-  super_admin: 123456789          # 超级管理员 QQ 号（唯一）
-  admin_users: [123456789]        # 普通管理员 QQ 号列表
+  super_admin: '123456789'         # 超级管理员 ID（唯一；平台无关字符串标识，如 QQ 号 / Telegram 用户 ID）
+  admin_users: ['123456789']       # 普通管理员 ID 列表
   trigger_mode: at                 # 触发方式: at / keyword / always
   trigger_keywords: ["/bot", "/ai"] # keyword 模式的触发词
-  group_blacklist: []              # 群黑名单
+  group_blacklist: []              # 群黑名单（平台无关字符串标识）
   user_blacklist: []               # 用户黑名单
   log_json: false                  # 结构化 JSON 日志（false 使用普通文本日志）
 onebot:
+  enabled: true                    # 是否启动 OneBot 反向 WS 服务端（Telegram 主平台实例可设为 false）
   host: 127.0.0.1
   port: 3001                       # LLBot 连接 ws://host:port/ws
   access_token: ''
@@ -321,7 +322,7 @@ llm:
   model: gpt-4o-mini
   max_tokens: 2048                 # 单次回复最大 token
   temperature: 0.7
-  system_prompt: 你是一个友好的 QQ 机器人助手。请用简洁、自然的中文回复。
+  system_prompt: 你是一个友好、乐于助人的机器人助手。请用简洁、自然的中文回复。
   max_history: 20                  # 最大对话历史轮数（每轮 = user + assistant）
   max_context_tokens: 8192         # 上下文窗口 token 上限，超出自动裁剪历史
   timeout: 60                      # 单次 LLM 请求超时（秒）

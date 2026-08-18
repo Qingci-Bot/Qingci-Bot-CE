@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Telegram 适配器 v12 化**：`telegram.py` 归一化为 OneBot 12 事件（`mention` 段而非 `at`、`voice` 段而非 `record`），发送直接消费 v12 段数组（`image`/`voice`/`video` 段映射 `sendPhoto`/`sendVoice`/`sendVideo`）；成员变动归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_set`/`group_admin_unset`
 - **测试事件构造器双模**：`bot/testing/events.py` 新增 `make_v12_message_event`/`make_v12_notice_event`/`make_v12_request_event`，与 v11 构造器并存，供迁移后核心路径测试使用
 - **OneBot 12 回复段判别修复**：`Message.from_raw` 对 reply 段按字段判别（`message_id`/`id`），避免 v12 reply 段被误归一化（修复方案 A 迁移中发现的关键兼容问题）
+- **实例绑定主平台**：创建实例时可选择绑定主平台（`onebot` / `telegram`，`POST /api/instances` 新增 `platform` 字段，WebUI 实例创建表单新增平台下拉）——实例元数据记录 `platform`，创建时自动渲染对应适配器启用配置：OneBot 主平台启动反向 WS 服务端（`onebot.enabled: true`）、Telegram 主平台关闭反向 WS 并启用 Telegram 适配器，实现针对平台的系统设置落位
+- **`onebot.enabled` 开关**：`OneBotConfig` 新增 `enabled` 字段控制反向 WS 服务端启停（默认 `true`），`assemble_bot()` 按配置条件启动 OneBot 适配器，避免 Telegram 主平台实例空跑无用服务
+- **权限/黑名单标识字符串化**：`bot.super_admin` / `bot.admin_users` / `group_blacklist` / `user_blacklist` 由数字 ID 升级为平台无关字符串（支持 QQ 号、Telegram 用户 ID 等任意平台 ID）；`before-validator` 自动将存量数字配置转为字符串，旧 config.yaml 无需手动迁移；`/blacklist` 命令、首次向导、WebUI 系统设置同步改为字符串输入
+- **SDK 权限函数支持字符串 ID**：`USER` / `GROUP_MEMBER` 接受 `int` / `str` / 混合序列，内部归一化为字符串比较，与 OneBot 12 字符串 ID 语义对齐（见 Plugins-SDK 变更记录）
 
 ### Changed
 - **消息发送兼容**：`send_msg`/`send_group_msg`/`send_private_msg`/`call_api` 的 `message` 参数统一接受纯文本 / v11 段数组 / v12 段数组；发往 OneBot-11 协议端时由 `segments_to_cq` 将 v12 段自动转 CQ 码（`mention`→`at`、`voice`→`record` 等）

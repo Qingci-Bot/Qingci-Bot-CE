@@ -792,7 +792,7 @@ self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 
 **内置 Permission：** `EVERYONE` / `SUPERUSER` / `ADMIN` / `PRIVATE` / `GROUP` / `MEMBER` / `USER(ids)` / `GROUP_MEMBER(ids)`
 
-> 权限分两级：`SUPERUSER` = 超级管理员（唯一，`config.yaml` 的 `bot.super_admin`）；`ADMIN` = 普通管理员（多个，`bot.admin_users`，超级管理员自动继承普通管理员权限）。
+> 权限分两级：`SUPERUSER` = 超级管理员（唯一，`config.yaml` 的 `bot.super_admin`）；`ADMIN` = 普通管理员（多个，`bot.admin_users`，超级管理员自动继承普通管理员权限）。两者与黑白名单均以**平台无关字符串 ID** 配置（如 QQ 号 / Telegram 用户 ID），`USER(ids)` / `GROUP_MEMBER(ids)` 的 ID 参数支持数字或字符串（内部归一为字符串比较），多平台插件无需区分 ID 类型。
 
 ### MatcherContext 字段
 
