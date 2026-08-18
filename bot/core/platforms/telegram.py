@@ -17,13 +17,19 @@
   其余不可渲染段降级为纯文本
 - 通知：chat_member / my_chat_member 成员变动 → group_member_increase /
   group_member_decrease / group_admin_set / group_admin_unset notice 事件
+- 特有事件补全（归一化为 OneBot 12 扩展 notice，插件用 on_notice 消费）：
+  edited_message → message_edited（携带新文本与段数组，不触发消息回复）；
+  callback_query → callback_query（携带 data / callback_query_id，
+  可经 call_api("answer_callback_query") 应答）；message_reaction →
+  message_reaction（新/旧表情列表，sub_type 区分 add/remove/change）
 - 能力：call_api 映射 send_private_msg/send_group_msg → sendMessage/sendPhoto/sendVoice/sendVideo，
   其余 action 透传为 Telegram 方法（小写方法名）
 - 状态：轮询运行即视为已连接；last_heartbeat 随每次成功轮询更新
 
-说明：Telegram 的 edited_message / callback_query 承载其特有语义，
-在 OneBot 事件模型中无等价事件，故暂不归一化（可由后续
-自定义事件机制承载）。offset 游标在处理单条更新后推进，处理失败也推进，
+说明：Telegram 的 edited_message / callback_query / message_reaction 承载
+其特有语义，在 OneBot 事件模型中无等价事件，以扩展 notice detail_type
+（message_edited / callback_query / message_reaction）承载，插件可用
+on_notice() 消费。offset 游标在处理单条更新后推进，处理失败也推进，
 避免无限重放。
 """
 
@@ -356,12 +362,33 @@ class TelegramAdapter(PlatformAdapter):
                 )
 
     async def _handle_update(self, update: dict) -> None:
-        """处理单条 Update：message → 消息事件；成员变动 → notice 事件"""
+        """处理单条 Update：消息/编辑/按钮回调/表情回应/成员变动 → 事件"""
         message = update.get("message")
         if isinstance(message, dict):
             event = self._normalize_message(message)
             if event is not None:
                 await self.emit_event(event)
+            return
+
+        edited = update.get("edited_message")
+        if isinstance(edited, dict):
+            notice = self._normalize_edited(update, edited)
+            if notice is not None:
+                await self.emit_event(notice)
+            return
+
+        callback = update.get("callback_query")
+        if isinstance(callback, dict):
+            notice = self._normalize_callback(update, callback)
+            if notice is not None:
+                await self.emit_event(notice)
+            return
+
+        reaction = update.get("message_reaction")
+        if isinstance(reaction, dict):
+            notice = self._normalize_reaction(update, reaction)
+            if notice is not None:
+                await self.emit_event(notice)
             return
 
         member_key = (
@@ -560,6 +587,112 @@ class TelegramAdapter(PlatformAdapter):
             "_telegram_message": message,
         }
         return event
+
+    def _normalize_edited(self, update: dict, message: dict) -> dict | None:
+        """将 edited_message 归一化为 notice（detail_type=message_edited）
+
+        消息编辑是 Telegram 特有语义，OneBot 事件模型无等价事件，故以
+        扩展 notice 承载。编辑不触发消息回复（避免 bot 对旧消息重复响应），
+        插件可用 on_notice() 消费并读取新文本（alt_message）与段数组。
+        """
+        event = self._normalize_message(message)
+        if event is None:
+            return None
+        return {
+            "type": "notice",
+            "detail_type": "message_edited",
+            "sub_type": event.get("sub_type", ""),
+            "id": str(update.get("update_id", "")),
+            "impl": self.name,
+            "platform": self.name,
+            "self_id": str(self.self_id),
+            "time": 0,
+            "message_id": event.get("message_id", ""),
+            "user_id": event.get("user_id", ""),
+            "group_id": event.get("group_id", ""),
+            "alt_message": event.get("alt_message", ""),
+            "message": event.get("message", []),
+            "is_at_bot": event.get("is_at_bot", False),
+            "_telegram_message": message,
+        }
+
+    def _normalize_callback(self, update: dict, callback: dict) -> dict | None:
+        """将 callback_query 归一化为 notice（detail_type=callback_query）
+
+        按钮回调为 Telegram 特有交互语义：携带 data（按钮数据）与
+        callback_query_id（可经 call_api("answer_callback_query") 应答）。
+        消息可能为空（纯 inline 按钮），此时无 message_id/group_id。
+        """
+        user = callback.get("from") or {}
+        user_id = self._safe_int(user.get("id"))
+        if not user_id:
+            return None
+        msg = callback.get("message")
+        chat = (msg or {}).get("chat") or {}
+        chat_id = self._safe_int(chat.get("id"))
+        chat_type = str(chat.get("type", ""))
+        return {
+            "type": "notice",
+            "detail_type": "callback_query",
+            "sub_type": "button",
+            "id": str(update.get("update_id", "")),
+            "impl": self.name,
+            "platform": self.name,
+            "self_id": str(self.self_id),
+            "time": 0,
+            "message_id": str((msg or {}).get("message_id", "")),
+            "user_id": str(user_id),
+            "group_id": str(chat_id) if chat_type in ("group", "supergroup") else "",
+            "data": str(callback.get("data") or ""),
+            "callback_query_id": str(callback.get("id") or ""),
+            "_telegram_callback_query": callback,
+        }
+
+    def _normalize_reaction(self, update: dict, reaction: dict) -> dict | None:
+        """将 message_reaction 归一化为 notice（detail_type=message_reaction）
+
+        表情回应为 Telegram 特有语义：携带新/旧表情列表（reaction /
+        old_reaction），sub_type 区分 add / remove / change。
+        """
+        user = reaction.get("user") or {}
+        user_id = self._safe_int(user.get("id"))
+        chat = reaction.get("chat") or {}
+        chat_id = self._safe_int(chat.get("id"))
+        if not user_id or not chat_id:
+            return None
+        chat_type = str(chat.get("type", ""))
+
+        def _emojis(items: Any) -> list[str]:
+            if not isinstance(items, list):
+                return []
+            return [
+                str(e.get("emoji", "")) for e in items if isinstance(e, dict) and e.get("emoji")
+            ]
+
+        new_emoji = _emojis(reaction.get("new_reaction"))
+        old_emoji = _emojis(reaction.get("old_reaction"))
+        if new_emoji and not old_emoji:
+            sub_type = "add"
+        elif old_emoji and not new_emoji:
+            sub_type = "remove"
+        else:
+            sub_type = "change"
+        return {
+            "type": "notice",
+            "detail_type": "message_reaction",
+            "sub_type": sub_type,
+            "id": str(update.get("update_id", "")),
+            "impl": self.name,
+            "platform": self.name,
+            "self_id": str(self.self_id),
+            "time": 0,
+            "message_id": str(reaction.get("message_id", "")),
+            "user_id": str(user_id),
+            "group_id": str(chat_id) if chat_type in ("group", "supergroup") else "",
+            "reaction": new_emoji,
+            "old_reaction": old_emoji,
+            "_telegram_reaction": reaction,
+        }
 
     def _collect_at(self, message: dict, text: str) -> tuple[list[dict], list[str]]:
         """解析 entities，识别 @Bot 与提及的其他用户。

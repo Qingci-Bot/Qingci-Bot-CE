@@ -97,6 +97,129 @@ def test_emit_event_adds_platform(adapter):
     assert got[0]["platform"] == "telegram"
 
 
+# ---------- 特有事件补全（edited / callback / reaction） ----------
+
+
+def test_normalize_edited_private(adapter):
+    """edited_message → notice message_edited（复用消息归一化，不触发消息回复）"""
+    notice = adapter._normalize_edited(
+        {"update_id": 7},
+        {
+            "message_id": 42,
+            "date": 1786889000,
+            "from": {"id": 10001, "first_name": "Alice"},
+            "chat": {"id": 20001, "type": "private"},
+            "text": "改后的内容",
+        },
+    )
+    assert notice["type"] == "notice"
+    assert notice["detail_type"] == "message_edited"
+    assert notice["user_id"] == "10001"
+    assert notice["message_id"] == "42"
+    assert notice["alt_message"] == "改后的内容"
+    assert notice["message"][0]["type"] == "text"
+    assert notice["platform"] == "telegram"
+
+
+def test_normalize_edited_group_has_group_id(adapter):
+    notice = adapter._normalize_edited(
+        {"update_id": 8},
+        {
+            "message_id": 42,
+            "date": 1786889000,
+            "from": {"id": 10001, "first_name": "Alice"},
+            "chat": {"id": 30001, "type": "supergroup", "title": "群"},
+            "text": "改",
+        },
+    )
+    assert notice["detail_type"] == "message_edited"
+    assert notice["group_id"] == "30001"
+
+
+def test_normalize_callback_group(adapter):
+    """callback_query → notice callback_query（含 data / callback_query_id / group_id）"""
+    notice = adapter._normalize_callback(
+        {"update_id": 9},
+        {
+            "id": "cb-123",
+            "from": {"id": 10001, "first_name": "Alice"},
+            "data": "page:2",
+            "message": {
+                "message_id": 10,
+                "chat": {"id": 30001, "type": "supergroup", "title": "群"},
+            },
+        },
+    )
+    assert notice["type"] == "notice"
+    assert notice["detail_type"] == "callback_query"
+    assert notice["user_id"] == "10001"
+    assert notice["group_id"] == "30001"
+    assert notice["message_id"] == "10"
+    assert notice["data"] == "page:2"
+    assert notice["callback_query_id"] == "cb-123"
+
+
+def test_normalize_callback_inline_without_message(adapter):
+    """纯 inline 按钮回调：无 message，message_id/group_id 为空但不丢失 data"""
+    notice = adapter._normalize_callback(
+        {"update_id": 10},
+        {"id": "cb-456", "from": {"id": 10001, "first_name": "Alice"}, "data": "inline:go"},
+    )
+    assert notice is not None
+    assert notice["data"] == "inline:go"
+    assert notice["message_id"] == ""
+    assert notice["group_id"] == ""
+
+
+def test_normalize_reaction_add(adapter):
+    """message_reaction → notice message_reaction（add）"""
+    notice = adapter._normalize_reaction(
+        {"update_id": 11},
+        {
+            "user": {"id": 10001},
+            "chat": {"id": 30001, "type": "group"},
+            "message_id": 42,
+            "new_reaction": [{"type": "emoji", "emoji": "👍"}],
+            "old_reaction": [],
+        },
+    )
+    assert notice["detail_type"] == "message_reaction"
+    assert notice["sub_type"] == "add"
+    assert notice["user_id"] == "10001"
+    assert notice["group_id"] == "30001"
+    assert notice["reaction"] == ["👍"]
+    assert notice["old_reaction"] == []
+
+
+def test_normalize_reaction_remove_and_change(adapter):
+    remove = adapter._normalize_reaction(
+        {"update_id": 12},
+        {
+            "user": {"id": 10001},
+            "chat": {"id": 30001, "type": "group"},
+            "message_id": 42,
+            "new_reaction": [],
+            "old_reaction": [{"type": "emoji", "emoji": "👍"}],
+        },
+    )
+    assert remove["sub_type"] == "remove"
+    change = adapter._normalize_reaction(
+        {"update_id": 13},
+        {
+            "user": {"id": 10001},
+            "chat": {"id": 30001, "type": "group"},
+            "message_id": 42,
+            "new_reaction": [{"type": "emoji", "emoji": "❤️"}],
+            "old_reaction": [{"type": "emoji", "emoji": "👍"}],
+        },
+    )
+    assert change["sub_type"] == "change"
+
+
+def test_normalize_reaction_ignores_invalid(adapter):
+    assert adapter._normalize_reaction({"update_id": 14}, {"chat": {"id": 1}}) is None
+
+
 # ---------- 发送与能力 ----------
 
 
