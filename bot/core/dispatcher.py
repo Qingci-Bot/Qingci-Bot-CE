@@ -121,8 +121,12 @@ class MessageDispatcher:
     async def _run_event_matchers(
         self, bot: "QingciBot", event: dict, ctx: MessageContext
     ) -> tuple[str | None, bool]:
-        """执行 notice/request 事件 Matcher 调度（包装 _run_matchers，保持调用方兼容）"""
-        post_type = event.get("post_type", "")
+        """执行 notice/request 事件 Matcher 调度（包装 _run_matchers，保持调用方兼容）
+
+        OneBot 12 迁移：v12 事件无 post_type 字段，事件类型以
+        ctx.post_type（已由 type 派生）为准。
+        """
+        post_type = ctx.post_type or event.get("post_type", "")
         return await self._run_matchers(bot, event, ctx, post_type)
 
     async def _run_matchers(

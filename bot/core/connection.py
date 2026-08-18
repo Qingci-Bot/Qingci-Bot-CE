@@ -28,6 +28,7 @@ from aiocqhttp import CQHttp
 
 from .message import segments_to_cq
 from .platforms.base import PlatformAdapter
+from .v11_compat import v11_event_to_v12
 
 logger = logging.getLogger("qingci-bot.connection")
 
@@ -113,9 +114,11 @@ class OneBotConnection(PlatformAdapter):
         """分发事件到所有处理器
 
         aiocqhttp 的 Event 继承自 dict，可直接当 dict 用。
+        OneBot 12 迁移（M3）：v11 事件在适配器内翻译为 v12 事件再上报，
+        核心只消费 v12 事件模型（type / detail_type）。
         """
-        # Event 是 dict 子类，直接传入
-        raw = dict(event)
+        # Event 是 dict 子类，先转纯 dict 再翻译为 v12 事件
+        raw = v11_event_to_v12(dict(event))
         for handler in list(self._event_handlers):
             try:
                 if asyncio.iscoroutinefunction(handler):

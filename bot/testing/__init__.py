@@ -24,6 +24,9 @@ from .events import (
     make_message_event,
     make_notice_event,
     make_request_event,
+    make_v12_message_event,
+    make_v12_notice_event,
+    make_v12_request_event,
     private_message,
 )
 
@@ -36,4 +39,7 @@ __all__ = [
     "make_request_event",
     "private_message",
     "group_message",
+    "make_v12_message_event",
+    "make_v12_notice_event",
+    "make_v12_request_event",
 ]
