@@ -74,27 +74,37 @@ def test_v11_notice_group_increase_translated():
 
 
 def test_v11_notice_admin_subtype_split():
-    assert v11_event_to_v12(
-        {"post_type": "notice", "notice_type": "group_admin", "sub_type": "set"}
-    )["detail_type"] == "group_admin_set"
-    assert v11_event_to_v12(
-        {"post_type": "notice", "notice_type": "group_admin", "sub_type": "unset"}
-    )["detail_type"] == "group_admin_unset"
+    assert (
+        v11_event_to_v12({"post_type": "notice", "notice_type": "group_admin", "sub_type": "set"})[
+            "detail_type"
+        ]
+        == "group_admin_set"
+    )
+    assert (
+        v11_event_to_v12(
+            {"post_type": "notice", "notice_type": "group_admin", "sub_type": "unset"}
+        )["detail_type"]
+        == "group_admin_unset"
+    )
 
 
 def test_v11_notice_ban_subtype_split():
-    assert v11_event_to_v12(
-        {"post_type": "notice", "notice_type": "group_ban", "sub_type": "ban"}
-    )["detail_type"] == "group_member_ban"
-    assert v11_event_to_v12(
-        {"post_type": "notice", "notice_type": "group_ban", "sub_type": "lift_ban"}
-    )["detail_type"] == "group_member_unban"
+    assert (
+        v11_event_to_v12({"post_type": "notice", "notice_type": "group_ban", "sub_type": "ban"})[
+            "detail_type"
+        ]
+        == "group_member_ban"
+    )
+    assert (
+        v11_event_to_v12(
+            {"post_type": "notice", "notice_type": "group_ban", "sub_type": "lift_ban"}
+        )["detail_type"]
+        == "group_member_unban"
+    )
 
 
 def test_v11_notice_recall_translated():
-    v12 = v11_event_to_v12(
-        {"post_type": "notice", "notice_type": "group_recall", "message_id": 88}
-    )
+    v12 = v11_event_to_v12({"post_type": "notice", "notice_type": "group_recall", "message_id": 88})
     assert v12["detail_type"] == "group_message_delete"
     assert v12["message_id"] == 88  # 携带原始字段供缓冲读取
 
