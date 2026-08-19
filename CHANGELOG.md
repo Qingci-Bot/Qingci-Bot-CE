@@ -5,7 +5,7 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.9.3] - 2026-08-19（插件卸载修复）
 
 ### Fixed
 - **插件卸载不再残留文件**：`DELETE /api/plugin/{name}` 由「仅卸载模块」升级为「卸载并删除插件目录」（新增 `PluginManager.remove`），修复插件市场/插件管理卸载后文件仍留在 `plugins/{name}`、市场仍显示已安装、卸载按钮反复存在的问题——删除目录后市场 `installed` 状态与按钮同步清除；内置插件仍拒绝删除，目录删除失败（文件占用）明确报错不静默残留
