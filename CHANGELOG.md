@@ -5,6 +5,11 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **插件市场索引支持 `mirror`（备用地址）**：市场条目可声明主地址 `source` + 备用地址 `mirror`，安装时按 `source` → `mirror` 顺序尝试，全部失败才报错（配合索引仓库模型：插件代码留在作者仓库，市场只登记地址）。`MarketIndex` 解析新增 `mirror` 字段（缺省为空），`MarketManager.install` 增加回退逻辑
+
 ## [1.9.1] - 2026-08-19（项目结构收敛 + 命名/组件化）
 
 ### Changed

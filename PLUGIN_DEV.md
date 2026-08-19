@@ -30,7 +30,7 @@ npm run build    # 构建生产版本到 web/dist/
 
 > **快速开始**：复制 `plugins/_template/` 目录为 `plugins/my_plugin/` 即可开始开发。
 > 模板目录涵盖所有功能（命令/前缀/关键词/通知/请求/定时任务/Function Calling），附详细中文注释。
-> 最小示例见 `plugins/hello/`（开箱即用）。
+> 最小示例见独立仓库 [Qingci-Bot/hello](https://github.com/Qingci-Bot/hello)（开箱即用，可一键从插件市场安装）。
 
 ### 命名规范
 
