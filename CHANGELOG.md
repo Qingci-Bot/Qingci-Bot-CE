@@ -5,7 +5,7 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.9.1] - 2026-08-19（项目结构收敛 + 命名/组件化）
 
 ### Changed
 - **项目结构重构**：`bot/core/` 收敛为纯框架层——`alerter`/`filter`/`broadcast`/`logformat`/`html_renderer` 五功能组件平铺至 `bot/` 根级；OneBot 11 适配器归入 `bot/core/platforms/onebot11.py`（`bot/core/connection.py` 保留兼容再导出）；插件协议层薄转发收拢到 `bot/plugin/protocol/` 子包（base/context/matcher/rule/permission/ratelimit/session/events），`bot/plugin/` 顶层同名文件改为兼容再导出，框架内部直接引用 protocol；`dispatcher.py` 不再 re-export `MessageContext`（改引 `protocol.context`）；打包排除 `bot.testing*`（测试沙箱不进 exe）；文档（ARCHITECTURE / PROJECT_STRUCTURE / CODING_STANDARDS）同步
