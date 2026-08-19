@@ -1,16 +1,10 @@
-"""会话阶梯 — 转发至独立插件 SDK
+"""会话阶梯 — 协议层转发（兼容别名）
 
-协议层（Session / PauseException / FinishException / RejectException）统一由
-qingci_plugin_sdk.session 维护，主项目不再维护副本。调度实现见
-bot/core/dispatcher.py（Dispatcher 维护等待中的阶梯并驱动续接）。
+协议层唯一实现来源为 Plugins-SDK，实际转发位于
+`bot/plugin/protocol/session.py`。本文件保留为兼容再导出，供存量导入路径
+`from bot.plugin.session import ...` 继续使用；新代码请直接导入
+`bot.plugin.protocol.session`。调度实现见 bot/core/dispatcher.py。
 """
 
-from qingci_plugin_sdk.session import *  # noqa: F401,F403
-from qingci_plugin_sdk.session import (  # noqa: F401
-    FinishException,
-    PauseException,
-    RejectException,
-    Session,
-)
-
-__all__ = ["Session", "PauseException", "FinishException", "RejectException"]
+from .protocol.session import *  # noqa: F401,F403
+from .protocol.session import __all__  # noqa: F401

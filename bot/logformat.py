@@ -150,7 +150,7 @@ def get_module_logger(name: str) -> logging.Logger:
     """获取模块级 Logger（命名空间前缀 qingci-bot）
 
     用法：
-        from bot.core.logformat import get_module_logger
+        from bot.logformat import get_module_logger
         logger = get_module_logger(__name__)
     """
     return logging.getLogger(name)

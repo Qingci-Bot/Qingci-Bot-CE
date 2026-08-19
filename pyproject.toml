@@ -103,4 +103,4 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["api*", "bot*", "desktop*", "plugins*"]
-exclude = ["web*", "data*", "migrations*", "dist*", "tests*", "scripts*"]
+exclude = ["web*", "data*", "migrations*", "dist*", "tests*", "scripts*", "bot.testing*"]

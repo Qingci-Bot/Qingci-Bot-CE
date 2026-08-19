@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from api.audit import record_audit
 from api.auth import _get_configured_api_key
 
-logger = logging.getLogger("qingci-bot.api.routes.auth")
+logger = logging.getLogger("qingci-bot.api.routes.login")
 
 router = APIRouter()
 

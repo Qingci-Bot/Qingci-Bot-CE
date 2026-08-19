@@ -19,7 +19,7 @@ pytest                # 测试（含覆盖率）
 |------|----------|------|
 | ruff | `target-version = py310`，`line-length = 100`，select `E F I W UP B C4` | 忽略 `E501`（行宽由 formatter 处理）、`B008` |
 | mypy | `python_version = "3.12"`，`warn_return_any = true` | 排除 `tests/`；覆盖 `api/` `bot/` `desktop/` |
-| pytest | `asyncio_mode = "auto"`，`testpaths = ["tests"]` | 默认带 `--cov=bot --cov=api`，门槛 40% |
+| pytest | `asyncio_mode = "auto"`，`testpaths = ["tests"]` | 默认带 `--cov=bot --cov=api`，门槛 50%（与 CI 一致；LLM 子系统另有 70% 门槛） |
 
 ## 2. 类型与语法约定
 
@@ -40,8 +40,8 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
 ```
 
 - **`api/` 只做 HTTP 编排**（鉴权、参数校验、响应组装），业务逻辑下沉到 `bot/`。
-- **`bot/core/` 为框架层**：生命周期、连接、调度、DI、组合根装配、事件总线、会话状态。不含具体业务。
-- **`bot/plugin/` 提供插件机制**；业务能力以内置插件（`builtin/`）或外部插件（`plugins/`）承载。
+- **`bot/core/` 为框架层**：生命周期、连接、调度、DI、组合根装配、事件总线、会话状态。不含具体业务与功能组件（功能组件放 `bot/` 根级：alerter / filter / broadcast / logformat / html_renderer）。
+- **`bot/plugin/` 提供插件机制**；`bot/plugin/protocol/` 为协议层薄转发（唯一实现来源为 Plugins-SDK），顶层同名文件为兼容再导出；业务能力以内置插件（`builtin/`）或外部插件（`plugins/`）承载。
 - **禁止循环 import**：框架层不 import 插件；`bot/core` 内部模块间保持单向依赖。
 - 新增能力优先放在已有的领域模块（`llm`/`db`/`rag`），避免在 `core` 堆积单一模块。
 
@@ -49,7 +49,7 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
 
 插件协议层（`PluginBase`/`Matcher`/`MatcherContext`/`Permission`/`Rule`/`MessageContext`/`RateLimiter`）的**唯一实现在 `Plugins-SDK`**（`qingci_plugin_sdk` 包）。本仓库约束：
 
-- `bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `bot/core/dispatcher.py` 中的 `MessageContext` **只允许薄转发**（`from qingci_plugin_sdk.xxx import *` + 显式 `__all__`），不得新增协议层实现。
+- `bot/plugin/protocol/{base,matcher,permission,rule,ratelimit,session,events,context}.py` **只允许薄转发**（`from qingci_plugin_sdk.xxx import *` + 显式 `__all__`），不得新增协议层实现；`bot/plugin/` 顶层同名文件仅作**兼容再导出**（不新增逻辑）。
 - 修改协议行为（权限语义、匹配规则、基类方法等）必须改 `Plugins-SDK` 仓库，并同步主项目 git 依赖版本。
 - 主项目可在 `bot/plugin/llm_tool.py` 等保留**运行时专属逻辑**（如注册到 `ToolRegistry`），但协议定义本身不得在本仓库重复。
 
@@ -86,7 +86,7 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
 
 - Vue 3 组合式 API（`<script setup>`）+ Pinia + Vue Router。
 - 遵守 ESLint + Prettier 规则（`npm run lint` / `npm run format`）。
-- 目录：`views/`（页面）、`stores/`（状态）、`router/`（路由）、`composables/`（复用逻辑）、`styles/`（全局样式）。
+- 目录：`views/`（页面）、`components/`（通用组件）、`stores/`（状态）、`router/`（路由）、`composables/`（复用逻辑）、`styles/`（全局样式）。
 - 组件命名：PascalCase 文件或语义化 kebab-case，与目录职责一致。
 
 ## 7. Git 约定

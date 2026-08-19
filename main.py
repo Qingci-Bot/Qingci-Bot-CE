@@ -36,7 +36,7 @@ logging.basicConfig(
 logger = logging.getLogger("qingci-bot.main")
 
 # ── 轻量级模块级导入（仅路径/日志工具，不触发重型依赖）───────
-from bot.core.logformat import apply_logging_from_config  # noqa: E402 — 仅 logging 工具
+from bot.logformat import apply_logging_from_config  # noqa: E402 — 仅 logging 工具
 from bot.paths import app_root  # noqa: E402 — 仅 sys + pathlib，极轻量
 
 # ── 命令行解析 ────────────────────────────────────────────────
@@ -218,7 +218,7 @@ def main():
     apply_logging_from_config(args.config)
 
     if args.desktop:
-        from desktop.main import run_desktop
+        from desktop.app import run_desktop
 
         run_desktop(args, splash)
         return

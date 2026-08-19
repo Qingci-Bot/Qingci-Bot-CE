@@ -15,7 +15,7 @@ import sys
 import time
 from collections import deque
 
-from .tasks import spawn_background_task
+from .core.tasks import spawn_background_task
 
 # 告警发送相关日志专用 logger 名前缀；AlertHandler 忽略该来源的日志防止递归
 ALERT_LOGGER_PREFIX = "qingci-bot.alerter"

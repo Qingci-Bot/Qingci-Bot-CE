@@ -37,8 +37,8 @@ from ..core.message import segments_to_cq
 from ..core.platforms.base import PlatformAdapter
 from ..core.session_state import SessionStateManager
 from ..llm.tools import ToolRegistry
-from ..plugin.base import PluginStatus
 from ..plugin.manager import PluginManager
+from ..plugin.protocol.base import PluginStatus
 
 if TYPE_CHECKING:
     from ..core.bot import QingciBot
@@ -255,7 +255,7 @@ class TestBot:
 
         # 类型化事件入缓冲（与真实 Bot _process_event_impl 对齐）
         if post_type in ("notice", "request"):
-            from ..plugin.events import parse_event
+            from ..plugin.protocol.events import parse_event
 
             self.event_buffer.record(parse_event(post_type, event) or event)
 

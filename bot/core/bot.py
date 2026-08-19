@@ -9,27 +9,28 @@ from typing import TYPE_CHECKING, Any, cast
 from qingci_plugin_sdk.segments import MessageSegment
 
 from .. import __version__
+from ..alerter import AlertHandler
 from ..config import ConfigManager
 from ..paths import plugins_dir
-from ..plugin import PluginStatus
-from ..plugin.events import parse_event
+from ..plugin.protocol.base import PluginStatus
+from ..plugin.protocol.context import MessageContext
+from ..plugin.protocol.events import parse_event
 from ..plugin.watcher import PluginWatcher
-from .alerter import AlertHandler
 from .di import DIContainer
-from .dispatcher import MessageContext, MessageDispatcher
+from .dispatcher import MessageDispatcher
 from .tasks import spawn_background_task
 
 if TYPE_CHECKING:
     from ..db import Database
+    from ..filter import SensitiveFilter
+    from ..html_renderer import HtmlRenderer
     from ..llm import EventBuffer, LLMManager, ToolRegistry
     from ..plugin import PluginManager
-    from ..plugin.ratelimit import RateLimiter
+    from ..plugin.protocol.ratelimit import RateLimiter
     from ..rag import KnowledgeStore
-    from .connection import OneBotConnection
     from .event_bus import EventBus
-    from .filter import SensitiveFilter
-    from .html_renderer import HtmlRenderer
     from .platforms.base import PlatformAdapter
+    from .platforms.onebot11 import OneBotConnection
     from .scheduler import BotScheduler
     from .session_state import SessionStateManager
 

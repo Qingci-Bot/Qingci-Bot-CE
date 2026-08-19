@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import Drawer from '../components/Drawer.vue';
 import { useAppStore } from '../stores/app';
 import { useToast } from '../composables/useToast';
 
@@ -637,86 +638,65 @@ function openHomepage(url) {
       </div>
 
       <!-- 插件管理页面抽屉 -->
-      <Teleport to="body">
-        <transition name="drawer">
-          <div v-if="drawerOpen" class="drawer-overlay" @click.self="closeDrawer">
-            <div class="drawer-panel">
-              <div class="drawer-header">
-                <div class="drawer-title">
-                  <span>{{ drawerPage?.icon || '◇' }}</span>
-                  <span>{{ drawerPlugin?.name }} - {{ drawerPage?.title }}</span>
-                </div>
-                <button class="drawer-close" @click="closeDrawer">✕</button>
-              </div>
-              <div class="drawer-body">
-                <iframe
-                  :src="drawerUrl"
-                  class="drawer-iframe"
-                  sandbox="allow-scripts allow-same-origin allow-forms"
-                  title="插件管理页面"
-                />
-              </div>
-            </div>
-          </div>
-        </transition>
-      </Teleport>
+      <Drawer
+        :open="drawerOpen"
+        :icon="drawerPage?.icon || '◇'"
+        :title="`${drawerPlugin?.name} - ${drawerPage?.title}`"
+        @close="closeDrawer"
+      >
+        <iframe
+          :src="drawerUrl"
+          class="drawer-iframe"
+          sandbox="allow-scripts allow-same-origin allow-forms"
+          title="插件管理页面"
+        />
+      </Drawer>
 
       <!-- 插件配置抽屉（JSON Schema 自动生成表单） -->
-      <Teleport to="body">
-        <transition name="drawer">
-          <div v-if="configOpen" class="drawer-overlay" @click.self="closeConfig">
-            <div class="drawer-panel">
-              <div class="drawer-header">
-                <div class="drawer-title">
-                  <span>⚙</span>
-                  <span>{{ configPlugin?.name }} - 配置</span>
-                </div>
-                <button class="drawer-close" @click="closeConfig">✕</button>
-              </div>
-              <div class="drawer-body config-drawer-body">
-                <div v-if="configLoading" class="empty-state">加载配置中...</div>
-                <div v-else-if="!configSchema" class="empty-state">
-                  <div class="icon">◇</div>
-                  <div>该插件未定义配置项（无 Config 内嵌类）</div>
-                </div>
-                <div v-else class="config-form">
-                  <div v-if="configFields.length === 0" class="empty-state">该插件无配置字段</div>
-                  <div v-for="field in configFields" :key="field.key" class="config-field">
-                    <label class="config-label">
-                      <span class="config-title">
-                        {{ field.title }}
-                        <span v-if="field.required" class="required-mark" title="必填">*</span>
-                      </span>
-                      <span v-if="field.description" class="config-desc">{{
-                        field.description
-                      }}</span>
-                    </label>
-                    <label v-if="field.type === 'boolean'" class="switch">
-                      <input v-model="configValues[field.key]" type="checkbox" />
-                      <span class="slider round" />
-                    </label>
-                    <input
-                      v-else
-                      v-model="configValues[field.key]"
-                      :type="configInputType(field)"
-                      class="config-input"
-                      :step="field.type === 'number' ? '0.1' : undefined"
-                    />
-                  </div>
-                  <div class="config-actions">
-                    <button class="btn btn-secondary" :disabled="configSaving" @click="closeConfig">
-                      取消
-                    </button>
-                    <button class="btn btn-primary" :disabled="configSaving" @click="saveConfig">
-                      <span :class="{ spin: configSaving }">✓</span> 保存配置
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+      <Drawer
+        :open="configOpen"
+        icon="⚙"
+        :title="`${configPlugin?.name} - 配置`"
+        body-class="config-drawer-body"
+        @close="closeConfig"
+      >
+        <div v-if="configLoading" class="empty-state">加载配置中...</div>
+        <div v-else-if="!configSchema" class="empty-state">
+          <div class="icon">◇</div>
+          <div>该插件未定义配置项（无 Config 内嵌类）</div>
+        </div>
+        <div v-else class="config-form">
+          <div v-if="configFields.length === 0" class="empty-state">该插件无配置字段</div>
+          <div v-for="field in configFields" :key="field.key" class="config-field">
+            <label class="config-label">
+              <span class="config-title">
+                {{ field.title }}
+                <span v-if="field.required" class="required-mark" title="必填">*</span>
+              </span>
+              <span v-if="field.description" class="config-desc">{{ field.description }}</span>
+            </label>
+            <label v-if="field.type === 'boolean'" class="switch">
+              <input v-model="configValues[field.key]" type="checkbox" />
+              <span class="slider round" />
+            </label>
+            <input
+              v-else
+              v-model="configValues[field.key]"
+              :type="configInputType(field)"
+              class="config-input"
+              :step="field.type === 'number' ? '0.1' : undefined"
+            />
           </div>
-        </transition>
-      </Teleport>
+          <div class="config-actions">
+            <button class="btn btn-secondary" :disabled="configSaving" @click="closeConfig">
+              取消
+            </button>
+            <button class="btn btn-primary" :disabled="configSaving" @click="saveConfig">
+              <span :class="{ spin: configSaving }">✓</span> 保存配置
+            </button>
+          </div>
+        </div>
+      </Drawer>
     </template>
 
     <!-- 命令管理 Tab -->
@@ -1091,67 +1071,6 @@ function openHomepage(url) {
 }
 
 /* 插件管理页面抽屉 */
-.drawer-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 1000;
-  display: flex;
-  justify-content: flex-end;
-}
-.drawer-panel {
-  width: min(90vw, 900px);
-  height: 100%;
-  background: var(--bg-primary);
-  border-left: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
-}
-.drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-.drawer-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.drawer-close {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 16px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-.drawer-close:hover {
-  color: var(--text-primary);
-  border-color: var(--border-active);
-  background: rgba(255, 255, 255, 0.05);
-}
-.drawer-body {
-  flex: 1;
-  overflow: hidden;
-}
-.config-drawer-body {
-  overflow-y: auto;
-  padding: 20px;
-}
 .drawer-iframe {
   width: 100%;
   height: 100%;
@@ -1214,26 +1133,6 @@ function openHomepage(url) {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 8px;
-}
-
-/* 抽屉过渡动画 */
-.drawer-enter-active,
-.drawer-leave-active {
-  transition: opacity 0.25s ease;
-}
-.drawer-enter-active .drawer-panel,
-.drawer-leave-active .drawer-panel {
-  transition: transform 0.25s ease;
-}
-.drawer-enter-from,
-.drawer-leave-to {
-  opacity: 0;
-}
-.drawer-enter-from .drawer-panel {
-  transform: translateX(100%);
-}
-.drawer-leave-to .drawer-panel {
-  transform: translateX(100%);
 }
 
 /* 命令管理表格 */

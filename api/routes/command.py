@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from api.audit import record_audit
 from api.auth import require_auth
 from bot.core.bot import get_bot as _get_bot
-from bot.plugin.permission import describe_permission
+from bot.plugin.protocol.permission import describe_permission
 
 logger = logging.getLogger("qingci-bot.api.command")
 

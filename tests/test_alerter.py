@@ -7,7 +7,7 @@
 import logging
 from types import SimpleNamespace
 
-from bot.core.alerter import AlertHandler
+from bot.alerter import AlertHandler
 
 
 def _config(threshold=2, cooldown=1, admins=(), super_admin=None):

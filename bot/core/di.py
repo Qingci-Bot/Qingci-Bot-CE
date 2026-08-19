@@ -192,7 +192,7 @@ def _is_event_annotation(ann: Any) -> bool:
 
     惰性导入避免模块级循环依赖；转发后与 SDK 是同一类型。
     """
-    from ..plugin.events import NoticeEvent, RequestEvent
+    from ..plugin.protocol.events import NoticeEvent, RequestEvent
 
     try:
         return isinstance(ann, type) and issubclass(ann, (NoticeEvent, RequestEvent))

@@ -5,6 +5,13 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **项目结构重构**：`bot/core/` 收敛为纯框架层——`alerter`/`filter`/`broadcast`/`logformat`/`html_renderer` 五功能组件平铺至 `bot/` 根级；OneBot 11 适配器归入 `bot/core/platforms/onebot11.py`（`bot/core/connection.py` 保留兼容再导出）；插件协议层薄转发收拢到 `bot/plugin/protocol/` 子包（base/context/matcher/rule/permission/ratelimit/session/events），`bot/plugin/` 顶层同名文件改为兼容再导出，框架内部直接引用 protocol；`dispatcher.py` 不再 re-export `MessageContext`（改引 `protocol.context`）；打包排除 `bot.testing*`（测试沙箱不进 exe）；文档（ARCHITECTURE / PROJECT_STRUCTURE / CODING_STANDARDS）同步
+- **命名收敛（C 类）**：登录路由 `api/routes/auth.py` → `api/routes/login.py`（消除与鉴权依赖 `api/auth.py` 的同根名混淆，`router` 更名 `login_router`）；桌面入口 `desktop/main.py` → `desktop/app.py`（消除与根入口 `main.py` 同名）；`bot/instances.py`（数据级多实例）与 `desktop/single_instance.py`（进程级单例）补充概念区分说明；`bot/i18n.py`（框架侧）与 SDK `i18n.py`（插件侧）边界说明
+- **前端组件化**：新增 `web/src/components/Drawer.vue` 通用抽屉组件（Teleport + 过渡动画 + 配置/页面双抽屉复用），`PluginManager.vue` 改用它并移除内联抽屉样式；前端目录约定新增 `components/`
+
 ## [1.9.0] - 2026-08-19（框架能力补全：HTML 渲染 + 插件 Web API）
 
 ### Added

@@ -5,6 +5,10 @@ Windows 下基于命名互斥量（CreateMutexW）判断本进程是否为第一
 - 重复实例：释放句柄并返回 False，由调用方决定聚焦已有窗口后退出
 
 仅在 Windows 下启用；非 Windows 环境无法可靠做跨进程互斥，放开不阻塞启动。
+
+> 与 `bot/instances.py` 的「实例」区分：本模块指**进程级单例互斥**
+> （同数据目录重复启动只留一个进程）；`bot/instances.py` 指**数据级多实例**
+> （instances/<name>/ 自包含目录，不同 --data-dir 可并行多开）。
 """
 
 import ctypes

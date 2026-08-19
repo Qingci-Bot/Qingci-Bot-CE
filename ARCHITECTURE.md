@@ -56,22 +56,22 @@ Qingci-Bot-CE/
 │   ├── config.py              # 配置管理（Pydantic 模型）
 │   ├── instances.py           # 实例管理（instances/<name>/ 自包含目录，含 config/plugins/data）
 │   ├── paths.py               # 路径解析（app_root / data_root / plugins_dir）
-│   ├── i18n.py                # 国际化翻译器
+│   ├── i18n.py                # 国际化翻译器（框架侧）
+│   ├── alerter.py             # 错误告警器（ERROR 日志阈值 → 私聊通知管理员）
+│   ├── filter.py              # 敏感词过滤器（词库 + 打码）
+│   ├── broadcast.py           # 消息广播（WS 实时推送 broker）
+│   ├── logformat.py           # 结构化 JSON 日志 + 文件轮转
+│   ├── html_renderer.py       # HTML → 图片渲染服务（Playwright 无头 Chromium，可选依赖）
 │   ├── core/
 │   │   ├── bot.py             # Bot 主类（生命周期、事件调度、全局钩子）
 │   │   ├── composition.py     # 组合根（assemble_bot：组件装配 + DI 注册）
-│   │   ├── connection.py      # OneBot 连接（aiocqhttp 反向 WS，实现 PlatformAdapter 契约）
 │   │   ├── v11_compat.py      # OneBot 11 事件 → OneBot 12 事件翻译层（双模归一化入口）
-│   │   ├── platforms/         # 多平台适配器（base.py PlatformAdapter 契约 + onebot12.py + telegram.py）
-│   │   ├── dispatcher.py      # 消息分发 + Matcher 调度（MessageContext 转发 SDK）
-│   │   ├── message.py         # 类型化消息构造器（Message/MessageSegment）
-│   │   ├── broadcast.py       # 消息广播
-│   │   ├── filter.py          # 敏感词过滤器
+│   │   ├── platforms/         # 多平台适配器（base.py PlatformAdapter 契约 + onebot11.py + onebot12.py + telegram.py）
+│   │   ├── connection.py      # 兼容再导出（实际实现在 platforms/onebot11.py）
+│   │   ├── dispatcher.py      # 消息分发 + Matcher 调度（MessageContext 引 protocol.context）
+│   │   ├── message.py         # 类型化消息构造器（Message/MessageSegment，仅 OneBot-11 平台兼容用；v12 消息段由 SDK segments 承担）
 │   │   ├── scheduler.py       # 定时任务调度器
 │   │   ├── tasks.py           # 后台任务管理（防 GC + 停机等待）
-│   │   ├── alerter.py         # 错误告警器
-│   │   ├── logformat.py       # 结构化 JSON 日志
-│   │   ├── html_renderer.py   # HTML → 图片渲染服务（Playwright 无头 Chromium，可选依赖）
 │   │   ├── session_state.py   # 会话状态管理（TTL 键值存储）
 │   │   ├── event_bus.py       # 跨插件事件总线（发布-订阅）
 │   │   └── di.py              # 依赖注入容器（SINGLETON/TRANSIENT/SCOPED）
@@ -91,16 +91,27 @@ Qingci-Bot-CE/
 │   │   ├── bot.py             # TestBot 轻量测试环境
 │   │   └── events.py          # 事件构造器（v11 / v12 双模）
 │   └── plugin/
-│       ├── base.py            # 薄转发 SDK PluginBase（协议层唯一来源）
-│       ├── manager.py         # 插件管理器（热加载 + 模块级收集 + SDK data_root 重定向）
-│       ├── matcher.py         # 薄转发 SDK Matcher/MatcherContext/工厂函数
-│       ├── rule.py            # 薄转发 SDK Rule 规则系统
-│       ├── permission.py      # 薄转发 SDK Permission 权限系统
-│       ├── ratelimit.py       # 薄转发 SDK RateLimiter 限流
-│       ├── webapi.py          # 插件级 Web API 适配器（register_api → /api/plugin-web/<name>/）
-│       ├── llm_tool.py        # @llm_tool 插件级 LLM 工具声明（含注册到 ToolRegistry 的运行时逻辑）
-│       ├── watcher.py         # 插件自动热重载监听
-│       └── builtin/           # 内置插件（目录结构）
+│       ├── protocol/           # 插件协议层（薄转发 SDK，唯一实现来源为 Plugins-SDK）
+│       │   ├── base.py         # PluginBase / PluginStatus
+│       │   ├── context.py      # MessageContext
+│       │   ├── matcher.py      # Matcher / MatcherContext / 工厂函数
+│       │   ├── rule.py         # Rule 规则系统
+│       │   ├── permission.py   # Permission 权限系统
+│       │   ├── ratelimit.py    # RateLimiter 限流
+│       │   ├── session.py      # Session 会话阶梯
+│       │   └── events.py       # 类型化事件（notice/request）
+│       ├── base.py             # 兼容再导出（指向 protocol/base.py）
+│       ├── manager.py          # 插件管理器（热加载 + 模块级收集 + SDK data_root 重定向）
+│       ├── matcher.py          # 兼容再导出（指向 protocol/matcher.py）
+│       ├── rule.py             # 兼容再导出（指向 protocol/rule.py）
+│       ├── permission.py       # 兼容再导出（指向 protocol/permission.py）
+│       ├── ratelimit.py        # 兼容再导出（指向 protocol/ratelimit.py）
+│       ├── session.py          # 兼容再导出（指向 protocol/session.py）
+│       ├── events.py           # 兼容再导出（指向 protocol/events.py）
+│       ├── webapi.py           # 插件级 Web API 适配器（register_api → /api/plugin-web/<name>/）
+│       ├── llm_tool.py         # @llm_tool 插件级 LLM 工具声明（含注册到 ToolRegistry 的运行时逻辑）
+│       ├── watcher.py          # 插件自动热重载监听
+│       └── builtin/            # 内置插件（目录结构）
 │           ├── chat/          # LLM 对话（Matcher API）
 │           ├── admin/         # 管理命令（含 /filter /group）
 │           ├── help/          # /help 命令（按权限列出可用命令）
@@ -122,15 +133,16 @@ Qingci-Bot-CE/
 │   ├── auth.py                # API 鉴权
 │   ├── audit.py               # 审计日志（埋点 + 查询）
 │   ├── server.py              # FastAPI 应用
-│   └── routes/                # API 路由（bot/config/plugin/market/log/group/auth/backup/command/instances）
+│   └── routes/                # API 路由（bot/config/plugin/market/log/group/login/backup/command/instances）
 ├── web/                       # Vue 3 前端
 │   └── src/
 │       ├── views/             # 页面组件
+│       ├── components/        # 通用组件（Drawer 等）
 │       ├── stores/            # Pinia 状态管理
 │       ├── router/            # 路由配置
 │       └── styles/            # 全局样式
 ├── desktop/
-│   ├── main.py                # 桌面入口
+│   ├── app.py                  # 桌面入口（run_desktop）
 │   ├── splash.py              # 启动画面（即时加载，重型模块延迟导入）
 │   ├── tray.py                # 系统托盘
 │   ├── single_instance.py     # 单实例保护（Windows 命名互斥量，由数据根目录派生）
@@ -178,7 +190,7 @@ Qingci-Bot-CE/
 
 - **`base.py`**：定义 `PlatformAdapter` 契约（适配器名/展示名、启动与关闭、事件上报回调、发送消息、`get_status`/API 透传等），任何平台只需实现该契约即可接入
 - **`telegram.py`**：Telegram 平台实现——以 Bot API 长轮询（`getUpdates`）接入，由 `platforms.telegram.enabled/token/poll_interval` 控制；收到更新后归一化为 **OneBot 12 消息事件**并注入 `platform: "telegram"`。关键能力：① 群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 v12 `mention` 段（`user_id=self_id`）并置 `is_at_bot`，确保 at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；② `photo` / `image/*` document 归一化为 `image` 段（`file_id`）+ `images`，`voice` → `voice`、`video` / `video_note` → `video` 段，消息 `sub_type` 语义对齐 OneBot（私聊 `friend`）；③ 发送消费 OneBot 12 标准段——`image` → `sendPhoto`、`voice` → `sendVoice`、`video` → `sendVideo`（file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，caption 附着首条媒体），`reply` 段 → 回复指定消息，其余不可渲染的段降级为纯文本并合并连续空白，之外走 `sendMessage`；④ `chat_member` / `my_chat_member` 成员变动归一化为 OneBot `notice`（`group_member_increase` / `group_member_decrease` / `group_admin_set` / `group_admin_unset`，被邀请 `sub_type=invite`），由既有事件 Matcher 消费；⑤ 轮询 offset 采用**整批确认**：先以 `max(update_id)+1` 推进游标再并发消费本批更新，单条处理失败也已被确认，避免失败更新无限重放
-- **`OneBotConnection`**（`bot/core/connection.py`）作为「onebot」平台接入 OneBot 11 反向 WebSocket，收到 v11 事件先经 `v11_compat.v11_event_to_v12()` 翻译为 v12 事件再上报（同时保留 `platform`/兼容字段），与原反向 WS 行为兼容，回复路由与附加平台共用同一发送映射
+- **`OneBotConnection`**（`bot/core/platforms/onebot11.py`，`bot/core/connection.py` 保留兼容再导出）作为「onebot」平台接入 OneBot 11 反向 WebSocket，收到 v11 事件先经 `v11_compat.v11_event_to_v12()` 翻译为 v12 事件再上报（同时保留 `platform`/兼容字段），与原反向 WS 行为兼容，回复路由与附加平台共用同一发送映射
 - **`onebot12.py`**：OneBot 12 平台实现——aiohttp 反向 WebSocket 服务端（`platforms.onebot12.enabled/host/port/access_token` 控制），支持 OneBot 12 实现端（NapCat / Lagrange.OneBot 等）原生接入；事件以 v12 标准格式直通 Dispatcher（注入 `platform: "onebot12"`），动作以 JSON-RPC（`{action, params, echo}`）请求并通过 echo 匹配响应，`send_message` 动作消费 v12 段数组原生表达，与 v11 相比省去翻译层
 - 附加平台（Telegram / OneBot 12）启动失败仅记录日志，不阻断主平台（OneBot）可用性
 
@@ -206,7 +218,7 @@ Qingci-Bot-CE/
 - 会话摘要：可选的摘要压缩，保留最近 N 轮原文
 - 人格切换：`/persona` 命令会话级覆盖 system_prompt
 
-### HTML 渲染服务（`bot/core/html_renderer.py`）
+### HTML 渲染服务（`bot/html_renderer.py`）
 
 基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG，供签到卡等「HTML 模板 → 图片消息」插件复用：
 
@@ -339,4 +351,4 @@ Qingci-Bot CE 启动后会自动监测协议端（OneBot 11 客户端）的 WebS
 - **优雅降级**：断连期间 Web UI 与 API 服务正常可用，Bot 状态显示为"未连接"
 - **重连成功**：自动恢复消息收发，已加载插件与配置保持不变
 
-断连监控与重连回调内置于 `bot/core/connection.py`，无需额外配置。
+断连监控与重连回调内置于 `bot/core/platforms/onebot11.py`，无需额外配置。

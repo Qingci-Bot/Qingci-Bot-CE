@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture(autouse=True)
 def _clean_login_failures():
     """每个测试前清空登录防暴力计数，避免跨测试残留"""
-    from api.routes import auth as auth_routes
+    from api.routes import login as auth_routes
 
     auth_routes._login_failures.clear()
     yield

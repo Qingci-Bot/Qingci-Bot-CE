@@ -16,12 +16,12 @@ from typing import TYPE_CHECKING, Any
 
 # 消息上下文统一由独立插件 SDK 定义（qingci_plugin_sdk.context.MessageContext），
 # 主项目与外部插件共用同一类型，避免协议层定义漂移。
-from qingci_plugin_sdk.context import MessageContext
 from qingci_plugin_sdk.segments import Message
 
-from ..plugin.events import parse_event
-from ..plugin.matcher import MatcherContext
-from ..plugin.session import (
+from ..plugin.protocol.context import MessageContext
+from ..plugin.protocol.events import parse_event
+from ..plugin.protocol.matcher import MatcherContext
+from ..plugin.protocol.session import (
     FinishException,
     PauseException,
     RejectException,

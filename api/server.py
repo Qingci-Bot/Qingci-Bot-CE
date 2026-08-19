@@ -14,9 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from api.auth import _get_configured_api_key
+from bot.broadcast import register_broker, unregister_broker
 from bot.core.bot import QingciBot
 from bot.core.bot import get_bot as _get_bot
-from bot.core.broadcast import register_broker, unregister_broker
 
 
 def get_bot() -> QingciBot | None:
@@ -146,7 +146,6 @@ def create_app() -> FastAPI:
     # 注册路由
     from api.audit import router as audit_router
     from api.routes import (
-        auth_router,
         backup_router,
         bot_router,
         command_router,
@@ -154,6 +153,7 @@ def create_app() -> FastAPI:
         group_router,
         instances_router,
         log_router,
+        login_router,
         market_router,
         plugin_router,
     )
@@ -164,7 +164,7 @@ def create_app() -> FastAPI:
     app.include_router(market_router, prefix="/api/plugins/market", tags=["PluginMarket"])
     app.include_router(log_router, prefix="/api/log", tags=["Log"])
     app.include_router(group_router, prefix="/api/group", tags=["Group"])
-    app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
+    app.include_router(login_router, prefix="/api/auth", tags=["Auth"])
     app.include_router(audit_router, prefix="/api/audit", tags=["Audit"])
     app.include_router(backup_router, prefix="/api/backup", tags=["Backup"])
     app.include_router(command_router, prefix="/api/command", tags=["Command"])

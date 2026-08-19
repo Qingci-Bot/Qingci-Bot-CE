@@ -8,8 +8,8 @@
 """
 
 from bot.plugin.base import PluginBase, PluginStatus
-from bot.plugin.matcher import Matcher, MatcherContext, Rule, on_command, on_message
-from bot.plugin.rule import keyword
+from bot.plugin.matcher import Matcher, MatcherContext, on_command, on_message
+from bot.plugin.rule import Rule, keyword
 
 
 class RecordingPlugin(PluginBase):

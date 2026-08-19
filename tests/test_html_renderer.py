@@ -8,9 +8,9 @@ import asyncio
 
 import pytest
 
-import bot.core.html_renderer as hrm
+import bot.html_renderer as hrm
 from bot.config import RenderConfig
-from bot.core.html_renderer import (
+from bot.html_renderer import (
     HtmlRenderer,
     HtmlRenderError,
     HtmlRenderTimeoutError,

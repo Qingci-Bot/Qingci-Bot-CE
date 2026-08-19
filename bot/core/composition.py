@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 from ..config import ConfigManager
 from ..db import Database
+from ..filter import SensitiveFilter
+from ..html_renderer import HtmlRenderer
 from ..llm import (
     EventBuffer,
     LLMManager,
@@ -24,15 +26,13 @@ from ..llm import (
 )
 from ..paths import data_root
 from ..plugin import PluginManager
-from ..plugin.ratelimit import RateLimiter
+from ..plugin.protocol.ratelimit import RateLimiter
 from ..rag import KnowledgeStore
-from .connection import OneBotConnection
 from .di import DIContainer
 from .dispatcher import MessageDispatcher
 from .event_bus import EventBus
-from .filter import SensitiveFilter
-from .html_renderer import HtmlRenderer
 from .platforms.base import make_platform
+from .platforms.onebot11 import OneBotConnection
 from .scheduler import BotScheduler
 from .session_state import SessionStateManager
 

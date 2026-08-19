@@ -1,6 +1,19 @@
-from .manager import PluginManager
-from .protocol.base import PluginBase, PluginStatus
-from .protocol.matcher import (
+"""插件协议层（唯一实现来源为 Plugins-SDK）
+
+协议层（PluginBase / Matcher / Rule / Permission / MessageContext /
+类型化事件 / Session / RateLimiter）统一由独立插件 SDK
+（qingci_plugin_sdk）维护，本子包内的模块均为**薄转发**，主项目不保存
+任何协议实现。
+
+- 框架内部代码应直接引用本子包（`bot.plugin.protocol.*`）；
+- `bot/plugin/` 顶层的同名模块（base/matcher/rule/...）为**兼容再导出**，
+  供存量导入路径与外部插件继续使用；
+- 修改协议行为一律改 Plugins-SDK，本子包只做转发。
+"""
+
+from .base import PluginBase, PluginStatus
+from .context import MessageContext
+from .matcher import (
     Matcher,
     MatcherContext,
     on_command,
@@ -10,7 +23,7 @@ from .protocol.matcher import (
     on_request,
     on_startswith,
 )
-from .protocol.permission import (
+from .permission import (
     ADMIN,
     EVERYONE,
     GROUP,
@@ -21,7 +34,7 @@ from .protocol.permission import (
     USER,
     Permission,
 )
-from .protocol.rule import (
+from .rule import (
     Rule,
     command,
     contains,
@@ -33,6 +46,7 @@ from .protocol.rule import (
     rate_limit,
     regex,
     startswith,
+    subcommand,
     to_me,
 )
 
@@ -40,7 +54,7 @@ __all__ = [
     # 基础
     "PluginBase",
     "PluginStatus",
-    "PluginManager",
+    "MessageContext",
     # Matcher
     "Matcher",
     "MatcherContext",
@@ -68,6 +82,7 @@ __all__ = [
     "contains",
     "regex",
     "command",
+    "subcommand",
     "to_me",
     "is_private",
     "is_group",

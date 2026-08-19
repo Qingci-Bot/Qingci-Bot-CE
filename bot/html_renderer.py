@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from ..config import RenderConfig
+    from .config import RenderConfig
 
 logger = logging.getLogger("qingci-bot.core.html_renderer")
 
