@@ -610,6 +610,8 @@ class QingciBot:
                     "category": p.category,
                     "status": p.status.value,
                     "enabled": p.enabled,
+                    # 供 WebUI 渲染插件卡片上的 Web 管理页面入口按钮
+                    "pages": self.plugin_manager.get_plugin_pages(p.name),
                 }
                 for p in self.plugin_manager.plugins.values()
             ],

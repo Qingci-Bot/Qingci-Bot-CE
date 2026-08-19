@@ -129,6 +129,9 @@ class TestBotStatus:
         assert "connected" in data
         assert "plugins" in data
         assert isinstance(data["plugins"], list)
+        # 插件条目须携带 pages 字段（WebUI 卡片 Web 管理入口按钮依赖）
+        for p in data["plugins"]:
+            assert "pages" in p and isinstance(p["pages"], list)
         # 平台状态：结构校验；运行中时至少包含默认 onebot 平台
         assert "platforms" in data
         assert isinstance(data["platforms"], list)
