@@ -5,10 +5,15 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.9.2] - 2026-08-19（插件市场增强）
 
 ### Added
-- **插件市场索引支持 `mirror`（备用地址）**：市场条目可声明主地址 `source` + 备用地址 `mirror`，安装时按 `source` → `mirror` 顺序尝试，全部失败才报错（配合索引仓库模型：插件代码留在作者仓库，市场只登记地址）。`MarketIndex` 解析新增 `mirror` 字段（缺省为空），`MarketManager.install` 增加回退逻辑
+- **市场索引 `python_requires` 兼容声明**：市场条目可声明 Python 版本约束（PEP 440 specifier，如 `>=3.10`），市场列表每条返回 `compatible` 状态（当前 Python 是否满足）；WebUI 市场卡片对不兼容插件显示红色「不兼容当前 Python」徽标并禁用安装按钮，未声明视为兼容
+- **市场索引备用源 `market.mirror_url`**：索引拉取按 主源 → 备用源 → 磁盘缓存 → 报错 顺序回退（此前仅插件安装支持 mirror 回退）；`MarketClient.get_index` 对每个源逐次尝试并记录日志
+- **插件安装 `mirror` 回退**：市场条目可声明主地址 `source` + 备用地址 `mirror`，安装时按 `source` → `mirror` 顺序尝试，全部失败才报错（配合索引仓库模型：插件代码留在作者仓库，市场只登记地址）。`MarketIndex` 解析新增 `mirror` 字段（缺省为空），`MarketManager.install` 增加回退逻辑
+
+### Changed
+- **文档**：最小示例插件引用改为独立仓库 [Qingci-Bot/hello](https://github.com/Qingci-Bot/hello)（README / CHANGELOG 等）
 
 ## [1.9.1] - 2026-08-19（项目结构收敛 + 命名/组件化）
 
