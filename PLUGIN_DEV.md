@@ -970,10 +970,12 @@ class WelcomePlugin(PluginBase):
 
     async def _on_group_increase(self, ctx: MatcherContext, event: GroupIncreaseNotice) -> None:
         """类型化通知事件注入：勿再手写 notice_type / detail_type 判断，直接读字段"""
-        msg = Message([
-            MessageSegment.mention(event.user_id),  # v12 mention 段（@ 新人）
-            MessageSegment.text(" 欢迎加入本群！"),
-        ])
+        msg = Message(
+            [
+                MessageSegment.mention(event.user_id),  # v12 mention 段（@ 新人）
+                MessageSegment.text(" 欢迎加入本群！"),
+            ]
+        )
         # send_group_msg 接受文本 / v11 段 / v12 段数组（此处传 v12 段，自动转 CQ 发送）
         await self.connection.send_group_msg(event.group_id, msg.as_dicts())
 ```
@@ -1119,12 +1121,14 @@ async def weather_log(ctx: MatcherContext) -> None:
 from qingci_plugin_sdk.segments import Message, MessageSegment
 
 # 回复 + @ + 文本 + 图片 组合（OneBot 12 段）
-msg = Message([
-    MessageSegment.reply(ctx.message_id),
-    MessageSegment.mention(ctx.user_id),
-    MessageSegment.text("请看这张图："),
-    MessageSegment.image("file_id_xxx"),
-])
+msg = Message(
+    [
+        MessageSegment.reply(ctx.message_id),
+        MessageSegment.mention(ctx.user_id),
+        MessageSegment.text("请看这张图："),
+        MessageSegment.image("file_id_xxx"),
+    ]
+)
 # as_dicts() 返回标准 v12 段数组，直接作为发送动作参数
 await self.connection.send_msg("group", ctx.group_id, msg.as_dicts())
 ```
