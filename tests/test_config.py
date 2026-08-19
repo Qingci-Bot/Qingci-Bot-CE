@@ -148,3 +148,37 @@ class TestConfigManager:
         # 只有 super_admin 时，admin_set 仅为 super_admin
         assert "12345" in cfg.admin_set
         assert "99999" not in cfg.admin_set
+
+
+class TestPluginConfig:
+    """set_plugin_config：写盘失败必须回滚内存，不留下内存/磁盘不一致"""
+
+    def test_set_plugin_config_ok(self, config_file):
+        cm = ConfigManager(Path(config_file))
+        cm.load()
+        got = cm.set_plugin_config("myplugin", {"enabled": True, "level": 3})
+        assert got == {"enabled": True, "level": 3}
+        assert cm.get_plugin_config("myplugin") == {"enabled": True, "level": 3}
+        # 已持久化到磁盘
+        data = yaml.safe_load(Path(config_file).read_text(encoding="utf-8"))
+        assert data["plugins"]["myplugin"] == {"enabled": True, "level": 3}
+
+    def test_set_plugin_config_rollback_on_save_failure(self, config_file, monkeypatch):
+        cm = ConfigManager(Path(config_file))
+        cm.load()
+        original = cm.to_dict()
+
+        def _boom(self):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(ConfigManager, "save", _boom)
+
+        with pytest.raises(OSError, match="disk full"):
+            cm.set_plugin_config("myplugin", {"enabled": True})
+
+        # 内存回滚：plugins 不含 myplugin
+        assert cm.get_plugin_config("myplugin") is None
+        # 磁盘未改动
+        assert cm.to_dict() == original
+        data = yaml.safe_load(Path(config_file).read_text(encoding="utf-8"))
+        assert "myplugin" not in (data.get("plugins") or {})

@@ -266,10 +266,11 @@ async def test_llm_config(data: dict):
         available = await manager.check_availability()
         if not available:
             detail = getattr(manager, "last_error", "") or "未知错误"
+            # last_error 可能含完整 URL / Key，仅记录日志，不回显客户端
             logger.warning(f"LLM 连接测试失败: {detail}")
         return {
             "available": available,
-            "message": "LLM 连接正常" if available else f"LLM 连接失败：{detail}",
+            "message": "LLM 连接正常" if available else "LLM 连接失败，请检查配置（详见服务端日志）",
         }
     except HTTPException:
         raise
@@ -347,8 +348,12 @@ async def list_llm_models(data: dict):
     except HTTPException:
         raise
     except Exception as e:
+        # 异常消息可能包含完整 URL（如 Gemini key 在 query 中），不回显给客户端
         logger.warning(f"查询模型列表失败: provider={provider}, error={e}")
-        raise HTTPException(status_code=400, detail=f"查询模型列表失败：{e}") from None
+        raise HTTPException(
+            status_code=400,
+            detail="查询模型列表失败，请检查 API 地址与 Key（详见服务端日志）",
+        ) from None
 
 
 @router.get("/onebot", dependencies=[Depends(require_auth)])
@@ -359,6 +364,23 @@ async def get_onebot_config():
 
 
 # ============ 配置引导向导 ============
+
+
+def _is_cross_origin(request: Request) -> bool:
+    """浏览器跨源防护：仅允许回环来源完成免鉴权向导
+
+    首次启动窗口期无 API Key，跨源恶意网页可向本机 API 提交向导数据；
+    CORS 出于局域网访问需求保持放开，故对免鉴权的向导接口单独校验
+    Origin。直接访问 /ui 时 Origin 为回环地址；无 Origin 头（curl 等）
+    视为非浏览器请求放行。
+    """
+    from urllib.parse import urlparse
+
+    origin = request.headers.get("origin", "")
+    if not origin:
+        return False
+    host = (urlparse(origin).hostname or "").lower()
+    return host not in ("127.0.0.1", "localhost", "::1")
 
 
 @router.get("/wizard/status")
@@ -391,13 +413,15 @@ async def get_wizard_status():
 
 
 @router.post("/wizard")
-async def complete_wizard(data: dict):
+async def complete_wizard(request: Request, data: dict):
     """完成初始配置引导（免鉴权，仅首次使用）
 
     接受字段：provider, api_key, model, admin_qq, onebot_port
     安全约束：仅当配置尚未完成（api_key 与 admin_users 均为空）时允许调用，
-    防止已配置后被未授权方篡改 LLM/管理员/端口配置。
+    防止已配置后被未授权方篡改 LLM/管理员/端口配置；同时拒绝浏览器跨源请求。
     """
+    if _is_cross_origin(request):
+        raise HTTPException(status_code=403, detail="禁止跨源完成配置向导") from None
     async with _get_config_lock():
         try:
             cfg = _get_config_manager()
@@ -457,15 +481,24 @@ async def complete_wizard(data: dict):
 
 
 @router.post("/wizard/skip")
-async def skip_wizard():
-    """跳过首次配置引导（免鉴权）"""
+async def skip_wizard(request: Request):
+    """跳过首次配置引导（免鉴权，仅未配置完成时可跳过）"""
+    if _is_cross_origin(request):
+        raise HTTPException(status_code=403, detail="禁止跨源跳过配置向导") from None
     async with _get_config_lock():
         try:
             cfg = _get_config_manager()
+            configured_key = (cfg.config.api_key or "").strip()
+            configured_super = cfg.bot.super_admin
+            configured_admins = cfg.bot.admin_users or []
+            if configured_key or configured_super or configured_admins:
+                raise HTTPException(status_code=403, detail="配置已完成，无需跳过引导")
             current = cfg.to_dict()
             current["bot"]["wizard_skipped"] = True
             cfg.update(current)
             return {"message": "已跳过配置引导"}
+        except HTTPException:
+            raise
         except Exception:
             logger.exception("跳过配置引导失败")
             raise HTTPException(status_code=500, detail="内部错误，详见服务端日志") from None

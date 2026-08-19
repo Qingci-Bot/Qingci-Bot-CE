@@ -85,7 +85,7 @@ async def update_command(owner: str, command: str, body: CommandUpdate, request:
 
     for plugin in pm.plugins.values():
         for m in plugin.matchers:
-            if m.owner != owner or m.meta.get("command") != command:
+            if m.owner != owner or (m.meta or {}).get("command") != command:
                 continue
             if body.disabled is not None:
                 m.disabled = body.disabled

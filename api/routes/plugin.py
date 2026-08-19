@@ -53,6 +53,8 @@ async def list_plugins():
     seen: set[str] = set()
     for _name, plugin in bot.plugin_manager.plugins.items():
         seen.add(plugin.name)
+        # 已注册但 reload 等操作失败的插件：合并加载错误信息，以 error 状态展示
+        load_error = bot.plugin_manager._load_errors.get(plugin.name, "")
         plugins.append(
             {
                 "name": plugin.name,
@@ -60,10 +62,10 @@ async def list_plugins():
                 "author": plugin.author,
                 "description": plugin.description,
                 "category": plugin.category,
-                "status": plugin.status.value,
+                "status": "error" if load_error else plugin.status.value,
                 "enabled": plugin.enabled,
                 "pages": bot.plugin_manager.get_plugin_pages(plugin.name),
-                "load_error": "",
+                "load_error": load_error,
             }
         )
     # 加载失败的插件（目录/文件存在但未加载成功）：以 error 状态展示原因，

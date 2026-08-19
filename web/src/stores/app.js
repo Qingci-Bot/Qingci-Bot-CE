@@ -197,8 +197,8 @@ export const useAppStore = defineStore('app', () => {
       error.value = '';
       return true;
     } catch (e) {
-      botRunning.value = false;
-      botConnected.value = false;
+      // 拉取失败时保留上次 botRunning/botConnected 状态，避免轮询抖动误报"未启动"；
+      // 错误信息已由 apiFetch 写入 error.value
       return false;
     }
   }

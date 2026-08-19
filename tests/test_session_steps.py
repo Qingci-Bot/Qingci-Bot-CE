@@ -12,6 +12,7 @@
 测试用 bot.sent_messages 断言。
 """
 
+import logging
 import time
 
 import pytest
@@ -141,3 +142,28 @@ async def test_unload_clears_steps(bot):
 
     async with bot.dispatcher._steps_lock:
         assert bot.dispatcher._pending_steps == {}
+
+
+async def test_step_handler_plain_exception_consumes_event(bot, caplog):
+    """阶梯续接时 handler 抛普通异常：事件被消费、阶梯不悬挂、不中断分发"""
+    await bot.load_plugin("plugin_pkg.session_flow_plugin")
+    await bot.send(private_message("/wizard"))
+    assert last_sent(bot) == "请输入你的名字："
+
+    key = f"private:{10001}"
+    async with bot.dispatcher._steps_lock:
+        step = bot.dispatcher._pending_steps[key]
+
+        async def _boom(*args, **kwargs):
+            raise RuntimeError("step handler boom")
+
+        step.matcher.handler = _boom
+
+    # 续接消息：handler 抛普通异常（非 Pause/Finish/Reject）
+    with caplog.at_level(logging.ERROR, logger="qingci-bot.dispatcher"):
+        r2 = await bot.send(private_message("晴"))
+    assert r2 is None  # 事件被消费，无回复
+    assert "step handler boom" in caplog.text  # 异常已被记录
+    # 阶梯已删除，不残留悬挂状态（下一条同会话消息走正常分发）
+    async with bot.dispatcher._steps_lock:
+        assert key not in bot.dispatcher._pending_steps

@@ -555,9 +555,13 @@ class QingciBot:
                     await asyncio.sleep(0.5)
 
     async def _handle_request_approval(self, event: dict, approve: bool) -> None:
-        """处理加好友/加群请求的审批结果"""
+        """处理加好友/加群请求的审批结果
+
+        v11 事件的 request_type（friend/group）在适配器翻译为 v12 事件时
+        已映射为 detail_type，故此处读取 detail_type。
+        """
         try:
-            request_type = event.get("request_type", "")
+            request_type = event.get("detail_type", "")
             flag = event.get("flag", "")
             if not flag:
                 return

@@ -20,8 +20,12 @@ _cached_mtime: float = 0.0
 
 def set_config_path(path: Path):
     """设置配置文件路径（由 main.py 在启动时调用）"""
-    global _config_path
+    global _config_path, _cached_key, _cached_mtime
     _config_path = path
+    # 配置路径变更后旧缓存不再有效，必须清空（否则 _get_configured_api_key
+    # 会命中旧文件的 mtime 缓存，返回过期 api_key）
+    _cached_key = None
+    _cached_mtime = 0.0
 
 
 def _get_configured_api_key() -> str | None:

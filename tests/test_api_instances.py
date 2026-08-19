@@ -133,6 +133,16 @@ class TestDeleteInstance:
         resp = client.delete("/api/instances/alpha", headers=_headers())
         assert resp.status_code == 400
 
+    def test_delete_residual_dir_returns_500(self, client, monkeypatch):
+        """rmtree 静默失败（目录残留）时删除接口必须返回 500 而非假装成功"""
+        import bot.instances as inst
+
+        client.post("/api/instances", json={"name": "alpha"}, headers=_headers())
+        monkeypatch.setattr(inst.shutil, "rmtree", lambda *a, **k: None)
+        resp = client.delete("/api/instances/alpha", headers=_headers())
+        assert resp.status_code == 500
+        assert "删除失败" in resp.json()["detail"]
+
 
 class TestRenameInstance:
     def test_rename_ok(self, client):
@@ -188,3 +198,78 @@ class TestStartInstance:
         monkeypatch.setattr("api.routes.instances.os._exit", lambda code: None)
         resp = client.post("/api/instances/b/start", headers=_headers())
         assert resp.status_code == 200
+
+    def test_start_spawn_failure_returns_500_without_exit(self, client, monkeypatch):
+        """spawn_relaunch 派发失败时返回 500，且绝不调用 os._exit 终止当前进程"""
+        client.post("/api/instances", json={"name": "a"}, headers=_headers())
+        client.post("/api/instances", json={"name": "b"}, headers=_headers())
+        from bot.instances import instance_path
+
+        monkeypatch.setattr(
+            "api.routes.instances.data_root",
+            lambda: instance_path("a") / "data",
+        )
+        exited: list[int] = []
+        monkeypatch.setattr("api.routes.instances.os._exit", lambda code: exited.append(code))
+
+        def _boom(*a, **k):
+            raise RuntimeError("spawn failed")
+
+        monkeypatch.setattr("api.routes.instances.spawn_relaunch", _boom)
+        resp = client.post("/api/instances/b/start", headers=_headers())
+        assert resp.status_code == 500
+        assert exited == [], "派发失败时不得调用 os._exit"
+
+
+class TestBuildStartArgs:
+    """_build_start_args：透传 --data-dir/--config 等当前进程启动参数"""
+
+    def test_passes_through_data_dir_and_config(self, monkeypatch):
+        import sys
+
+        from api.routes.instances import _build_start_args
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "qingci-bot",
+                "--instance",
+                "alpha",
+                "--data-dir",
+                "C:/custom/data",
+                "--config",
+                "C:/custom/config.yaml",
+                "--host",
+                "0.0.0.0",
+            ],
+        )
+        args = _build_start_args("beta")
+        assert args[:2] == ["--instance", "beta"]
+        assert "--data-dir" in args and "C:/custom/data" in args
+        assert "--config" in args and "C:/custom/config.yaml" in args
+        assert "--host" in args and "0.0.0.0" in args
+
+    def test_supports_equals_form(self, monkeypatch):
+        import sys
+
+        from api.routes.instances import _build_start_args
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["qingci-bot", "--data-dir=C:/custom/data", "--config=C:/custom/config.yaml"],
+        )
+        args = _build_start_args("beta")
+        assert "--data-dir=C:/custom/data" in args
+        assert "--config=C:/custom/config.yaml" in args
+
+    def test_absent_flags_not_injected(self, monkeypatch):
+        import sys
+
+        from api.routes.instances import _build_start_args
+
+        monkeypatch.setattr(sys, "argv", ["qingci-bot"])
+        args = _build_start_args("beta")
+        assert "--data-dir" not in args
+        assert "--config" not in args

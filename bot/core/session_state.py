@@ -30,6 +30,8 @@ class SessionState:
         self._data: dict[str, tuple[Any, float]] = {}
         # key -> (value, expire_at)
         self._created_at: float = time.monotonic()
+        # 最近访问时间（SessionStateManager 按此驱逐最旧会话）
+        self._last_access: float = time.monotonic()
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取值，过期自动删除"""
@@ -58,12 +60,12 @@ class SessionState:
         return value
 
     def expire(self, key: str, ttl: float) -> bool:
-        """为已有键设置过期时间，不存在时返回 False"""
+        """为已有键设置过期时间，ttl<=0 表示永不过期（与 set 语义一致）；不存在时返回 False"""
         entry = self._data.get(key)
         if entry is None:
             return False
         value, _ = entry
-        self._data[key] = (value, time.monotonic() + ttl)
+        self._data[key] = (value, time.monotonic() + ttl if ttl > 0 else 0)
         return True
 
     def delete(self, key: str) -> None:
@@ -178,13 +180,12 @@ class SessionStateManager:
                 if self._max_sessions > 0 and len(self._states) >= self._max_sessions:
                     self._cleanup_expired_locked()
                     if len(self._states) >= self._max_sessions:
-                        logger.warning(
-                            f"会话数已达上限 {self._max_sessions}，无法创建新会话: {key}"
-                        )
-                        return SessionState()
+                        self._evict_oldest_locked(key)
                 self._states[key] = SessionState()
                 logger.debug(f"创建会话: {key}")
-            return self._states[key]
+            state = self._states[key]
+            state._last_access = time.monotonic()
+            return state
 
     async def remove_session(
         self,
@@ -351,3 +352,18 @@ class SessionStateManager:
                 empty.append(key)
         for k in empty:
             del self._states[k]
+
+    def _evict_oldest_locked(self, new_key: str) -> None:
+        """删除最久未访问的会话，为新会话腾出名额（需持有锁）
+
+        驱逐后仍保证新会话一定注册进 _states，避免返回未注册的
+        临时实例导致状态静默丢失。
+        """
+        if not self._states:
+            return
+        oldest_key = min(self._states, key=lambda k: self._states[k]._last_access)
+        del self._states[oldest_key]
+        logger.warning(
+            f"会话数已达上限 {self._max_sessions}，"
+            f"删除最久未访问会话以创建新会话: {new_key} (驱逐: {oldest_key})"
+        )

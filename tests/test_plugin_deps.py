@@ -77,3 +77,34 @@ def test_ensure_dependencies_install_failure(tmp_path, monkeypatch):
     assert got == ["requests"]
     # 安装失败不写 marker，下次会重试
     assert not deps._marker_path(plugin_dir.name).exists()
+
+
+def test_install_subprocess_timeout_kills_process(tmp_path, monkeypatch):
+    """communicate 超时（默认 300s）必须 kill 进程并返回 False，不挂死"""
+
+    class FakeProc:
+        def __init__(self):
+            self.returncode = None
+            self.killed = False
+
+        async def communicate(self):
+            await asyncio.sleep(3600)  # 永不返回，触发 wait_for 超时
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+        async def wait(self):
+            return -9
+
+    fake = FakeProc()
+
+    async def fake_create(*args, **kwargs):
+        return fake
+
+    monkeypatch.setattr(deps.asyncio, "create_subprocess_exec", fake_create)
+    monkeypatch.setattr(deps, "_INSTALL_TIMEOUT", 0.05)
+
+    ok = asyncio.run(deps._install_subprocess(tmp_path, ["requests"]))
+    assert ok is False
+    assert fake.killed is True

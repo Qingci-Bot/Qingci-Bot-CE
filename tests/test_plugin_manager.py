@@ -1,5 +1,7 @@
 """PluginManager 插件管理器测试：加载/重载/依赖/循环依赖/多类拒绝"""
 
+import json
+
 import pytest
 
 
@@ -218,6 +220,63 @@ async def test_matchers_event_type_inverted_index(bot):
     assert priorities == sorted(priorities)
 
 
+async def test_matchers_dynamic_append_picked_up_without_invalidation(bot):
+    """运行期动态 append matcher（不手动失效缓存）也应被调度识别（签名检测）"""
+    pm = bot.plugin_manager
+    await pm.load_external("plugin_pkg.simple_plugin", bot)
+    plugin = pm.get("simple")
+    before = len(pm.all_matchers())
+    plugin.matchers.append(_make_matcher("dyn", 99))
+    after = pm.all_matchers()
+    assert len(after) == before + 1
+    assert "dyn" in [m.owner for m in after]
+
+
+async def test_copy_plugin_dir_rejects_invalid_name(bot, tmp_path):
+    """非法插件名（路径穿越）必须拒绝安装"""
+    pm = bot.plugin_manager
+    src = tmp_path / "evil"
+    src.mkdir()
+    (src / "__init__.py").write_text("", encoding="utf-8")
+    plugins_dir = tmp_path / "plugins"
+    plugins_dir.mkdir()
+
+    name, target = await pm._copy_plugin_dir(src, "..", plugins_dir)
+    assert name == ""
+    assert target is None
+    # 未发生路径穿越：plugins 目录未写入任何内容
+    assert list(plugins_dir.iterdir()) == []
+
+
+async def test_copy_plugin_dir_keeps_old_on_failure(bot, tmp_path):
+    """复制失败时保留旧版本插件目录（staging 原子替换）"""
+    pm = bot.plugin_manager
+    plugins_dir = tmp_path / "plugins"
+    plugins_dir.mkdir()
+    target = plugins_dir / "demo"
+    target.mkdir()
+    (target / "old.txt").write_text("old", encoding="utf-8")
+
+    # 源目录不存在 → copytree 抛 OSError，旧目录必须保留
+    name, result = await pm._copy_plugin_dir(tmp_path / "missing-src", "demo", plugins_dir)
+    assert result is None
+    assert (target / "old.txt").read_text(encoding="utf-8") == "old"
+
+
+async def test_discover_metadata_scans_dir_plugins(bot, tmp_path):
+    """discover_metadata 应扫描目录型插件 plugins/<name>/plugin.json"""
+    pm = bot.plugin_manager
+    plugins_dir = tmp_path / "plugins"
+    (plugins_dir / "alpha").mkdir(parents=True)
+    (plugins_dir / "alpha" / "plugin.json").write_text(
+        json.dumps({"name": "alpha", "version": "1.0.0"}), encoding="utf-8"
+    )
+    metas = pm.discover_metadata(plugins_dir)
+    assert len(metas) == 1
+    assert metas[0]["name"] == "alpha"
+    assert pm._metadata_cache["alpha"]["version"] == "1.0.0"
+
+
 def _make_matcher(owner: str, priority: int):
     from bot.plugin.matcher import Matcher
 
@@ -255,3 +314,68 @@ async def test_load_builtin_fallback_when_dir_missing(bot, monkeypatch):
     await pm.load_builtin(bot)
     names = {p.name for p in pm.plugins.values()}
     assert names == set(_BUILTIN_PLUGINS)
+
+
+# ──────────────────────────────────────────────────────────────────
+# 插件热重载 watcher：加载失败的插件修复文件后应触发重试加载
+# ──────────────────────────────────────────────────────────────────
+
+
+class _WatcherFakeManager:
+    """最小 manager 替身：只记录 load_external 调用与 _load_errors 状态"""
+
+    def __init__(self, load_errors: dict[str, str], loaded: set[str] | None = None):
+        self._load_errors = dict(load_errors)
+        self.loaded = set(loaded or ())
+        self.calls: list[str] = []
+
+    def get(self, name):
+        return object() if name in self.loaded else None
+
+    async def load_external(self, module_path, bot):
+        self.calls.append(module_path)
+        self._load_errors.pop(module_path.rsplit(".", 1)[-1], None)
+        return True
+
+
+async def test_watcher_retries_failed_plugin_on_file_change():
+    """加载失败的插件（在 _load_errors 中）文件变更时，watcher 应触发重试加载"""
+    from pathlib import Path
+
+    from bot.plugin.watcher import PluginWatcher
+
+    mgr = _WatcherFakeManager(load_errors={"broken": "ImportError: boom"})
+    watcher = PluginWatcher(mgr, object(), Path("/tmp/plugins"))
+    await watcher._reload_plugin("/tmp/plugins/broken/__init__.py")
+
+    assert mgr.calls == ["plugins.broken"]
+    # 重试加载成功后错误记录被清除
+    assert "broken" not in mgr._load_errors
+
+
+async def test_watcher_does_not_retry_unknown_plugin():
+    """插件未加载且不在 _load_errors 中（如新文件首次扫描）时，不触发加载"""
+    from pathlib import Path
+
+    from bot.plugin.watcher import PluginWatcher
+
+    mgr = _WatcherFakeManager(load_errors={})
+    watcher = PluginWatcher(mgr, object(), Path("/tmp/plugins"))
+    await watcher._reload_plugin("/tmp/plugins/other/__init__.py")
+
+    assert mgr.calls == []
+
+
+async def test_watcher_reloads_loaded_plugin():
+    """已加载插件文件变更仍走 reload 路径（不经过 load_external）"""
+    from pathlib import Path
+
+    from bot.plugin.watcher import PluginWatcher
+
+    mgr = _WatcherFakeManager(load_errors={}, loaded={"simple"})
+    watcher = PluginWatcher(mgr, object(), Path("/tmp/plugins"))
+    # reload 走 _manager.reload（未在 FakeManager 定义即 AttributeError）
+    # → 被 watcher 内部 except 捕获，load_external 不应被调用
+    await watcher._reload_plugin("/tmp/plugins/simple/__init__.py")
+
+    assert mgr.calls == []

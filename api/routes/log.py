@@ -176,7 +176,10 @@ async def clear_all_sessions(confirm: bool = Query(default=False)):
             detail="清除所有会话需显式传入 confirm=true 确认",
         )
     bot = _get_bot_instance()
-    await bot.llm.clear_session()
+    if bot.llm is not None:
+        await bot.llm.clear_session()
+    else:
+        await bot.db.clear_sessions()
     return {"message": "所有会话已清除"}
 
 

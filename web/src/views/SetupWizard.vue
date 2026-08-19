@@ -68,9 +68,14 @@ async function testConnection() {
     if (apiUrl.value.trim()) body.api_url = apiUrl.value.trim();
     if (model.value.trim()) body.model = model.value.trim();
 
+    // 鉴权已启用时测试连接也需要携带 X-API-Key，与 store.apiFetch 行为保持一致
+    const headers = { 'Content-Type': 'application/json' };
+    const apiKeyHeader = localStorage.getItem('qingci_api_key');
+    if (apiKeyHeader) headers['X-API-Key'] = apiKeyHeader;
+
     const res = await fetch('/api/config/llm/test', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
     const data = await res.json();

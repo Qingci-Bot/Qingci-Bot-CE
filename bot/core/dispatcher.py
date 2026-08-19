@@ -285,6 +285,14 @@ class MessageDispatcher:
         except RejectException:
             await self._register_step(bot, matcher, plugin, mctx)
             return None, True
+        except Exception:
+            # 普通异常：记录日志并消费事件。阶梯已在上方删除，不残留悬挂状态；
+            # 返回 (None, True) 保证不越过 _run_matchers 中断整个事件分发。
+            logger.exception(
+                f"会话阶梯续接异常: owner={matcher.owner}, "
+                f"handler={getattr(matcher.handler, '__name__', repr(matcher.handler))}"
+            )
+            return None, True
         finally:
             if matcher.temp:
                 bot.plugin_manager.remove_temp_matcher(matcher)
@@ -439,7 +447,7 @@ class MessageDispatcher:
 
         消息段统一归一化为 OneBot 12 段存储（Message.from_raw 自动识别
         v11 段：at -> mention、record -> voice 等）；
-        at_list 保持 v11 语义（0 表示 @全体），is_at_bot 用 self_id 匹配。
+        at_list 保持 v11 语义（"0" 表示 @全体），is_at_bot 用 self_id 匹配。
         """
         ctx = MessageContext(raw_event=event)
 
@@ -479,7 +487,8 @@ class MessageDispatcher:
                     if self_id_str and uid == self_id_str:
                         ctx.is_at_bot = True
             elif seg_type == "mention_all":
-                ctx.at_list.append(0)  # 0 表示全体成员（v11 语义）
+                # "0" 表示全体成员（v11 语义，与 v12 路径字符串列表一致）
+                ctx.at_list.append("0")
             elif seg_type == "image":
                 ctx.images.append(str(data.get("file_id") or data.get("url") or ""))
 

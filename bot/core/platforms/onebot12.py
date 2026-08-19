@@ -159,7 +159,14 @@ class OneBot12Adapter(PlatformAdapter):
         ws = web.WebSocketResponse(heartbeat=_WS_HEARTBEAT)
         await ws.prepare(request)
         self._clients[ws] = {"self_id": "", "impl": "", "last_active": time.time()}
+        # 接入通知：首个协议端接入广播 connected，已有连接在线时再次接入按重连语义
+        # （与 telegram 适配器的连接通知写法一致）
+        was_connected = self._connected
         self._connected = True
+        if was_connected:
+            await self.notify_reconnected()
+        else:
+            await self.notify_connected()
         logger.info(
             "OneBot 12 协议端接入 (from %s, clients=%d, protocol=%s)",
             request.remote,

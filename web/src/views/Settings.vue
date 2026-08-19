@@ -107,6 +107,18 @@ async function saveConfig() {
     showToast('error', '配置尚未加载完成，无法保存');
     return;
   }
+  // 端口校验：填写了非法端口时明确提示，而不是静默回退默认值
+  if (currentPlatform.value !== 'telegram') {
+    const rawPort =
+      currentPlatform.value === 'onebot' ? form.onebot.port : form.platforms.onebot12.port;
+    if (rawPort !== '' && rawPort != null) {
+      const n = Number(rawPort);
+      if (isNaN(n) || n < 1024 || n > 65535) {
+        showToast('error', `监听端口无效：${rawPort}（需为 1024-65535 之间的整数）`);
+        return;
+      }
+    }
+  }
   // 服务端 API Key 由非空变空意味着关闭鉴权，需要二次确认
   if (store.config.api_key && !form.api_key.trim()) {
     if (!window.confirm('清空服务端 API Key 将关闭鉴权，确认继续？')) return;

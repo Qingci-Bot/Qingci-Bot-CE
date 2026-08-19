@@ -35,6 +35,14 @@ const drawerOpen = ref(false);
 const drawerPlugin = ref(null);
 const drawerPage = ref(null);
 
+// 插件指标缓存（name -> metrics）：store.fetchStatus() 每 3 秒整体替换 plugins 数组，
+// 挂在 plugin 对象上的 _metrics 会被轮询清掉，故改用组件本地 Map 保存
+const metricsMap = ref(new Map());
+// GET /api/plugin 返回的插件详情（含 author / load_error / pages），与 store.plugins 按 name 合并
+const pluginDetails = ref([]);
+// 插件市场请求序号：快速切换 Tab 时丢弃过期响应，避免竞态覆盖
+let marketSeq = 0;
+
 // 插件配置抽屉（JSON Schema 自动生成表单）
 const configOpen = ref(false);
 const configPlugin = ref(null);
@@ -45,21 +53,51 @@ const configLoading = ref(false);
 
 onMounted(() => {
   store.fetchStatus();
+  // 额外拉取 /api/plugin 详情（author / load_error / pages），
+  // 与 store.plugins（来自 /api/bot/status，无 author/load_error）按 name 合并
+  fetchPluginDetails();
 });
 
+async function fetchPluginDetails() {
+  try {
+    pluginDetails.value = await store.apiFetch('/api/plugin');
+  } catch (e) {
+    // Bot 未启动等场景下该接口不可用，忽略即可（卡片仅使用 status 数据）
+  }
+}
+
 const categories = computed(() => {
-  const cats = new Set(store.plugins.map((p) => p.category || '未分类'));
+  const cats = new Set(mergedPlugins.value.map((p) => p.category || '未分类'));
   return ['all', ...Array.from(cats).sort()];
 });
 
 const filteredPlugins = computed(() => {
-  if (activeCategory.value === 'all') return store.plugins;
-  return store.plugins.filter((p) => (p.category || '未分类') === activeCategory.value);
+  if (activeCategory.value === 'all') return mergedPlugins.value;
+  return mergedPlugins.value.filter((p) => (p.category || '未分类') === activeCategory.value);
+});
+
+// store.plugins 与 /api/plugin 详情按 name 合并：仅补充 store.plugins 缺失的
+// author / load_error 字段（/api/bot/status 不含），不覆盖轮询到的实时 enabled/status；
+// 并追加仅在 /api/plugin 中出现（如加载失败）的插件，保证 load_error 可展示
+const mergedPlugins = computed(() => {
+  const detailsByName = new Map((pluginDetails.value || []).map((d) => [d.name, d]));
+  const merged = store.plugins.map((p) => {
+    const detail = detailsByName.get(p.name);
+    if (!detail) return p;
+    return { ...p, author: detail.author, load_error: detail.load_error };
+  });
+  for (const d of pluginDetails.value || []) {
+    if (!store.plugins.some((p) => p.name === d.name)) merged.push(d);
+  }
+  return merged;
 });
 
 const drawerUrl = computed(() => {
   if (!drawerPlugin.value) return '';
-  return `/api/plugin-data/${drawerPlugin.value.name}/`;
+  // 多页面插件优先使用后端返回的页面 URL；追加 cache-buster 强制 iframe 刷新
+  const base = drawerPage.value?.url || `/api/plugin-data/${drawerPlugin.value.name}/`;
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}t=${Date.now()}`;
 });
 
 const statusLabel = (s) =>
@@ -225,6 +263,8 @@ async function toggleEnabled(plugin) {
     showToast('success', `插件 ${plugin.name} 已${plugin.enabled ? '禁用' : '启用'}`);
   } catch (e) {
     showToast('error', `${action === 'disable' ? '禁用' : '启用'}失败：${e.message}`);
+    // 请求失败后强制刷新，恢复开关真实状态（:checked 由 plugin.enabled 驱动）
+    await store.fetchStatus();
   } finally {
     loading.value = '';
   }
@@ -238,8 +278,7 @@ async function toggleMetrics(name) {
   expandedMetrics.value = name;
   try {
     const data = await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}/metrics`);
-    const plugin = store.plugins.find((p) => p.name === name);
-    if (plugin) plugin._metrics = data;
+    metricsMap.value.set(name, data);
   } catch (e) {
     showToast('error', `获取指标失败：${e.message}`);
     expandedMetrics.value = '';
@@ -250,6 +289,8 @@ async function fetchCommands() {
   try {
     commands.value = await store.apiFetch('/api/command/conflicts');
   } catch (e) {
+    // 失败置 null，模板显示错误态而非"暂无命令"
+    commands.value = null;
     showToast('error', `获取命令列表失败：${e.message}`);
   }
 }
@@ -344,6 +385,7 @@ const marketUpdatedText = computed(() => {
 });
 
 async function fetchMarket() {
+  const seq = ++marketSeq;
   marketLoading.value = true;
   marketError.value = '';
   try {
@@ -352,15 +394,17 @@ async function fetchMarket() {
       store.apiFetch('/api/plugins/market/info'),
       store.apiFetch('/api/plugins/market/source'),
     ]);
+    if (seq !== marketSeq) return; // 已发起更新的请求，丢弃过期响应
     market.value = items;
     marketInfo.value = info;
     marketSource.value = source.url || '';
     marketDefaultSource.value = source.default_url || '';
   } catch (e) {
+    if (seq !== marketSeq) return;
     marketError.value = e.message || '获取市场失败';
     showToast('error', `获取插件市场失败：${e.message}`);
   } finally {
-    marketLoading.value = false;
+    if (seq === marketSeq) marketLoading.value = false;
   }
 }
 
@@ -557,15 +601,23 @@ function openHomepage(url) {
                   :title="expandedMetrics === plugin.name ? '收起指标' : '查看指标'"
                   @click="toggleMetrics(plugin.name)"
                 >
-                  <span :class="{ spin: expandedMetrics === plugin.name && !plugin._metrics }"
+                  <span
+                    :class="{ spin: expandedMetrics === plugin.name && !metricsMap.get(plugin.name) }"
                     >⏱</span
                   >
                   指标
                 </button>
               </div>
-              <!-- 指标面板 -->
-              <div v-if="expandedMetrics === plugin.name && plugin._metrics" class="metrics-panel">
-                <div v-if="plugin._metrics.length === 0" class="empty-state" style="padding: 12px">
+              <!-- 指标面板（数据存于组件本地 metricsMap，轮询刷新 plugins 数组不会丢失） -->
+              <div
+                v-if="expandedMetrics === plugin.name && metricsMap.get(plugin.name)"
+                class="metrics-panel"
+              >
+                <div
+                  v-if="metricsMap.get(plugin.name).length === 0"
+                  class="empty-state"
+                  style="padding: 12px"
+                >
                   暂无指标数据
                 </div>
                 <table v-else class="metrics-table">
@@ -580,7 +632,7 @@ function openHomepage(url) {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="m in plugin._metrics" :key="m.handler">
+                    <tr v-for="m in metricsMap.get(plugin.name)" :key="m.handler">
                       <td>{{ m.handler }}</td>
                       <td>
                         <span class="tag tag-accent">{{ m.event_type }}</span>
@@ -648,6 +700,7 @@ function openHomepage(url) {
         @close="closeDrawer"
       >
         <iframe
+          :key="drawerUrl"
           :src="drawerUrl"
           class="drawer-iframe"
           sandbox="allow-scripts allow-same-origin allow-forms"
@@ -707,9 +760,16 @@ function openHomepage(url) {
       <div class="card fade-in">
         <div class="card-header">
           <div class="card-title">已注册命令</div>
-          <span class="text-muted">共 {{ commands.length }} 条</span>
+          <span class="text-muted">共 {{ commands?.length ?? 0 }} 条</span>
         </div>
-        <div v-if="commands.length === 0" class="empty-state">
+        <div v-if="commands === null" class="empty-state">
+          <div class="icon">⚠</div>
+          <div>命令列表加载失败</div>
+          <button class="btn btn-secondary btn-sm" style="margin-top: 12px" @click="fetchCommands">
+            <span>↻</span> 重试
+          </button>
+        </div>
+        <div v-else-if="commands.length === 0" class="empty-state">
           <div class="icon">◇</div>
           <div>暂无命令</div>
         </div>

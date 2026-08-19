@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +31,10 @@ INSTANCE_META = "instance.json"
 DEFAULT_PORT = 8080
 DEFAULT_INSTANCE_NAME = "default"
 DEFAULT_PLATFORM = "onebot"
+
+# 端口分配/占用临界区锁：create_instance 的「计算空闲端口 + 写元数据占用」必须
+# 原子，否则并发创建可能分到同一端口（TOCTOU）。
+_PORT_ALLOC_LOCK = threading.Lock()
 
 # 实例可绑定的主平台（创建实例时选定，驱动该实例默认启用的适配器）
 SUPPORTED_PLATFORMS = ("onebot", "onebot12", "telegram")
@@ -191,7 +196,10 @@ def instance_adapters(name: str) -> dict[str, bool]:
 
 
 def _next_free_port() -> int:
-    """从 8080 起分配未被占用（DB 层面）的端口"""
+    """从 8080 起分配未被占用（DB 层面）的端口
+
+    须在 _PORT_ALLOC_LOCK 临界区内调用（由 create_instance 保证）。
+    """
     used = {inst.port for inst in list_instances()}
     port = DEFAULT_PORT
     while port in used:
@@ -231,29 +239,36 @@ def create_instance(
 
     # 端口须在目录创建前分配：list_instances() 会把已建目录按默认端口计入，
     # 若先 mkdir 再分配会把当前实例误判为占用 8080，导致端口 +1 偏移。
-    port = port or _next_free_port()
+    # 分配 + 写元数据占用全程持锁，避免并发创建分到同一端口（TOCTOU）。
+    with _PORT_ALLOC_LOCK:
+        if port is not None:
+            used_ports = {inst.port for inst in list_instances()}
+            if port in used_ports:
+                raise ValueError(f"端口 {port} 已被其他实例占用")
+        else:
+            port = _next_free_port()
 
-    path.mkdir(parents=True, exist_ok=True)
+        path.mkdir(parents=True, exist_ok=True)
 
-    # config.yaml：从模板复制，再按主平台覆盖适配器启用开关
-    src = template or (app_root() / "config.example.yaml")
-    if src.is_file():
-        (path / "config.yaml").write_bytes(src.read_bytes())
-    _apply_platform_overlay(path / "config.yaml", platform)
+        # config.yaml：从模板复制，再按主平台覆盖适配器启用开关
+        src = template or (app_root() / "config.example.yaml")
+        if src.is_file():
+            (path / "config.yaml").write_bytes(src.read_bytes())
+        _apply_platform_overlay(path / "config.yaml", platform)
 
-    # plugins/ 与 data/ 目录
-    (path / "plugins").mkdir(exist_ok=True)
-    (path / "data").mkdir(exist_ok=True)
+        # plugins/ 与 data/ 目录
+        (path / "plugins").mkdir(exist_ok=True)
+        (path / "data").mkdir(exist_ok=True)
 
-    created_at = datetime.now().isoformat(timespec="seconds")
-    meta = {
-        "name": name,
-        "port": port,
-        "description": description,
-        "created_at": created_at,
-        "platform": platform,
-    }
-    _write_meta(path, meta)
+        created_at = datetime.now().isoformat(timespec="seconds")
+        meta = {
+            "name": name,
+            "port": port,
+            "description": description,
+            "created_at": created_at,
+            "platform": platform,
+        }
+        _write_meta(path, meta)
     return InstanceInfo(
         name=name,
         port=port,
@@ -264,7 +279,9 @@ def create_instance(
 
 
 def delete_instance(name: str) -> bool:
-    """删除实例目录（含数据）。返回 False 表示实例不存在。"""
+    """删除实例目录（含数据）。返回 False 表示实例不存在或名称非法。"""
+    if not is_valid_name(name):
+        return False
     path = instance_path(name)
     if not path.is_dir():
         return False

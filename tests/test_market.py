@@ -93,6 +93,8 @@ def test_semver_compare():
     assert is_newer("1.2.3-beta", "1.2.2")  # 预发布版本号主版本更高仍判定更新
     assert not is_newer("1.2.3-beta", "1.2.3-alpha")  # 非数字段截断，视为相同
     assert not is_newer("v1.2.0", "1.2.0")  # v 前缀忽略非数字部分
+    assert not is_newer("1.2.0", "v1.2.0")  # 已装插件带 v 前缀，索引同版本不算更新
+    assert is_newer("1.2.1", "v1.2.0")  # v 前缀不干扰跨版本比较
 
 
 # ---------- MarketClient ----------

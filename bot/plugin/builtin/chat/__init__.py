@@ -335,6 +335,7 @@ class ChatPlugin(PluginBase):
             now = datetime.now(timezone.utc).isoformat()
             await broadcast_message(
                 {
+                    "id": ctx.message_id,
                     "message_id": ctx.message_id,
                     "user_id": ctx.user_id,
                     "group_id": group_id,
@@ -346,6 +347,7 @@ class ChatPlugin(PluginBase):
             )
             await broadcast_message(
                 {
+                    "id": f"{ctx.message_id}_reply",
                     "message_id": f"{ctx.message_id}_reply",
                     "user_id": ctx.self_id,
                     "group_id": group_id,

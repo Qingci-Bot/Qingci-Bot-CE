@@ -65,9 +65,28 @@ def test_get_and_delete(instances_dir):
     assert m.delete_instance("alpha") is False
 
 
+def test_delete_invalid_name_returns_false(instances_dir):
+    """非法实例名（路径穿越）必须拒绝删除，不得触碰实例目录之外"""
+    assert m.delete_instance("..") is False
+    assert m.delete_instance("../evil") is False
+    assert m.delete_instance(".hidden") is False
+
+
 def test_metadata_roundtrip_preserves_port(instances_dir):
     m.create_instance("alpha", port=9100)
     assert m.get_instance("alpha").port == 9100
+
+
+def test_explicit_port_conflict_raises(instances_dir):
+    """显式指定已被其他实例占用的端口必须拒绝（冲突 400 由 API 层转换）"""
+    m.create_instance("alpha", port=9100)
+    with pytest.raises(ValueError, match="端口"):
+        m.create_instance("beta", port=9100)
+    # 未创建的实例不落盘
+    assert m.get_instance("beta") is None
+    # 另一空闲端口不受影响
+    inst = m.create_instance("beta", port=9101)
+    assert inst.port == 9101
 
 
 def test_default_name_prefers_default_instance(instances_dir):

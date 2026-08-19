@@ -84,17 +84,31 @@ class PluginWatcher:
                 logger.exception("插件热重载轮询异常")
 
     async def _reload_plugin(self, path: str) -> None:
-        """重载发生变更的插件（若已加载）"""
+        """重载发生变更的插件（若已加载）；加载失败的插件视为修复信号重试加载"""
         name = self._plugin_name_from_path(path)
         if not name:
             return
-        if self._manager.get(name) is None:
+        if self._manager.get(name) is not None:
+            try:
+                await self._manager.reload(name, self._bot)
+                logger.info(f"热重载插件: {name}（{os.path.basename(path)}）")
+            except Exception:
+                logger.exception(f"热重载插件 {name} 失败，旧插件保持生效")
             return
-        try:
-            await self._manager.reload(name, self._bot)
-            logger.info(f"热重载插件: {name}（{os.path.basename(path)}）")
-        except Exception:
-            logger.exception(f"热重载插件 {name} 失败，旧插件保持生效")
+        # 插件未加载：若此前加载失败（记录在 _load_errors 中），文件变更说明
+        # 开发者已修复代码，应触发重试加载而非一直静默跳过。
+        if name in self._manager._load_errors:
+            logger.info(
+                f"插件 {name} 文件已变更，重试加载（此前失败: {self._manager._load_errors[name]}）"
+            )
+            try:
+                ok = await self._manager.load_external(f"plugins.{name}", self._bot)
+                if ok:
+                    logger.info(f"插件 {name} 重试加载成功（{os.path.basename(path)}）")
+                else:
+                    logger.warning(f"插件 {name} 重试加载仍失败，等待下次文件变更")
+            except Exception:
+                logger.exception(f"插件 {name} 重试加载异常")
 
     async def stop(self) -> None:
         """停止监听任务"""

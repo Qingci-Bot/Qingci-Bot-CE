@@ -116,19 +116,19 @@ def create_app() -> FastAPI:
             content={
                 "detail": "服务器内部错误",
                 "error_code": "INTERNAL_ERROR",
-                "error_type": type(exc).__name__,
             },
         )
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
-        """HTTP 异常统一响应格式"""
+        """HTTP 异常统一响应格式（保留 exc.headers，如 401 的 WWW-Authenticate）"""
         return JSONResponse(
             status_code=exc.status_code,
             content={
                 "detail": exc.detail,
                 "error_code": f"HTTP_{exc.status_code}",
             },
+            headers=exc.headers,
         )
 
     @app.exception_handler(ValidationError)

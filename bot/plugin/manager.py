@@ -31,6 +31,14 @@ logger = logging.getLogger("qingci-bot.plugin.manager")
 # 需回退到显式清单加载；新增内置插件时同步更新此处与 qingci-bot-ce.spec 的 hiddenimports）
 _BUILTIN_PLUGINS: tuple[str, ...] = ("admin", "chat", "help", "imagegen", "knowledge")
 
+# 插件名合法性：仅允许字母/数字/下划线/连字符，禁止路径穿越（../ 等）
+_PLUGIN_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
+
+
+def _is_valid_plugin_name(name: str) -> bool:
+    """校验插件名是否合法（用于市场安装等从外部输入获取插件名的场景）"""
+    return bool(_PLUGIN_NAME_RE.fullmatch(name))
+
 
 @dataclass
 class MatcherMetrics:
@@ -123,6 +131,8 @@ class PluginManager:
     def __init__(self):
         self._plugins: dict[str, PluginBase] = {}
         self._cached_matchers: list[Matcher] | None = None
+        # 调度缓存签名：记录构建缓存时各插件 matcher 数量，检测运行期动态增删
+        self._matchers_sig: tuple | None = None
         # 事件类型倒排索引: event_type -> 该类型的 Matcher（保持优先级升序）
         self._matcher_index: dict[str, list[Matcher]] = {}
         # Matcher 执行指标: owner_name -> Matcher 实例 -> MatcherMetrics
@@ -175,7 +185,8 @@ class PluginManager:
         避免每次分发都对全部 Matcher 做线性扫描过滤（注意/请求等低频
         事件类型收益尤其明显）。
         """
-        if self._cached_matchers is None:
+        if self._cached_matchers is None or self._matchers_sig != self._matchers_signature():
+            self._matchers_sig = self._matchers_signature()
             result = []
             for plugin in self._plugins.values():
                 if plugin.matchers and plugin.status == PluginStatus.LOADED:
@@ -192,6 +203,19 @@ class PluginManager:
         if post_type:
             return list(self._matcher_index.get(post_type, []))
         return list(self._cached_matchers)
+
+    def _matchers_signature(self) -> tuple:
+        """当前已加载插件的 matcher 数量签名，用于检测运行期动态增删 matcher
+
+        plugin.matchers 是 SDK 公开可变列表，插件可能在 on_load 之后运行时
+        append/remove（一次性 matcher 等场景）；通过签名比对使调度缓存失效，
+        避免新增 matcher 静默不参与调度。
+        """
+        return tuple(
+            (name, len(p.matchers) if p.matchers else 0)
+            for name, p in self._plugins.items()
+            if p.status == PluginStatus.LOADED
+        )
 
     def _invalidate_matchers_cache(self) -> None:
         self._cached_matchers = None
@@ -255,10 +279,16 @@ class PluginManager:
         from fastapi.staticfiles import StaticFiles
 
         for plugin_name, pages in self._plugin_pages.items():
-            for page in pages:
+            for idx, page in enumerate(pages):
                 static_dir = page.get("static_dir", "")
                 if static_dir and os.path.isdir(static_dir):
-                    mount_path = f"/api/plugin-data/{plugin_name}"
+                    # 首个页面挂载在 /api/plugin-data/<name>/，其余页面按索引区分，
+                    # 保证多页面插件每个入口都能打开对应静态目录
+                    mount_path = (
+                        f"/api/plugin-data/{plugin_name}"
+                        if idx == 0
+                        else f"/api/plugin-data/{plugin_name}/{idx}"
+                    )
                     # 避免重复挂载
                     if not any(
                         r.path == mount_path for r in self._web_app.routes if hasattr(r, "path")
@@ -267,7 +297,7 @@ class PluginManager:
                             self._web_app.mount(
                                 mount_path,
                                 StaticFiles(directory=static_dir, html=True),
-                                name=f"plugin-static-{plugin_name}",
+                                name=f"plugin-static-{plugin_name}-{idx}",
                             )
                             logger.info(
                                 f"插件 {plugin_name} 管理页面已挂载: {mount_path} -> {static_dir}"
@@ -276,9 +306,20 @@ class PluginManager:
                             logger.exception(f"挂载插件 {plugin_name} 管理页面失败: {static_dir}")
 
     def get_plugin_pages(self, name: str) -> list[dict]:
-        """获取指定插件的管理页面注册信息（不含 static_dir）"""
+        """获取指定插件的管理页面注册信息（不含 static_dir，附带访问 URL）"""
         pages = self._plugin_pages.get(name, [])
-        return [{"title": p["title"], "icon": p["icon"]} for p in pages]
+        return [
+            {
+                "title": p["title"],
+                "icon": p["icon"],
+                "url": (
+                    f"/api/plugin-data/{name}"
+                    if i == 0
+                    else f"/api/plugin-data/{name}/{i}"
+                ),
+            }
+            for i, p in enumerate(pages)
+        ]
 
     # ---- 配置 schema 自动生成配置 UI ----
 
@@ -378,17 +419,26 @@ class PluginManager:
     # ---- 元数据发现 ----
 
     def discover_metadata(self, directory: Path) -> list[dict]:
-        """扫描目录中的 plugin.json 元数据，无需导入模块"""
+        """扫描目录中的 plugin.json 元数据，无需导入模块
+
+        目录型插件（plugins/<name>/plugin.json）为主形态；同时兼容
+        plugins/ 根目录下直接放置的 plugin.json（文件型插件共用）。
+        """
         results: list[dict] = []
         if not directory.is_dir():
             return results
-        for py_file in sorted(directory.glob("*.py")):
-            if py_file.name.startswith("_"):
+        # 根目录直接放置的 plugin.json
+        root_meta = _load_plugin_json(directory)
+        if root_meta:
+            self._metadata_cache["."] = root_meta
+            results.append(root_meta)
+        # 目录型插件：plugins/<name>/plugin.json
+        for child in sorted(directory.iterdir()):
+            if not child.is_dir() or child.name.startswith("."):
                 continue
-            # 尝试同目录下的 plugin.json
-            meta = _load_plugin_json(py_file.parent)
+            meta = _load_plugin_json(child)
             if meta:
-                self._metadata_cache[py_file.stem] = meta
+                self._metadata_cache[child.name] = meta
                 results.append(meta)
         return results
 
@@ -801,6 +851,8 @@ class PluginManager:
                 except Exception:
                     logger.exception(f"清理插件 {name} 会话阶梯异常")
             logger.info(f"插件已卸载: {name}")
+        # 清理加载错误记录（已卸载则不再展示 error 状态幽灵条目）
+        self._load_errors.pop(name, None)
         self._invalidate_matchers_cache()
 
     async def remove(self, name: str) -> None:
@@ -894,7 +946,9 @@ class PluginManager:
         module_path = type(plugin).__module__
         try:
             await self._load_or_reload(module_path, bot, replaced_name=name)
-        except Exception:
+        except Exception as e:
+            # 记录加载错误供 WebUI 展示（reload 失败时实例状态与磁盘/模块脱节）
+            self._load_errors[name] = f"{type(e).__name__}: {e}"
             logger.exception(f"重载插件 {name} 失败，旧插件保持生效")
             raise
         finally:
@@ -1071,25 +1125,38 @@ class PluginManager:
     async def _copy_plugin_dir(
         self, src: Path, name: str | None, plugins_dir: Path
     ) -> tuple[str, Path | None]:
-        """复制插件目录到 plugins/，返回 (插件名, 目标目录)"""
+        """复制插件目录到 plugins/，返回 (插件名, 目标目录)
+
+        先复制到 staging 目录再原子替换，失败时保留旧版本插件目录。
+        """
         import shutil
+        import uuid
 
         target_name = name or src.name
+        # 插件名合法性校验：市场索引/仓库目录名可能被篡改（路径穿越）
+        if not _is_valid_plugin_name(target_name):
+            logger.error(f"非法插件名，拒绝安装: {target_name!r}")
+            return "", None
         target = plugins_dir / target_name
-        if target.exists():
-            shutil.rmtree(target, ignore_errors=True)
+        # 先复制到 staging，成功后原子替换（同目录 rename），失败保留旧版本
+        staging = plugins_dir / f".staging-{target_name}-{uuid.uuid4().hex[:8]}"
         try:
             shutil.copytree(
-                src, target, ignore=shutil.ignore_patterns(".git", "__pycache__", ".venv")
+                src, staging, ignore=shutil.ignore_patterns(".git", "__pycache__", ".venv")
             )
+            if target.exists():
+                shutil.rmtree(target, ignore_errors=True)
+            staging.rename(target)
             return target_name, target
         except OSError as e:
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
             logger.error(f"复制插件目录失败: {e}")
             return "", None
 
     @staticmethod
     async def _run_subprocess(cmd: list[str]) -> bool:
-        """运行子进程并返回是否成功"""
+        """运行子进程并返回是否成功（communicate 带超时，防止永久挂起）"""
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -1098,7 +1165,16 @@ class PluginManager:
                 stderr=asyncio.subprocess.STDOUT,
                 creationflags=NO_WINDOW_FLAG,
             )
-            stdout, _ = await proc.communicate()
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                proc.kill()
+                try:
+                    await proc.wait()
+                except Exception:
+                    pass
+                logger.error(f"子进程超时（{cmd[0]}），已终止")
+                return False
             if proc.returncode != 0:
                 logger.error(f"子进程失败 ({cmd[0]}): {stdout.decode(errors='replace')[-2000:]}")
                 return False
@@ -1109,18 +1185,21 @@ class PluginManager:
 
     @staticmethod
     async def _download_archive(url: str, dest: Path) -> bool:
-        """下载远程归档文件到 dest"""
+        """下载远程归档文件到 dest（同步 urllib 放入线程池，避免阻塞事件循环）"""
         import shutil
         import urllib.request
 
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Qingci-Bot-CE"})
-            with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as f:
-                shutil.copyfileobj(resp, f)
-            return True
-        except (OSError, urllib.error.URLError) as e:
-            logger.error(f"下载失败 {url}: {e}")
-            return False
+        def _sync_download() -> bool:
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Qingci-Bot-CE"})
+                with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as f:
+                    shutil.copyfileobj(resp, f)
+                return True
+            except (OSError, urllib.error.URLError) as e:
+                logger.error(f"下载失败 {url}: {e}")
+                return False
+
+        return await asyncio.to_thread(_sync_download)
 
     @staticmethod
     async def _extract_archive(archive: Path, dest_dir: Path) -> Path:
@@ -1135,10 +1214,16 @@ class PluginManager:
                 zf.extractall(dest_dir)
         elif fname.endswith((".tar.gz", ".tgz", ".tar.bz2", ".tar")):
             with tarfile.open(archive) as tf:
-                # Python 3.12+ 支持安全解压过滤，旧版本回退（来源通常可信）
+                # 安全解压：Py3.12+ 用 data_filter；旧版本手动预检成员路径，
+                # 拒绝绝对路径与 .. 成员，防止 Zip Slip 覆盖解压目录外文件
                 if hasattr(tarfile, "data_filter"):
                     tf.extractall(dest_dir, filter="data")
                 else:
+                    dest_root = dest_dir.resolve()
+                    for m in tf.getmembers():
+                        member_target = (dest_root / m.name).resolve()
+                        if not member_target.is_relative_to(dest_root):
+                            raise ValueError(f"归档包含非法路径: {m.name}")
                     tf.extractall(dest_dir)
         else:
             raise ValueError(f"不支持的归档格式: {fname}")

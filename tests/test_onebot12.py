@@ -260,3 +260,36 @@ async def test_heartbeat_and_state(adapter):
                 await asyncio.sleep(0.05)
             assert adapter.last_heartbeat > 0
     assert adapter.is_connected is False
+
+
+# ---------- 接入通知 ----------
+
+
+@pytest.mark.asyncio
+async def test_ws_connect_notifications(adapter):
+    """协议端接入触发 notify_connected；已有连接在线时再次接入触发 notify_reconnected"""
+    events: list[str] = []
+    adapter.on_connect(lambda: events.append("connected"))
+    adapter.on_reconnect(lambda: events.append("reconnected"))
+
+    async with aiohttp.ClientSession() as s1, aiohttp.ClientSession() as s2:
+        async with s1.ws_connect(WS_URL):
+            # 首个协议端接入：connected
+            for _ in range(100):
+                if "connected" in events:
+                    break
+                await asyncio.sleep(0.05)
+            assert "connected" in events
+            assert "reconnected" not in events
+            assert adapter.is_connected is True
+
+            # 第二个协议端接入（第一个仍在线）：reconnected
+            async with s2.ws_connect(WS_URL):
+                for _ in range(100):
+                    if "reconnected" in events:
+                        break
+                    await asyncio.sleep(0.05)
+            assert "reconnected" in events
+
+    # 全部断开后状态翻转
+    assert adapter.is_connected is False

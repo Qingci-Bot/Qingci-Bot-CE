@@ -78,6 +78,11 @@ async function addGroup() {
     showToast('error', '请输入有效的群组 ID');
     return;
   }
+  // 群 ID 必须为纯数字，避免提交后直接被后端 422 拒绝
+  if (!/^\d+$/.test(id)) {
+    showToast('error', `群组 ID「${id}」无效：必须为纯数字`);
+    return;
+  }
   if (groups.value.some((g) => String(g.group_id) === id)) {
     showToast('info', `群组 ${id} 已在列表中`);
     newGroupId.value = '';

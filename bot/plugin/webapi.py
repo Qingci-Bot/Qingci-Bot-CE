@@ -105,6 +105,14 @@ def mount_plugin_apis(
     """把插件的 API 注册挂载到 FastAPI 应用（同路径已存在时跳过）"""
     for api in apis:
         path = str(api.get("path") or "").strip("/")
+        # 拒绝含动态段（{id}）的路径：FastAPI 会将其解释为路径参数，但插件端点
+        # 签名不接收该参数，请求必然 500。插件应把动态值放 query 参数。
+        if "{" in path or "}" in path:
+            logger.error(
+                f"插件 {plugin_name} Web API 路径含动态段，拒绝注册: {path!r}"
+                "（固定字面路径，动态取值请用 query 参数传递）"
+            )
+            continue
         full = f"{API_BASE}/{plugin_name}" + (f"/{path}" if path else "")
         if any(getattr(r, "path", None) == full for r in app.routes):
             continue

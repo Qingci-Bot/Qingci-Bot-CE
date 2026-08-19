@@ -32,7 +32,16 @@ _login_failures: dict[str, list] = {}
 
 
 def _client_ip(request: Request) -> str:
-    """提取来源 IP（无客户端信息时用占位符）"""
+    """提取来源 IP（无客户端信息时用占位符）
+
+    优先取 X-Forwarded-For 首个 IP：经反向代理时 request.client.host 是
+    代理地址，全站同 IP 会把所有登录失败计入同一来源，导致误触发限流。
+    """
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
     return request.client.host if request.client else "unknown"
 
 

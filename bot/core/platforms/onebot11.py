@@ -67,6 +67,8 @@ class OneBotConnection(PlatformAdapter):
         self._running = False
         self._event_handlers: list[Callable] = []
         self._last_heartbeat = 0.0
+        # 缓存最近一次事件的 self_id（协议端 QQ 号），供状态上报使用
+        self.self_id: int = 0
 
         # 连接状态监控
         self._was_connected = False
@@ -126,6 +128,7 @@ class OneBotConnection(PlatformAdapter):
         """
         # Event 是 dict 子类，先转纯 dict 再翻译为 v12 事件
         raw = v11_event_to_v12(dict(event))
+        self.self_id = int(raw.get("self_id") or 0)
         for handler in list(self._event_handlers):
             try:
                 if asyncio.iscoroutinefunction(handler):

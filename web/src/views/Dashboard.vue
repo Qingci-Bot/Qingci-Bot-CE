@@ -70,7 +70,15 @@ const triggerDesc = {
         <span class="stat-icon">◉</span>
         <div class="stat-label">Bot 状态</div>
         <div class="stat-value" :style="{ color: store.statusColor }">{{ store.statusText }}</div>
-        <div class="stat-desc">{{ store.botConnected ? '协议端已连接' : '等待协议端连接' }}</div>
+        <div class="stat-desc">
+          {{
+            !store.botRunning
+              ? '未启动'
+              : store.botConnected
+                ? '协议端已连接'
+                : '等待协议端连接'
+          }}
+        </div>
       </div>
       <div class="card stat-card">
         <span class="stat-icon" style="color: var(--blue)">◇</span>

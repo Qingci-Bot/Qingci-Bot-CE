@@ -1,15 +1,25 @@
 <script setup>
-import { computed, onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onUnmounted, watch } from 'vue';
 import { RouterView, RouterLink, useRoute } from 'vue-router';
 import { useAppStore } from './stores/app';
 import { useToast } from './composables/useToast';
 
 const route = useRoute();
 const store = useAppStore();
-const { toast } = useToast();
+const { toast, showToast } = useToast();
 let pollTimer = null;
 let pollDelay = 3000;
 let disposed = false;
+
+// 消费 store.error（如 401 鉴权失败文案）：变化时以顶部 toast 展示；
+// 请求成功后 store 内部会清空 error，再次失败时重新提示
+watch(
+  () => store.error,
+  (msg) => {
+    if (msg) showToast('error', msg);
+  },
+  { immediate: true },
+);
 
 // 左下角平台状态：仅显示当前激活实例的主平台
 const activePlatforms = computed(() => {

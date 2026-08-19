@@ -110,12 +110,16 @@ class MarketIndex:
 
 
 def _semver_key(version: str) -> tuple[int, ...]:
-    """将版本号转为可比较的整数元组（1.2.3 -> (1,2,3)）
+    """将版本号转为可比较的整数元组（v1.2.3 与 1.2.3 均解析为 (1,2,3)）
 
     非数字段忽略；仅用于"是否可更新"判断，不做完整 semver 校验。
     """
+    text = str(version).strip()
+    # 去掉常见的 v/V 前缀，避免首段被解析为 0 导致恒判可更新
+    if text[:1].lower() == "v":
+        text = text[1:]
     parts = []
-    for seg in str(version).split("."):
+    for seg in text.split("."):
         num = ""
         for ch in seg:
             if ch.isdigit():
@@ -212,7 +216,7 @@ class MarketClient:
         if cached is not None:
             logger.info("使用本地缓存的插件市场索引")
             self._cache = cached
-            self._fetched_at = now
+            # 不重置 _fetched_at：保留上次成功拉取时间，TTL 到期后仍会尝试联网刷新
             return cached
         raise MarketError("插件市场索引拉取失败且无本地缓存（主源与备用源均不可用）")
 
@@ -236,10 +240,14 @@ class MarketClient:
     async def _fetch_via_http(self, url: str) -> MarketIndex:
         import urllib.request
 
-        req = urllib.request.Request(url, headers={"User-Agent": "Qingci-Bot-CE"})
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        return MarketIndex(data)
+        def _sync_fetch() -> MarketIndex:
+            req = urllib.request.Request(url, headers={"User-Agent": "Qingci-Bot-CE"})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return MarketIndex(data)
+
+        # 同步 urllib 放入线程池，避免阻塞事件循环（Bot 与 API 共用同一循环）
+        return await asyncio.to_thread(_sync_fetch)
 
     async def _fetch_via_git(self, url: str) -> MarketIndex:
         tmp = tempfile.mkdtemp(prefix="qb-market-")
@@ -255,7 +263,15 @@ class MarketClient:
                 stderr=asyncio.subprocess.STDOUT,
                 creationflags=NO_WINDOW_FLAG,
             )
-            stdout, _ = await proc.communicate()
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                proc.kill()
+                try:
+                    await proc.wait()
+                except Exception:
+                    pass
+                raise MarketError(f"git 克隆市场索引超时: {url}") from None
             if proc.returncode != 0:
                 raise MarketError(f"git 克隆市场索引失败: {stdout.decode(errors='replace')[-500:]}")
             index_file = Path(tmp) / "index.json"
@@ -410,11 +426,28 @@ class MarketManager:
         if manager.get(name) is not None:
             await manager.unload(name)
         sources = [s for s in (item.get("source"), item.get("mirror")) if s]
+        last_err: Exception | None = None
         for src in sources:
-            if await manager.install(bot, src, name=name):
-                return True
+            try:
+                if await manager.install(bot, src, name=name):
+                    return True
+            except Exception as e:
+                # ensure_dependencies 等抛异常时继续尝试备用源，避免 500 中断
+                logger.exception(f"插件 {name} 从 {src} 安装异常: {e}")
+                last_err = e
             logger.warning(f"插件 {name} 从 {src} 安装失败，尝试下一个地址")
-        raise MarketError(f"插件 {name} 安装失败（已尝试 {len(sources)} 个地址），详见服务端日志")
+        # 全部失败：尽力回滚——重新加载磁盘上残留的旧版本，避免插件静默消失
+        try:
+            from ..paths import plugins_dir
+
+            if (plugins_dir() / name).is_dir():
+                await manager.load_external(f"plugins.{name}", bot)
+        except Exception:
+            logger.exception(f"回滚加载插件 {name} 失败")
+        raise MarketError(
+            f"插件 {name} 安装失败（已尝试 {len(sources)} 个地址，"
+            f"最后错误: {last_err}），详见服务端日志"
+        )
 
     async def update(self, bot, name: str) -> bool:
         """更新插件：重新安装（install 内部已处理覆盖重载）"""

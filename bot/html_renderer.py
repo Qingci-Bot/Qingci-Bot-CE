@@ -81,6 +81,9 @@ class HtmlRenderer:
         self._browser: Any = None
         self._probe: dict[str, Any] | None = None
         self._probe_lock = asyncio.Lock()
+        # 浏览器生命周期互斥：防止 _ensure_browser 双启动 / 句柄覆盖 / close 互踩
+        # （独立于 _probe_lock；probe 内部会调用 _ensure_browser，二者职责不同）
+        self._browser_lock = asyncio.Lock()
 
     # ============ 配置 / 状态 ============
 
@@ -199,43 +202,45 @@ class HtmlRenderer:
 
     async def close(self) -> None:
         """关闭浏览器与 playwright 句柄（幂等；未使用过渲染器时零开销）"""
-        if self._browser is not None:
-            try:
-                await self._browser.close()
-            except Exception:
-                logger.debug("关闭渲染浏览器失败（忽略）", exc_info=True)
-            self._browser = None
-        if self._playwright is not None:
-            try:
-                await self._playwright.stop()
-            except Exception:
-                logger.debug("停止 playwright 失败（忽略）", exc_info=True)
-            self._playwright = None
+        async with self._browser_lock:
+            if self._browser is not None:
+                try:
+                    await self._browser.close()
+                except Exception:
+                    logger.debug("关闭渲染浏览器失败（忽略）", exc_info=True)
+                self._browser = None
+            if self._playwright is not None:
+                try:
+                    await self._playwright.stop()
+                except Exception:
+                    logger.debug("停止 playwright 失败（忽略）", exc_info=True)
+                self._playwright = None
 
     # ============ 内部实现 ============
 
     async def _ensure_browser(self) -> Any:
-        """惰性启动并复用无头浏览器"""
-        if self._browser is not None:
-            return self._browser
-        async_playwright = _import_async_playwright()
-        if async_playwright is None:
-            raise HtmlRenderUnavailableError(
-                "playwright 未安装，可用 `uv pip install 'qingci-bot-ce[render]'` "
-                "与 `playwright install chromium` 启用 HTML 渲染"
-            )
-        self._playwright = await async_playwright().start()
-        try:
-            self._browser = await self._playwright.chromium.launch(args=_BROWSER_ARGS)
-        except Exception:
-            # 启动失败时清理已启动的 playwright 句柄，避免资源泄漏
+        """惰性启动并复用无头浏览器（_browser_lock 保证进程内单实例）"""
+        async with self._browser_lock:
+            if self._browser is not None:
+                return self._browser
+            async_playwright = _import_async_playwright()
+            if async_playwright is None:
+                raise HtmlRenderUnavailableError(
+                    "playwright 未安装，可用 `uv pip install 'qingci-bot-ce[render]'` "
+                    "与 `playwright install chromium` 启用 HTML 渲染"
+                )
+            self._playwright = await async_playwright().start()
             try:
-                await self._playwright.stop()
+                self._browser = await self._playwright.chromium.launch(args=_BROWSER_ARGS)
             except Exception:
-                pass
-            self._playwright = None
-            raise
-        return self._browser
+                # 启动失败时清理已启动的 playwright 句柄，避免资源泄漏
+                try:
+                    await self._playwright.stop()
+                except Exception:
+                    pass
+                self._playwright = None
+                raise
+            return self._browser
 
     async def _render_once(
         self,

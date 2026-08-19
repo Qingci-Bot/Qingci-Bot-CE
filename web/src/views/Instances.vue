@@ -57,12 +57,23 @@ const createName = ref('');
 const createPlatform = ref('onebot');
 const createDescription = ref('');
 const createPort = ref('');
+// 刷新实例列表的独立 loading 状态（store.loading 仅用于启停 Bot）
+const instancesLoading = ref(false);
 
 // 当前激活实例
 const activeInstance = computed(() => store.currentInstance);
 
-onMounted(async () => {
-  await store.fetchInstances();
+async function refreshInstances() {
+  instancesLoading.value = true;
+  try {
+    await store.fetchInstances();
+  } finally {
+    instancesLoading.value = false;
+  }
+}
+
+onMounted(() => {
+  refreshInstances();
 });
 
 function openCreateForm() {
@@ -80,21 +91,26 @@ function cancelCreate() {
 function doCreate() {
   const name = createName.value.trim();
   if (!name) return;
+  // 端口校验：填写了非法端口时明确提示，而不是静默丢弃
+  const portInput = createPort.value.trim();
+  if (portInput) {
+    const n = Number(portInput);
+    if (isNaN(n) || n < 1024 || n > 65535) {
+      showToast('error', `端口无效：${portInput}（需为 1024-65535 之间的整数）`);
+      return;
+    }
+  }
   showToast('info', '正在创建实例...');
   const payload = { name, platform: createPlatform.value };
   const desc = createDescription.value.trim();
   if (desc) payload.description = desc;
-  const port = Number(createPort.value);
-  if (createPort.value.trim() && port >= 1024 && port <= 65535) {
-    payload.port = port;
-  }
+  if (portInput) payload.port = Number(portInput);
   store
     .createInstance(payload)
     .then(() => {
       showCreateForm.value = false;
       showToast('success', `实例「${name}」已创建`);
     })
-    .then(() => store.fetchInstances())
     .catch((e) => showToast('error', e.message || '创建失败'));
 }
 
@@ -179,8 +195,8 @@ function onRename(inst) {
       <div class="card-header">
         <div class="card-title">全部实例</div>
         <div class="action-bar">
-          <button class="btn btn-secondary btn-sm" @click="store.fetchInstances">
-            <span style="display: inline-block" :class="{ spin: store.loading }">↻</span> 刷新
+          <button class="btn btn-secondary btn-sm" @click="refreshInstances">
+            <span style="display: inline-block" :class="{ spin: instancesLoading }">↻</span> 刷新
           </button>
           <button class="btn btn-primary btn-sm" @click="openCreateForm">＋ 新建实例</button>
         </div>

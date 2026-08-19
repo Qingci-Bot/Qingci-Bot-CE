@@ -46,7 +46,7 @@ def _current_instance_name() -> str | None:
 
 
 def _build_start_args(name: str) -> list[str]:
-    """构造重启到指定实例的应用参数（保留桌面/无Bot/监听地址/端口等标志）"""
+    """构造重启到指定实例的应用参数（保留桌面/无Bot/监听地址/端口/数据目录/配置等标志）"""
     args = ["--instance", name]
     # 保留桌面模式（frozen windowed 下 sys.argv 无 --desktop，需用显式标志判断）
     from bot.paths import is_desktop
@@ -55,11 +55,17 @@ def _build_start_args(name: str) -> list[str]:
         args.append("--desktop")
     if "--no-bot" in sys.argv:
         args.append("--no-bot")
-    for flag in ("--host", "--port"):
+    # 透传带值标志：支持 `--flag value` 与 `--flag=value` 两种写法
+    for flag in ("--host", "--port", "--data-dir", "--config"):
         if flag in sys.argv:
             i = sys.argv.index(flag)
             if i + 1 < len(sys.argv):
                 args += [flag, sys.argv[i + 1]]
+        else:
+            for tok in sys.argv:
+                if tok.startswith(flag + "="):
+                    args.append(tok)
+                    break
     return args
 
 
@@ -103,10 +109,19 @@ async def create_new_instance(req: CreateInstanceRequest) -> dict:
 @router.delete("/{name}", dependencies=[Depends(require_auth)])
 async def remove_instance(name: str) -> dict:
     """删除实例（含数据）"""
+    if not is_valid_name(name):
+        raise HTTPException(status_code=400, detail=f"非法实例名: {name!r}") from None
     if name == _current_instance_name():
         raise HTTPException(status_code=400, detail="不能删除正在运行的实例") from None
     if not delete_instance(name):
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}") from None
+    # 兜底校验残留：delete_instance 内部 rmtree(ignore_errors=True) 可能静默失败
+    # （如 Windows 下文件句柄被占用），目录残留时应返回明确错误而非假装成功
+    if instance_path(name).exists():
+        raise HTTPException(
+            status_code=500,
+            detail=f"实例 {name} 目录删除失败（可能被其他进程占用），请稍后重试",
+        ) from None
     await record_audit("instance.delete", f"删除实例 {name}")
     return {"ok": True}
 
@@ -134,7 +149,14 @@ async def rename_existing_instance(name: str, req: RenameInstanceRequest) -> dic
     await record_audit("instance.rename", f"实例 {name} 改名为 {req.new_name}")
 
     if is_running:
-        spawn_relaunch(["--rename-dir", name, req.new_name] + _build_start_args(req.new_name))
+        try:
+            spawn_relaunch(["--rename-dir", name, req.new_name] + _build_start_args(req.new_name))
+        except Exception:
+            # 派发失败时不退出当前进程，返回错误由前端提示，主流程不受影响
+            logger.exception("派发改名重启助手失败，未执行改名")
+            raise HTTPException(
+                status_code=500, detail="派发改名重启助手失败，请稍后重试"
+            ) from None
         os._exit(0)  # noqa: PLR1722 — 主动终止进程完成改名切换
         return {}  # pragma: no cover — 永不返回
 
@@ -153,7 +175,12 @@ async def start_instance(name: str) -> dict:
         raise HTTPException(status_code=400, detail="已运行于该实例") from None
 
     await record_audit("instance.start", f"切换到实例 {name}")
-    spawn_relaunch(_build_start_args(name))
+    try:
+        spawn_relaunch(_build_start_args(name))
+    except Exception:
+        # 派发失败时不退出当前进程，返回错误由前端提示，主流程不受影响
+        logger.exception("派发重启助手失败，未切换实例")
+        raise HTTPException(status_code=500, detail="派发重启助手失败，请稍后重试") from None
 
     # 立即退出当前进程，释放实例互斥量，让新进程接管
     os._exit(0)  # noqa: PLR1722 — 主动终止进程完成切换

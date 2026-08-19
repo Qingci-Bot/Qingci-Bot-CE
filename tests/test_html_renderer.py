@@ -307,3 +307,53 @@ async def test_invalid_format_and_timeout_param(monkeypatch):
         await renderer.render_html("<html>hi</html>", image_format="webp")
     with pytest.raises(ValueError, match="timeout"):
         await renderer.render_html("<html>hi</html>", timeout=0)
+
+
+# ──────────────────────────────────────────────────────────────────
+# 浏览器生命周期并发安全（_browser_lock）
+# ──────────────────────────────────────────────────────────────────
+
+
+async def test_concurrent_ensure_browser_single_instance(monkeypatch):
+    """并发触发浏览器启动：_browser_lock 保证只启动一次、复用同一实例"""
+    fake = install_fake_playwright(monkeypatch)
+    renderer = make_renderer()
+
+    results = await asyncio.gather(*(renderer._ensure_browser() for _ in range(5)))
+    # 所有并发调用返回同一浏览器实例，且底层只 launch 一次
+    assert len({id(b) for b in results}) == 1
+    assert len(fake.instances) == 1
+    assert renderer._browser is results[0]
+
+
+async def test_concurrent_close_idempotent(monkeypatch):
+    """并发 close：互不踩踏，浏览器与 playwright 句柄全部清空"""
+    fake = install_fake_playwright(monkeypatch)
+    renderer = make_renderer()
+    await renderer._ensure_browser()
+    assert renderer._browser is not None
+
+    await asyncio.gather(*(renderer.close() for _ in range(3)))
+    assert renderer._browser is None
+    assert renderer._playwright is None
+    assert fake.instances[0].chromium.browser.closed is True
+    assert fake.instances[0].stopped is True
+
+
+async def test_concurrent_ensure_and_close_consistent(monkeypatch):
+    """_ensure_browser 与 close 并发：不出现句柄覆盖，最终可重建"""
+    install_fake_playwright(monkeypatch)
+    renderer = make_renderer()
+
+    async def _flap():
+        await renderer._ensure_browser()
+        await renderer.close()
+
+    await asyncio.gather(*(_flap() for _ in range(4)))
+    # 结束后句柄一致清空；再次渲染可正常重建
+    assert renderer._browser is None
+    assert renderer._playwright is None
+
+    out = await renderer.render_html("<html>ok</html>")
+    assert out.read_bytes() == b"fake-image-bytes"
+    assert renderer._browser is not None

@@ -24,6 +24,9 @@ from ._proc import NO_WINDOW_FLAG
 
 logger = logging.getLogger("qingci-bot.plugin.deps")
 
+# 依赖安装子进程最大耗时（秒）：超时 kill 并报错，避免挂死事件循环
+_INSTALL_TIMEOUT = 300
+
 
 def deps_dir() -> Path:
     """返回实例隔离的插件依赖目录（自动创建）"""
@@ -133,14 +136,24 @@ async def _install_subprocess(target: Path, reqs: list[str]) -> bool:
             stderr=asyncio.subprocess.STDOUT,
             creationflags=NO_WINDOW_FLAG,
         )
-        stdout, _ = await proc.communicate()
-        if proc.returncode != 0:
-            logger.error(f"依赖安装失败: {stdout.decode(errors='replace')[-2000:]}")
-            return False
-        return True
     except (OSError, ValueError) as e:
         logger.error(f"无法运行依赖安装器: {e}")
         return False
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_INSTALL_TIMEOUT)
+    except asyncio.TimeoutError:
+        # communicate 超时：进程可能卡死，终止并回收，避免僵尸进程
+        try:
+            proc.kill()
+            await proc.wait()
+        except (OSError, ProcessLookupError):
+            pass
+        logger.error(f"依赖安装超时（>{_INSTALL_TIMEOUT}s），已终止安装进程")
+        return False
+    if proc.returncode != 0:
+        logger.error(f"依赖安装失败: {stdout.decode(errors='replace')[-2000:]}")
+        return False
+    return True
 
 
 def _install_in_process(target: Path, reqs: list[str]) -> bool:

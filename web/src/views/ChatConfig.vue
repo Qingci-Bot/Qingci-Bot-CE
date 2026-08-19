@@ -132,7 +132,23 @@ function onProviderChange() {
 async function testConnection() {
   testing.value = true;
   try {
-    const res = await store.testLLM({ ...form });
+    // 与 saveConfig 一致：表单中的 mcp args 为逗号分隔字符串，测试前转回数组
+    const payload = {
+      ...form,
+      mcp_servers: (form.mcp_servers || []).map((s) => ({
+        name: s.name,
+        command: s.command,
+        args:
+          typeof s.args === 'string'
+            ? s.args
+                .split(/[,，\s]+/)
+                .map((x) => x.trim())
+                .filter(Boolean)
+            : s.args || [],
+        url: s.url,
+      })),
+    };
+    const res = await store.testLLM(payload);
     showToast(
       res.available ? 'success' : 'error',
       res.message || (res.available ? 'LLM 连接测试通过' : 'LLM 连接测试失败'),

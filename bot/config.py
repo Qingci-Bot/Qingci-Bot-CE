@@ -579,10 +579,18 @@ class ConfigManager:
             return plugins_section.get(plugin_name)
 
     def set_plugin_config(self, plugin_name: str, values: dict) -> dict:
-        """设置插件级配置并保存到 config.yaml（原子写入）"""
+        """设置插件级配置并保存到 config.yaml（先校验后原子写入，失败回滚内存）"""
         with self._lock:
-            plugins = self._config.plugins or {}
+            plugins = dict(self._config.plugins or {})
             plugins[plugin_name] = dict(values)
+            # 先整体校验：pydantic 校验失败直接抛出，绝不落盘
+            AppConfig(**{**self._config.model_dump(), "plugins": plugins})
+            old_plugins = self._config.plugins
             self._config.plugins = plugins
-            self.save()
+            try:
+                self.save()
+            except Exception:
+                # 写盘失败回滚内存，避免内存与磁盘不一致
+                self._config.plugins = old_plugins
+                raise
             return dict(plugins[plugin_name])
