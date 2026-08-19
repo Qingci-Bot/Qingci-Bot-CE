@@ -74,6 +74,14 @@ image:
   model: dall-e-3
   api_url: ''
   api_key: ''
+render:                       # HTML → 图片渲染服务（可选能力，签到卡等插件复用）
+  enabled: true              # 渲染服务开关；关闭后渲染直接不可用（调用方回退）
+  timeout: 30.0              # 单次渲染超时（秒）
+  format: jpeg               # 默认输出格式：jpeg / png
+  quality: 92                # JPEG 质量（1-100；png 忽略）
+  default_width: 800         # 默认渲染宽度（调用方未指定时）
+  default_height: 600        # 默认渲染高度
+  device_scale_factor: 1.0   # 输出清晰度倍率（如 2.0 对应 2x 高清）
 rag:
   enabled: false
   mode: keyword               # keyword / vector

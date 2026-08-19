@@ -22,6 +22,7 @@
 - **插件系统**：借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持命令/前缀/关键词/正则/通知/请求匹配，优先级调度、权限控制、插件间依赖声明（require + PEP 440 版本约束）、插件级配置（config.yaml 节）、插件间导出/导入（export/require）、插件级中间件（before/after handler）、handler 参数级依赖注入（Depends）、全局生命周期钩子（on_startup/on_shutdown/on_bot_connect/on_metaevent）、跨插件事件总线（EventBus 发布-订阅）、插件级 LLM 工具声明（`@llm_tool` 参与 Function Calling）、指令系统增强（别名 / 子指令 / 类型化参数）、插件数据目录（data_dir）、国际化（i18n）、在线插件安装与依赖自动安装、配置 schema 自动生成 Web 配置表单、开发期自动热重载、细粒度事件处理钩子（run_preprocessor Matcher 运行前钩子 + on_calling_api 平台接口调用钩子）、插件状态管理（PluginStatus 枚举）、执行指标监控、元数据发现（plugin.json）；支持加载/卸载/重载/禁用/启用，禁用时保留实例并跳过事件分发。协议层（PluginBase/Matcher/Rule/Permission/MessageContext）由独立插件 SDK 单一维护，内置插件与外部插件行为一致
 - **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）
 - **增强能力**：AI 图片生成、轻量知识库（关键词检索零依赖；向量检索需可选依赖 lancedb）、会话摘要（历史裁剪）、Function Calling（内置时间/一言/群事件查询工具）、MCP 服务器接入、定时任务调度器、LLM 用量统计
+- **HTML 渲染服务**：基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG（可选依赖 `[render]`），供签到卡等「HTML 模板 → 图片消息」插件复用；playwright 未安装/浏览器缺失时自动降级不可用，不影响框架启动
 - **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式），支持在线备份与消息 CSV 导出
 - **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板 + 插件市场一键安装/更新/搜索）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置。独立「实例管理」页面支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）
 - **桌面应用**：PyWebView 套壳 + 系统托盘（关闭窗口自动驻留后台）；启动时显示即时加载画面，重型模块延迟导入，双击 exe 后无感知等待
@@ -57,6 +58,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > |------|----------|------|
 > | 核心 | `uv pip install -e .` | 运行时依赖（FastAPI、litellm、OneBot、qingci-plugin-sdk 等） |
 > | `[vector]` | `uv pip install -e ".[vector]"` | 向量知识库（lancedb，可选；缺失时 RAG 自动回退关键词检索） |
+> | `[render]` | `uv pip install -e ".[render]"` | HTML → 图片渲染（playwright，可选；安装后需执行 `playwright install chromium` 下载浏览器；缺失时渲染能力自动降级不可用，调用方回退） |
 > | `[test]` | `uv pip install -e ".[test]"` | pytest / pytest-asyncio / pytest-cov / httpx |
 > | `[build]` | `uv pip install -e ".[build]"` | pyinstaller（`.\build.ps1` 依赖） |
 > | `[dev]` | `uv pip install -e ".[dev]"` | 以上全部 + ruff / mypy（代码质量工具） |
@@ -377,6 +379,14 @@ image:
   model: dall-e-3
   api_url: ''                      # 留空则按 litellm 默认路由
   api_key: ''                      # 留空则回退 llm.api_key
+render:
+  enabled: true                    # HTML → 图片渲染服务（可选能力；需安装 playwright 并下载浏览器）
+  timeout: 30.0                    # 单次渲染超时（秒）
+  format: jpeg                     # 默认输出格式: jpeg / png
+  quality: 92                      # JPEG 质量（1-100；png 忽略）
+  default_width: 800               # 默认渲染宽度（调用方未指定时）
+  default_height: 600              # 默认渲染高度
+  device_scale_factor: 1.0         # 输出清晰度倍率（如 2.0 对应 2x 高清）
 rag:
   enabled: false                   # 轻量知识库（默认关闭）
   mode: keyword                    # 检索模式: keyword（关键词检索）/ vector（LanceDB 向量检索）
@@ -420,6 +430,7 @@ api_key: ''                        # API 鉴权密钥
 | `hot_reload` | 插件自动热重载 | `enabled: false` | 开发期监听 `plugins/` 目录 `.py` 文件变更并自动重载对应插件；`interval` 为轮询间隔（秒）；生产环境建议关闭 |
 | `alert` | 错误告警 | `enabled: false` | 冷却窗口内 ERROR 日志达到 `error_threshold` 条时向管理员发消息告警，带 `cooldown_minutes` 冷却 |
 | `image` | 图片生成 | `enabled: false` | `/image <提示词>`（或 `/画图`）命令；`image.api_key` 为空时回退 `llm.api_key`；成功后以 v12 `image` 消息段回复 |
+| `render` | HTML → 图片渲染 | `enabled: true` | 基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG，供签到卡等插件复用（可选依赖 `[render]` + `playwright install chromium`）；未安装/浏览器缺失时自动降级不可用，`/api/bot/status` 的 `render` 字段展示能力状态 |
 | `rag` | 轻量知识库 | `enabled: false` | 双模式：`keyword`（纯 Python 关键词检索，无重型依赖）/ `vector`（LanceDB 向量检索 + litellm embedding，语义更精准；需可选依赖 `lancedb`，未安装时自动回退 keyword 并告警）；开启后对话自动注入检索到的参考资料；`/kb` 命令管理文档（add/list/search/remove/reload）。vector 模式的初始化步骤见 [ARCHITECTURE.md](./ARCHITECTURE.md#向量检索rag初始化) |
 | `session_summary` | 会话摘要 | `enabled: false` | 与 `llm.enable_summary` 等价，任一为 true 即启用；上下文超过条数/token 阈值时将较早消息摘要压缩，保留最近 N 轮原文 |
 | `log.usage_tracking` | LLM 用量入库 | `true` | 可退出的遥测：关闭后 chat/摘要/图片不再写 usage_logs，Dashboard 用量统计将为空 |

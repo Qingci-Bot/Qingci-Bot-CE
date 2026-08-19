@@ -31,6 +31,7 @@ from .di import DIContainer
 from .dispatcher import MessageDispatcher
 from .event_bus import EventBus
 from .filter import SensitiveFilter
+from .html_renderer import HtmlRenderer
 from .platforms.base import make_platform
 from .scheduler import BotScheduler
 from .session_state import SessionStateManager
@@ -72,6 +73,9 @@ def assemble_bot(bot: "QingciBot") -> None:
         summary_config=config.session_summary,
         usage_tracking=config.log.usage_tracking,
     )
+    # HTML → 图片渲染服务（可选能力；playwright 未安装时渲染不可用，
+    # 不影响启动。能力探测在 bot.start 中后台执行）
+    bot.html_renderer = HtmlRenderer(config.render)
     bot.plugin_manager = PluginManager()
 
     # 依赖注入容器：集中管理所有服务实例
@@ -87,6 +91,7 @@ def assemble_bot(bot: "QingciBot") -> None:
     di.register_sync(Database, bot.db)
     di.register_sync(OneBotConnection, bot.connection)
     di.register_sync(LLMManager, bot.llm)
+    di.register_sync(HtmlRenderer, bot.html_renderer)
     di.register_sync(PluginManager, bot.plugin_manager)
     di.register_sync(MessageDispatcher, bot.dispatcher)
     di.register_sync(SessionStateManager, bot.session_state)

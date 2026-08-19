@@ -37,6 +37,12 @@ qingci-bot-ce = "main:main"
 vector = [
     "lancedb>=0.15,<1",
 ]
+# HTML → 图片渲染服务依赖（bot/core/html_renderer.py）。playwright 体积大
+# 且需单独下载浏览器（playwright install chromium），故为可选特性；缺失时
+# 渲染能力自动降级不可用（调用方回退），不影响框架启动。
+render = [
+    "playwright>=1.40",
+]
 test = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

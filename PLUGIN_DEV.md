@@ -764,6 +764,47 @@ plugins/my_plugin/
 
 **静态文件挂载：** 框架自动将 `web/` 目录挂载到 `/api/plugin-data/{plugin_name}/`，前端通过 iframe 加载。插件页面需预构建为纯静态 HTML/CSS/JS，不依赖框架前端构建链。
 
+### 插件级 Web API（register_api）
+
+插件可注册 HTTP 接口（管理页面后端、数据查询等），框架统一挂载到 `/api/plugin-web/{plugin_name}/{path}`，鉴权对齐现有 API 体系（`X-API-Key`），无需引入独立服务。
+
+```python
+from fastapi.responses import JSONResponse
+
+
+class MyPlugin(PluginBase):
+    name = "my_plugin"
+
+    async def on_load(self):
+        # 简单 JSON 接口：返回 dict 自动序列化
+        self.register_api("ranking", self._api_ranking, methods=["GET"], description="群排行")
+        # 上传/复杂场景：直接返回 Response 对象
+        self.register_api("backup", self._api_backup, methods=["POST"])
+        # 自动带状态码：返回 (data, status) 二元组
+        self.register_api("members/update", self._api_member_update, methods=["POST"])
+
+    async def _api_ranking(self, request):
+        # request 为 FastAPI Request：request.query_params / await request.json() 等
+        return {"ranking": [1, 2, 3]}
+
+    async def _api_backup(self, request):
+        return JSONResponse({"ok": True})
+```
+
+**handler 契约：**
+- 参数：`request`（FastAPI `Request`，可读 `query_params` / `headers`、`await request.json()` 取 JSON body、`await request.form()` 取上传文件）
+- 返回值：`Response` 对象原样返回；`(data, status_code)` 二元组按 JSON 序列化并指定状态码；`dict` / `list` / `str` 自动 JSON 序列化
+
+**参数说明：**
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `path` | `str` | 相对路径（固定字面路径，不含 `{id}` 动态段；动态取值经 query 参数传递），如 `ranking`、`content-safety/terms/add` |
+| `handler` | `callable` | 处理函数（见上方契约） |
+| `methods` | `list[str]` | HTTP 方法列表，默认 `["GET"]` |
+| `description` | `str` | 接口描述（调试/文档用） |
+
+> 插件热重载/卸载后路由自动指向新实现或返回 404，无需重启服务。前端页面（`register_page`）可通过 `/api/plugin-web/{plugin_name}/...` 直接调用接口。
+
 ### Matcher / Rule / Permission
 
 **核心概念：**

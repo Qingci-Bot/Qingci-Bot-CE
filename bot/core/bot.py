@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from .connection import OneBotConnection
     from .event_bus import EventBus
     from .filter import SensitiveFilter
+    from .html_renderer import HtmlRenderer
     from .platforms.base import PlatformAdapter
     from .scheduler import BotScheduler
     from .session_state import SessionStateManager
@@ -63,6 +64,8 @@ class QingciBot:
     platforms: dict[str, "PlatformAdapter"]
     knowledge_store: "KnowledgeStore | None"
     sensitive_filter: "SensitiveFilter"
+    # HTML → 图片渲染服务（可选能力；playwright 未安装时不可用，不影响启动）
+    html_renderer: "HtmlRenderer"
     # 插件热重载监听器（composition 初始化为 None，start 中按需创建）
     _plugin_watcher: "PluginWatcher | None"
 
@@ -140,6 +143,9 @@ class QingciBot:
                 logger.info(f"平台适配器已启动: {platform.display_name}")
             except Exception:
                 logger.exception(f"平台适配器启动失败: {name}（该平台将不可用）")
+
+        # 后台探测 HTML 渲染能力（失败仅记日志，结果供 /api/bot/status 与插件查询）
+        self._spawn_background_task(self.html_renderer.probe(), name="html-render-probe")
 
         # 启动调度器与错误告警；失败时连同连接/插件/数据库一并回滚
         try:
@@ -267,6 +273,12 @@ class QingciBot:
             await self.llm.close()
         except (Exception, asyncio.CancelledError):
             logger.exception("LLM 关闭异常")
+
+        # 关闭 HTML 渲染服务（幂等；未使用过渲染器时零开销）
+        try:
+            await self.html_renderer.close()
+        except (Exception, asyncio.CancelledError):
+            logger.exception("HTML 渲染器关闭异常")
 
         try:
             await self.db.close()
@@ -574,6 +586,7 @@ class QingciBot:
             "connected": self.connection.is_connected,
             "version": __version__,
             "last_heartbeat": self.connection.last_heartbeat,
+            "render": self.html_renderer.status_info(),
             "platforms": [
                 {
                     "name": p.name,

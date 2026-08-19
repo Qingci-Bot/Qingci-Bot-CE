@@ -37,7 +37,7 @@ Qingci-Bot-CE/
 ├── bot/                    # Bot 核心逻辑（纯 Python 包）
 │   ├── core/               # 生命周期与调度：bot/composition/connection/dispatcher/event_bus/
 │   │                       #   di/scheduler/session_state/filter/alerter/tasks/
-│   │                       #   broadcast/message/logformat/platforms
+│   │                       #   broadcast/message/logformat/html_renderer/platforms
 │   │   ├── composition.py  # 组合根：assemble_bot() 组件装配 + DI 注册（__init__ 不再手写装配）
 │   │   ├── bot.py          # Bot 主类；get_bot() 经 DI 容器解析（resolve_sync），无模块级单例
 │   │   ├── dispatcher.py   # MessageContext 转发 SDK（qingci_plugin_sdk.context）

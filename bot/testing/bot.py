@@ -166,6 +166,7 @@ class TestBot:
         self.scheduler = None
         self.knowledge_store = None
         self.sensitive_filter = None
+        self.html_renderer = None  # HTML 渲染服务（测试不启动浏览器）
 
         # Matcher 运行前钩子（run_preprocessor），与真实 Bot 对齐
         self._matcher_preprocessors: list[Any] = []
@@ -178,6 +179,7 @@ class TestBot:
             "running": self._running,
             "connected": self.connection.is_connected,
             "last_heartbeat": self.connection.last_heartbeat,
+            "render": self.html_renderer.status_info() if self.html_renderer else None,
             "platforms": [
                 {
                     "name": p.name,

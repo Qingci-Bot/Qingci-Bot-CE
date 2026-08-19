@@ -127,6 +127,8 @@ class PluginManager:
         self._metadata_cache: dict[str, dict] = {}
         # Web 管理页面注册信息: plugin_name -> [{"title": ..., "icon": ..., "static_dir": ...}]
         self._plugin_pages: dict[str, list[dict]] = {}
+        # 插件级 Web API 注册信息: plugin_name -> [{"path": ..., "handler": ..., ...}]
+        self._plugin_apis: dict[str, list[dict]] = {}
         # FastAPI 应用引用（由 create_app 后注入）
         self._web_app = None
         # 全局 i18n 语言（插件翻译默认语言，由 config.lang 设置）
@@ -235,9 +237,10 @@ class PluginManager:
     # ---- Web 管理页面 ----
 
     def set_web_app(self, app) -> None:
-        """注入 FastAPI 应用引用（由 create_app 后调用），并挂载已注册的插件页面"""
+        """注入 FastAPI 应用引用（由 create_app 后调用），并挂载已注册的插件页面与 API"""
         self._web_app = app
         self._mount_all_plugin_pages()
+        self._mount_all_plugin_apis()
 
     def _mount_all_plugin_pages(self) -> None:
         """挂载所有已注册插件的静态文件目录"""
@@ -339,6 +342,32 @@ class PluginManager:
     def _remove_plugin_pages(self, name: str) -> None:
         """移除插件的 Web 管理页面注册"""
         self._plugin_pages.pop(name, None)
+
+    # ---- 插件级 Web API ----
+
+    def _mount_all_plugin_apis(self) -> None:
+        """挂载所有已注册插件的 Web API 路由"""
+        if self._web_app is None:
+            return
+        from .webapi import mount_plugin_apis
+
+        for plugin_name, apis in self._plugin_apis.items():
+            try:
+                mount_plugin_apis(self._web_app, self, plugin_name, apis)
+            except Exception:
+                logger.exception(f"挂载插件 {plugin_name} Web API 失败")
+
+    def _collect_plugin_apis(self, plugin: PluginBase) -> None:
+        """从插件实例收集已注册的 Web API 并挂载"""
+        apis = getattr(plugin, "_apis", None)
+        if apis:
+            self._plugin_apis[plugin.name] = list(apis)
+            if self._web_app is not None:
+                self._mount_all_plugin_apis()
+
+    def _remove_plugin_apis(self, name: str) -> None:
+        """移除插件的 Web API 注册（已挂载路由保留，请求时动态解析失效）"""
+        self._plugin_apis.pop(name, None)
 
     # ---- 元数据发现 ----
 
@@ -682,6 +711,7 @@ class PluginManager:
                 # 重载场景下 unload 已清除页面注册，需重新收集
                 # （若插件没有页面，_plugin_pages 保持为空即可）
                 self._collect_plugin_pages(plugin)
+                self._collect_plugin_apis(plugin)
             except BaseException:
                 try:
                     await plugin.on_unload()
@@ -751,6 +781,8 @@ class PluginManager:
                     plugin.bot.tool_registry.unregister(full_name)
             # 清理 Web 管理页面注册
             self._remove_plugin_pages(name)
+            # 清理插件级 Web API 注册（已挂载路由保留，请求时动态解析失效）
+            self._remove_plugin_apis(name)
             # 清理该插件名下挂起的会话阶梯（多轮交互等待态）
             dispatcher = getattr(plugin.bot, "dispatcher", None) if plugin.bot else None
             if dispatcher is not None:
@@ -861,6 +893,8 @@ class PluginManager:
         await plugin.on_load()
         # 收集插件注册的 Web 管理页面
         self._collect_plugin_pages(plugin)
+        # 收集插件注册的 Web API（挂载到 /api/plugin-web/<name>/）
+        self._collect_plugin_apis(plugin)
         # 加载插件 i18n 翻译资源
         self._load_i18n(plugin)
 

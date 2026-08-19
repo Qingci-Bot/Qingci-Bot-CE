@@ -252,6 +252,26 @@ class ImageConfig(BaseModel):
     api_key: str = ""
 
 
+class RenderConfig(BaseModel):
+    """HTML → 图片渲染服务配置（可选能力）
+
+    基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG，供签到卡等
+    插件复用。playwright 为可选依赖（`pyproject.toml` 的 `[render]` 分组）；
+    未安装/浏览器缺失时渲染不可用，`render_html()` 抛
+    HtmlRenderUnavailableError，调用方回退，框架启动不受影响。
+    """
+
+    model_config = {"extra": "ignore"}
+
+    enabled: bool = True  # 渲染服务开关（关闭后渲染直接不可用）
+    timeout: float = 30.0  # 单次渲染超时（秒）
+    format: Literal["jpeg", "png"] = "jpeg"  # 默认输出格式
+    quality: int = 92  # JPEG 质量（1-100；png 忽略）
+    default_width: int = 800  # 默认渲染宽度（调用方未指定时）
+    default_height: int = 600  # 默认渲染高度
+    device_scale_factor: float = 1.0  # 输出清晰度倍率（如 2.0 对应 2x 高清）
+
+
 class SessionSummaryConfig(BaseModel):
     """会话摘要（历史裁剪）配置（默认关闭）
 
@@ -367,6 +387,7 @@ class AppConfig(BaseModel):
     hot_reload: HotReloadConfig = HotReloadConfig()
     alert: AlertConfig = AlertConfig()
     image: ImageConfig = ImageConfig()
+    render: RenderConfig = RenderConfig()
     rag: RAGConfig = RAGConfig()
     session_summary: SessionSummaryConfig = SessionSummaryConfig()
     log: LogConfig = LogConfig()
@@ -429,6 +450,10 @@ class ConfigManager:
     @property
     def image(self) -> ImageConfig:
         return self._config.image
+
+    @property
+    def render(self) -> RenderConfig:
+        return self._config.render
 
     @property
     def rag(self) -> RAGConfig:

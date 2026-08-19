@@ -71,6 +71,7 @@ Qingci-Bot-CE/
 │   │   ├── tasks.py           # 后台任务管理（防 GC + 停机等待）
 │   │   ├── alerter.py         # 错误告警器
 │   │   ├── logformat.py       # 结构化 JSON 日志
+│   │   ├── html_renderer.py   # HTML → 图片渲染服务（Playwright 无头 Chromium，可选依赖）
 │   │   ├── session_state.py   # 会话状态管理（TTL 键值存储）
 │   │   ├── event_bus.py       # 跨插件事件总线（发布-订阅）
 │   │   └── di.py              # 依赖注入容器（SINGLETON/TRANSIENT/SCOPED）
@@ -96,6 +97,7 @@ Qingci-Bot-CE/
 │       ├── rule.py            # 薄转发 SDK Rule 规则系统
 │       ├── permission.py      # 薄转发 SDK Permission 权限系统
 │       ├── ratelimit.py       # 薄转发 SDK RateLimiter 限流
+│       ├── webapi.py          # 插件级 Web API 适配器（register_api → /api/plugin-web/<name>/）
 │       ├── llm_tool.py        # @llm_tool 插件级 LLM 工具声明（含注册到 ToolRegistry 的运行时逻辑）
 │       ├── watcher.py         # 插件自动热重载监听
 │       └── builtin/           # 内置插件（目录结构）
@@ -203,6 +205,15 @@ Qingci-Bot-CE/
 - Token 裁剪：按条数与 Token 双重限制，超出自动裁剪
 - 会话摘要：可选的摘要压缩，保留最近 N 轮原文
 - 人格切换：`/persona` 命令会话级覆盖 system_prompt
+
+### HTML 渲染服务（`bot/core/html_renderer.py`）
+
+基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG，供签到卡等「HTML 模板 → 图片消息」插件复用：
+
+- 可选依赖（`[render]` 分组，含 playwright；需 `playwright install chromium` 下载浏览器），懒加载——未安装/浏览器缺失时渲染能力自动降级不可用（`render_html()` 抛 `HtmlRenderUnavailableError`），框架启动不受影响
+- 浏览器惰性启动并复用（进程内单例）；渲染超时（`render.timeout`）控制、失败自动重建浏览器；`close()` 幂等，Bot 停止时自动关闭
+- 能力探测 `probe()` 实际启动一次浏览器验证并缓存；`GET /api/bot/status` 的 `render` 字段暴露 `enabled`/`supported`/`available`/`reason`，插件经 `bot.html_renderer` 访问
+- 配置节 `render`：`enabled`/`timeout`/`format`（jpeg/png）/`quality`/`default_width`/`default_height`/`device_scale_factor`（输出清晰度倍率）
 
 ### Database（`bot/db/`）
 
