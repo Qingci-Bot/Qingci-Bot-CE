@@ -113,6 +113,43 @@ async def test_unload(bot):
     assert pm.all_matchers() == []
 
 
+async def test_remove_deletes_disk_dir(bot, tmp_path):
+    """remove 应卸载插件并删除磁盘插件目录（修复卸载后文件残留）"""
+    from bot import paths
+
+    old_root = paths.plugins_dir()
+    paths.set_plugins_dir(tmp_path)
+    try:
+        plugin_dir = tmp_path / "simple"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.json").write_text(
+            '{"name": "simple", "version": "1.0.0"}', encoding="utf-8"
+        )
+
+        pm = bot.plugin_manager
+        await pm.load_external("plugin_pkg.simple_plugin", bot)
+        assert pm.get("simple") is not None
+        assert plugin_dir.is_dir()
+
+        await pm.remove("simple")
+        assert pm.get("simple") is None
+        assert pm.all_matchers() == []
+        assert not plugin_dir.exists()
+    finally:
+        paths.set_plugins_dir(old_root)
+
+
+async def test_remove_without_disk_dir_only_unloads(bot):
+    """无磁盘插件目录时 remove 退化为仅卸载，不报错"""
+    pm = bot.plugin_manager
+    await pm.load_external("plugin_pkg.simple_plugin", bot)
+    assert pm.get("simple") is not None
+
+    await pm.remove("simple")
+    assert pm.get("simple") is None
+    assert pm.all_matchers() == []
+
+
 async def test_shutdown_unloads_all(bot):
     pm = bot.plugin_manager
     await pm.load_external("plugin_pkg.simple_plugin", bot)

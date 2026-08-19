@@ -797,6 +797,31 @@ class PluginManager:
             logger.info(f"插件已卸载: {name}")
         self._invalidate_matchers_cache()
 
+    async def remove(self, name: str) -> None:
+        """卸载并删除插件（模块 + 磁盘插件目录）
+
+        与 unload 的区别：unload 仅卸载模块（文件保留，可随时重新加载），
+        remove 在 unload 基础上删除 data 目录下 `plugins/{name}` 目录，
+        使市场/插件列表状态完全清除。
+        """
+        await self.unload(name)
+        from ..paths import plugins_dir
+
+        plugin_dir = plugins_dir() / name
+        if not plugin_dir.exists():
+            logger.info(f"插件 {name} 无磁盘目录，已仅卸载")
+            return
+        if not plugin_dir.is_dir():
+            logger.warning(f"插件 {name} 磁盘路径非目录，跳过删除: {plugin_dir}")
+            return
+        import shutil
+
+        try:
+            shutil.rmtree(plugin_dir)
+        except OSError as e:
+            raise RuntimeError(f"插件 {name} 目录删除失败（文件可能被占用）: {plugin_dir}") from e
+        logger.info(f"插件已删除: {name} ({plugin_dir})")
+
     # ---- 禁用/启用 ----
 
     async def disable(self, name: str) -> None:

@@ -121,14 +121,14 @@ async def load_plugin(data: LoadPluginRequest, request: Request):
 
 @router.delete("/{name}", dependencies=[Depends(require_auth)])
 async def unload_plugin(name: str, request: Request):
-    """卸载插件"""
+    """卸载并删除插件（含磁盘目录）"""
     bot = _get_bot_instance()
     if name in _BUILTIN_PLUGINS:
-        raise HTTPException(status_code=400, detail=f"不允许卸载内置插件 {name}")
+        raise HTTPException(status_code=400, detail=f"不允许删除内置插件 {name}")
     if not bot.plugin_manager.get(name):
         raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
-    await bot.plugin_manager.unload(name)
-    await record_audit("plugin_unload", f"卸载插件: {name}", request)
+    await bot.plugin_manager.remove(name)
+    await record_audit("plugin_unload", f"卸载并删除插件: {name}", request)
     return {"message": f"插件 {name} 已卸载"}
 
 
