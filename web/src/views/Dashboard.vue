@@ -72,11 +72,7 @@ const triggerDesc = {
         <div class="stat-value" :style="{ color: store.statusColor }">{{ store.statusText }}</div>
         <div class="stat-desc">
           {{
-            !store.botRunning
-              ? '未启动'
-              : store.botConnected
-                ? '协议端已连接'
-                : '等待协议端连接'
+            !store.botRunning ? '未启动' : store.botConnected ? '协议端已连接' : '等待协议端连接'
           }}
         </div>
       </div>
