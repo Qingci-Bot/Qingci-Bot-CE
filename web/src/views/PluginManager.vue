@@ -544,6 +544,9 @@ function openHomepage(url) {
                 }}</span>
               </div>
               <div class="desc">{{ plugin.description || '无描述' }}</div>
+              <div v-if="plugin.load_error" class="desc load-error" :title="plugin.load_error">
+                ⚠ {{ plugin.load_error }}
+              </div>
               <div class="plugin-meta-row">
                 <span class="status-badge" :class="statusClass(plugin.status)">
                   <span class="status-dot" :class="statusClass(plugin.status)" />
@@ -1289,6 +1292,13 @@ function openHomepage(url) {
   background: var(--danger-bg);
   color: var(--danger);
   border-color: rgba(248, 113, 113, 0.25);
+}
+.load-error {
+  color: var(--danger);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .market-card .action-bar {
   display: flex;

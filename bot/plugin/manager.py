@@ -139,6 +139,8 @@ class PluginManager:
         self._i18n_locale = "zh-CN"
         # 插件注册的 LLM 工具名: plugin_name -> [full_tool_name]，卸载时注销
         self._plugin_tools: dict[str, list[str]] = {}
+        # 插件加载失败记录: plugin_name -> 错误摘要（供 WebUI 展示，替代静默失败）
+        self._load_errors: dict[str, str] = {}
 
     def set_i18n_locale(self, locale: str) -> None:
         """设置全局语言并刷新已加载插件的翻译"""
@@ -423,10 +425,13 @@ class PluginManager:
 
     async def load_external(self, module_path: str, bot) -> bool:
         """加载外部插件"""
+        name = module_path.rsplit(".", 1)[-1]
         try:
             await self._load_or_reload(module_path, bot)
+            self._load_errors.pop(name, None)
             return True
-        except Exception:
+        except Exception as e:
+            self._load_errors[name] = f"{type(e).__name__}: {e}"
             logger.exception(f"加载外部插件失败: {module_path}")
             return False
 
@@ -513,7 +518,8 @@ class PluginManager:
                 ok = await self.load_external(module_path, bot)
                 if ok:
                     count += 1
-            except Exception:
+            except Exception as e:
+                self._load_errors[module_name] = f"{type(e).__name__}: {e}"
                 logger.exception(f"加载外部插件失败: {module_path}")
 
         if count > 0:
@@ -988,6 +994,12 @@ class PluginManager:
         # 自动安装依赖（requirements.txt / plugin.json 的 requirements 字段，
         # 装入实例隔离的 deps 目录而非全局环境）
         await ensure_dependencies(target_dir)
+
+        # 确保 plugins 父目录在 sys.path（与 load_external_dir 一致），
+        # 避免 EXE 首次安装（目录新建、此前未扫描）时 import 失败
+        root_str = str(plugin_dir.parent)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
 
         # 加载插件
         module_path = f"plugins.{target_name}"

@@ -47,10 +47,12 @@ def _get_bot_instance():
 
 @router.get("", dependencies=[Depends(require_auth)])
 async def list_plugins():
-    """获取插件列表（含状态、分类、Web 管理页面）"""
+    """获取插件列表（含状态、分类、Web 管理页面；加载失败的插件以 error 状态展示原因）"""
     bot = _get_bot_instance()
     plugins = []
+    seen: set[str] = set()
     for _name, plugin in bot.plugin_manager.plugins.items():
+        seen.add(plugin.name)
         plugins.append(
             {
                 "name": plugin.name,
@@ -61,6 +63,26 @@ async def list_plugins():
                 "status": plugin.status.value,
                 "enabled": plugin.enabled,
                 "pages": bot.plugin_manager.get_plugin_pages(plugin.name),
+                "load_error": "",
+            }
+        )
+    # 加载失败的插件（目录/文件存在但未加载成功）：以 error 状态展示原因，
+    # 避免静默失败导致用户无从排查（EXE 环境无控制台日志）
+    for name, error in bot.plugin_manager._load_errors.items():
+        if name in seen:
+            continue
+        seen.add(name)
+        plugins.append(
+            {
+                "name": name,
+                "version": "",
+                "author": "",
+                "description": "插件加载失败",
+                "category": "",
+                "status": "error",
+                "enabled": False,
+                "pages": [],
+                "load_error": str(error),
             }
         )
     return plugins

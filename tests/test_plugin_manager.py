@@ -21,6 +21,17 @@ async def test_load_external_simple(bot):
 async def test_load_missing_module_fails(bot):
     ok = await bot.plugin_manager.load_external("plugin_pkg.no_such_module", bot)
     assert ok is False
+    # 加载失败应记录错误（供 WebUI 展示，避免静默失败）
+    assert "no_such_module" in bot.plugin_manager._load_errors
+
+
+async def test_load_failure_error_cleared_on_success(bot):
+    pm = bot.plugin_manager
+    await pm.load_external("plugin_pkg.no_such_module", bot)
+    assert "no_such_module" in pm._load_errors
+    ok = await pm.load_external("plugin_pkg.simple_plugin", bot)
+    assert ok is True
+    assert "simple" not in pm._load_errors
 
 
 async def test_load_sdk_plugin(bot):
