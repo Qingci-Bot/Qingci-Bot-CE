@@ -342,7 +342,9 @@ class MarketConfig(BaseModel):
 
     # 默认指 Gitee 镜像（GitHub 主仓库的国内同步镜像，拉取更快）；如遇镜像延迟，可改为 GitHub 主仓库 https://github.com/Qingci-Bot/Plugin-Market.git
     url: str = "https://gitee.com/qingci-bot/Plugin-Market.git"
-    refresh_interval: int = 3600  # 索引缓存 TTL（秒）
+    # 备用市场源（可选）：主源拉取失败时自动回退（如 GitHub 主仓库 / 自定义镜像）
+    mirror_url: str | None = None
+    refresh_interval: float = 3600  # 索引缓存 TTL（秒）
 
 
 class TelegramConfig(BaseModel):

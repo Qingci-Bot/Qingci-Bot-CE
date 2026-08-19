@@ -37,6 +37,7 @@ SAMPLE_INDEX = {
             "homepage": "https://example.com/hello",
             "source": "https://example.com/hello.git",
             "mirror": "https://example.com/hello-mirror.git",
+            "python_requires": ">=3.10",
             "tags": ["demo"],
             "requirements": ["qingci-plugin-sdk>=1.0"],
         },
@@ -70,9 +71,11 @@ def test_index_parse_filters_invalid(sample_index):
     assert hello["homepage"] == "https://example.com/hello"
     assert hello["requirements"] == ["qingci-plugin-sdk>=1.0"]
     assert hello["mirror"] == "https://example.com/hello-mirror.git"
+    assert hello["python_requires"] == ">=3.10"
     # 缺省字段回退为空
     assert sample_index.get("echo")["icon"] == ""
     assert sample_index.get("echo")["mirror"] == ""
+    assert sample_index.get("echo")["python_requires"] == ""
     assert sample_index.get("echo")["requirements"] == []
     assert sample_index.get("missing") is None
 
@@ -237,6 +240,9 @@ async def test_list_market_status(tmp_path: Path, monkeypatch):
     echo = next(i for i in items if i["name"] == "echo")
     assert echo["installed"] is False
     assert echo["update_available"] is False
+
+    # python_requires 兼容性（本机 3.10+ 均满足 >=3.10）
+    assert hello["compatible"] is True
 
 
 async def test_install_unloads_then_installs(tmp_path: Path, monkeypatch):

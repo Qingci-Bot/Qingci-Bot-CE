@@ -35,6 +35,7 @@ import asyncio
 import json
 import logging
 import shutil
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -89,6 +90,7 @@ class MarketIndex:
                     "type": str(item.get("type", "sdk")),
                     "source": source,
                     "mirror": str(item.get("mirror", "") or ""),
+                    "python_requires": str(item.get("python_requires", "") or ""),
                     "icon": str(item.get("icon", "") or ""),
                     "homepage": str(item.get("homepage", "") or ""),
                     "tags": [str(t) for t in (item.get("tags") or [])],
@@ -131,16 +133,36 @@ def is_newer(latest: str, current: str) -> bool:
     return _semver_key(latest) > _semver_key(current)
 
 
+def _python_compatible(python_requires: str) -> bool:
+    """当前 Python 版本是否满足索引声明的 python_requires（PEP 440 specifier）
+
+    未声明或声明无法解析时视为兼容（不阻断安装，仅作展示提示）。
+    """
+    spec = python_requires.strip()
+    if not spec:
+        return True
+    try:
+        from packaging.specifiers import SpecifierSet
+        from packaging.version import Version
+
+        return SpecifierSet(spec).contains(Version(sys.version.split()[0]))
+    except Exception:
+        logger.debug(f"python_requires 解析失败，视为兼容: {python_requires!r}")
+        return True
+
+
 class MarketClient:
-    """市场索引客户端：拉取 + TTL 缓存 + 磁盘回退"""
+    """市场索引客户端：拉取 + TTL 缓存 + 磁盘回退 + 备用源回退"""
 
     def __init__(
         self,
         url: str = DEFAULT_MARKET_URL,
         *,
+        mirror_url: str | None = None,
         refresh_interval: float = DEFAULT_REFRESH_INTERVAL,
     ):
         self.url = url
+        self.mirror_url = mirror_url
         self.refresh_interval = refresh_interval
         self._cache: MarketIndex | None = None
         self._fetched_at: float = 0.0  # monotonic，用于 TTL 判断
@@ -159,36 +181,48 @@ class MarketClient:
         """获取索引：内存缓存 TTL 内直接返回；否则拉取并刷新缓存
 
         force=True 强制重新拉取（WebUI「刷新市场」按钮）。
+        拉取顺序：主源 url → 备用源 mirror_url → 磁盘缓存 → 报错。
         """
         now = time.monotonic()
         if not force and self._cache is not None and now - self._fetched_at < self.refresh_interval:
             return self._cache
 
-        try:
-            index = await self._fetch_remote()
+        index = None
+        for label, src in (("主源", self.url), ("备用源", self.mirror_url)):
+            if not src:
+                continue
+            try:
+                index = await self._fetch_remote(src)
+                if label == "备用源":
+                    logger.info(f"插件市场索引来自备用源: {src}")
+                break
+            except Exception as e:
+                logger.warning(f"插件市场索引拉取失败（{label} {src}）: {e}")
+                index = None
+
+        if index is not None:
             self._save_cache(index)
             self._cache = index
             self._fetched_at = now
             self._fetched_wall = time.time()
             logger.info(f"插件市场索引已更新: {index.name} ({len(index.plugins)} 个插件)")
             return index
-        except Exception as e:
-            logger.warning(f"拉取插件市场索引失败: {e}")
-            cached = self._load_cache()
-            if cached is not None:
-                logger.info("使用本地缓存的插件市场索引")
-                self._cache = cached
-                self._fetched_at = now
-                return cached
-            raise MarketError(f"插件市场索引拉取失败且无本地缓存: {e}") from e
 
-    async def _fetch_remote(self) -> MarketIndex:
+        cached = self._load_cache()
+        if cached is not None:
+            logger.info("使用本地缓存的插件市场索引")
+            self._cache = cached
+            self._fetched_at = now
+            return cached
+        raise MarketError("插件市场索引拉取失败且无本地缓存（主源与备用源均不可用）")
+
+    async def _fetch_remote(self, url: str) -> MarketIndex:
         """拉取远端索引（git 仓库或 HTTP raw）
 
         优先尝试 HTTP（快）；返回非 JSON（如 Gitee 匿名 raw 被拦为 HTML）
         或 git 仓库地址时回退 git clone。
         """
-        url = self.url.strip()
+        url = url.strip()
         if url.endswith(".git") or "git@" in url:
             return await self._fetch_via_git(url)
         try:
@@ -290,9 +324,12 @@ class MarketManager:
         client: MarketClient | None = None,
         *,
         url: str = DEFAULT_MARKET_URL,
+        mirror_url: str | None = None,
         refresh_interval: float = DEFAULT_REFRESH_INTERVAL,
     ):
-        self.client = client or MarketClient(url=url, refresh_interval=refresh_interval)
+        self.client = client or MarketClient(
+            url=url, mirror_url=mirror_url, refresh_interval=refresh_interval
+        )
 
     async def list_market(self, bot) -> list[dict]:
         """市场列表：合并已安装/未安装/可更新状态
@@ -301,6 +338,7 @@ class MarketManager:
         - installed: bool    是否已安装（插件已加载或目录存在）
         - installed_version: str 已安装版本（空串=未安装）
         - update_available: bool 索引版本是否更新
+        - compatible: bool   当前 Python 版本是否满足索引 python_requires
         """
         index = await self.client.get_index()
         installed = self._collect_installed(bot)
@@ -311,6 +349,7 @@ class MarketManager:
             entry["installed"] = bool(cur)
             entry["installed_version"] = cur
             entry["update_available"] = bool(cur) and is_newer(item["version"], cur)
+            entry["compatible"] = _python_compatible(entry.get("python_requires") or "")
             result.append(entry)
         return result
 

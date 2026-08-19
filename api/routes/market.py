@@ -53,8 +53,9 @@ def _get_market_manager(bot) -> MarketManager:
     if manager is None:
         cfg = getattr(bot.config, "market", None)
         url = str(getattr(cfg, "url", "") or "").strip() or DEFAULT_MARKET_URL
+        mirror_url = str(getattr(cfg, "mirror_url", "") or "").strip() or None
         refresh = float(getattr(cfg, "refresh_interval", 3600) or 3600)
-        manager = MarketManager(url=url, refresh_interval=refresh)
+        manager = MarketManager(url=url, mirror_url=mirror_url, refresh_interval=refresh)
         bot._market_manager = manager  # type: ignore[attr-defined]
     return manager
 

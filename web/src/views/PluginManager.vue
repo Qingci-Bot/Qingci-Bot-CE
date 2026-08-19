@@ -911,6 +911,12 @@ function openHomepage(url) {
                 <span v-if="item.update_available" class="status-badge yellow">
                   可更新至 v{{ item.version }}
                 </span>
+                <span
+                  v-if="item.compatible === false"
+                  class="status-badge badge-incompatible"
+                  title="当前 Python 版本不满足插件声明的 python_requires"
+                  >⚠ 不兼容当前 Python</span
+                >
               </div>
             </div>
             <div class="action-bar">
@@ -926,16 +932,22 @@ function openHomepage(url) {
               <button
                 v-else
                 class="btn btn-primary btn-sm"
-                :disabled="marketAction === `install:${item.name}` || item.installed"
+                :disabled="
+                  marketAction === `install:${item.name}` ||
+                  item.installed ||
+                  item.compatible === false
+                "
                 @click="marketInstall(item.name)"
               >
                 <span :class="{ spin: marketAction === `install:${item.name}` }">＋</span>
                 {{
-                  item.installed
-                    ? '已安装'
-                    : marketAction === `install:${item.name}`
-                      ? '安装中...'
-                      : '安装'
+                  item.compatible === false
+                    ? '不兼容'
+                    : item.installed
+                      ? '已安装'
+                      : marketAction === `install:${item.name}`
+                        ? '安装中...'
+                        : '安装'
                 }}
               </button>
               <button
@@ -1272,6 +1284,11 @@ function openHomepage(url) {
   gap: 8px;
   margin-top: 6px;
   flex-wrap: wrap;
+}
+.badge-incompatible {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: rgba(248, 113, 113, 0.25);
 }
 .market-card .action-bar {
   display: flex;
