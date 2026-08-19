@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Web 关于页版本号动态化**：关于页版本号由硬编码改为从后端状态接口动态读取——`bot/__init__.py` 的 `__version__` 为唯一版本来源，`api/server.py`、`bot/core/bot.py`、`web/package.json` 与关于页统一引用，消除多处置 1.5.1/1.6.0 漂移
 - **Web 关于页鸣谢清单补全**：对照 `pyproject.toml` 依赖逐项核对，补齐 `pywebview` / `pystray`（桌面端运行依赖）鸣谢
 - **Telegram 增强：@提及触发与图片收发**：群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 `at` 段（`qq=self_id`）并置 `is_at_bot`，at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；`photo` / `image/*` document 归一化为 `image` 段 + `images`（file_id）；发送侧 `send_msg` / `call_api` 识别 `[CQ:image]` → `sendPhoto`（支持 Telegram file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，首图带 caption），其余不可渲染的 CQ 段降级为纯文本并合并连续空白；新增 14 个用例，`telegram.py` 覆盖升至 64%
-- **Telegram 增强：成员变动通知与轮询可靠性**：`chat_member` / `my_chat_member` 成员变动归一化为 OneBot `notice` 事件（`group_increase` / `group_decrease` / `group_admin`，被邀请 `sub_type=invite`），由原有事件 Matcher 消费；轮询 offset 改为处理单条更新后推进，单条处理失败仅记录并仍推进，避免失败更新无限重放；补充 5 个用例
+- **Telegram 增强：成员变动通知与轮询可靠性**：`chat_member` / `my_chat_member` 成员变动归一化为 OneBot `notice` 事件（`group_increase` / `group_decrease` / `group_admin`，被邀请 `sub_type=invite`），由原有事件 Matcher 消费；轮询 offset 推进策略优化（最终采用整批确认，见下方 Changed 条目），失败更新自动确认跳过避免重放；补充 5 个用例
 - **Telegram 增强：语音/视频媒体与 CQ 回复**：接收侧 `voice` → `record`、`video` / `video_note` → `video` 段；发送侧识别 `[CQ:record]` → `sendVoice`、`[CQ:video]` → `sendVideo`（与图片共用 file_id / http(s) URL / `base64://` / 本地路径解析），`[CQ:reply,id=N]` → `reply_to_message_id` 回复指定消息；消息事件 `sub_type` 语义修正（私聊 `friend`）；新增 8 个用例
 
 ### Changed
@@ -273,7 +273,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 多 LLM 提供商支持：OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义
 - 插件系统：借鉴 NoneBot2 的 Matcher / Rule / Permission 设计，支持热加载
 - Web 管理端：Vue 3 + 原神风格暗色主题
-- 桌面应用：PyWebView 套壳 + 系统托盘 + 开机自启 + 启动加载画面
+- 桌面应用：PyWebView 套壳 + 系统托盘 + 启动加载画面
 - 轻量知识库：关键词 + LanceDB 向量检索双模式
 - 会话摘要：历史超长时自动压缩，保留最近 N 轮原文
 - Function Calling：支持多轮工具调用（含 MCP 服务器接入）

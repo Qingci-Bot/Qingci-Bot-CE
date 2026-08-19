@@ -29,8 +29,8 @@
 说明：Telegram 的 edited_message / callback_query / message_reaction 承载
 其特有语义，在 OneBot 事件模型中无等价事件，以扩展 notice detail_type
 （message_edited / callback_query / message_reaction）承载，插件可用
-on_notice() 消费。offset 游标在处理单条更新后推进，处理失败也推进，
-避免无限重放。
+on_notice() 消费。offset 游标采用整批确认：先以 max(update_id)+1 推进
+再消费本批，处理失败也已确认，避免无限重放。
 """
 
 import asyncio

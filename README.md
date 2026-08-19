@@ -24,7 +24,7 @@
 - **增强能力**：AI 图片生成、轻量知识库（关键词检索零依赖；向量检索需可选依赖 lancedb）、会话摘要（历史裁剪）、Function Calling（内置时间/一言/群事件查询工具）、MCP 服务器接入、定时任务调度器、LLM 用量统计
 - **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式），支持在线备份与消息 CSV 导出
 - **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板 + 插件市场一键安装/更新/搜索）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置。独立「实例管理」页面支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）
-- **桌面应用**：PyWebView 套壳 + 系统托盘（关闭窗口自动驻留后台），开机自启；启动时显示即时加载画面，重型模块延迟导入，双击 exe 后无感知等待
+- **桌面应用**：PyWebView 套壳 + 系统托盘（关闭窗口自动驻留后台）；启动时显示即时加载画面，重型模块延迟导入，双击 exe 后无感知等待
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖；litellm 延迟导入，启动不加载重型依赖
 
 ---
@@ -66,7 +66,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install git+https://gitee.com/qingci-bot/Plugins-SDK.git` 安装 SDK）：
 >
 > ```bash
-> uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiosqlite \
+> uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiohttp aiosqlite \
 >   sqlmodel alembic "sqlalchemy[asyncio]" litellm pydantic pyyaml httpx \
 >   "apscheduler>=3.10,<4" "mcp>=1.6,<2" \
 >   pywebview pystray pillow \
@@ -92,7 +92,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 .venv\Scripts\python main.py --instance <name>
 ```
 
-启动必须绑定一个实例（无全局模式）：未指定 `--instance` 时自动选择默认实例（`default` 优先，其次名称排序第一个）；若实例数为 0 则自动创建 `default` 实例。每个实例是 `instances/<name>/` 下的自包含目录，侧边栏「实例」区块可新建/删除/切换实例；切换会以目标实例重启进程。**创建实例时可绑定主平台**（OneBot/QQ 或 Telegram）：创建后系统设置即针对该平台语义落位——OneBot 主平台实例启动反向 WS 服务端（`onebot.enabled`），Telegram 主平台实例自动关闭反向 WS 并启用 Telegram 适配器，`super_admin` / 管理员 / 黑白名单均以平台无关字符串 ID 配置。
+启动必须绑定一个实例（无全局模式）：未指定 `--instance` 时自动选择默认实例（`default` 优先，其次名称排序第一个）；若实例数为 0 则自动创建 `default` 实例。每个实例是 `instances/<name>/` 下的自包含目录，独立「实例管理」页（`/instances`）支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）；切换会以目标实例重启进程。**创建实例时可绑定主平台**（OneBot / OneBot 12 / Telegram）：创建后系统设置即针对该平台语义落位——OneBot 主平台实例启动反向 WS 服务端（`onebot.enabled`），Telegram 主平台实例自动关闭反向 WS 并启用 Telegram 适配器，`super_admin` / 管理员 / 黑白名单均以平台无关字符串 ID 配置。
 
 启动后访问 `http://127.0.0.1:8080/ui` 进入管理界面。
 
@@ -116,7 +116,7 @@ docker compose down         # 停止
 - **外部 OneBot 前端连入**：将该实例 `onebot.host` 改为 `0.0.0.0` 后 `docker compose restart`
 - 文件内容与完整说明见 `Dockerfile` / `docker-compose.yml`（`.dockerignore` 排除 venv/产物，实例目录不进镜像）
 
-> 构建依赖 `qingci-plugin-sdk`（GitHub git 依赖）需构建期联网；若改用了私有 SDK 克隆地址，请在构建前配置好凭据。
+> 构建依赖 `qingci-plugin-sdk`（Gitee git 依赖，见 [pyproject.toml](./pyproject.toml)）需构建期联网；若改用了私有 SDK 克隆地址，请在构建前配置好凭据。
 
 ### 2.2 Linux 源码部署（一键脚本 install.sh）
 
@@ -303,6 +303,7 @@ api_key: your-secret-key
 - 设置后，除以下免鉴权端点外，**所有接口**（含 GET 读操作）都需要携带 `X-API-Key` 请求头：
   - `GET /api/bot/status`、`GET /api/bot/health`（状态/健康检查）
   - `GET /api/auth/status`、`POST /api/auth/login`（登录与鉴权状态）
+  - `GET /api/config/wizard/status`、`POST /api/config/wizard`、`POST /api/config/wizard/skip`（首次启动向导）
 - 在 Web UI 的「系统设置」页面可同时配置服务端 Key 和浏览器端 Key
 - WebSocket（`/api/ws/log`、`/api/ws/chat`）通过 `token` 查询参数鉴权，方式同上
 

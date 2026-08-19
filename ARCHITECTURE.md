@@ -62,7 +62,7 @@ Qingci-Bot-CE/
 │   │   ├── composition.py     # 组合根（assemble_bot：组件装配 + DI 注册）
 │   │   ├── connection.py      # OneBot 连接（aiocqhttp 反向 WS，实现 PlatformAdapter 契约）
 │   │   ├── v11_compat.py      # OneBot 11 事件 → OneBot 12 事件翻译层（双模归一化入口）
-│   │   ├── platforms/         # 多平台适配器（base.py PlatformAdapter 契约 + telegram.py 长轮询）
+│   │   ├── platforms/         # 多平台适配器（base.py PlatformAdapter 契约 + onebot12.py + telegram.py）
 │   │   ├── dispatcher.py      # 消息分发 + Matcher 调度（MessageContext 转发 SDK）
 │   │   ├── message.py         # 类型化消息构造器（Message/MessageSegment）
 │   │   ├── broadcast.py       # 消息广播
@@ -88,7 +88,7 @@ Qingci-Bot-CE/
 │   │   └── models.py          # SQLModel 模型定义
 │   ├── testing/               # 插件测试工具（TestBot + 事件构造器，无需启动真实 Bot）
 │   │   ├── bot.py             # TestBot 轻量测试环境
-│   │   └── events.py          # OneBot v11 事件构造器
+│   │   └── events.py          # 事件构造器（v11 / v12 双模）
 │   └── plugin/
 │       ├── base.py            # 薄转发 SDK PluginBase（协议层唯一来源）
 │       ├── manager.py         # 插件管理器（热加载 + 模块级收集 + SDK data_root 重定向）
@@ -120,7 +120,7 @@ Qingci-Bot-CE/
 │   ├── auth.py                # API 鉴权
 │   ├── audit.py               # 审计日志（埋点 + 查询）
 │   ├── server.py              # FastAPI 应用
-│   └── routes/                # API 路由（bot/config/plugin/log/group/auth/backup/command/instances）
+│   └── routes/                # API 路由（bot/config/plugin/market/log/group/auth/backup/command/instances）
 ├── web/                       # Vue 3 前端
 │   └── src/
 │       ├── views/             # 页面组件
@@ -175,7 +175,7 @@ Qingci-Bot-CE/
 平台协议统一收敛为 `PlatformAdapter` 契约，插件对来源平台无感知；事件归一化为 **OneBot 12 内部模型**（`type`/`detail_type` + 标准消息段，注入 `platform` 字段），回复按 `MessageContext.platform` 路由回对应适配器：
 
 - **`base.py`**：定义 `PlatformAdapter` 契约（适配器名/展示名、启动与关闭、事件上报回调、发送消息、`get_status`/API 透传等），任何平台只需实现该契约即可接入
-- **`telegram.py`**：Telegram 平台实现——以 Bot API 长轮询（`getUpdates`）接入，由 `platforms.telegram.enabled/token/poll_interval` 控制；收到更新后归一化为 **OneBot 12 消息事件**并注入 `platform: "telegram"`。关键能力：① 群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 v12 `mention` 段（`user_id=self_id`）并置 `is_at_bot`，确保 at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；② `photo` / `image/*` document 归一化为 `image` 段（`file_id`）+ `images`，`voice` → `voice`、`video` / `video_note` → `video` 段，消息 `sub_type` 语义对齐 OneBot（私聊 `friend`）；③ 发送消费 OneBot 12 标准段——`image` → `sendPhoto`、`voice` → `sendVoice`、`video` → `sendVideo`（file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，caption 附着首条媒体），`reply` 段 → 回复指定消息，其余不可渲染的段降级为纯文本并合并连续空白，之外走 `sendMessage`；④ `chat_member` / `my_chat_member` 成员变动归一化为 OneBot `notice`（`group_member_increase` / `group_member_decrease` / `group_admin_set` / `group_admin_unset`，被邀请 `sub_type=invite`），由既有事件 Matcher 消费；⑤ 轮询 offset 在处理单条更新后推进，单条处理失败仅记录并仍推进，避免失败更新无限重放
+- **`telegram.py`**：Telegram 平台实现——以 Bot API 长轮询（`getUpdates`）接入，由 `platforms.telegram.enabled/token/poll_interval` 控制；收到更新后归一化为 **OneBot 12 消息事件**并注入 `platform: "telegram"`。关键能力：① 群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 v12 `mention` 段（`user_id=self_id`）并置 `is_at_bot`，确保 at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；② `photo` / `image/*` document 归一化为 `image` 段（`file_id`）+ `images`，`voice` → `voice`、`video` / `video_note` → `video` 段，消息 `sub_type` 语义对齐 OneBot（私聊 `friend`）；③ 发送消费 OneBot 12 标准段——`image` → `sendPhoto`、`voice` → `sendVoice`、`video` → `sendVideo`（file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，caption 附着首条媒体），`reply` 段 → 回复指定消息，其余不可渲染的段降级为纯文本并合并连续空白，之外走 `sendMessage`；④ `chat_member` / `my_chat_member` 成员变动归一化为 OneBot `notice`（`group_member_increase` / `group_member_decrease` / `group_admin_set` / `group_admin_unset`，被邀请 `sub_type=invite`），由既有事件 Matcher 消费；⑤ 轮询 offset 采用**整批确认**：先以 `max(update_id)+1` 推进游标再并发消费本批更新，单条处理失败也已被确认，避免失败更新无限重放
 - **`OneBotConnection`**（`bot/core/connection.py`）作为「onebot」平台接入 OneBot 11 反向 WebSocket，收到 v11 事件先经 `v11_compat.v11_event_to_v12()` 翻译为 v12 事件再上报（同时保留 `platform`/兼容字段），与原反向 WS 行为兼容，回复路由与附加平台共用同一发送映射
 - **`onebot12.py`**：OneBot 12 平台实现——aiohttp 反向 WebSocket 服务端（`platforms.onebot12.enabled/host/port/access_token` 控制），支持 OneBot 12 实现端（NapCat / Lagrange.OneBot 等）原生接入；事件以 v12 标准格式直通 Dispatcher（注入 `platform: "onebot12"`），动作以 JSON-RPC（`{action, params, echo}`）请求并通过 echo 匹配响应，`send_message` 动作消费 v12 段数组原生表达，与 v11 相比省去翻译层
 - 附加平台（Telegram / OneBot 12）启动失败仅记录日志，不阻断主平台（OneBot）可用性
@@ -248,8 +248,8 @@ rag:
 索引生成是**全自动**的，无需手动执行脚本：
 
 - **启动时自动索引**：Bot 启动时若 `mode: vector`，自动扫描 `knowledge_dir` 下所有文档，调用 embedding API 生成向量并写入 LanceDB
-- **文档变更自动重建**：通过 Web UI 知识库管理页或 `/kb` 命令添加/删除文档时，自动触发全量索引重建
-- **手动触发重建**：在 Web UI 知识库管理页点击「重建索引」按钮
+- **文档变更自动重建**：通过 `/kb` 命令添加/删除文档时，自动触发全量索引重建
+- **手动触发重建**：`/kb reload` 重新索引知识库目录（知识库无独立 Web 管理页，统一经 `/kb` 命令管理）
 
 **首次索引耗时估算**：取决于文档总量和 embedding API 响应速度。100 篇中等长度文档约需 30-60 秒，期间 Bot 其他功能不受影响。
 
@@ -259,11 +259,7 @@ LanceDB 数据存储在 `data/knowledge/.lancedb/` 目录下，无需额外维�
 
 #### 5. 验证索引状态
 
-通过 Web UI 知识库管理页可查看：文档列表、各文档分块数、索引更新时间。或调用 API：
-
-```bash
-curl http://localhost:8000/api/knowledge/documents
-```
+通过 `/kb list` 命令可查看：知识库文档列表与分块状态（`/kb reload` 可手动重建索引）。
 
 #### 注意事项
 

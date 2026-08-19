@@ -30,7 +30,7 @@ npm run build    # 构建生产版本到 web/dist/
 
 > **快速开始**：复制 `plugins/_template/` 目录为 `plugins/my_plugin/` 即可开始开发。
 > 模板目录涵盖所有功能（命令/前缀/关键词/通知/请求/定时任务/Function Calling），附详细中文注释。
-> 最小示例见 `plugins/hello/`（15 行代码，开箱即用）。
+> 最小示例见 `plugins/hello/`（开箱即用）。
 
 ### 命名规范
 
@@ -45,7 +45,7 @@ npm run build    # 构建生产版本到 web/dist/
 - 目录名以 `_` 开头（如 `_template/`）会被跳过，不会加载
 - 每个插件包只能定义 **1 个** `PluginBase` 子类，多个会报错
 - 插件类必须定义在 `__init__.py` 模块内，不能从其他模块 `import` 进来
-- `name` 不能与其他已加载插件重名
+- `name` 与其他已加载插件重名时**警告并覆盖**（后加载者胜出，仅记录 warning 不报错）
 - 单文件 `.py` 插件仍兼容，但推荐使用目录结构
 
 ### 目录结构要求
@@ -64,7 +64,7 @@ npm run build    # 构建生产版本到 web/dist/
 ```
 plugins/my_plugin/          # 目录名 = 插件名（不能以 _ 或 . 开头）
 ├── __init__.py              # 必需：插件入口，含 PluginBase 子类
-├── plugin.json              # 可选：元数据（替代类属性 name/version/author 等）
+├── plugin.json              # 可选：元数据（用于元数据发现与依赖声明；不合并类属性）
 ├── requirements.txt         # 可选：Python 第三方依赖声明（见「插件第三方依赖」）
 ├── utils.py                 # 可选：插件内部模块
 └── web/                     # 可选：Web 管理页面静态文件
@@ -237,7 +237,7 @@ async def stats(
 5. 其余带默认值参数 → 使用默认值
 6. 其余参数 → 视为上下文（向后兼容）
 
-`Depends` 支持 `use_cache=True`（默认）缓存解析结果；可调用依赖的返回值会自动等待 `await`。
+`Depends` 接受 `use_cache=True` 参数（当前保留兼容、暂未实现缓存）；可调用依赖的返回值会自动等待 `await`。
 
 ### 插件数据目录（data_dir）
 
@@ -722,12 +722,13 @@ class MyPlugin(PluginBase):
   "version": "1.0.0",
   "author": "YourName",
   "description": "插件描述",
-  "category": "tool",
-  "require": ["chat>=1.0"]
+  "category": "tool"
 }
 ```
 
-框架提供 `GET /api/plugin/discover/metadata` API 扫描所有 `plugin.json`。
+> 注意：`plugin.json` 仅承载元数据发现与依赖声明（`requirements` 字段，声明 Python 包依赖）；插件元信息（`name`/`version`/`require` 等）仍以类属性为准，不会从 `plugin.json` 合并。
+
+框架提供 `GET /api/plugin/discover/metadata` API 扫描插件目录根层 `.py` 文件旁的同名 `plugin.json`（文件型插件），无需导入模块即可发现元信息。
 
 ### Web 管理页面（register_page）
 
@@ -788,7 +789,7 @@ plugins/my_plugin/
 self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 ```
 
-**内置 Rule：** `startswith` / `endswith` / `fullmatch` / `contains` / `regex` / `command` / `to_me` / `is_private` / `is_group` / `keyword` / `rate_limit`
+**内置 Rule：** `startswith` / `endswith` / `fullmatch` / `contains` / `regex` / `command` / `subcommand` / `to_me` / `is_private` / `is_group` / `keyword` / `rate_limit`
 
 **内置 Permission：** `EVERYONE` / `SUPERUSER` / `ADMIN` / `PRIVATE` / `GROUP` / `MEMBER` / `USER(ids)` / `GROUP_MEMBER(ids)`
 
@@ -806,10 +807,15 @@ self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 | `ctx.command` | `str` | 匹配到的命令名（`command` 规则写入） |
 | `ctx.args` | `str` | 命令参数 / 前缀后的剩余文本 |
 | `ctx.match` | `re.Match` | 正则匹配结果（`regex` 规则写入） |
+| `ctx.subcommand` | `str` | 子指令名（`subcommand` 规则写入，如 `admin ban` 中的 `ban`） |
+| `ctx.parsed_args` | `dict` | `args_schema` 类型化解析后的命令参数字典 |
+| `ctx.session` | `Session` | 会话阶梯句柄（多轮交互，`pause`/`finish`/`reject`） |
+| `ctx.session_state` | `SessionStateManager` | TTL 会话状态（`get`/`set` 等） |
+| `ctx.event` | `NoticeEvent` | 类型化事件对象（notice/request 事件注入，消息事件为 None） |
 
-基础字段（同 MessageContext）：`type` / `detail_type`（v12 事件类型与详细类型）/ `raw_event` / `message_type` / `message_id` / `user_id` / `group_id` / `self_id` / `plain_text` / `raw_message` / `segments`（v12 标准段数组）/ `is_at_bot` / `at_list` / `images` / `sender` / `platform`
+基础字段（同 MessageContext）：`type` / `detail_type` / `event_id`（v12 事件标识）/ `raw_event` / `message_type` / `sub_type` / `message_id` / `user_id` / `group_id` / `self_id` / `channel_id` / `guild_id` / `plain_text` / `raw_message` / `segments`（v12 标准段数组）/ `is_at_bot` / `at_list` / `images` / `sender` / `platform`
 
-> **多平台说明**：`platform` 为来源平台标识（如 `"onebot"` / `"telegram"`），由适配器在事件入口归一化为 OneBot 12 时注入。`type`/`detail_type` 为 v12 事件标识（如 `type="message", detail_type="private"`）；`post_type`/`message_type` 由 v12 字段派生，保留供存量插件读取。插件/命令无需感知来源平台——同一套 Matcher/Rule/Permission 逻辑基于统一事件模型自动适用于所有已接入平台；回复由框架按 `ctx.platform` 路由回对应适配器。默认（OneBot）环境下该字段为 `"onebot"`。
+> **多平台说明**：`platform` 为来源平台标识（如 `"onebot"` / `"telegram"`），由适配器在事件入口归一化为 OneBot 12 时注入。`type`/`detail_type` 为 v12 事件标识（如 `type="message", detail_type="private"`）；`post_type`/`message_type` 由 v12 字段派生，保留供存量插件读取。插件/命令无需感知来源平台——同一套 Matcher/Rule/Permission 逻辑基于统一事件模型自动适用于所有已接入平台；回复由框架按 `ctx.platform` 路由回对应适配器。默认（OneBot）环境下该字段为 `"onebot"`。平台差异与 Telegram 特有扩展事件详见「多平台插件开发（QQ / Telegram）」。
 >
 > **v12 消息段访问**：`ctx.segments` 为 OneBot 12 标准段数组（`{type, data}`，媒体用 `file_id`）；`ctx.message` 为 SDK `Message` 容器（`extract_plain_text()` / `mentions()` / `images()` / `first_reply()` / `as_dicts()` / `as_v11()`）；`ctx.as_v12_segments()` / `ctx.as_v11_segments()` 提供 v12/v11 视图。
 
@@ -964,10 +970,10 @@ class WelcomePlugin(PluginBase):
 
     async def _on_group_increase(self, ctx: MatcherContext, event: GroupIncreaseNotice) -> None:
         """类型化通知事件注入：勿再手写 notice_type / detail_type 判断，直接读字段"""
-        msg = Message(
+        msg = Message([
             MessageSegment.mention(event.user_id),  # v12 mention 段（@ 新人）
             MessageSegment.text(" 欢迎加入本群！"),
-        )
+        ])
         # send_group_msg 接受文本 / v11 段 / v12 段数组（此处传 v12 段，自动转 CQ 发送）
         await self.connection.send_group_msg(event.group_id, msg.as_dicts())
 ```
@@ -1113,12 +1119,12 @@ async def weather_log(ctx: MatcherContext) -> None:
 from qingci_plugin_sdk.segments import Message, MessageSegment
 
 # 回复 + @ + 文本 + 图片 组合（OneBot 12 段）
-msg = Message(
+msg = Message([
     MessageSegment.reply(ctx.message_id),
     MessageSegment.mention(ctx.user_id),
     MessageSegment.text("请看这张图："),
     MessageSegment.image("file_id_xxx"),
-)
+])
 # as_dicts() 返回标准 v12 段数组，直接作为发送动作参数
 await self.connection.send_msg("group", ctx.group_id, msg.as_dicts())
 ```
@@ -1132,6 +1138,52 @@ await self.connection.send_msg("group", ctx.group_id, msg.as_dicts())
 > from qingci_plugin_sdk.segments import segments_to_v11
 > v11_segments = segments_to_v11(ctx.message.segments)
 > ```
+
+### 多平台插件开发（QQ / Telegram）
+
+内核统一采用 **OneBot 12 事件模型**，QQ（OneBot 11/12 协议端）与 Telegram 的事件在入口由各自适配器归一化为同一套内部事件，因此**插件对来源平台完全无感知**——同一份插件代码在 QQ 和 Telegram 实例上零改动即可运行，无需任何平台分支。
+
+**为什么一样：**
+
+- 插件 API 一致：`PluginBase` / `Matcher` / `Permission` / `Rule` / `MessageContext` 与平台无关
+- 事件模型一致：`type` / `detail_type` / `{type, data}` 消息段，媒体以 `file_id` 引用
+- 发送一致：`send_msg` / `send_group_msg` / `send_private_msg` 接受 v12 段数组，回复按 `ctx.platform` 自动路由回对应适配器
+- 权限一致：`super_admin` / `admin_users` 等以平台无关字符串 ID 配置
+
+**平台差异对照：**
+
+| 维度 | QQ（OneBot 11/12） | Telegram |
+|------|--------------------|----------|
+| 标准 notice 事件 | 完整（撤回/禁言/poke/好友添加/上传等） | 仅成员进出群、管理员变更被归一化 |
+| 平台特有扩展事件 | 无 | `message_edited` / `callback_query` / `message_reaction`（用 `on_notice()` 消费） |
+| 群聊触发 | 默认直接响应 | 需 `@Bot` 提及（at 触发模式），私聊天然放行 |
+| 媒体段映射 | `face`/`record` 等 QQ 段 | `photo→image`、`voice→voice`、`video→video` |
+| 回调按钮 | 无 | `callback_query` 需 `call_api("answer_callback_query")` 应答 |
+| 发送者字段 | `nickname`/`card` | `first_name`/`username` |
+
+**Telegram 特有扩展事件**（QQ 无对应事件，均以扩展 notice `detail_type` 承载，插件用 `on_notice()` 消费）：
+
+| detail_type | 说明 | SDK 类型化事件 |
+|-------------|------|----------------|
+| `message_edited` | 消息被编辑（携带新文本 `alt_message` 与 v12 段数组，不触发消息回复） | `MessageEditedEvent` |
+| `callback_query` | 内联按钮回调（携带 `data` / `callback_query_id`，可 `call_api("answer_callback_query")` 应答） | `NoticeEvent` |
+| `message_reaction` | 消息表情反应（新/旧表情列表，`sub_type` 区分 add/remove/change） | `NoticeEvent` |
+
+**实践建议：**
+
+- 写**通用插件**时只依赖 v12 标准事件与消息段，QQ / Telegram 直接通用
+- 只有做平台特有功能（如监听消息编辑、内联按钮回调）时才用扩展事件，并建议用 `ctx.platform` 判断来源，避免在 QQ 上误触发：
+
+```python
+from qingci_plugin_sdk import on_notice, MatcherContext, MessageEditedEvent
+
+
+@on_notice()
+async def on_edited(ctx: MatcherContext, event: MessageEditedEvent) -> str | None:
+    if ctx.platform != "telegram":
+        return None  # 仅 Telegram 有消息编辑事件
+    return f"你刚刚把消息改成了：{event.alt_message}"
+```
 
 ### 全局事件钩子（消息中间件）
 
@@ -1254,7 +1306,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin")
 - `on_disable` 和 `on_enable` 是可选钩子：禁用/启用不触发 `on_load`/`on_unload`，仅做轻量清理（如停用/恢复定时任务）
 - 插件被禁用后，实例保留在内存中，Matcher 和旧式回调均不触发，API 返回的 `enabled` 字段反映当前状态
 - 插件中不要使用阻塞操作（如 `time.sleep`），用 `asyncio.sleep` 代替
-- `on_message` 返回空字符串 `""` 也会被当作回复发送，不需要回复时返回 `None`
+- Matcher handler 返回空字符串 `""` 也会被当作回复发送（判空为 `is not None`）；旧式 `on_message` 返回空字符串不会发送，不需要回复时返回 `None`
 - 插件可通过 `self.config` 修改配置，但需调用 `self.config.save()` 持久化
 - 热重载会重新执行模块代码，类级别的可变状态会丢失
 - 模块级装饰器注册的 Matcher 会自动关联到同模块的 PluginBase 子类
@@ -1265,7 +1317,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin")
 
 ## API 接口
 
-所有接口前缀 `/api`。启用鉴权（配置 `api_key`）时，除 `/api/bot/status`、`/api/bot/health`、`/api/auth/*` 外均需携带 `X-API-Key` 请求头；`api_key` 为空时全部免鉴权。
+所有接口前缀 `/api`。启用鉴权（配置 `api_key`）时，除 `/api/bot/status`、`/api/bot/health`、`/api/auth/*`、`/api/config/wizard*`（首次启动向导）外均需携带 `X-API-Key` 请求头；`api_key` 为空时全部免鉴权。
 
 **错误响应与超时说明：**
 
@@ -1312,7 +1364,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin")
 | GET | `/{name}/metrics` | 是 | 获取插件执行指标（调用次数、平均耗时、错误率） |
 | GET | `/{name}/config` | 是 | 获取插件配置 JSON Schema 与当前值（用于自动渲染配置表单） |
 | PUT | `/{name}/config` | 是 | 更新插件配置（写入 config.yaml 并应用到插件实例） |
-| GET | `/discover/metadata` | 是 | 无导入发现：扫描 plugins/ 目录中的 plugin.json 元数据 |
+| GET | `/discover/metadata` | 是 | 无导入发现：扫描插件目录根层 `.py` 文件旁的同名 `plugin.json`（文件型插件） |
 
 ### 命令管理 `/api/command`
 
