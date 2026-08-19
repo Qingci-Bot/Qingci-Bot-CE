@@ -5,7 +5,7 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.9.0] - 2026-08-19（框架能力补全：HTML 渲染 + 插件 Web API）
 
 ### Added
 - **插件级 Web API 注册机制（`register_api`）**：插件在 `on_load` 中经 SDK `PluginBase.register_api` 注册 HTTP 接口，框架统一挂载到 `/api/plugin-web/{plugin_name}/{path}`，鉴权对齐现有 API 体系（`X-API-Key`）——handler 契约支持 `Response` 原样返回 / `(data, status)` 二元组 / dict 自动 JSON 序列化；路由在插件加载后动态挂载（无需重启），端点按请求时动态解析插件实例与 handler（插件热重载后自动指向新实现、卸载后返回 404）；新增 `bot/plugin/webapi.py` 适配器与 10 个用例（含返回类型归一化、鉴权、卸载/热重载动态解析、幂等挂载）
