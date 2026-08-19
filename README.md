@@ -58,11 +58,19 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > |------|----------|------|
 > | 核心 | `uv pip install -e .` | 运行时依赖（FastAPI、litellm、OneBot、qingci-plugin-sdk 等） |
 > | `[vector]` | `uv pip install -e ".[vector]"` | 向量知识库（lancedb，可选；缺失时 RAG 自动回退关键词检索） |
-> | `[render]` | `uv pip install -e ".[render]"` | HTML → 图片渲染（playwright，可选；安装后需执行 `playwright install chromium` 下载浏览器；缺失时渲染能力自动降级不可用，调用方回退） |
+> | `[render]` | `uv pip install -e ".[render]"` | HTML → 图片渲染（playwright，可选；安装与 Chromium 下载见下方「启用 HTML 渲染」；缺失时渲染能力自动降级不可用，调用方回退） |
 > | `[test]` | `uv pip install -e ".[test]"` | pytest / pytest-asyncio / pytest-cov / httpx |
 > | `[build]` | `uv pip install -e ".[build]"` | pyinstaller（`.\build.ps1` 依赖） |
 > | `[dev]` | `uv pip install -e ".[dev]"` | 以上全部 + ruff / mypy（代码质量工具） |
 >
+> **启用 HTML 渲染**：安装 `[render]` 分组后还需下载 Chromium（国内网络建议走 npm 镜像，否则容易卡住/超时）：
+>
+> ```bash
+> $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://npmmirror.com/mirrors/playwright"
+> uv run playwright install chromium
+> ```
+>
+> 浏览器缺失或下载失败时渲染能力自动降级不可用（`/api/bot/status` 的 `render` 字段可查状态），不影响框架启动。
 > 插件协议层 SDK（`qingci-plugin-sdk`）作为 git 依赖（默认指 [Gitee 镜像](https://gitee.com/qingci-bot/Plugins-SDK)，国内拉取更快）随核心依赖安装；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.ps1` 一致），覆盖 git 依赖版本。
 >
 > 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install git+https://gitee.com/qingci-bot/Plugins-SDK.git` 安装 SDK）：
@@ -430,7 +438,7 @@ api_key: ''                        # API 鉴权密钥
 | `hot_reload` | 插件自动热重载 | `enabled: false` | 开发期监听 `plugins/` 目录 `.py` 文件变更并自动重载对应插件；`interval` 为轮询间隔（秒）；生产环境建议关闭 |
 | `alert` | 错误告警 | `enabled: false` | 冷却窗口内 ERROR 日志达到 `error_threshold` 条时向管理员发消息告警，带 `cooldown_minutes` 冷却 |
 | `image` | 图片生成 | `enabled: false` | `/image <提示词>`（或 `/画图`）命令；`image.api_key` 为空时回退 `llm.api_key`；成功后以 v12 `image` 消息段回复 |
-| `render` | HTML → 图片渲染 | `enabled: true` | 基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG，供签到卡等插件复用（可选依赖 `[render]` + `playwright install chromium`）；未安装/浏览器缺失时自动降级不可用，`/api/bot/status` 的 `render` 字段展示能力状态 |
+| `render` | HTML → 图片渲染 | `enabled: true` | 基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG，供签到卡等插件复用（可选依赖 `[render]`；Chromium 下载见「启用 HTML 渲染」，国内走 npm 镜像）；未安装/浏览器缺失时自动降级不可用，`/api/bot/status` 的 `render` 字段展示能力状态 |
 | `rag` | 轻量知识库 | `enabled: false` | 双模式：`keyword`（纯 Python 关键词检索，无重型依赖）/ `vector`（LanceDB 向量检索 + litellm embedding，语义更精准；需可选依赖 `lancedb`，未安装时自动回退 keyword 并告警）；开启后对话自动注入检索到的参考资料；`/kb` 命令管理文档（add/list/search/remove/reload）。vector 模式的初始化步骤见 [ARCHITECTURE.md](./ARCHITECTURE.md#向量检索rag初始化) |
 | `session_summary` | 会话摘要 | `enabled: false` | 与 `llm.enable_summary` 等价，任一为 true 即启用；上下文超过条数/token 阈值时将较早消息摘要压缩，保留最近 N 轮原文 |
 | `log.usage_tracking` | LLM 用量入库 | `true` | 可退出的遥测：关闭后 chat/摘要/图片不再写 usage_logs，Dashboard 用量统计将为空 |
