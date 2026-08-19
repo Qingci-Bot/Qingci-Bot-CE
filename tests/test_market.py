@@ -36,6 +36,7 @@ SAMPLE_INDEX = {
             "icon": "👋",
             "homepage": "https://example.com/hello",
             "source": "https://example.com/hello.git",
+            "mirror": "https://example.com/hello-mirror.git",
             "tags": ["demo"],
             "requirements": ["qingci-plugin-sdk>=1.0"],
         },
@@ -68,8 +69,10 @@ def test_index_parse_filters_invalid(sample_index):
     assert hello["icon"] == "👋"
     assert hello["homepage"] == "https://example.com/hello"
     assert hello["requirements"] == ["qingci-plugin-sdk>=1.0"]
+    assert hello["mirror"] == "https://example.com/hello-mirror.git"
     # 缺省字段回退为空
     assert sample_index.get("echo")["icon"] == ""
+    assert sample_index.get("echo")["mirror"] == ""
     assert sample_index.get("echo")["requirements"] == []
     assert sample_index.get("missing") is None
 
@@ -245,6 +248,42 @@ async def test_install_unloads_then_installs(tmp_path: Path, monkeypatch):
     await manager.install(bot, "hello")
     assert "hello" in fake_mgr._plugins
     assert fake_mgr._plugins["hello"].version == "1.2.0"
+
+
+async def test_install_falls_back_to_mirror(tmp_path: Path, monkeypatch):
+    """主地址 source 失败时回退到备用地址 mirror"""
+    manager = _make_manager(tmp_path, monkeypatch, json.dumps(SAMPLE_INDEX).encode())
+    calls: list[str] = []
+
+    class _FlakyManager(_FakeManager):
+        async def install(self, bot, source, name=None):
+            calls.append(source)
+            if "mirror" not in source:
+                return False
+            self._plugins[name or "x"] = _FakePlugin(name or "x", "1.2.0")
+            return True
+
+    fake_mgr = _FlakyManager({"hello": _FakePlugin("hello", "1.0.0")})
+    bot = _FakeBot(fake_mgr)
+
+    assert await manager.install(bot, "hello") is True
+    assert calls == ["https://example.com/hello.git", "https://example.com/hello-mirror.git"]
+    assert fake_mgr._plugins["hello"].version == "1.2.0"
+
+
+async def test_install_all_sources_fail(tmp_path: Path, monkeypatch):
+    """source 与 mirror 均失败时抛 MarketError"""
+    manager = _make_manager(tmp_path, monkeypatch, json.dumps(SAMPLE_INDEX).encode())
+
+    class _FailingManager(_FakeManager):
+        async def install(self, bot, source, name=None):
+            return False
+
+    fake_mgr = _FailingManager({"hello": _FakePlugin("hello", "1.0.0")})
+    bot = _FakeBot(fake_mgr)
+
+    with pytest.raises(MarketError, match="已尝试 2 个地址"):
+        await manager.install(bot, "hello")
 
 
 async def test_install_unknown_plugin(tmp_path: Path, monkeypatch):

@@ -88,6 +88,7 @@ class MarketIndex:
                     "author": str(item.get("author", "")),
                     "type": str(item.get("type", "sdk")),
                     "source": source,
+                    "mirror": str(item.get("mirror", "") or ""),
                     "icon": str(item.get("icon", "") or ""),
                     "homepage": str(item.get("homepage", "") or ""),
                     "tags": [str(t) for t in (item.get("tags") or [])],
@@ -360,6 +361,7 @@ class MarketManager:
 
         复用 PluginManager.install（git 克隆/HTTP 归档 + 依赖隔离 + 加载）。
         若插件已加载，先卸载再安装（保证代码与实例一致）。
+        安装地址按 source → mirror（备用）顺序尝试，全部失败才报错。
         """
         index = await self.client.get_index()
         item = index.get(name)
@@ -368,10 +370,12 @@ class MarketManager:
         manager = bot.plugin_manager
         if manager.get(name) is not None:
             await manager.unload(name)
-        ok = await manager.install(bot, item["source"], name=name)
-        if not ok:
-            raise MarketError(f"插件 {name} 安装失败，详见服务端日志")
-        return True
+        sources = [s for s in (item.get("source"), item.get("mirror")) if s]
+        for src in sources:
+            if await manager.install(bot, src, name=name):
+                return True
+            logger.warning(f"插件 {name} 从 {src} 安装失败，尝试下一个地址")
+        raise MarketError(f"插件 {name} 安装失败（已尝试 {len(sources)} 个地址），详见服务端日志")
 
     async def update(self, bot, name: str) -> bool:
         """更新插件：重新安装（install 内部已处理覆盖重载）"""
