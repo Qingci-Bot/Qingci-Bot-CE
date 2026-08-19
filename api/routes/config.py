@@ -270,7 +270,9 @@ async def test_llm_config(data: dict):
             logger.warning(f"LLM 连接测试失败: {detail}")
         return {
             "available": available,
-            "message": "LLM 连接正常" if available else "LLM 连接失败，请检查配置（详见服务端日志）",
+            "message": "LLM 连接正常"
+            if available
+            else "LLM 连接失败，请检查配置（详见服务端日志）",
         }
     except HTTPException:
         raise

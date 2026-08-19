@@ -602,7 +602,9 @@ function openHomepage(url) {
                   @click="toggleMetrics(plugin.name)"
                 >
                   <span
-                    :class="{ spin: expandedMetrics === plugin.name && !metricsMap.get(plugin.name) }"
+                    :class="{
+                      spin: expandedMetrics === plugin.name && !metricsMap.get(plugin.name),
+                    }"
                     >⏱</span
                   >
                   指标

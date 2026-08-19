@@ -312,11 +312,7 @@ class PluginManager:
             {
                 "title": p["title"],
                 "icon": p["icon"],
-                "url": (
-                    f"/api/plugin-data/{name}"
-                    if i == 0
-                    else f"/api/plugin-data/{name}/{i}"
-                ),
+                "url": (f"/api/plugin-data/{name}" if i == 0 else f"/api/plugin-data/{name}/{i}"),
             }
             for i, p in enumerate(pages)
         ]
