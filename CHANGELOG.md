@@ -5,6 +5,23 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.4] - 2026-08-19（安全与稳定性修复）
+
+### Security
+
+- **插件安装路径穿越修复**：市场安装强制插件名合法性校验（仅字母/数字/下划线/连字符），恶意索引 `name=".."` 不再可越出插件目录删除文件；复制改为 staging 原子替换，安装失败保留旧版本
+- **删除实例路径穿越修复**：`delete_instance` 与 `DELETE /api/instances/{name}` 增加实例名合法性校验，拒绝 `..` / 隐藏目录等非法名
+- **OneBot 12 加好友/加群审批修复**：审批按事件 `detail_type` 判别请求类型（此前迁移后恒为空、审批静默失效）
+- **API Key 泄漏收敛**：LLM 模型列表查询 / 连接测试错误不再回显上游完整 URL（Gemini Key 随 query 入 URL）；全局异常处理器不再返回内部异常类名；HTTP 异常响应保留 `WWW-Authenticate` 头
+- **配置向导跨源防护**：`/api/config/wizard` 与 `/wizard/skip` 校验浏览器 Origin 仅允许回环来源；`/wizard/skip` 增加"配置已完成则拒绝"守卫
+
+### Fixed
+
+- **插件子系统**：多页面插件每个页面独立挂载（`/api/plugin-data/<name>/<idx>`，`pages` 附带 `url`）；市场安装/更新双源全部失败时尽力回滚重载旧版本而非静默消失；git clone / pip 子进程 `communicate` 增加 300s 超时；同步 urllib 网络 IO 改线程池（索引拉取/归档下载不再阻塞事件循环）；tar 归档解压补成员路径预检（Zip Slip）；`discover_metadata` 修正为目录型插件扫描；`_semver_key` 兼容 `v` 前缀版本号（不再恒判可更新）；运行期动态增删 matcher 自动失效调度缓存；reload 失败写入加载错误并在插件列表展示；卸载清理 `_load_errors` 幽灵条目
+- **核心运行时**：会话阶梯续接补普通异常兜底（不再中断整个事件分发）；Playwright 渲染生命周期加并发锁（防双启动/句柄互踩）；会话数超限改驱逐最旧会话（状态不再静默丢失）；`expire(ttl<=0)` 语义与 `set` 统一；OneBot 12 协议端接入触发 `notify_connected/reconnected`；OneBot 11 状态上报补 `self_id`；WS 实时消息携带 `id` 字段
+- **API 层**：实例切换/改名透传 `--data-dir`/`--config`；端口分配加锁 + 显式端口冲突拒绝；删除实例失败返回真实结果；`update_command` 防 `meta=None`；`clear_all_sessions` 防 LLM 未初始化；登录限流支持反向代理 `X-Forwarded-For`；`set_plugin_config` 先校验后落盘；插件热重载 watcher 对修复后的失败插件自动重试
+- **前端**：MCP 测试连接 args 类型修正、实时消息 v-for key、插件指标面板轮询不丢失、卡片 author/加载错误展示、401 全局提示、启用/禁用开关失败还原、市场刷新竞态、命令错误态、实例刷新 loading 与重复拉取、端口非法输入提示、群 ID 数字校验、向导测试连接携带鉴权头等 15 项
+
 ## [1.9.3] - 2026-08-19（插件卸载修复）
 
 ### Fixed
