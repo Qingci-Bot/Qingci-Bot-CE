@@ -5,6 +5,12 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **SDK 锁定升级到 v1.10.1**：`qingci-plugin-sdk @ v1.10.1`（pyproject/build.ps1/uv.lock 同步），含 `parse_cq_string` FACE 引用修复
+
 ## [1.11.0] - 2026-08-20（架构审阅阶段一落地）
 
 ### Added
