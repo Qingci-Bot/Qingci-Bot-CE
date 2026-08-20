@@ -5,7 +5,25 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.11.0] - 2026-08-20（架构审阅阶段一落地）
+
+### Added
+
+- **平台能力面契约化**：`PlatformAdapter` 新增 `supports_request_approval` / `supports_media_upload` / `supports_at_trigger` 能力字段与 `approve_request` 抽象方法；请求审批按能力面路由（OneBot 11 → `set_*_add_request`、OneBot 12 → `friend_request.handle` / `group_request.handle`），不再按平台名硬编码 action，新增平台无需改核心代码
+- **市场归档完整性校验**：市场索引条目支持可选 `source_sha256`，HTTP 归档安装下载后校验（防传输篡改/投毒）；git 来源自带完整性跳过。Plugin-Market 的 `bump_index.py`/`validate_index.py` 同步支持该字段（64 位十六进制 + 仅限归档来源）
+- **事件链路追踪**：`event_id` 经 contextvar 贯穿单条事件处理链路（分发/匹配/插件/LLM），结构化 JSON 日志自动携带 `event_id` 字段，跨模块串查"这条消息为什么没回复"
+- **CI SDK 版本一致性校验**：安装后核对 `qingci_plugin_sdk.__version__` 与 `pyproject.toml` 锁定的 tag 一致（防锁错/上游漂移）
+- **EXE SHA256 校验清单**：`build.ps1` 构建产物生成 `qingci-bot-ce.sha256`（exe + web index），供最终用户校验分发完整性
+
+### Changed
+
+- **配置 `update()` 深合并**：仅覆盖传入的节/字段，未提供的配置保持不变——杜绝"传部分配置静默重置其它节（如 api_key / llm.api_key）"的陷阱；列表整值替换、嵌套 dict 递归合并
+- **热重载读写屏障**：新增 `_ReloadRWLock`——事件分发共享读、重载独占写，重载窗口内不再读到半新半旧的 Matcher 注册表/模块状态；同任务重入（handler 内触发 reload）安全跳过
+
+### Fixed
+
+- **HTTP 归档安装扩展名缺失修复**：下载暂存文件无扩展名时按文件头嗅探 zip/tar 格式，HTTP 归档来源安装不再报"不支持的归档格式"
+- **`set_bot` 重复注册防护**：单进程单实例约束显式化，重复注册记录告警便于排查
 
 ### Security
 

@@ -54,8 +54,10 @@ def _replace_value(content: str, pattern: re.Pattern[str], new_version: str) -> 
 
 # package-lock.json 中代表根项目版本的两处：顶层 version 与 packages[""].version
 # （依赖包自身的 version 字段不属于项目版本，不得改动）
+# lockfileVersion 3 下 packages[""] 缩进为 6 空格（旧版为 8），6~8 容忍两种格式；
+# 依赖包的 version 缩进更深或位于其后，首个 6~8 空格匹配即 packages[""]。
 _LOCK_TOP_VERSION_RE = re.compile(r'^  "version": "(?P<v>[^"]+)"', re.MULTILINE)
-_LOCK_PACKAGE_VERSION_RE = re.compile(r'^        "version": "(?P<v>[^"]+)"', re.MULTILINE)
+_LOCK_PACKAGE_VERSION_RE = re.compile(r'^ {6,8}"version": "(?P<v>[^"]+)"', re.MULTILINE)
 
 
 def update_package_lock_version(content: str, new_version: str) -> str | None:
