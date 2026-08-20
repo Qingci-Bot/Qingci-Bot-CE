@@ -185,18 +185,28 @@ def _sniff_archive_format(path: Path) -> str | None:
 
 @dataclass
 class MatcherMetrics:
-    """单个 Matcher 的执行指标"""
+    """单个 Matcher 的执行指标（含阶段耗时细分）"""
 
     call_count: int = 0
     total_time_ms: float = 0.0
     error_count: int = 0
     last_call_time: float = 0.0
+    # 阶段耗时累计（毫秒）：permission 检查 / rule 检查 / handler 执行
+    permission_time_ms: float = 0.0
+    rule_time_ms: float = 0.0
+    handler_time_ms: float = 0.0
 
     @property
     def avg_time_ms(self) -> float:
         if self.call_count == 0:
             return 0.0
         return self.total_time_ms / self.call_count
+
+    @property
+    def avg_handler_time_ms(self) -> float:
+        if self.call_count == 0:
+            return 0.0
+        return self.handler_time_ms / self.call_count
 
 
 def _parse_version_spec(dep_spec: str) -> tuple[str, SpecifierSet | None]:
@@ -372,8 +382,16 @@ class PluginManager:
 
     # ---- 指标 ----
 
-    def record_metric(self, matcher: Matcher, elapsed_ms: float, is_error: bool = False) -> None:
-        """记录一次 Matcher 执行指标"""
+    def record_metric(
+        self,
+        matcher: Matcher,
+        elapsed_ms: float,
+        is_error: bool = False,
+        handler_ms: float | None = None,
+        permission_ms: float | None = None,
+        rule_ms: float | None = None,
+    ) -> None:
+        """记录一次 Matcher 执行指标（elapsed_ms 为总耗时，阶段耗时可选细分）"""
         owner = getattr(matcher, "owner", "__unknown__")
         if owner not in self._metrics:
             self._metrics[owner] = {}
@@ -382,6 +400,12 @@ class PluginManager:
         m = self._metrics[owner][matcher]
         m.call_count += 1
         m.total_time_ms += elapsed_ms
+        if permission_ms is not None:
+            m.permission_time_ms += permission_ms
+        if rule_ms is not None:
+            m.rule_time_ms += rule_ms
+        if handler_ms is not None:
+            m.handler_time_ms += handler_ms
         if is_error:
             m.error_count += 1
         m.last_call_time = time.time()
@@ -409,6 +433,12 @@ class PluginManager:
                     "total_time_ms": round(m.total_time_ms, 2),
                     "error_count": m.error_count,
                     "last_call_time": m.last_call_time,
+                    # 阶段耗时均值（毫秒）：定位到 rule / permission / handler 环节
+                    "avg_permission_ms": round(
+                        m.permission_time_ms / m.call_count if m.call_count else 0.0, 2
+                    ),
+                    "avg_rule_ms": round(m.rule_time_ms / m.call_count if m.call_count else 0.0, 2),
+                    "avg_handler_ms": round(m.avg_handler_time_ms, 2),
                 }
             )
         return result

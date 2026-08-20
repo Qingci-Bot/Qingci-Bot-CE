@@ -12,10 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **数据保留清理**：`config.log.retention_days` 配置保留天数，Bot 每日自动清理 `messages`/`sessions`/`usage_logs`/`audit_logs` 中超过保留期的记录（默认 0 不清理），防止长期运行单表无限膨胀
 - **前端 API 封装层**：新增 `web/src/api/request.js`（X-API-Key 自动注入 / JSON 解析 / 401 统一跳转），`app.js` 与登录/向导视图统一接入；WS 连接抽取为 `useWebSocket` composable（token 子协议注入 + 断线重连），消息日志与对话调试视图复用
 - **v11 翻译收敛 SDK**：`bot/core/v11_compat.py` 改为 `qingci_plugin_sdk.events.translate_v11_event` 薄转发（仅补 OneBot 11 平台字段），v11 <-> v12 协议映射单一来源，消除双实现漂移风险
+- **插件执行阶段指标**：Matcher 指标细分为 permission / rule / handler 三阶段耗时（`avg_permission_ms` / `avg_rule_ms` / `avg_handler_ms`），插件管理面板可定位慢环节
 
 ### Changed
 
 - **SDK 锁定升级到 v1.11.0**：`qingci-plugin-sdk @ v1.11.0`（pyproject/build.ps1/uv.lock 同步），含 `translate_v11_event` 与 `parse_cq_string` FACE 修复
+- **SQLite→PG 迁移脚本加固**：日期解析 fail-fast（打印表名/行号，不再回退当前时间篡改数据）；INSERT 改 `ON CONFLICT DO NOTHING` 幂等追加，中断后 `--force` 重跑可安全跳过已迁移行
+- **内核/外壳边界文档化**：ARCHITECTURE.md 记录单进程单实例约束、三外壳复用同一内核装配、`api.auth` 唯一反向依赖的边界与库化路径
 
 ## [1.11.0] - 2026-08-20（架构审阅阶段一落地）
 

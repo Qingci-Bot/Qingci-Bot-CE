@@ -191,10 +191,15 @@ class MessageDispatcher:
                     mctx.plugin = plugin
 
                 try:
+                    # 阶段计时：permission / rule 检查耗时（供指标细分定位慢环节）
+                    _stage_t0 = time.perf_counter()
                     if not await matcher.permission.check(bot, event, mctx):
                         continue
+                    permission_ms = (time.perf_counter() - _stage_t0) * 1000
+                    _stage_t0 = time.perf_counter()
                     if not await matcher.rule.check(bot, event, mctx):
                         continue
+                    rule_ms = (time.perf_counter() - _stage_t0) * 1000
 
                     mctx.matcher = matcher
 
@@ -206,7 +211,9 @@ class MessageDispatcher:
 
                     # 执行 handler（含指标 + 中间件）
                     try:
-                        result = await self._execute_handler(bot, matcher, mctx)
+                        result = await self._execute_handler(
+                            bot, matcher, mctx, permission_ms=permission_ms, rule_ms=rule_ms
+                        )
                     except PauseException:
                         # 挂起：等待同会话下一条消息续接同一 handler
                         await self._register_step(bot, matcher, mctx.plugin, mctx)
@@ -390,11 +397,19 @@ class MessageDispatcher:
                 logger.exception("Matcher 运行前钩子异常")
         return None
 
-    async def _execute_handler(self, bot: "QingciBot", matcher, mctx) -> Any:
+    async def _execute_handler(
+        self,
+        bot: "QingciBot",
+        matcher,
+        mctx,
+        permission_ms: float | None = None,
+        rule_ms: float | None = None,
+    ) -> Any:
         """执行单个 Matcher handler（含指标记录 + 插件级中间件）
 
         返回 handler 的原始返回值（不 str 化），str 化由调用方按事件类型决定，
-        使 request Matcher 的 bool 审批结果得以保留。
+        使 request Matcher 的 bool 审批结果得以保留。permission_ms/rule_ms
+        为调度阶段的检查耗时，随总耗时一并记入指标。
         """
         plugin = mctx.plugin
         start = time.perf_counter()
@@ -457,7 +472,14 @@ class MessageDispatcher:
             raise
         finally:
             elapsed = (time.perf_counter() - start) * 1000
-            bot.plugin_manager.record_metric(matcher, elapsed, is_error=is_error)
+            bot.plugin_manager.record_metric(
+                matcher,
+                elapsed,
+                is_error=is_error,
+                handler_ms=elapsed,
+                permission_ms=permission_ms,
+                rule_ms=rule_ms,
+            )
 
     def _parse_message(self, event: dict) -> MessageContext:
         """解析 OneBot 11 消息事件（v11 兼容路径，保留供测试与防御性兜底）

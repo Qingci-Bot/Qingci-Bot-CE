@@ -143,7 +143,7 @@ async def check_pg_tables_empty(pg_url: str, tables: list[str]) -> list[str]:
         async with engine.connect() as conn:
             for table_name in tables:
                 result = await conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
-                count = result.scalar()
+                count = result.scalar() or 0
                 if count > 0:
                     non_empty.append(table_name)
                     logger.warning(f"  PG [{table_name}] 已有 {count} 行数据")
@@ -177,23 +177,24 @@ async def migrate_table(
         columns = list(rows[0].keys())
         col_names = ", ".join(columns)
         placeholders = ", ".join(f":{c}" for c in columns)
+        # 幂等追加：ON CONFLICT DO NOTHING——中断后重跑（--force）跳过已迁移行
+        insert_sql = (
+            f"INSERT INTO {table_name} ({col_names}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+        )
 
-        # 分批写入
+        # 分批写入（每批一个事务：单批失败整体回滚该批，配合幂等可安全重跑）
         for i in range(0, len(rows), BATCH_SIZE):
             batch = rows[i : i + BATCH_SIZE]
             async with engine.begin() as conn:
-                for row in batch:
-                    # 处理 datetime 字符串 → Python datetime
+                for row_index, row in enumerate(batch, start=i):
+                    # 处理 datetime 字符串 → Python datetime（fail-fast）
                     cleaned = {}
                     for k, v in row.items():
                         if isinstance(v, str) and _looks_like_iso_datetime(v):
-                            cleaned[k] = _parse_iso_datetime(v)
+                            cleaned[k] = _parse_iso_datetime(v, table_name, row_index)
                         else:
                             cleaned[k] = v
-                    await conn.execute(
-                        text(f"INSERT INTO {table_name} ({col_names}) VALUES ({placeholders})"),
-                        cleaned,
-                    )
+                    await conn.execute(text(insert_sql), cleaned)
             written += len(batch)
             logger.info(f"  [{table_name}] {written}/{len(rows)}")
     finally:
@@ -207,8 +208,12 @@ def _looks_like_iso_datetime(value: str) -> bool:
     return len(value) >= 19 and "T" in value and value[4] == "-"
 
 
-def _parse_iso_datetime(value: str) -> datetime:
-    """解析 ISO 格式时间戳字符串为 timezone-aware datetime"""
+def _parse_iso_datetime(value: str, table_name: str = "", row_index: int = 0) -> datetime:
+    """解析 ISO 格式时间戳字符串为 timezone-aware datetime
+
+    解析失败 fail-fast（抛 ValueError 并携带表名/行号），绝不回退当前时间
+    ——回退会静默篡改数据时间，违背迁移工具的可靠性要求。
+    """
     try:
         # 处理 SQLite 存储的 ISO 格式
         if value.endswith("Z"):
@@ -217,9 +222,11 @@ def _parse_iso_datetime(value: str) -> datetime:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
-    except (ValueError, TypeError):
-        logger.warning(f"时间戳解析失败，回退当前时间（数据时间将被篡改）: {value!r}")
-        return datetime.now(timezone.utc)
+    except (ValueError, TypeError) as e:
+        ctx = f"{table_name}[第 {row_index} 行]" if table_name else ""
+        raise ValueError(
+            f"时间戳解析失败（{ctx or '未知位置'}），值 {value!r} 不是合法 ISO 格式"
+        ) from e
 
 
 async def reset_pg_sequences(pg_url: str, tables: list[str]):
@@ -301,7 +308,13 @@ async def main():
         rows = all_tables[table_name]
         if not rows:
             continue
-        migrated[table_name] = await migrate_table(args.pg_url, table_name, rows)
+        try:
+            migrated[table_name] = await migrate_table(args.pg_url, table_name, rows)
+        except ValueError as e:
+            # 数据质量问题（如时间戳解析失败）：fail-fast，不静默篡改数据
+            logger.error(f"迁移 {table_name} 中止: {e}")
+            logger.error("请修复源数据后重跑；已写入的行可通过 --force 幂等跳过")
+            sys.exit(1)
 
     # 5. 重置序列
     await reset_pg_sequences(args.pg_url, list(migrated.keys()))

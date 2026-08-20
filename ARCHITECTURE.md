@@ -42,6 +42,22 @@
 - 修改权限语义、匹配规则等协议时只改 SDK 一处，主项目无需同步
 - SDK 是主项目的**正式依赖**（`pyproject.toml` 声明 git 依赖；构建/本地开发由 `build.ps1` 以 `-e` 安装优先）
 
+## 进程模型与外壳边界（无头内核库化方向）
+
+Qingci-Bot-CE 采用**单进程 = 单 Bot 实例**（`set_bot` 重复注册有告警防护）。`main.py` 为统一入口，同一进程内承载 Bot 内核 + FastAPI/WebUI + 桌面后端：
+
+- **CLI（默认）**：`python main.py` — Bot + API 同事件循环（`run_bot_and_api`）
+- **API-only**：`python main.py --no-bot` — 仅 Web UI/API（`--api-only` 独立进程方向的雏形）
+- **桌面**：`python main.py --desktop` — pywebview 窗口 + 系统托盘，后端在后台线程运行
+
+内核边界约束：
+
+- `bot/` 内核**不反向依赖** `desktop/`（0 引用）；桌面通过 `main.run_bot_and_api` 复用同一启动序列
+- 唯一例外：`bot/plugin/manager.py` 与 `bot/plugin/webapi.py` 引用 `api.auth`（插件 Web 页面 / API 的鉴权）。`api/auth.py` 是纯函数模块（不持有 FastAPI 应用实例），该引用仅用于鉴权判断，不构成进程模型耦合；内核库化时可将鉴权抽象为回调注入解除
+- 无头方向：`bot/` 可独立为库（不启用桌面、未装 `[render]` 时渲染能力自动降级），CLI / API / 桌面三外壳复用同一内核装配（`composition.assemble_bot`）
+
+数据保留：`config.log.retention_days`（默认 0 不清理）由 Bot 每日清理 `messages` / `sessions` / `usage_logs` / `audit_logs` 中超期记录（`bot/core/bot.py` `_data_retention_loop`），防止长期运行单表无限膨胀。
+
 ## 项目结构
 
 ```
