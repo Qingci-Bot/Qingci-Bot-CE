@@ -49,7 +49,8 @@ if (Test-Path (Join-Path $WebSrc "index.html")) {
 # 全内置 HTML 渲染：把 Chromium 浏览器下载到产物目录 ms-playwright/，
 # 运行时由 main.py 设 PLAYWRIGHT_BROWSERS_PATH 指向它，EXE 开箱即可渲染签到卡，
 # 无需最终用户另行 `playwright install chromium`。
-# 国内镜像前缀可缓解下载慢/失败：$env:PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright"
+# 官方 CDN 在国内下载极慢/易超时，默认走 npmmirror 镜像；可用环境变量覆盖：
+#   $env:PLAYWRIGHT_DOWNLOAD_HOST="https://playwright.azureedge.net"
 Write-Host "==> [2.5/3] bundling Playwright chromium (headless shell)..." -ForegroundColor Cyan
 try {
     # playwright 作为构建期依赖被安装（render 分组），这里先确认可导入
@@ -57,11 +58,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "playwright not importable" }
 
     $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $AppDir "ms-playwright"
+    if (-not $env:PLAYWRIGHT_DOWNLOAD_HOST) {
+        $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://npmmirror.com/mirrors/playwright"
+    }
     # --only-shell 仅下载无头浏览器（比完整 chromium 更小，足以支撑 HTML 渲染）
     & $Python -m playwright install chromium --only-shell
     if ($LASTEXITCODE -ne 0) { throw "playwright install chromium --only-shell failed" }
 
-    if (-not (Test-Path (Join-Path $env:PLAYWRIGHT_BROWSERS_PATH))) {
+    if (-not (Test-Path $env:PLAYWRIGHT_BROWSERS_PATH)) {
         throw "browser bundle dir missing: $env:PLAYWRIGHT_BROWSERS_PATH"
     }
     Write-Host "    bundled Playwright browsers -> $env:PLAYWRIGHT_BROWSERS_PATH"
