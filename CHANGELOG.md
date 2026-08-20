@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-08-20（架构审阅阶段二 + 阶段三落地）
+
 ### Added
 
 - **数据保留清理**：`config.log.retention_days` 配置保留天数，Bot 每日自动清理 `messages`/`sessions`/`usage_logs`/`audit_logs` 中超过保留期的记录（默认 0 不清理），防止长期运行单表无限膨胀
