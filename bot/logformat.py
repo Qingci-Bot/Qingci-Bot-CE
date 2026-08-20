@@ -7,12 +7,32 @@
 - 启动时由 main.py / desktop/main.py 调用 apply_logging_from_config 统一配置
 """
 
+import contextvars
 import datetime
 import json
 import logging
 import logging.handlers
 from pathlib import Path
 from typing import Union
+
+# 事件链路追踪：contextvar 贯穿单条事件处理链路，跨模块串查同一条消息的
+# 分发/匹配/插件/LLM 处理过程（排障"这条消息为什么没回复"）。
+# 每条事件在独立 asyncio task 中处理，task 自带独立 context，无需手动复位。
+event_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("event_id", default="")
+
+
+def set_event_id(event_id: str) -> None:
+    """为当前事件处理链路设置 event_id（空值/纯空白忽略，保持默认）"""
+    if event_id and event_id.strip():
+        event_id_var.set(event_id)
+
+
+class TraceFilter(logging.Filter):
+    """把当前链路的 event_id 附加到每条日志记录（无 id 时为空字符串）"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.event_id = event_id_var.get()
+        return True
 
 
 class JsonFormatter(logging.Formatter):
@@ -25,6 +45,9 @@ class JsonFormatter(logging.Formatter):
             "name": record.name,
             "message": record.getMessage(),
         }
+        event_id = getattr(record, "event_id", "")
+        if event_id:
+            payload["event_id"] = event_id
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
         try:
@@ -81,6 +104,7 @@ def _add_rotating_file_handler(
         encoding="utf-8",
     )
     handler.setFormatter(formatter)
+    handler.addFilter(TraceFilter())
     root_logger.addHandler(handler)
 
 
@@ -110,6 +134,7 @@ def configure_logging(
     )
     handler = logging.StreamHandler()
     handler.setFormatter(fmt)
+    handler.addFilter(TraceFilter())
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
     # 移除所有现有 handler 后重新添加（force=True 等价效果）

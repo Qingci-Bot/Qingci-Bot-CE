@@ -182,3 +182,36 @@ class TestPluginConfig:
         assert cm.to_dict() == original
         data = yaml.safe_load(Path(config_file).read_text(encoding="utf-8"))
         assert "myplugin" not in (data.get("plugins") or {})
+
+
+class TestConfigDeepMerge:
+    """update() 深合并语义：部分配置不会静默重置其它节"""
+
+    def test_partial_update_preserves_other_sections(self, config_file):
+        cm = ConfigManager(Path(config_file))
+        cm.load()
+        original_llm_key = cm.config.llm.api_key
+
+        # 仅更新 bot.admin_users，llm 整节与 api_key 必须保持不变
+        cm.update({"bot": {"admin_users": [99999]}})
+        assert cm.config.bot.admin_users == ["99999"]
+        assert cm.config.bot.super_admin == cm.config.bot.super_admin  # 无副作用
+        assert cm.config.llm.api_key == original_llm_key
+        assert cm.config.llm.model == "gpt-4o-mini"  # 默认值未被重置
+
+    def test_update_preserves_other_plugin_configs(self, config_file):
+        cm = ConfigManager(Path(config_file))
+        cm.load()
+        cm.update({"plugins": {"alpha": {"enabled": True, "level": 2}, "beta": {"k": 1}}})
+        # 再次更新 alpha 的部分字段，beta 配置不受影响
+        cm.update({"plugins": {"alpha": {"level": 5}}})
+        assert cm.get_plugin_config("alpha") == {"enabled": True, "level": 5}
+        assert cm.get_plugin_config("beta") == {"k": 1}
+
+    def test_list_replacement_not_merge(self, config_file):
+        cm = ConfigManager(Path(config_file))
+        cm.load()
+        cm.update({"bot": {"admin_users": [10001, 10002], "super_admin": 12345}})
+        cm.update({"bot": {"admin_users": []}})
+        assert cm.config.bot.admin_users == []
+        assert cm.config.bot.super_admin == "12345"

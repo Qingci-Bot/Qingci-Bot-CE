@@ -39,6 +39,74 @@ _MAX_ARCHIVE_BYTES = 200 * 1024 * 1024  # 下载上限 200MB
 _MAX_EXTRACT_BYTES = 1024 * 1024 * 1024  # 解压总量上限 1GB
 
 
+class _ReloadRWLock:
+    """热重载读写屏障：事件分发共享读、重载独占写
+
+    防止重载窗口内（importlib.reload 就地替换模块 dict / 注册表替换）
+    事件分发读到半新半旧的插件状态。同任务重入安全：
+    - handler 内触发 reload（读→写）：acquire_write 返回 False，跳过写锁
+    - 写锁持有者内重新读（写→读）：acquire_read 直接放行
+    - 嵌套写（reload 内部再走 _register_from_module）：幂等放行
+    """
+
+    def __init__(self) -> None:
+        self._readers: set[asyncio.Task] = set()
+        self._writer: asyncio.Task | None = None
+        self._cond = asyncio.Condition()
+
+    def _current_task(self) -> asyncio.Task | None:
+        """当前任务；事件循环外调用时返回 None（防御性，不抛错）"""
+        return asyncio.current_task()
+
+    async def acquire_read(self) -> None:
+        task = self._current_task()
+        if task is None:
+            return  # 事件循环外调用：无锁语义
+        if task is self._writer:
+            return  # 写锁持有者内重入读：直接放行
+        async with self._cond:
+            while self._writer is not None:
+                await self._cond.wait()
+            self._readers.add(task)
+
+    async def release_read(self) -> None:
+        task = self._current_task()
+        if task is None:
+            return
+        if task is self._writer:
+            return
+        async with self._cond:
+            if task in self._readers:
+                self._readers.discard(task)
+                # 无论是否有写者在等都要 notify：等待中的写者尚未设置
+                # _writer，其唤醒依赖读者释放时通知（while 循环防误唤醒）
+                if not self._readers:
+                    self._cond.notify_all()
+
+    async def acquire_write(self) -> bool:
+        """返回 False 表示本任务已持读锁（读→写重入），调用方须跳过写锁"""
+        task = self._current_task()
+        if task is None:
+            return False
+        if task in self._readers:
+            return False
+        async with self._cond:
+            while self._writer is not None or self._readers:
+                if self._writer is task:
+                    return True  # 嵌套写：已由本任务持有，幂等放行
+                await self._cond.wait()
+            self._writer = task
+        return True
+
+    async def release_write(self) -> None:
+        task = self._current_task()
+        if task is None or self._writer is not task:
+            return
+        async with self._cond:
+            self._writer = None
+            self._cond.notify_all()
+
+
 class _AuthStaticFiles:
     """带鉴权的插件静态文件服务（包装 StaticFiles）
 
@@ -87,6 +155,32 @@ class _AuthStaticFiles:
 def _is_valid_plugin_name(name: str) -> bool:
     """校验插件名是否合法（用于市场安装等从外部输入获取插件名的场景）"""
     return bool(_PLUGIN_NAME_RE.fullmatch(name))
+
+
+def _sha256_file(path: Path) -> str:
+    """计算文件 SHA256（小文件分块读取，防止归档大文件一次读入内存）"""
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _sniff_archive_format(path: Path) -> str | None:
+    """按文件头嗅探归档格式：zip / tar / 其他（扩展名缺失时的兜底）"""
+    import tarfile
+    import zipfile
+
+    try:
+        if zipfile.is_zipfile(path):
+            return "zip"
+        if tarfile.is_tarfile(path):
+            return "tar"
+    except OSError:
+        return None
+    return None
 
 
 @dataclass
@@ -183,6 +277,9 @@ class PluginManager:
         # 热重载互斥锁：importlib.reload + 注册非原子，串行化避免并发
         # reload/install 竞态（新旧插件实例并存、matcher 双份）
         self._reload_lock = asyncio.Lock()
+        # 重载读写屏障：事件分发共享读、重载独占写，防止重载窗口内
+        # 分发读到半新半旧的模块 dict / 注册表
+        self._reload_rw = _ReloadRWLock()
         # 调度缓存签名：记录构建缓存时各插件 matcher 数量，检测运行期动态增删
         self._matchers_sig: tuple | None = None
         # 事件类型倒排索引: event_type -> 该类型的 Matcher（保持优先级升序）
@@ -808,8 +905,11 @@ class PluginManager:
             # 成功：设置状态为 LOADED
             plugin._status = PluginStatus.LOADED
 
+            old_tool_names = self._plugin_tools.get(target_name, [])
+            # 注册表替换（卸载旧 + 挂新）全程持写锁：等待在途分发（读锁）
+            # 结束，防止分发读到新旧混合的 Matcher / 页面 / 工具注册
+            swap_guarded = await self._reload_rw.acquire_write()
             try:
-                old_tool_names = self._plugin_tools.get(target_name, [])
                 if old_plugin is not None:
                     await self.unload(target_name)
                 existing = self._plugins.get(plugin.name)
@@ -860,6 +960,9 @@ class PluginManager:
                     self._invalidate_matchers_cache()
                     logger.warning(f"插件 {plugin.name} 注册失败，已恢复旧插件 {target_name}")
                 raise
+            finally:
+                if swap_guarded:
+                    await self._reload_rw.release_write()
 
             matcher_count = len(plugin.matchers) if plugin.matchers else 0
             logger.info(
@@ -1023,7 +1126,11 @@ class PluginManager:
     # ---- 重载 ----
 
     async def reload(self, name: str, bot) -> None:
-        """重载插件（_reload_lock 串行化，避免并发 reload 竞态）"""
+        """重载插件（_reload_lock 串行化，避免并发 reload 竞态）
+
+        重载全程持有读写屏障写锁：等待在途事件分发（读锁）结束后
+        才执行模块 reload + 注册表替换，防止分发读到半新半旧状态。
+        """
         async with self._reload_lock:
             plugin = self._plugins.get(name)
             if not plugin:
@@ -1031,6 +1138,9 @@ class PluginManager:
                 return
 
             module_path = type(plugin).__module__
+            # 同任务重入（handler 内触发 reload）时 acquire_write 返回 False，
+            # 此时跳过屏障（读锁仍由本任务持有，注册表替换与分发为同一任务串行）
+            guarded = await self._reload_rw.acquire_write()
             try:
                 await self._load_or_reload(module_path, bot, replaced_name=name)
             except Exception as e:
@@ -1039,6 +1149,8 @@ class PluginManager:
                 logger.exception(f"重载插件 {name} 失败，旧插件保持生效")
                 raise
             finally:
+                if guarded:
+                    await self._reload_rw.release_write()
                 self._invalidate_matchers_cache()
 
     # ---- 初始化 ----
@@ -1106,7 +1218,13 @@ class PluginManager:
     # ---- 在线安装 ----
 
     async def install(
-        self, bot, source: str, *, name: str | None = None, allow_local: bool = False
+        self,
+        bot,
+        source: str,
+        *,
+        name: str | None = None,
+        allow_local: bool = False,
+        expected_sha256: str = "",
     ) -> bool:
         """在线安装插件到外部插件目录并加载
 
@@ -1123,9 +1241,7 @@ class PluginManager:
             name: 目标插件名（为空时从来源推断）
             allow_local: 是否接受本地路径来源。市场安装来源由远端索引下发，
                 必须保持 False（禁止本地路径），防止恶意索引复制服务器任意目录。
-
-        Returns:
-            是否成功安装并加载
+            expected_sha256: 归档校验和（仅 HTTP 归档来源生效；git 自带完整性）
         """
         from ..paths import plugins_dir
 
@@ -1133,7 +1249,11 @@ class PluginManager:
         plugin_dir.mkdir(parents=True, exist_ok=True)
 
         target_name, target_dir = await self._fetch_plugin(
-            source, name, plugin_dir, allow_local=allow_local
+            source,
+            name,
+            plugin_dir,
+            allow_local=allow_local,
+            expected_sha256=expected_sha256,
         )
         if target_dir is None:
             return False
@@ -1162,6 +1282,7 @@ class PluginManager:
         name: str | None,
         plugins_dir: Path,
         allow_local: bool = False,
+        expected_sha256: str = "",
     ) -> tuple[str, Path | None]:
         """拉取插件源码到 plugins/ 目录，返回 (插件名, 插件目录)"""
         import shutil
@@ -1213,6 +1334,13 @@ class PluginManager:
                     if not ok:
                         logger.error(f"下载归档失败: {source}")
                         return "", None
+                    # 归档完整性校验：市场索引声明 source_sha256 时校验下载内容，
+                    # 防传输被篡改/投毒（git 来源跳过，git 自带内容完整性）
+                    if expected_sha256:
+                        actual = await asyncio.to_thread(_sha256_file, staging)
+                        if actual != expected_sha256:
+                            logger.error(f"插件归档校验失败（sha256 不匹配，可能被篡改）: {source}")
+                            return "", None
                     staging = await self._extract_archive(staging, staging.parent)
                 else:
                     logger.error(f"不支持的插件来源: {source}")
@@ -1335,14 +1463,22 @@ class PluginManager:
 
     @staticmethod
     async def _extract_archive(archive: Path, dest_dir: Path) -> Path:
-        """解压 zip/tar 归档，返回解压后的根目录"""
+        """解压 zip/tar 归档，返回解压后的根目录
+
+        无法按扩展名判断格式时嗅探文件头（HTTP 下载的暂存文件通常无扩展名）。
+        """
         import stat
         import tarfile
         import zipfile
 
         dest_dir.mkdir(parents=True, exist_ok=True)
         fname = archive.name.lower()
-        if fname.endswith(".zip"):
+        fmt = "zip" if fname.endswith(".zip") else None
+        if fmt is None and fname.endswith((".tar.gz", ".tgz", ".tar.bz2", ".tar")):
+            fmt = "tar"
+        if fmt is None:
+            fmt = _sniff_archive_format(archive)
+        if fmt == "zip":
             with zipfile.ZipFile(archive) as zf:
                 # 解压总量上限（防 zip 炸弹）
                 if sum(i.file_size for i in zf.infolist()) > _MAX_EXTRACT_BYTES:
@@ -1360,7 +1496,7 @@ class PluginManager:
                     if stat.S_ISLNK(mode):
                         raise ValueError(f"归档包含符号链接，已拒绝: {info.filename}")
                 zf.extractall(dest_dir)
-        elif fname.endswith((".tar.gz", ".tgz", ".tar.bz2", ".tar")):
+        elif fmt == "tar":
             with tarfile.open(archive) as tf:
                 # 解压总量上限（防 zip 炸弹）
                 if sum(m.size for m in tf.getmembers()) > _MAX_EXTRACT_BYTES:

@@ -44,6 +44,7 @@ class OneBotConnection(PlatformAdapter):
 
     name = "onebot"
     display_name = "OneBot 11"
+    supports_request_approval = True  # 支持 set_friend/set_group_add_request 审批
 
     def __init__(
         self,
@@ -348,6 +349,21 @@ class OneBotConnection(PlatformAdapter):
             raise
 
     # ============ 便捷 API ============
+
+    async def approve_request(
+        self,
+        flag: str,
+        approve: bool,
+        request_type: str = "friend",
+        sub_type: str = "",
+    ) -> dict:
+        """审批加好友/加群请求（OneBot 11 action）"""
+        if request_type == "friend":
+            return await self.call_api("set_friend_add_request", {"flag": flag, "approve": approve})
+        return await self.call_api(
+            "set_group_add_request",
+            {"flag": flag, "sub_type": sub_type, "approve": approve},
+        )
 
     async def send_private_msg(self, user_id: int, message: str | list) -> dict:
         """发送私聊消息（message 可为文本 / v11 段数组 / v12 段数组）"""

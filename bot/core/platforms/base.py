@@ -27,6 +27,13 @@ class PlatformAdapter:
     name: str = "base"
     #: 展示名（日志/WebUI 使用）
     display_name: str = "Base"
+    # ---- 能力面：核心代码按能力分支而非按平台名分支 ----
+    #: 是否支持加好友/加群请求审批（approve_request）
+    supports_request_approval: bool = False
+    #: 是否支持媒体上传（file_id 解析/上传；false 时图片段降级为 URL 直发）
+    supports_media_upload: bool = False
+    #: 是否支持 @ 触发（v11 at / v12 mention；false 时命令不依赖 @bot 前缀）
+    supports_at_trigger: bool = True
 
     def __init__(self) -> None:
         self._event_handlers: list[Callable] = []
@@ -165,6 +172,21 @@ class PlatformAdapter:
             timeout: 超时秒数
         """
         raise NotImplementedError(f"平台 {self.name} 不支持 API: {action}")
+
+    async def approve_request(
+        self,
+        flag: str,
+        approve: bool,
+        request_type: str = "friend",
+        sub_type: str = "",
+    ) -> dict:
+        """审批加好友/加群请求（supports_request_approval=True 时实现）
+
+        各平台映射到自身 action（OneBot 11 的 set_*_add_request、
+        OneBot 12 的 friend_request.handle / group_request.handle）。
+        调用方应在能力面检查后调用；不支持的平台由基类抛 NotImplementedError。
+        """
+        raise NotImplementedError(f"平台 {self.name} 不支持请求审批")
 
     # ============ 工具 ============
 

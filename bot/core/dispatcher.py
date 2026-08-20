@@ -142,95 +142,106 @@ class MessageDispatcher:
         - blocked: 是否发生 block 语义（匹配成功且 block=True，或已有回复），
           此时应停止整个分发链（含旧式回调）。
         """
-        # 会话阶梯续接优先：若该会话存在挂起中的阶梯，跳过 rule/permission
-        # 直接续接 handler（用户已进入多轮流程，不应被命令前缀规则再次拦截）
-        if post_type == "message":
-            step_reply, step_blocked = await self._try_resume_step(bot, ctx)
-            if step_blocked:
-                return step_reply, True
+        # 重载屏障读锁：与插件热重载的写锁互斥——重载期间等待分发结束，
+        # 分发期间阻塞重载，避免读到半新半旧的 Matcher 注册表/模块状态。
+        rw = getattr(bot.plugin_manager, "_reload_rw", None)
+        if rw is not None:
+            await rw.acquire_read()
+        try:
+            # 会话阶梯续接优先：若该会话存在挂起中的阶梯，跳过 rule/permission
+            # 直接续接 handler（用户已进入多轮流程，不应被命令前缀规则再次拦截）
+            if post_type == "message":
+                step_reply, step_blocked = await self._try_resume_step(bot, ctx)
+                if step_blocked:
+                    return step_reply, True
 
-        # 事件类型倒排索引：直接取该事件类型的 Matcher，避免对全部
-        # Matcher 线性扫描过滤（消息事件不再遍历 notice/request Matcher）
-        event_matchers = bot.plugin_manager.all_matchers(post_type)
-        if not event_matchers:
-            return None, False
+            # 事件类型倒排索引：直接取该事件类型的 Matcher，避免对全部
+            # Matcher 线性扫描过滤（消息事件不再遍历 notice/request Matcher）
+            event_matchers = bot.plugin_manager.all_matchers(post_type)
+            if not event_matchers:
+                return None, False
 
-        # 会话状态每事件预取一次，供所有 Matcher 复用（避免逐 Matcher 重复查询）
-        session_state = None
-        if bot.session_state is not None:
-            session_state = await bot.session_state.get_session(
-                user_id=ctx.user_id,
-                group_id=ctx.group_id,
-                message_type=ctx.message_type,
-            )
-
-        for matcher in event_matchers:
-            mctx = MatcherContext.from_message_context(ctx, bot=bot, plugin=None, matcher=matcher)
-            mctx.session_state = session_state
-            # 注入会话阶梯对象：handler 可调用 ctx.session.pause/finish 等控制多轮流程
-            mctx.session = Session(
-                send_fn=lambda text: self._send_text(bot, ctx, text),
-                step_key=self._step_key(ctx),
-                step_ttl=self.step_ttl,
-            )
-            # 类型化事件：notice/request 事件解析为类型化对象（handler 按注解注入）
-            if post_type in ("notice", "request") and mctx.event is None:
-                mctx.event = parse_event(post_type, event)
-            if matcher.owner:
-                plugin = bot.plugin_manager.get(matcher.owner)
-                if plugin is None:
-                    continue
-                mctx.plugin = plugin
-
-            try:
-                if not await matcher.permission.check(bot, event, mctx):
-                    continue
-                if not await matcher.rule.check(bot, event, mctx):
-                    continue
-
-                mctx.matcher = matcher
-
-                # Matcher 运行前全局钩子（run_preprocessor）：拦截则停止分发
-                if bot._matcher_preprocessors:
-                    intercepted = await self._run_preprocessors(bot, matcher, mctx)
-                    if intercepted is not None:
-                        return _to_reply(intercepted, post_type), True
-
-                # 执行 handler（含指标 + 中间件）
-                try:
-                    result = await self._execute_handler(bot, matcher, mctx)
-                except PauseException:
-                    # 挂起：等待同会话下一条消息续接同一 handler
-                    await self._register_step(bot, matcher, mctx.plugin, mctx)
-                    return None, True
-                except FinishException:
-                    # 结束：清除阶梯，本消息已由 session 内部发送
-                    await self._clear_step(ctx)
-                    return None, True
-                except RejectException:
-                    # 拒绝：保留阶梯继续等待（重新计时）
-                    await self._register_step(bot, matcher, mctx.plugin, mctx)
-                    return None, True
-                finally:
-                    # temp 一次性匹配器：无论 handler 成功/异常都移除，
-                    # 避免失败后反复匹配刷错
-                    if matcher.temp:
-                        bot.plugin_manager.remove_temp_matcher(matcher)
-
-                if result is not None:
-                    return _to_reply(result, post_type), True
-
-                if matcher.block:
-                    return None, True
-
-            except Exception:
-                logger.exception(
-                    f"Matcher 执行异常: owner={matcher.owner}, "
-                    f"handler={getattr(matcher.handler, '__name__', repr(matcher.handler))}"
+            # 会话状态每事件预取一次，供所有 Matcher 复用（避免逐 Matcher 重复查询）
+            session_state = None
+            if bot.session_state is not None:
+                session_state = await bot.session_state.get_session(
+                    user_id=ctx.user_id,
+                    group_id=ctx.group_id,
+                    message_type=ctx.message_type,
                 )
-                continue
 
-        return None, False
+            for matcher in event_matchers:
+                mctx = MatcherContext.from_message_context(
+                    ctx, bot=bot, plugin=None, matcher=matcher
+                )
+                mctx.session_state = session_state
+                # 注入会话阶梯对象：handler 可调用 ctx.session.pause/finish 等控制多轮流程
+                mctx.session = Session(
+                    send_fn=lambda text: self._send_text(bot, ctx, text),
+                    step_key=self._step_key(ctx),
+                    step_ttl=self.step_ttl,
+                )
+                # 类型化事件：notice/request 事件解析为类型化对象（handler 按注解注入）
+                if post_type in ("notice", "request") and mctx.event is None:
+                    mctx.event = parse_event(post_type, event)
+                if matcher.owner:
+                    plugin = bot.plugin_manager.get(matcher.owner)
+                    if plugin is None:
+                        continue
+                    mctx.plugin = plugin
+
+                try:
+                    if not await matcher.permission.check(bot, event, mctx):
+                        continue
+                    if not await matcher.rule.check(bot, event, mctx):
+                        continue
+
+                    mctx.matcher = matcher
+
+                    # Matcher 运行前全局钩子（run_preprocessor）：拦截则停止分发
+                    if bot._matcher_preprocessors:
+                        intercepted = await self._run_preprocessors(bot, matcher, mctx)
+                        if intercepted is not None:
+                            return _to_reply(intercepted, post_type), True
+
+                    # 执行 handler（含指标 + 中间件）
+                    try:
+                        result = await self._execute_handler(bot, matcher, mctx)
+                    except PauseException:
+                        # 挂起：等待同会话下一条消息续接同一 handler
+                        await self._register_step(bot, matcher, mctx.plugin, mctx)
+                        return None, True
+                    except FinishException:
+                        # 结束：清除阶梯，本消息已由 session 内部发送
+                        await self._clear_step(ctx)
+                        return None, True
+                    except RejectException:
+                        # 拒绝：保留阶梯继续等待（重新计时）
+                        await self._register_step(bot, matcher, mctx.plugin, mctx)
+                        return None, True
+                    finally:
+                        # temp 一次性匹配器：无论 handler 成功/异常都移除，
+                        # 避免失败后反复匹配刷错
+                        if matcher.temp:
+                            bot.plugin_manager.remove_temp_matcher(matcher)
+
+                    if result is not None:
+                        return _to_reply(result, post_type), True
+
+                    if matcher.block:
+                        return None, True
+
+                except Exception:
+                    logger.exception(
+                        f"Matcher 执行异常: owner={matcher.owner}, "
+                        f"handler={getattr(matcher.handler, '__name__', repr(matcher.handler))}"
+                    )
+                    continue
+
+            return None, False
+        finally:
+            if rw is not None:
+                await rw.release_read()
 
     # ---- 会话阶梯（多轮交互） ----
 

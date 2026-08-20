@@ -1,5 +1,6 @@
 """PluginManager 插件管理器测试：加载/重载/依赖/循环依赖/多类拒绝"""
 
+import asyncio
 import json
 
 import pytest
@@ -364,6 +365,123 @@ async def test_watcher_does_not_retry_unknown_plugin():
     await watcher._reload_plugin("/tmp/plugins/other/__init__.py")
 
     assert mgr.calls == []
+
+
+# ──────────────────────────────────────────────────────────────────
+# 重载读写屏障（_ReloadRWLock）：分发共享读、重载独占写、同任务重入安全
+# ──────────────────────────────────────────────────────────────────
+
+
+async def test_reload_rwlock_read_shared_write_exclusive():
+    """读者可并发持有；写者在读者全部释放前阻塞"""
+    from bot.plugin.manager import _ReloadRWLock
+
+    rw = _ReloadRWLock()
+    entered: list[str] = []
+
+    async def hold_read(seconds: float):
+        await rw.acquire_read()
+        entered.append("read")
+        try:
+            await asyncio.sleep(seconds)
+        finally:
+            await rw.release_read()
+
+    async def try_write():
+        await rw.acquire_write()
+        entered.append("write")
+        await rw.release_write()
+
+    # 两个读者并发持有（共享读不互斥）
+    r1 = asyncio.create_task(hold_read(0.2))
+    await asyncio.sleep(0.01)
+    r2 = asyncio.create_task(hold_read(0.2))
+    await asyncio.sleep(0.01)
+    assert entered.count("read") == 2
+
+    # 写者阻塞：读者全部释放前不得进入
+    writer = asyncio.create_task(try_write())
+    await asyncio.sleep(0.01)
+    assert "write" not in entered
+
+    await asyncio.sleep(0.25)  # 读者超时释放
+    await asyncio.gather(r1, r2, writer)
+    assert "write" in entered
+
+    # 写者释放后读者可进入
+    await rw.acquire_read()
+    await rw.release_read()
+
+
+async def test_reload_rwlock_reentrancy():
+    """同任务读→写跳过（返回 False）；写锁内重入读/写均放行"""
+    from bot.plugin.manager import _ReloadRWLock
+
+    rw = _ReloadRWLock()
+    await rw.acquire_read()
+    # 读→写重入：返回 False 表示调用方应跳过写锁
+    assert await rw.acquire_write() is False
+    await rw.release_read()
+
+    # 写锁内重入
+    assert await rw.acquire_write() is True
+    await rw.acquire_read()  # 写→读重入放行
+    await rw.release_read()
+    assert await rw.acquire_write() is True  # 嵌套写幂等放行
+    await rw.release_write()
+    await rw.release_write()  # 幂等释放
+    # 写锁已释放：新读者可进入
+    await rw.acquire_read()
+    await rw.release_read()
+
+
+# ──────────────────────────────────────────────────────────────────
+# 市场安装归档完整性校验（source_sha256）
+# ──────────────────────────────────────────────────────────────────
+
+
+async def test_install_archive_sha256_mismatch_rejected(bot, tmp_path, monkeypatch):
+    """HTTP 归档 sha256 不匹配时拒绝安装（防传输篡改/投毒）"""
+    import shutil
+    import zipfile
+
+    from bot.plugin.manager import _sha256_file
+
+    manager = bot.plugin_manager
+    # 构造真实 zip 归档
+    archive = tmp_path / "plugin.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("shaplug/__init__.py", "NAME = 'shaplug'\n")
+    real_sha = _sha256_file(archive)
+
+    # 拦截 _download_archive：把归档内容写入目标路径（staging）
+    async def fake_download(url, dest):
+        shutil.copyfile(archive, dest)
+        return True
+
+    monkeypatch.setattr(manager, "_download_archive", fake_download)
+
+    target_dir = tmp_path / "installed"
+
+    # 错误的 sha256 → 拒绝安装
+    _, result = await manager._fetch_plugin(
+        "https://example.com/plugin.zip",
+        "shaplug",
+        target_dir,
+        expected_sha256="0" * 64,
+    )
+    assert result is None
+
+    # 正确的 sha256 → 安装成功
+    name, result = await manager._fetch_plugin(
+        "https://example.com/plugin.zip",
+        "shaplug",
+        target_dir,
+        expected_sha256=real_sha,
+    )
+    assert result is not None
+    assert name == "shaplug"
+    assert (result / "__init__.py").exists()
 
 
 async def test_watcher_reloads_loaded_plugin():

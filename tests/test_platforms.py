@@ -18,6 +18,7 @@ import pytest
 
 from bot.core.dispatcher import MessageDispatcher
 from bot.core.platforms.base import make_platform
+from bot.core.platforms.onebot11 import OneBotConnection
 from bot.core.platforms.telegram import (
     _BACKOFF_MAX,
     _BACKOFF_MIN,
@@ -513,6 +514,126 @@ def test_get_status_skips_disabled_platforms(bot):
     bot.connection.enabled = False
     status = bot.get_status()
     assert all(p["name"] != "onebot" for p in status["platforms"])
+
+
+# ---------- 能力面：请求审批 ----------
+
+
+class _FakeApprovalConnection:
+    """记录 approve_request 调用的能力面连接替身"""
+
+    name = "recorder"
+    supports_request_approval = True
+
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    async def approve_request(self, flag, approve, request_type="friend", sub_type=""):
+        self.calls.append((flag, approve, request_type, sub_type))
+        return {"ok": True}
+
+
+class _FakeApprovalBot:
+    """仅含 _handle_request_approval 所需属性的最小替身（免构造完整 QingciBot）"""
+
+    def __init__(self):
+        self.platforms: dict = {}
+        self.connection = _FakeApprovalConnection()
+
+    async def _event_summary(self, event):
+        return str(event)
+
+
+async def test_approval_routes_to_supporting_adapter():
+    """支持审批的平台收到 friend/group 请求 → approve_request 按平台映射调用"""
+    from bot.core.bot import QingciBot
+
+    fake = _FakeApprovalBot()
+    rec = _FakeApprovalConnection()
+    fake.platforms["recorder"] = rec
+
+    await QingciBot._handle_request_approval(
+        fake, {"detail_type": "friend", "flag": "f1", "sub_type": ""}, True, platform="recorder"
+    )
+    assert rec.calls == [("f1", True, "friend", "")]
+
+    await QingciBot._handle_request_approval(
+        fake,
+        {"detail_type": "group", "flag": "g1", "sub_type": "invite"},
+        False,
+        platform="recorder",
+    )
+    assert rec.calls[-1] == ("g1", False, "group", "invite")
+
+
+async def test_approval_skips_unsupported_platform(monkeypatch):
+    """不支持审批的平台（默认能力面 False）跳过，不抛错"""
+    from bot.core.bot import QingciBot
+
+    fake = _FakeApprovalBot()
+    tg = SimpleNamespace(name="telegram", supports_request_approval=False)
+    fake.platforms["telegram"] = tg
+    warned = []
+
+    from bot.core import bot as bot_module
+
+    monkeypatch.setattr(bot_module.logger, "warning", lambda msg, *a, **k: warned.append(str(msg)))
+    await QingciBot._handle_request_approval(
+        fake, {"detail_type": "friend", "flag": "f1", "sub_type": ""}, True, platform="telegram"
+    )
+    assert warned  # 记录"不支持审批"告警
+
+
+async def test_approval_missing_flag_noop():
+    """请求缺 flag 时不调用任何平台"""
+    from bot.core.bot import QingciBot
+
+    fake = _FakeApprovalBot()
+    rec = _FakeApprovalConnection()
+    fake.platforms["recorder"] = rec
+    await QingciBot._handle_request_approval(
+        fake, {"detail_type": "friend", "flag": ""}, True, platform="recorder"
+    )
+    assert rec.calls == []
+
+
+async def test_onebot11_approve_request_actions(monkeypatch):
+    """OneBot 11 approve_request 映射到 set_*_add_request action"""
+    conn = OneBotConnection(host="127.0.0.1", port=3001, enabled=True)
+    calls: list[tuple] = []
+
+    async def fake_call_api(action, params=None, timeout=30):
+        calls.append((action, params))
+        return {"ok": True}
+
+    monkeypatch.setattr(conn, "call_api", fake_call_api)
+    await conn.approve_request("f1", True, request_type="friend")
+    await conn.approve_request("g1", False, request_type="group", sub_type="invite")
+    assert calls[0] == ("set_friend_add_request", {"flag": "f1", "approve": True})
+    assert calls[1] == (
+        "set_group_add_request",
+        {"flag": "g1", "sub_type": "invite", "approve": False},
+    )
+    assert conn.supports_request_approval is True
+
+
+async def test_onebot12_approve_request_actions(monkeypatch):
+    """OneBot 12 approve_request 映射到 handle 动作命名空间"""
+    from bot.core.platforms.onebot12 import OneBot12Adapter
+
+    conn = OneBot12Adapter(host="127.0.0.1", port=3002, enabled=True)
+    calls: list[tuple] = []
+
+    async def fake_call(action, params, timeout=30):
+        calls.append((action, params))
+        return {"ok": True}
+
+    monkeypatch.setattr(conn, "_call", fake_call)
+    await conn.approve_request("f1", True, request_type="friend")
+    await conn.approve_request("g1", False, request_type="group", sub_type="invite")
+    assert calls[0] == ("friend_request.handle", {"flag": "f1", "approve": True})
+    assert calls[1] == ("group_request.handle", {"flag": "g1", "approve": False})
+    assert conn.supports_request_approval is True
 
 
 # ---------- Telegram 增强：@提及 ----------

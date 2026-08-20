@@ -10,6 +10,21 @@ from pydantic import BaseModel, ValidationError, model_validator
 
 from .paths import app_root
 
+
+def _deep_merge(base: dict, patch: dict) -> dict:
+    """递归合并 patch 到 base（返回新 dict，不修改入参）
+
+    嵌套 dict 递归合并；非 dict 值（含 list）整体替换。
+    """
+    result = dict(base)
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 # ============ 配置模型 ============
 
 
@@ -556,9 +571,15 @@ class ConfigManager:
                 raise
 
     def update(self, data: dict):
-        """更新配置并保存（save 失败时回滚内存）"""
+        """更新配置并保存（深合并语义，save 失败时回滚内存）
+
+        仅覆盖传入的节/字段，未提供的配置保持不变，杜绝"传部分配置
+        静默重置其它节（如 api_key / llm.api_key）"的陷阱。列表按整值
+        替换（如 admin_users），嵌套 dict 递归合并。
+        """
         with self._lock:
-            new_config = AppConfig(**data)
+            merged = _deep_merge(self._config.model_dump(), data)
+            new_config = AppConfig(**merged)
             old_config = self._config
             self._config = new_config
             try:

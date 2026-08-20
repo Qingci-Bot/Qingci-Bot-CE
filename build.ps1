@@ -80,6 +80,26 @@ if (-not (Test-Path $AppDir)) {
     throw "output folder missing: $AppDir"
 }
 
+# ---------- [3.5/3] SHA256 校验清单 ----------
+# 供最终用户校验分发产物完整性/防篡改；同时校验 Web UI 与 EXE 本体。
+Write-Host "==> [3.5/3] generating SHA256 checksums..." -ForegroundColor Cyan
+$ExeFile = Join-Path $AppDir "qingci-bot-ce.exe"
+$Manifest = Join-Path $DistDir "qingci-bot-ce.sha256"
+if (Test-Path $ExeFile) {
+    $exeHash = (Get-FileHash -Algorithm SHA256 -Path $ExeFile).Hash.ToLower()
+    $webHash = $null
+    $webIndex = Join-Path $AppDir "web\dist\index.html"
+    if (Test-Path $webIndex) {
+        $webHash = (Get-FileHash -Algorithm SHA256 -Path $webIndex).Hash.ToLower()
+    }
+    $lines = @("qingci-bot-ce.exe  $exeHash")
+    if ($webHash) { $lines += "web\dist\index.html  $webHash" }
+    $lines | Set-Content -Encoding utf8 $Manifest
+    Write-Host "    SHA256 manifest -> $Manifest"
+} else {
+    Write-Warning "    exe 未找到，跳过 SHA256 清单生成: $ExeFile"
+}
+
 Write-Host ""
 Write-Host "Build finished: $AppDir" -ForegroundColor Green
 Write-Host "Run:"

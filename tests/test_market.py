@@ -225,7 +225,7 @@ class _FakeManager:
     async def unload(self, name):
         self._plugins.pop(name, None)
 
-    async def install(self, bot, source, name=None):
+    async def install(self, bot, source, name=None, expected_sha256=""):
         assert source  # source 传入
         self._plugins[name or "x"] = _FakePlugin(name or "x", "1.2.0")
         return True
@@ -272,7 +272,7 @@ async def test_install_falls_back_to_mirror(tmp_path: Path, monkeypatch):
     calls: list[str] = []
 
     class _FlakyManager(_FakeManager):
-        async def install(self, bot, source, name=None):
+        async def install(self, bot, source, name=None, expected_sha256=""):
             calls.append(source)
             if "mirror" not in source:
                 return False
@@ -292,7 +292,7 @@ async def test_install_all_sources_fail(tmp_path: Path, monkeypatch):
     manager = _make_manager(tmp_path, monkeypatch, json.dumps(SAMPLE_INDEX).encode())
 
     class _FailingManager(_FakeManager):
-        async def install(self, bot, source, name=None):
+        async def install(self, bot, source, name=None, expected_sha256=""):
             return False
 
     fake_mgr = _FailingManager({"hello": _FakePlugin("hello", "1.0.0")})

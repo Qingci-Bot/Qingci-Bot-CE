@@ -47,6 +47,7 @@ class OneBot12Adapter(PlatformAdapter):
 
     name = "onebot12"
     display_name = "OneBot 12"
+    supports_request_approval = True  # 支持 friend_request.handle / group_request.handle
 
     def __init__(
         self,
@@ -303,3 +304,15 @@ class OneBot12Adapter(PlatformAdapter):
     ) -> dict:
         """调用 OneBot 12 标准动作（JSON-RPC 透传）"""
         return await self._call(action, params, timeout)
+
+    async def approve_request(
+        self,
+        flag: str,
+        approve: bool,
+        request_type: str = "friend",
+        sub_type: str = "",
+    ) -> dict:
+        """审批加好友/加群请求（OneBot 12 handle 动作命名空间）"""
+        if request_type == "friend":
+            return await self._call("friend_request.handle", {"flag": flag, "approve": approve})
+        return await self._call("group_request.handle", {"flag": flag, "approve": approve})

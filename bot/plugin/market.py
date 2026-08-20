@@ -96,6 +96,9 @@ class MarketIndex:
                     "tags": [str(t) for t in (item.get("tags") or [])],
                     "requirements": [str(r) for r in (item.get("requirements") or [])],
                     "updated_at": str(item.get("updated_at", "")),
+                    # 归档完整性校验和（可选）：HTTP 归档来源下载后校验，
+                    # 防传输被篡改/投毒；git 来源自带完整性，忽略该字段
+                    "source_sha256": str(item.get("source_sha256", "") or "").lower(),
                 }
             )
 
@@ -438,10 +441,13 @@ class MarketManager:
         if manager.get(name) is not None:
             await manager.unload(name)
         sources = [s for s in (item.get("source"), item.get("mirror")) if s]
+        expected_sha256 = str(item.get("source_sha256", "") or "")
         last_err: Exception | None = None
         for src in sources:
             try:
-                if await manager.install(bot, src, name=name):
+                # source_sha256 校验仅适用于 HTTP 归档；git 来源在
+                # _fetch_plugin 内跳过校验（git 自带完整性）
+                if await manager.install(bot, src, name=name, expected_sha256=expected_sha256):
                     return True
             except Exception as e:
                 # ensure_dependencies 等抛异常时继续尝试备用源，避免 500 中断

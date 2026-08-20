@@ -415,6 +415,11 @@ class QingciBot:
     async def _process_event_impl(self, event: dict) -> None:
         """事件处理实现（限流后执行）"""
         try:
+            # 事件链路追踪：把本事件的 id 注入日志上下文，跨模块串查
+            # 分发/匹配/插件/LLM 处理日志（v12 事件带 id；v11 用 message_id/flag）
+            from ..logformat import set_event_id
+
+            set_event_id(str(event.get("id") or event.get("message_id") or event.get("flag") or ""))
             ctx = self.dispatcher.dispatch(event)
             if ctx is None:  # 防御性检查，dispatch 当前总返回非 None
                 return
@@ -602,9 +607,9 @@ class QingciBot:
         已映射为 detail_type，故此处优先读取 detail_type；同时兼容未翻译的
         v11 形态（request_type），避免此类事件审批静默失效。
 
-        OneBot 12 / Telegram 平台使用独立的 action 命名空间
-        （friend_request.handle / group_request.handle），不能复用
-        OneBot 11 的 set_*_add_request，故按来源平台选择 action。
+        按能力面路由：supports_request_approval=True 的平台调用其
+        approve_request 映射到自身 action；不支持的平台记录告警并跳过
+        （不再按平台名硬编码 action，新增平台无需改核心代码）。
         """
         try:
             request_type = event.get("detail_type", "") or event.get("request_type", "")
@@ -618,26 +623,16 @@ class QingciBot:
                 return
             # 按事件来源平台路由连接；未知平台回退主连接
             conn = self.platforms.get(platform, self.connection)
-            is_v12 = getattr(conn, "name", "") == "onebot12"
-            if request_type == "friend":
-                if is_v12:
-                    await conn.call_api("friend_request.handle", {"flag": flag, "approve": approve})
-                else:
-                    await conn.call_api(
-                        "set_friend_add_request", {"flag": flag, "approve": approve}
-                    )
-            elif request_type == "group":
-                sub_type = event.get("sub_type", "")
-                if is_v12:
-                    await conn.call_api(
-                        "group_request.handle",
-                        {"flag": flag, "approve": approve},
-                    )
-                else:
-                    await conn.call_api(
-                        "set_group_add_request",
-                        {"flag": flag, "sub_type": sub_type, "approve": approve},
-                    )
+            if not getattr(conn, "supports_request_approval", False):
+                logger.warning(f"平台 {getattr(conn, 'name', platform)} 不支持请求审批，已跳过")
+                return
+            sub_type = event.get("sub_type", "")
+            try:
+                await conn.approve_request(
+                    flag, approve, request_type=request_type, sub_type=sub_type
+                )
+            except NotImplementedError:
+                logger.warning(f"平台 {getattr(conn, 'name', platform)} 未实现请求审批，已跳过")
         except Exception:
             logger.exception("处理请求审批失败")
 
@@ -704,8 +699,17 @@ def get_bot() -> QingciBot:
 
 
 def set_bot(bot: QingciBot):
-    """记录当前进程的 DI 容器（供 get_bot 解析）"""
+    """记录当前进程的 DI 容器（供 get_bot 解析）
+
+    架构约束：单进程 = 单 Bot 实例。重复设置说明已有实例存活
+    （异常多开/测试未清理），记录告警便于排查；不主动抛错，
+    以免打断测试重置等合法场景。
+    """
     global _bot_container
+    if _bot_container is not None and _bot_container is not bot.di:
+        logger.warning(
+            "set_bot 被重复调用：已有 Bot 实例注册，现被新实例覆盖（单进程应只存在一个 Bot 实例）"
+        )
     _bot_container = bot.di
 
 
