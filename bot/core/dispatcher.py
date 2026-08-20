@@ -148,6 +148,10 @@ class MessageDispatcher:
         if rw is not None:
             await rw.acquire_read()
         try:
+            # 框架级消息记录/广播：对所有进入分发链的收消息统一写库 + WS 实时广播，
+            # 使消息日志页覆盖所有插件/命令/对话（而非仅内置 chat 插件的 LLM 消息）
+            await self._record_incoming_message(bot, ctx, post_type)
+
             # 会话阶梯续接优先：若该会话存在挂起中的阶梯，跳过 rule/permission
             # 直接续接 handler（用户已进入多轮流程，不应被命令前缀规则再次拦截）
             if post_type == "message":
@@ -249,6 +253,43 @@ class MessageDispatcher:
         finally:
             if rw is not None:
                 await rw.release_read()
+
+    async def _record_incoming_message(self, bot, ctx: MessageContext, post_type: str) -> None:
+        """框架级消息入库 + 实时广播（对所有进入分发链的消息统一记录）
+
+        由 ``config.log.record_all_messages`` 开关控制（默认开）。内置 chat 插件
+        不再承担用户消息的入库/广播职责，避免与本钩子重复记录。
+        """
+        if post_type != "message":
+            return
+        record_all = getattr(getattr(bot.config, "log", None), "record_all_messages", True)
+        if not record_all:
+            return
+        group_id = ctx.group_id if ctx.message_type == "group" and ctx.group_id else None
+        record = {
+            "message_id": ctx.message_id,
+            "user_id": ctx.user_id,
+            "group_id": group_id,
+            "content": ctx.message.extract_plain_text(),
+            "message_type": ctx.message_type,
+            "role": "user",
+            "platform": ctx.platform,
+        }
+        db = getattr(bot, "db", None)
+        if db is not None:
+            try:
+                await db.save_messages_batch([record])
+            except Exception:
+                logger.exception("框架消息记录失败")
+        try:
+            from datetime import datetime, timezone
+
+            from ..broadcast import broadcast_message
+
+            record["created_at"] = datetime.now(timezone.utc).isoformat()
+            await broadcast_message(record)
+        except Exception:
+            logger.exception("框架消息广播失败")
 
     # ---- 会话阶梯（多轮交互） ----
 

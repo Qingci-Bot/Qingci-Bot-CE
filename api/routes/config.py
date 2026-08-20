@@ -65,6 +65,13 @@ def _maybe_notify_bot(reload_llm: bool = True):
         bot = _get_bot()
         if bot:
             bot.config.reload()
+            # 运行日志采集开关：配置变更后即时附加/移除日志 Handler（无需重启）
+            try:
+                from bot.logformat import set_run_log_enabled
+
+                set_run_log_enabled(bot.config.log.run_log_enabled)
+            except Exception:
+                logger.exception("应用运行日志开关失败")
             if reload_llm and bot.llm:
                 # 异步执行 reload，不阻塞 HTTP 请求；保存任务引用并记录异常。
                 # config.reload() 会新建 AppConfig，须把新的 session_summary

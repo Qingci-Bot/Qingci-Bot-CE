@@ -26,8 +26,8 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 # PyInstaller 打包时一并收集（spec 中 collect_all('qingci_plugin_sdk')）。
 # 锁定到已发布 tag（与 pyproject.toml 保持一致），保证构建可复现；
 # SDK 发新版后同步更新这里与 pyproject.toml 的 tag。
-Write-Host "==> [0/3] installing qingci-plugin-sdk (v1.12.0)..." -ForegroundColor Cyan
-uv pip install --python $Python "qingci-plugin-sdk @ git+https://gitee.com/qingci-bot/Plugins-SDK.git@v1.12.0"
+Write-Host "==> [0/3] installing qingci-plugin-sdk (v1.13.0)..." -ForegroundColor Cyan
+uv pip install --python $Python "qingci-plugin-sdk @ git+https://gitee.com/qingci-bot/Plugins-SDK.git@v1.13.0"
 if ($LASTEXITCODE -ne 0) { throw "qingci-plugin-sdk install failed with exit code $LASTEXITCODE" }
 
 # ---------- [1/3] PyInstaller build ----------
@@ -62,9 +62,26 @@ try {
     if (-not $env:PLAYWRIGHT_DOWNLOAD_HOST) {
         $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://npmmirror.com/mirrors/playwright"
     }
-    # --only-shell 仅下载无头浏览器（比完整 chromium 更小，足以支撑 HTML 渲染）
-    & $Python -m playwright install chromium --only-shell
-    if ($LASTEXITCODE -ne 0) { throw "playwright install chromium --only-shell failed" }
+    function Invoke-PlaywrightInstall {
+        param([string[]]$Flags)
+        & $Python -m playwright install chromium @Flags
+        return $LASTEXITCODE
+    }
+    # 优先 --only-shell（体积小，足以支撑 HTML 渲染）。
+    # npmmirror 的 chromium-headless-shell 产物长期滞后（新 revision 404），
+    # 失败时回退完整 chromium --no-shell（跳过缺失的 headless-shell，镜像有完整 chromium）。
+    # 两者皆失败（如官方 CDN 超时）最后回退官方源重试 --only-shell。
+    $installCode = Invoke-PlaywrightInstall @("--only-shell")
+    if ($installCode -ne 0) {
+        Write-Warning "    --only-shell 下载失败（镜像 headless-shell 滞后），回退完整 chromium --no-shell ..."
+        $installCode = Invoke-PlaywrightInstall @("--no-shell")
+    }
+    if ($installCode -ne 0) {
+        Write-Warning "    完整 chromium 亦失败，回退官方源重试 --only-shell ..."
+        $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://playwright.azureedge.net"
+        $installCode = Invoke-PlaywrightInstall @("--only-shell")
+    }
+    if ($installCode -ne 0) { throw "playwright install chromium 全部重试失败 (exit=$installCode)" }
 
     if (-not (Test-Path $env:PLAYWRIGHT_BROWSERS_PATH)) {
         throw "browser bundle dir missing: $env:PLAYWRIGHT_BROWSERS_PATH"

@@ -395,13 +395,23 @@ class MarketManager:
 
     def _collect_installed(self, bot) -> dict[str, str]:
         """收集已安装插件版本：已加载插件优先，其次插件目录 plugin.json/元数据"""
-        installed: dict[str, str] = {}
-        for _name, plugin in bot.plugin_manager.plugins.items():
-            installed[plugin.name] = plugin.version or "0.0.0"
-        # 扫描外部插件目录补充未加载的（目录型）
         from ..paths import plugins_dir
 
-        for child in plugins_dir().iterdir() if plugins_dir().is_dir() else []:
+        plugins_root = plugins_dir()
+        installed: dict[str, str] = {}
+        for name, plugin in bot.plugin_manager.plugins.items():
+            # 已加载插件优先读目录 plugin.json 的 version（市场更新判定的权威来源），
+            # 代码属性 plugin.version 仅作兜底——避免插件发布版本漂移导致永久"可更新"死循环。
+            ver: str | None = None
+            if plugins_root.is_dir():
+                plugin_dir = (plugins_root / name).resolve()
+                if plugin_dir.is_dir():
+                    meta = self._load_plugin_json(plugin_dir)
+                    if meta and meta.get("version"):
+                        ver = str(meta["version"])
+            installed[name] = ver or plugin.version or "0.0.0"
+        # 扫描外部插件目录补充未加载的（目录型）
+        for child in plugins_root.iterdir() if plugins_root.is_dir() else []:
             if not child.is_dir() or child.name.startswith("_"):
                 continue
             if child.name in installed:

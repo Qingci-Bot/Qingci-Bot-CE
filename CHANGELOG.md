@@ -5,11 +5,24 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.13.0] - 2026-08-21（问题诊断报告 CE-1~CE-7 + shiguang-1 修复落地）
+
+### Added
+
+- **运行日志功能（CE-2）**：新增 `/api/ws/runlog` 端点（复用 WS 鉴权 + 连接池扇出，连接即回发环形缓冲快照）与 `RunLogHandler` 环形缓冲采集器；WebUI 新增「运行日志」页（`RuntimeLog.vue`，实时查看 + 级别过滤 + 自动滚动）；设置页新增 `log.run_log_enabled` 开关（默认开，关闭后运行日志页无数据），配置变更即时生效无需重启
+- **框架级消息记录/广播（CE-1）**：`Dispatcher` 新增 `_record_incoming_message`，对所有进入分发链的用户消息统一写库 + WS 实时广播；新增 `log.record_all_messages` 开关（默认开）。内置 chat 插件只记录 LLM 助手回复——消息日志页由"仅 LLM 对话"变为"全量消息"
+- **群组配置删除（CE-5）**：补 `Database.delete_group_config` + `DELETE /api/group/{group_id}` 端点（含审计埋点 + chat 群配置缓存失效）+ `GroupConfig.vue` 删除按钮（带确认弹窗）
+
+### Fixed
+
+- **市场版本更新死循环（CE-4）**：`_collect_installed` 对已加载插件优先读目录 `plugin.json` 的 `version`（市场更新判定的权威来源），代码属性 `plugin.version` 仅作兜底——插件发布版本漂移（如 shiguang 代码 1.0.0 / 元数据 1.0.1）不再导致永久"可更新"
+- **插件卸载后列表不更新（CE-3）**：卸载 / reload / disable / enable 成功后刷新 `pluginDetails`，并收紧合并逻辑——不再从旧缓存"复活"已卸载插件
+- **build.ps1 Chromium 下载失败（CE-7）**：优先 `--only-shell`（体积小）；npmmirror 的 `chromium-headless-shell` 产物长期滞后导致 404 时自动回退完整 `chromium --no-shell`（镜像有完整 chromium），仍失败再回退官方源重试
+- **EXE 启动动画风格对齐（CE-6）**：splash 纯 ctypes 配色对齐 Web UI 原神风暗色主题（背景 `#0b0f1a`、标题/强调琥珀金 `#fbbf24`、副标题天蓝 `#38bdf8`），并添加顶部/底部琥珀金强调装饰线
 
 ### Changed
 
-- **SDK 锁定升级到 v1.12.0**：`qingci-plugin-sdk @ v1.12.0`（pyproject/build.ps1/uv.lock 同步，版本同步无代码变更）
+- **SDK 锁定升级到 v1.13.0（shiguang-1）**：`qingci-plugin-sdk @ v1.13.0`（pyproject/build.ps1/uv.lock 同步），含 `to_v11_segment` 媒体段 `file_id`/`file`/`url` 字段回退修复——OneBot 11 发送链路不再因插件仅填 `file`/`url` 而丢失图片段
 
 ## [1.12.0] - 2026-08-20（架构审阅阶段二 + 阶段三落地）
 

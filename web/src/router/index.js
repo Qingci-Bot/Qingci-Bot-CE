@@ -7,6 +7,11 @@ const routes = [
   { path: '/groups', name: 'groups', component: () => import('../views/GroupConfig.vue') },
   { path: '/plugins', name: 'plugins', component: () => import('../views/PluginManager.vue') },
   { path: '/logs', name: 'logs', component: () => import('../views/MessageLog.vue') },
+  {
+    path: '/runlog',
+    name: 'runlog',
+    component: () => import('../views/RuntimeLog.vue'),
+  },
   { path: '/settings', name: 'settings', component: () => import('../views/Settings.vue') },
   { path: '/about', name: 'about', component: () => import('../views/About.vue') },
   { path: '/setup', name: 'setup', component: () => import('../views/SetupWizard.vue') },

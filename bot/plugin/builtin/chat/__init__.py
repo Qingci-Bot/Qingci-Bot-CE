@@ -299,21 +299,13 @@ class ChatPlugin(PluginBase):
         if need_filter and not exempt:
             reply = self.bot.sensitive_filter.mask(reply)
 
-        # 保存消息记录到数据库（批量单事务，减少 SQLite commit 次数）
+        # 保存助手回复到数据库。入向用户消息已由框架级钩子在 Dispatcher
+        # （_record_incoming_message）统一记录，这里只记 LLM 生成的回复避免重复。
         group_id = ctx.group_id if ctx.message_type == "group" and ctx.group_id else None
         if self.db:
             try:
                 await self.db.save_messages_batch(
                     [
-                        {
-                            "message_id": ctx.message_id,
-                            "user_id": ctx.user_id,
-                            "group_id": group_id,
-                            "content": message,
-                            "message_type": ctx.message_type,
-                            "role": "user",
-                            "platform": ctx.platform,
-                        },
                         {
                             "message_id": f"{ctx.message_id}_reply",
                             "user_id": ctx.self_id,
@@ -328,23 +320,11 @@ class ChatPlugin(PluginBase):
             except Exception:
                 logger.exception("保存消息记录失败")
 
-        # 实时广播（独立于数据库）
+        # 实时广播助手回复（独立于数据库；用户消息由框架级钩子广播）
         try:
-            from ....core.broadcast import broadcast_message
+            from ....broadcast import broadcast_message
 
             now = datetime.now(timezone.utc).isoformat()
-            await broadcast_message(
-                {
-                    "id": ctx.message_id,
-                    "message_id": ctx.message_id,
-                    "user_id": ctx.user_id,
-                    "group_id": group_id,
-                    "content": message,
-                    "message_type": ctx.message_type,
-                    "role": "user",
-                    "created_at": now,
-                }
-            )
             await broadcast_message(
                 {
                     "id": f"{ctx.message_id}_reply",

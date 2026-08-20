@@ -110,6 +110,7 @@ log:
   log_dir: logs                # 日志目录（相对路径基于 app_root）
   retention_days: 0            # 数据保留天数：messages/sessions/usage_logs/audit_logs
                                # 超过保留期的记录每天自动清理（0=不清理，保留全部）
+  run_log_enabled: true        # 运行日志采集：WebUI"运行日志"页实时查看（关闭后无数据）
 api_key: ''                   # WebUI/API 鉴权密钥；留空仅本机(127.0.0.1)免鉴权，
                               # 局域网/公网访问必须配置（0.0.0.0 监听时非本机请求会被拒绝）
 api:

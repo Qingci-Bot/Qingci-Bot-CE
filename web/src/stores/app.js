@@ -88,6 +88,7 @@ const defaultConfig = {
   },
   log: {
     usage_tracking: true,
+    run_log_enabled: true,
   },
   api_key: '',
 };

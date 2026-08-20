@@ -366,6 +366,14 @@ class Database:
             )
             return [row.model_dump(mode="json") for row in rows]
 
+    async def delete_group_config(self, group_id: int) -> bool:
+        """删除群配置（不存在时返回 False，成功删除返回 True）"""
+        async with session_scope() as session:
+            result = await session.execute(
+                delete(GroupConfig).where(GroupConfig.group_id == group_id)
+            )
+            return bool(result.rowcount)
+
     # ============ 用量统计 ============
 
     async def save_usage(

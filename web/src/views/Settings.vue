@@ -25,6 +25,7 @@ const backupResult = ref(null);
 const exporting = ref(false);
 const auditLogs = ref([]);
 const auditLoading = ref(false);
+const runLogEnabled = ref(true);
 
 // 当前实例主平台：onebot 实例只显示 OneBot 连接配置，telegram 实例只显示 Telegram 配置
 const currentPlatform = computed(() => store.currentInstance?.platform || 'onebot');
@@ -84,6 +85,7 @@ function resetForm() {
     },
     api_key: store.config.api_key || '',
   });
+  runLogEnabled.value = (store.config.log && store.config.log.run_log_enabled) !== false;
 }
 
 function parseList(str, asNumber = true) {
@@ -152,6 +154,7 @@ async function saveConfig() {
       },
     };
     newConfig.api_key = form.api_key;
+    newConfig.log = { ...(newConfig.log || {}), run_log_enabled: runLogEnabled.value };
     await store.saveConfig(newConfig);
     showToast('success', '系统设置已保存');
   } catch (e) {
@@ -307,6 +310,26 @@ async function saveConfigJson() {
           <label>用户黑名单（逗号分隔）</label>
           <input v-model="form.bot.user_blacklist" type="text" placeholder="user_003" />
         </div>
+      </div>
+    </div>
+
+    <div class="card fade-in">
+      <div class="card-header">
+        <div class="card-title">日志</div>
+      </div>
+      <div class="switch-row">
+        <label class="switch">
+          <input v-model="runLogEnabled" type="checkbox" />
+          <span class="slider" />
+        </label>
+        <span class="text-muted" style="font-size: 13px">
+          {{ runLogEnabled ? '已启用' : '已停用' }}
+        </span>
+        <span style="font-size: 13px; color: var(--text-primary)">运行日志采集</span>
+      </div>
+      <div class="hint-text" style="margin-top: 8px">
+        启用后由框架把运行日志实时推送到侧边栏「运行日志」页（环形缓冲，保留最近日志），
+        便于排障。关闭后运行日志页无数据。保存后立即生效，无需重启。
       </div>
     </div>
 

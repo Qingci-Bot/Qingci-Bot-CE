@@ -35,6 +35,7 @@ const navItems = [
   { path: '/groups', name: '群组配置', icon: '▣' },
   { path: '/plugins', name: '插件管理', icon: '◇' },
   { path: '/logs', name: '消息日志', icon: '✉' },
+  { path: '/runlog', name: '运行日志', icon: '⌘' },
   { path: '/settings', name: '系统设置', icon: '⚙' },
   { path: '/about', name: '关于', icon: '♢' },
 ];

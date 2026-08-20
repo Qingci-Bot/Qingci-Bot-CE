@@ -17,6 +17,7 @@ from api.auth import _get_configured_api_key
 from bot.broadcast import register_broker, unregister_broker
 from bot.core.bot import QingciBot
 from bot.core.bot import get_bot as _get_bot
+from bot.logformat import get_runlog_new_nowait, get_runlog_snapshot
 
 
 def get_bot() -> QingciBot | None:
@@ -31,6 +32,8 @@ logger = logging.getLogger("qingci-bot.api")
 # WebSocket 连接池（实时消息推送）与对话调试台连接池
 _ws_clients: set[WebSocket] = set()
 _chat_clients: set[WebSocket] = set()
+_runlog_clients: set[asyncio.Queue] = set()  # 运行日志客户端（每条连接一个 asyncio.Queue）
+_runlog_pump_task: asyncio.Task | None = None
 _MAX_WS_CLIENTS = 32
 
 
@@ -53,10 +56,49 @@ async def _broadcast_message_to_ws(message: dict) -> None:
     await _send_to_all_ws(json.dumps(message, ensure_ascii=False))
 
 
+async def _runlog_pump() -> None:
+    """运行日志消费泵：从环形缓冲的新条目队列取日志，扇出给所有 runlog 客户端"""
+    while True:
+        entry = await asyncio.to_thread(get_runlog_new_nowait)
+        if entry is not None:
+            payload = json.dumps({"type": "log", "entry": entry}, ensure_ascii=False)
+            dead: list[asyncio.Queue] = []
+            for q in list(_runlog_clients):
+                try:
+                    q.put_nowait(payload)
+                except asyncio.QueueFull:
+                    # 单客户端积压满则丢弃该连接（从中断开，等其重连）
+                    dead.append(q)
+            for q in dead:
+                _runlog_clients.discard(q)
+        else:
+            await asyncio.sleep(0.05)
+
+
+def _ensure_runlog_pump() -> None:
+    """确保运行日志消费泵已启动（幂等；由 lifespan 启动 / 客户端连接时兜底）"""
+    global _runlog_pump_task
+    if _runlog_pump_task is None or _runlog_pump_task.done():
+        _runlog_pump_task = asyncio.get_event_loop().create_task(_runlog_pump())
+
+
+async def _stop_runlog_pump() -> None:
+    """停止运行日志消费泵（lifespan 关闭时清理）"""
+    global _runlog_pump_task
+    if _runlog_pump_task is not None and not _runlog_pump_task.done():
+        _runlog_pump_task.cancel()
+        try:
+            await _runlog_pump_task
+        except asyncio.CancelledError:
+            pass
+    _runlog_pump_task = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期"""
     logger.info("API 服务启动")
+    _ensure_runlog_pump()
     yield
     # 清理 WebSocket 连接
     for ws in list(_ws_clients):
@@ -71,6 +113,8 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
     _chat_clients.clear()
+    _runlog_clients.clear()
+    await _stop_runlog_pump()
     # 注销 WebSocket 广播 broker，避免测试场景多次 create_app 时 broker 累积
     unregister_broker(_broadcast_message_to_ws)
     logger.info("API 服务已关闭")
@@ -321,6 +365,50 @@ def create_app() -> FastAPI:
             logger.debug("Chat WebSocket 异常断开", exc_info=True)
         finally:
             _chat_clients.discard(ws)
+
+    # WebSocket 运行日志：连接即回发环形缓冲快照，随后实时推送运行日志。
+    # 鉴权方式同 /api/ws/log；服务端消费扇出，多个连接互相独立。
+    @app.websocket("/api/ws/runlog")
+    async def ws_runlog(ws: WebSocket, token: str = Query(default="")):
+        reason, subprotocol = _ws_auth_check(ws, token)
+        if reason is not None:
+            await ws.close(code=4001, reason=reason)
+            return
+        if len(_runlog_clients) >= _MAX_WS_CLIENTS:
+            await ws.close(code=4003, reason="连接数已满")
+            return
+        await ws.accept(subprotocol=subprotocol)
+        # 连接即回发当前环形缓冲快照，让新打开的运行日志页立即有历史
+        try:
+            await ws.send_text(
+                json.dumps(
+                    {"type": "snapshot", "entries": get_runlog_snapshot()}, ensure_ascii=False
+                )
+            )
+        except Exception:
+            await ws.close(code=1011, reason="快照发送失败")
+            return
+        client_queue: asyncio.Queue = asyncio.Queue(maxsize=512)
+        _runlog_clients.add(client_queue)
+        _ensure_runlog_pump()
+        try:
+            while True:
+                try:
+                    payload = await asyncio.wait_for(client_queue.get(), timeout=30)
+                except asyncio.TimeoutError:
+                    # 30 秒无日志，发送 ping 保活；客户端断开后连接池会自动回收
+                    try:
+                        await ws.send_json({"type": "ping"})
+                    except Exception:
+                        break
+                    continue
+                await ws.send_text(payload)
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            logger.debug("RunLog WebSocket 异常断开", exc_info=True)
+        finally:
+            _runlog_clients.discard(client_queue)
 
     # 静态文件（Web UI 构建产物）
     # frozen 模式下为 exe 所在目录/web/dist（见 bot/paths.py）

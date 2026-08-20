@@ -93,6 +93,22 @@ async function addGroup() {
   newGroupId.value = '';
   await loadGroups();
 }
+
+async function removeGroup(group) {
+  if (!window.confirm(`确定删除群组 ${group.group_id} 的配置吗？删除后将恢复为全局默认行为。`)) {
+    return;
+  }
+  savingId.value = group.group_id;
+  try {
+    await store.apiFetch(`/api/group/${group.group_id}`, { method: 'DELETE' });
+    showToast('success', `群组 ${group.group_id} 配置已删除`);
+    await loadGroups();
+  } catch (e) {
+    showToast('error', `删除失败：${e.message}`);
+  } finally {
+    savingId.value = null;
+  }
+}
 </script>
 
 <template>
@@ -146,6 +162,7 @@ async function addGroup() {
             <th class="col-group-id">群组 ID</th>
             <th class="col-enabled">启用</th>
             <th>触发模式</th>
+            <th class="col-actions">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -174,6 +191,15 @@ async function addGroup() {
                 </option>
               </select>
             </td>
+            <td>
+              <button
+                class="btn btn-danger btn-sm"
+                :disabled="savingId === group.group_id"
+                @click="removeGroup(group)"
+              >
+                <span>✕</span> 删除
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -187,6 +213,9 @@ async function addGroup() {
 }
 .col-enabled {
   width: 120px;
+}
+.col-actions {
+  width: 90px;
 }
 
 .inline-select {

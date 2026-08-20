@@ -332,6 +332,16 @@ class LogConfig(BaseModel):
     # 记录由 Bot 定期清理，防止长期运行单表无限膨胀；0 或负数 = 不清理（保留全部）
     retention_days: int = 0
 
+    # 框架级消息记录/广播开关：为 True 时由 Dispatcher 对全部收发消息统一
+    # 写库 + WS 实时广播（默认开，保证消息日志页"全量"）。关闭后仅内置 chat
+    # 插件的 LLM 对话仍然记录（兼容旧行为）。
+    record_all_messages: bool = True
+
+    # 运行日志采集开关：为 True 时由 RunLogHandler 把运行日志采集进环形缓冲
+    # 并经 /api/ws/runlog 实时推送到 WebUI"运行日志"页（默认开，方便排障）。
+    # 关闭后运行日志页无数据。
+    run_log_enabled: bool = True
+
 
 class RAGConfig(BaseModel):
     """知识库（RAG）配置（默认关闭）

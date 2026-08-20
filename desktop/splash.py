@@ -19,10 +19,11 @@ WS_EX_TOOLWINDOW = 0x00000080
 ULW_ALPHA = 0x00000002
 SW_SHOW = 5
 
-# 配色：暗色主题，与 Qingci-Bot CE UI 风格一致
-BG_COLOR = 0x001E1E2E  # 深藏青 (BGR)
-TITLE_COLOR = 0x00CDD6F4  # 亮薰衣草 (BGR) — 实际是 RGB(0xF4, 0xD6, 0xCD)
-SUB_COLOR = 0x00A6ADC8  # 灰紫 (BGR)
+# 配色：与 Qingci-Bot CE Web UI（原神风格暗色主题，web/src/styles/main.css）对齐
+BG_COLOR = 0x000B0F1A  # 深蓝黑 #0b0f1a (BGR)
+TITLE_COLOR = 0x0024BFFB  # 强调琥珀金 #fbbf24 (BGR) — 标题
+SUB_COLOR = 0x0038BDF8  # 主色天蓝 #38bdf8 (BGR) — 副标题
+ACCENT_COLOR = 0x0024BFFB  # 装饰强调色（琥珀金）
 
 user32 = ctypes.windll.user32  # type: ignore[attr-defined]  # Windows-only API
 gdi32 = ctypes.windll.gdi32  # type: ignore[attr-defined]  # Windows-only API
@@ -116,7 +117,13 @@ class SplashScreen:
 
                 gdi32.SetBkMode(hdc_mem, 1)  # TRANSPARENT
 
-                # 4. 绘制标题
+                # 4. 顶部强调装饰线（琥珀金短线，模仿 Web UI 的强调元素）
+                accent_brush = gdi32.CreateSolidBrush(ACCENT_COLOR)
+                accent = wintypes.RECT((self.W - 96) // 2, 20, (self.W + 96) // 2, 26)
+                user32.FillRect(hdc_mem, ctypes.byref(accent), accent_brush)
+                gdi32.DeleteObject(accent_brush)
+
+                # 5. 绘制标题
                 gdi32.SetTextColor(hdc_mem, TITLE_COLOR)
                 font_title = gdi32.CreateFontW(
                     38, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 0, 0, "Microsoft YaHei"
@@ -127,7 +134,7 @@ class SplashScreen:
                 gdi32.SelectObject(hdc_mem, old_font)
                 gdi32.DeleteObject(font_title)
 
-                # 5. 绘制副标题
+                # 6. 绘制副标题
                 gdi32.SetTextColor(hdc_mem, SUB_COLOR)
                 font_sub = gdi32.CreateFontW(
                     20, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0, "Microsoft YaHei"
@@ -138,7 +145,13 @@ class SplashScreen:
                 gdi32.SelectObject(hdc_mem, old_font)
                 gdi32.DeleteObject(font_sub)
 
-                # 6. 居中坐标
+                # 7. 底部强调装饰线（琥珀金，与顶部呼应）
+                bottom_brush = gdi32.CreateSolidBrush(ACCENT_COLOR)
+                bottom_bar = wintypes.RECT(0, 148, self.W, 151)
+                user32.FillRect(hdc_mem, ctypes.byref(bottom_bar), bottom_brush)
+                gdi32.DeleteObject(bottom_brush)
+
+                # 8. 居中坐标
                 sw = user32.GetSystemMetrics(0)
                 sh = user32.GetSystemMetrics(1)
                 x = (sw - self.W) // 2

@@ -87,7 +87,9 @@ const mergedPlugins = computed(() => {
     return { ...p, author: detail.author, load_error: detail.load_error };
   });
   for (const d of pluginDetails.value || []) {
-    if (!store.plugins.some((p) => p.name === d.name)) merged.push(d);
+    // 仅追加加载失败（需展示 load_error 原因）的插件，避免把已卸载成功、
+    // 已从 /api/plugin 消失的旧缓存条目重新"复活"回列表
+    if (!store.plugins.some((p) => p.name === d.name) && d.load_error) merged.push(d);
   }
   return merged;
 });
@@ -246,6 +248,8 @@ async function unload(name) {
   try {
     await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}`, { method: 'DELETE' });
     await store.fetchStatus();
+    // 同步刷新 /api/plugin 详情缓存，卸载成功的插件立即从列表消失
+    await fetchPluginDetails();
     showToast('success', `插件 ${name} 已卸载`);
   } catch (e) {
     showToast('error', `卸载失败：${e.message}`);

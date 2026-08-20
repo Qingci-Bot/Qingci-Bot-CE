@@ -124,3 +124,31 @@ async def update_group_config(group_id: int, payload: GroupConfigUpdate, request
     )
 
     return {"group_id": group_id, "enabled": enabled, "trigger_mode": trigger_mode}
+
+
+@router.delete("/{group_id}", dependencies=[Depends(require_auth)])
+async def delete_group_config(group_id: int, request: Request):
+    """删除单一群配置（移除该群在 Bot 上的覆盖，恢复默认行为）"""
+    bot = _require_bot()
+    try:
+        deleted = await bot.db.delete_group_config(group_id)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(f"删除群配置失败: group_id={group_id}")
+        raise HTTPException(status_code=500, detail="删除群配置失败，详见服务端日志") from None
+    if not deleted:
+        raise HTTPException(status_code=404, detail="群配置不存在")
+
+    # 失效 chat 插件的群配置缓存，使删除立即生效
+    try:
+        from bot.plugin.builtin.chat import invalidate_group_config_cache
+
+        invalidate_group_config_cache(group_id)
+    except Exception:
+        logger.exception("失效群配置缓存失败")
+
+    # 审计埋点
+    await record_audit("group_config_delete", f"删除群配置: group_id={group_id}", request)
+
+    return {"group_id": group_id, "deleted": True}
