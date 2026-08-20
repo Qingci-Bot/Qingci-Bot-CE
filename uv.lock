@@ -3326,12 +3326,14 @@ dependencies = [
 
 [package.optional-dependencies]
 build = [
+    { name = "playwright" },
     { name = "pyinstaller" },
 ]
 dev = [
     { name = "httpx" },
     { name = "lancedb" },
     { name = "mypy" },
+    { name = "playwright" },
     { name = "pyinstaller" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -3367,7 +3369,8 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "pillow", specifier = ">=11.0" },
-    { name = "playwright", marker = "extra == 'render'", specifier = ">=1.40" },
+    { name = "playwright", marker = "extra == 'build'", specifier = ">=1.62.0" },
+    { name = "playwright", marker = "extra == 'render'", specifier = ">=1.62.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pyinstaller", marker = "extra == 'build'", specifier = ">=6.0" },
     { name = "pystray", specifier = ">=0.19.0" },
@@ -3376,7 +3379,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=5.0" },
     { name = "pywebview", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "qingci-bot-ce", extras = ["test", "build", "vector"], marker = "extra == 'dev'" },
+    { name = "qingci-bot-ce", extras = ["test", "build", "vector", "render"], marker = "extra == 'dev'" },
     { name = "qingci-plugin-sdk", git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=main" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },

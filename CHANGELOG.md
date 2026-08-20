@@ -5,6 +5,32 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-08-20（安全加固与稳定性修复）
+
+### Added
+
+- **EXE 内置 Playwright 浏览器（全内置 HTML 渲染）**：`build.ps1` 打包时自动下载无头 Chromium 到产物目录 `ms-playwright\`（`--only-shell`，体积更小），运行时 `main.py` 经 `PLAYWRIGHT_BROWSERS_PATH` 指向内置浏览器——EXE 开箱即可渲染签到卡等 HTML → 图片，无需最终用户另行 `playwright install chromium`。构建期支持 `PLAYWRIGHT_DOWNLOAD_HOST` 走国内镜像；下载失败时产物仍可运行，仅渲染能力降级（签到卡回退纯文本）。spec 同步 `collect_all('playwright')` 收集 Python 包，playwright 由主依赖移入可选 `[render]` 分组（`[dev]` 含 `[render]` 保证 CI 可用），`build.ps1` 补 uv 检测
+
+### Security
+
+- **插件归档 Zip Slip 修复**：zip 解压补成员路径预检（此前仅 tar 有防护），拒绝绝对路径（含盘符）与 `..` 穿越条目，恶意插件包不再可越出目录覆盖主机任意文件
+- **SSRF 防护**：新增 `bot/plugin/ssrf.py`——市场索引 HTTP 拉取与插件归档下载禁用重定向（防 302 跳内网）、拒绝私网/环回/链路本地 IP 字面量；git 克隆 URL 增加传输协议白名单（拒绝 `ext::` 命令执行与 `file:` 协议）
+- **市场安装禁止本地路径**：`PluginManager.install` 默认 `allow_local=False`，远端市场索引无法再让服务端复制任意本地目录/执行插件；本地安装需显式 `allow_local=True`
+- **登录限流防伪造**：`X-Forwarded-For` 默认不再信任（可伪造换头绕过限流），需配置 `api.trust_proxy_headers=true`（部署于可信反向代理后）才启用
+- **未配置 api_key 免鉴权收紧**：留空仅本机（环回）豁免；监听暴露到局域网/公网时非本机请求拒绝访问，避免管理面无认证裸奔
+
+### Fixed
+
+- **LLM 会话摘要重复写 DB**：摘要压缩已把本条用户消息随 recent_msgs 重写落库，`chat()` 跳过重复写入，模型上下文不再出现重复用户消息
+- **`max_tool_rounds=1` 时 Function Calling 失效**：工具轮次至少保留 1 轮（总轮数 = 工具轮 + 收尾轮），配置 1 也能正常调用工具
+- **LLM reload 不再清空全部内存会话**：仅调参数不会重置所有用户的对话上下文（未落库轮次保留，历史无缝延续）
+- **插件重载中途失败不再丢失插件**：新插件注册失败时恢复旧插件（含 matcher/页面/LLM 工具注册），避免插件从管理器静默消失
+- **请求审批兼容 v11 形态**：`detail_type` 为空时回退 `request_type`，未翻译的 v11 请求事件不再静默失效；缺类型时输出告警日志
+- **消息批量保存回退健壮化**：唯一冲突回退逐条保存时补全缺失字段默认值，单条缺字段不再导致整批不落库
+- **`_send_reply` 失败可感知**：三次重试后返回 False 并记录明确 error（供"必须送达"的审批等语义消息调用方判断）
+- **EventBuffer 数值安全转换**：非数值 `user_id/group_id`（字符串/浮点串）不再抛 ValueError 导致事件整条丢失
+- **DI 懒加载 singleton 解析**：`resolve` 经接口绑定查找时触发未初始化的 lazy singleton 工厂，不再误判"服务未注册"
+
 ## [1.9.4] - 2026-08-19（安全与稳定性修复）
 
 ### Security

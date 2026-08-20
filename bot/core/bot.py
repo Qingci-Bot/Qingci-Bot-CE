@@ -513,12 +513,15 @@ class QingciBot:
             f"notice_type={event.get('notice_type')}"
         )
 
-    async def _send_reply(self, ctx: MessageContext, reply: str) -> None:
+    async def _send_reply(self, ctx: MessageContext, reply: str) -> bool:
         """发送插件回复（按 ctx.platform 路由到对应平台适配器）
 
         OneBot 12 迁移（方案 A）：群聊回复前缀不再拼 CQ 码字符串，
         改为组装 v12 段数组 [reply][mention][text]，由平台适配器负责
         序列化（v11 平台转 CQ，v12 平台原样透传）。
+
+        Returns:
+            是否发送成功（三次重试均失败返回 False，供调用方感知“必须送达”的语义消息）
         """
         target_id = ctx.group_id if ctx.message_type == "group" else ctx.user_id
         if not target_id:
@@ -526,7 +529,7 @@ class QingciBot:
                 f"无法发送回复：target_id 为空 (type={ctx.message_type}, "
                 f"user_id={ctx.user_id}, group_id={ctx.group_id})"
             )
-            return
+            return False
 
         message: str | list = reply
         if ctx.message_type == "group" and ctx.user_id:
@@ -544,7 +547,7 @@ class QingciBot:
         for attempt in range(3):
             try:
                 await conn.send_msg(ctx.message_type, target_id, message)
-                return
+                return True
             except Exception:
                 logger.exception(
                     f"发送消息失败 (attempt {attempt + 1}/3, "
@@ -553,17 +556,28 @@ class QingciBot:
                 )
                 if attempt < 2:
                     await asyncio.sleep(0.5)
+        logger.error(
+            f"发送消息失败（已重试 3 次，视为未送达）: platform={platform or 'onebot'}, "
+            f"type={ctx.message_type}, target={target_id}"
+        )
+        return False
 
     async def _handle_request_approval(self, event: dict, approve: bool) -> None:
         """处理加好友/加群请求的审批结果
 
         v11 事件的 request_type（friend/group）在适配器翻译为 v12 事件时
-        已映射为 detail_type，故此处读取 detail_type。
+        已映射为 detail_type，故此处优先读取 detail_type；同时兼容未翻译的
+        v11 形态（request_type），避免此类事件审批静默失效。
         """
         try:
-            request_type = event.get("detail_type", "")
+            request_type = event.get("detail_type", "") or event.get("request_type", "")
             flag = event.get("flag", "")
             if not flag:
+                return
+            if not request_type:
+                logger.warning(
+                    f"请求事件缺少 detail_type/request_type，跳过审批: {self._event_summary(event)}"
+                )
                 return
             if request_type == "friend":
                 await self.connection.call_api(

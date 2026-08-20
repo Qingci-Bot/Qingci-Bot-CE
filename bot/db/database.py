@@ -91,7 +91,17 @@ class Database:
         except IntegrityError:
             logger.debug("批量保存消息遇唯一冲突，回退逐条保存")
             for r in records:
-                await self.save_message(**r)
+                # 回退路径补全缺失字段的默认值，避免某条记录缺字段导致
+                # 整批回退抛 TypeError、消息彻底不落库
+                await self.save_message(
+                    message_id=r.get("message_id", ""),
+                    user_id=r.get("user_id", 0),
+                    content=r.get("content", ""),
+                    message_type=r.get("message_type", "group"),
+                    group_id=r.get("group_id"),
+                    role=r.get("role", "user"),
+                    platform=r.get("platform", "onebot"),
+                )
 
     async def get_history(
         self,

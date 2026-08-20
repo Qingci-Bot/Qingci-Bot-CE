@@ -375,11 +375,22 @@ class PlatformsConfig(BaseModel):
     onebot12: OneBot12Config = OneBot12Config()
 
 
+class ApiConfig(BaseModel):
+    """API 层配置"""
+
+    model_config = {"extra": "ignore"}
+
+    # 是否信任反向代理的 X-Forwarded-For 头（用于登录防暴力限流的来源 IP 判定）。
+    # 仅在明确部署于可信反向代理之后时才应开启；直连场景开启会被攻击者伪造头绕过限流。
+    trust_proxy_headers: bool = False
+
+
 class AppConfig(BaseModel):
     """应用总配置"""
 
     model_config = {"extra": "ignore"}
 
+    api: ApiConfig = ApiConfig()
     bot: BotConfig = BotConfig()
     onebot: OneBotConfig = OneBotConfig()
     llm: LLMConfig = LLMConfig()

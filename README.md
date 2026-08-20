@@ -60,15 +60,17 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > | `[vector]` | `uv pip install -e ".[vector]"` | 向量知识库（lancedb，可选；缺失时 RAG 自动回退关键词检索） |
 > | `[render]` | `uv pip install -e ".[render]"` | HTML → 图片渲染（playwright，可选；安装与 Chromium 下载见下方「启用 HTML 渲染」；缺失时渲染能力自动降级不可用，调用方回退） |
 > | `[test]` | `uv pip install -e ".[test]"` | pytest / pytest-asyncio / pytest-cov / httpx |
-> | `[build]` | `uv pip install -e ".[build]"` | pyinstaller（`.\build.ps1` 依赖） |
+> | `[build]` | `uv pip install -e ".[build]"` | pyinstaller + playwright（`.\build.ps1` 依赖；playwright 用于打包时内置无头浏览器） |
 > | `[dev]` | `uv pip install -e ".[dev]"` | 以上全部 + ruff / mypy（代码质量工具） |
 >
-> **启用 HTML 渲染**：安装 `[render]` 分组后还需下载 Chromium（国内网络建议走 npm 镜像，否则容易卡住/超时）：
+> **启用 HTML 渲染**：源码运行时安装 `[render]` 分组后还需下载 Chromium（国内网络建议走 npm 镜像，否则容易卡住/超时）：
 >
 > ```bash
 > $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://npmmirror.com/mirrors/playwright"
 > uv run playwright install chromium
 > ```
+>
+> **打包版（EXE）已全内置**：`build.ps1` 构建时自动下载无头 Chromium 到产物目录 `ms-playwright\`，运行时经 `PLAYWRIGHT_BROWSERS_PATH` 定位，EXE 开箱即可渲染签到卡，无需最终用户再执行安装。构建期同样可用上述 `PLAYWRIGHT_DOWNLOAD_HOST` 走国内镜像。
 >
 > 浏览器缺失或下载失败时渲染能力自动降级不可用（`/api/bot/status` 的 `render` 字段可查状态），不影响框架启动。
 > 插件协议层 SDK（`qingci-plugin-sdk`）作为 git 依赖（默认指 [Gitee 镜像](https://gitee.com/qingci-bot/Plugins-SDK)，国内拉取更快）随核心依赖安装；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.ps1` 一致），覆盖 git 依赖版本。

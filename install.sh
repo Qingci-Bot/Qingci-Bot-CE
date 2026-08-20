@@ -69,11 +69,22 @@ install_sys_deps() {
     apt-get update
     apt-get install -y $pkgs
   elif command -v dnf >/dev/null 2>&1; then
-    echo ">> 检测到 dnf，安装系统依赖：$pkgs（精简集）"
-    dnf install -y git gcc python3-devel ca-certificates
+    # dnf 基础包与 apt 不同名（无 build-essential/python3-venv），用发行版精简集
+    dnf_pkgs="git gcc python3-devel ca-certificates"
+    if [ "$WITH_GUI" = "1" ]; then
+      # --with-gui：补装桌面模式（pywebview GTK / pystray）所需系统库
+      dnf_pkgs="$dnf_pkgs webkit2gtk4.1 gtk3 gir1.2-webkit2-4.1 libappindicator-gtk3"
+    fi
+    echo ">> 检测到 dnf，安装系统依赖：$dnf_pkgs"
+    dnf install -y $dnf_pkgs
   elif command -v apk >/dev/null 2>&1; then
-    echo ">> 检测到 apk，安装系统依赖"
-    apk add --no-cache git gcc musl-dev python3-dev ca-certificates
+    apk_pkgs="git gcc musl-dev python3-dev ca-certificates"
+    if [ "$WITH_GUI" = "1" ]; then
+      # Alpine：--with-gui 时补装 pywebview GTK / pystray 依赖
+      apk_pkgs="$apk_pkgs py3-gobject3 py3-cairo gtk+3.0 webkit2gtk libappindicator"
+    fi
+    echo ">> 检测到 apk，安装系统依赖：$apk_pkgs"
+    apk add --no-cache $apk_pkgs
   else
     echo ">> 未识别的包管理器，跳过系统依赖自动安装；请按发行版文档手工安装：$pkgs"
   fi

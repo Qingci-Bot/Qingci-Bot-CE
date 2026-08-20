@@ -31,17 +31,32 @@ _MAX_TRACKED_IPS = 256  # 记录表容量保护上限
 _login_failures: dict[str, list] = {}
 
 
+def _trust_proxy_headers() -> bool:
+    """是否信任反向代理的 X-Forwarded-For 头（config.api.trust_proxy_headers）"""
+    try:
+        from bot.core.bot import get_bot
+
+        bot = get_bot()
+        if bot and bot.config:
+            return bool(bot.config.config.api.trust_proxy_headers)
+    except Exception:
+        pass
+    return False
+
+
 def _client_ip(request: Request) -> str:
     """提取来源 IP（无客户端信息时用占位符）
 
-    优先取 X-Forwarded-For 首个 IP：经反向代理时 request.client.host 是
-    代理地址，全站同 IP 会把所有登录失败计入同一来源，导致误触发限流。
+    仅当显式配置 ``api.trust_proxy_headers``（部署于可信反向代理之后）时才
+    信任 X-Forwarded-For；否则 request.client.host 已是真实来源 IP，信任该头
+    会被攻击者每请求伪造换头绕过登录防暴力限流。
     """
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        first = forwarded.split(",")[0].strip()
-        if first:
-            return first
+    if _trust_proxy_headers():
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            first = forwarded.split(",")[0].strip()
+            if first:
+                return first
     return request.client.host if request.client else "unknown"
 
 

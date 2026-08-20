@@ -131,8 +131,8 @@ class LLMManager:
                     except Exception:
                         logger.exception(f"关闭旧适配器失败: model={old_model}")
                 self._adapter = None
-                self._sessions.clear()
-                self._loaded_sessions.clear()
+                # 不清空内存会话：仅调整参数不应重置所有用户的对话上下文
+                # （DB 持久化 + 未落库轮次继续保留，reload 后历史无缝延续）
                 # 重建适配器
                 self._adapter = self._create_adapter()
                 logger.info("LLM 配置已重载")
@@ -264,7 +264,7 @@ class LLMManager:
 
     # ============ 历史裁剪 ============
 
-    async def _trim_history(self, key: str):
+    async def _trim_history(self, key: str) -> bool:
         """异步裁剪会话历史，确保不超过 max_history 和 max_context_tokens
 
         裁剪策略：
@@ -275,10 +275,14 @@ class LLMManager:
 
         注意：仅裁剪内存中的历史。DB 中的旧记录由 _ensure_session_loaded
         的 limit 参数限制加载；摘要成功时会同步重写 DB 会话以持久化 summary。
+
+        Returns:
+            是否发生了摘要压缩（历史已重写 DB 且包含本条用户消息）；chat()
+            据此跳过后续的用户消息落库，避免摘要场景下消息重复写入 DB。
         """
         msgs = self._sessions.get(key, [])
         if not msgs:
-            return
+            return False
 
         # 1. 按条数裁剪（每轮 = user + assistant）
         max_msgs = self._config.max_history * 2
@@ -295,19 +299,20 @@ class LLMManager:
         # 2. 按 token 上限裁剪（保留最近至少 1 轮）
         max_tokens = self._config.max_context_tokens
         if max_tokens <= 0 or len(msgs) <= 2:
-            return
+            return False
         total = self._estimate_messages_tokens(msgs)
         if total <= max_tokens:
-            return
+            return False
 
         # 2a. 优先尝试摘要压缩（开关默认关闭）
         if await self._summarize_history(key, msgs):
-            return
+            return True
 
         # 2b. 降级：逐条硬裁剪（token 估算走缓存，不重复计数）
         while len(msgs) > 2 and total > max_tokens:
             total -= self._estimate_message_tokens(msgs.pop(0))
         self._sessions[key] = msgs
+        return False
 
     async def _summarize_history(self, key: str, msgs: list[dict]) -> bool:
         """将较早消息异步摘要压缩为一条 summary 消息，保留最近 N 轮原文
@@ -560,10 +565,14 @@ class LLMManager:
                 total_usage["prompt_tokens"] += int(usage.get("prompt_tokens", 0) or 0)
                 total_usage["completion_tokens"] += int(usage.get("completion_tokens", 0) or 0)
 
-        max_rounds = max(1, self._config.max_tool_rounds)
+        # 工具轮次：配置的轮数扣除 1 轮收尾（强制文本），至少保留 1 轮工具调用，
+        # 避免 max_tool_rounds=1 时唯一一轮被误判为收尾而完全不下发 tools
+        configured_rounds = max(1, self._config.max_tool_rounds)
+        tool_rounds = max(1, configured_rounds - 1)
+        max_rounds = tool_rounds + 1  # 工具轮 + 收尾轮
         for round_idx in range(max_rounds):
             # 最后一轮不再下发 tools，强制模型产出文本回复
-            round_tools = tools if round_idx < max_rounds - 1 else None
+            round_tools = tools if round_idx < tool_rounds else None
             result = await self.adapter.chat_detail(
                 messages=working,
                 system_prompt=system_prompt,
@@ -665,11 +674,12 @@ class LLMManager:
             self._sessions.setdefault(key, []).append({"role": "user", "content": message})
 
             # 裁剪上下文（异步：开关开启且超阈时触发摘要压缩）
-            await self._trim_history(key)
+            summarized = await self._trim_history(key)
 
-            # 并行持久化用户消息：与下方 LLM 网络调用同时进行（DB 写不阻塞请求）
+            # 并行持久化用户消息：与下方 LLM 网络调用同时进行（DB 写不阻塞请求）。
+            # 摘要压缩已把本条用户消息随 recent_msgs 重写落库，此处跳过避免重复写入
             save_user_task = None
-            if self._db is not None:
+            if self._db is not None and not summarized:
                 save_user_task = asyncio.create_task(self._db.save_session(key, "user", message))
 
             async def _wait_user_saved() -> bool:

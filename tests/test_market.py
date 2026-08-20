@@ -119,9 +119,7 @@ async def test_client_cache(tmp_path: Path, monkeypatch):
         fetches["n"] += 1
         return Resp()
 
-    import urllib.request
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_openurl)
+    _patch_http_open(monkeypatch, fake_openurl)
     client = MarketClient(url="https://fake.invalid/index.json", refresh_interval=3600)
     # 缓存目录隔离到 tmp_path
     monkeypatch.setattr("bot.plugin.market.data_root", lambda: tmp_path)
@@ -142,9 +140,7 @@ async def test_client_fallback_to_disk_cache(tmp_path: Path, monkeypatch):
             raise OSError("network down")
         return _FakeResp(good)
 
-    import urllib.request
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_openurl)
+    _patch_http_open(monkeypatch, fake_openurl)
     monkeypatch.setattr("bot.plugin.market.data_root", lambda: tmp_path)
     client = MarketClient(url="https://fake.invalid/index.json", refresh_interval=0)
 
@@ -160,12 +156,11 @@ async def test_client_fallback_to_disk_cache(tmp_path: Path, monkeypatch):
 
 async def test_client_no_cache_fails(tmp_path: Path, monkeypatch):
     """无缓存且拉取失败时抛 MarketError"""
-    import urllib.request
 
     def fail(req, timeout=60):
         raise OSError("network down")
 
-    monkeypatch.setattr(urllib.request, "urlopen", fail)
+    _patch_http_open(monkeypatch, fail)
     monkeypatch.setattr("bot.plugin.market.data_root", lambda: tmp_path)
     client = MarketClient(url="https://fake.invalid/index.json", refresh_interval=0)
     with pytest.raises(MarketError):
@@ -189,10 +184,23 @@ class _FakeResp:
         return False
 
 
-def _make_manager(tmp_path: Path, monkeypatch, data: bytes) -> MarketManager:
+def _patch_http_open(monkeypatch, fn):
+    """把 urlopen mock 改写为 opener.open mock
+
+    _fetch_via_http 为防 SSRF 重定向改走 build_opener(NoRedirectHandler).open()，
+    不再调用模块级 urlopen；测试统一通过 build_opener 注入假响应。
+    """
     import urllib.request
 
-    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=60: _FakeResp(data))
+    class _FakeOpener:
+        def open(self, req, timeout=60):
+            return fn(req, timeout=timeout)
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *a, **k: _FakeOpener())
+
+
+def _make_manager(tmp_path: Path, monkeypatch, data: bytes) -> MarketManager:
+    _patch_http_open(monkeypatch, lambda req, timeout=60: _FakeResp(data))
     monkeypatch.setattr("bot.plugin.market.data_root", lambda: tmp_path)
     return MarketManager(url="https://fake.invalid/index.json", refresh_interval=0)
 

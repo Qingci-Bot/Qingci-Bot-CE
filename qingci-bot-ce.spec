@@ -5,12 +5,14 @@
     dist/qingci-bot-ce/
         qingci-bot-ce.exe        # 主程序（windowed，无控制台窗口）
         _internal/               # Python 运行时与依赖
+        ms-playwright/           # 内置 Playwright 无头浏览器（build.ps1 下载）
         web/dist/                # Web UI（构建脚本复制，不打包进 exe）
-        config.yaml              # 用户配置（构建脚本复制，不打包进 exe）
-        data/                    # SQLite 数据、备份、词库（运行时生成）
+        instances/               # 实例目录（首次启动自动创建，含 config.yaml/plugins/data）
 
 可写资源与静态资源均按"exe 所在目录"相对路径读取（见 bot/paths.py），
 因此不通过 datas 打进包内，由 build.ps1 复制到产物目录分发。
+自 v1.6 起配置/插件/数据已收敛到 instances/<name>/ 自包含目录，
+构建产物不再生成根级 config.yaml 或 data\。
 
 当前为 windowed（无控制台）模式（console=False），日志不可见，
 建议配合 config.yaml 的文件日志使用；如需控制台可将 EXE 参数改回 console=True。
@@ -48,6 +50,11 @@ clrloader_datas, clrloader_binaries, clrloader_hiddenimports = collect_all('clr_
 # 打包；整体收集全部子模块，保证数据目录重定向等特性可用
 sdk_datas, sdk_binaries, sdk_hiddenimports = collect_all('qingci_plugin_sdk')
 
+# HTML 渲染（可选能力）：playwright Python 包随 EXE 收集，保证渲染代码可导入；
+# 浏览器二进制不进 EXE（体积大），由 build.ps1 下载到产物目录 ms-playwright/，
+# 运行时经 PLAYWRIGHT_BROWSERS_PATH（见 main.py）定位
+pw_datas, pw_binaries, pw_hiddenimports = collect_all('playwright')
+
 # 内嵌 pip：打包模式下自动安装外部插件依赖（bot/plugin/deps.py 走
 # pip._internal）到实例 deps 目录，需随产物整体收集 pip 及其 vendored 依赖
 pip_datas, pip_binaries, pip_hiddenimports = collect_all('pip')
@@ -55,8 +62,8 @@ pip_datas, pip_binaries, pip_hiddenimports = collect_all('pip')
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=litellm_binaries + tiktoken_binaries + pythonnet_binaries + clrloader_binaries + sdk_binaries + pip_binaries,
-    datas=litellm_datas + tiktoken_datas + pythonnet_datas + clrloader_datas + sdk_datas + pip_datas + [
+    binaries=litellm_binaries + tiktoken_binaries + pythonnet_binaries + clrloader_binaries + sdk_binaries + pip_binaries + pw_binaries,
+    datas=litellm_datas + tiktoken_datas + pythonnet_datas + clrloader_datas + sdk_datas + pip_datas + pw_datas + [
         ('desktop\\app-icon.ico', '.'),
     ],
     hiddenimports=[
@@ -66,6 +73,7 @@ a = Analysis(
         *clrloader_hiddenimports,
         *sdk_hiddenimports,
         *pip_hiddenimports,
+        *pw_hiddenimports,
         'tiktoken_ext.openai_public',
         # ---- uvicorn 运行时动态导入（五件套 + standard 附加依赖） ----
         'uvicorn.logging',

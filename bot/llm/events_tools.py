@@ -18,6 +18,17 @@ from collections import deque
 
 logger = logging.getLogger("qingci-bot.llm.events_tools")
 
+
+def _safe_int(value) -> int:
+    """安全转 int：非数值（字符串/None/空串/浮点串等）回退 0，避免事件整条丢失"""
+    if isinstance(value, bool):
+        return 0
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 # 缓冲容量上限：超出后丢弃最旧事件
 DEFAULT_BUFFER_CAPACITY = 200
 # 事件类型中文映射（工具返回文本可读性）
@@ -60,8 +71,8 @@ class EventBuffer:
                 "time": ts,
                 "post_type": post_type,
                 "sub_type": str(raw.get("sub_type", "")),
-                "user_id": int(raw.get("user_id", 0) or 0),
-                "group_id": int(raw.get("group_id", 0) or 0),
+                "user_id": _safe_int(raw.get("user_id")),
+                "group_id": _safe_int(raw.get("group_id")),
                 "label": self._label(
                     post_type, str(raw.get("notice_type", raw.get("request_type", "")))
                 ),
@@ -74,8 +85,8 @@ class EventBuffer:
                 "time": ts,
                 "post_type": post_type,
                 "sub_type": getattr(event, "sub_type", "") or "",
-                "user_id": int(getattr(event, "user_id", 0) or 0),
-                "group_id": int(getattr(event, "group_id", 0) or 0),
+                "user_id": _safe_int(getattr(event, "user_id", 0)),
+                "group_id": _safe_int(getattr(event, "group_id", 0)),
                 "label": self._label(post_type, str(kind)),
                 "detail": self._summarize_typed(event),
             }

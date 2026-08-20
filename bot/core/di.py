@@ -318,6 +318,13 @@ class DIContainer:
                 # 尝试通过 bound_types 查找
                 for sd in self._services.values():
                     if service_type in sd.bound_types:
+                        # lazy singleton 尚未初始化时触发工厂，避免误判"未注册"
+                        if (
+                            sd.lifetime == ServiceLifetime.SINGLETON
+                            and sd.instance is None
+                            and sd.factory is not None
+                        ):
+                            sd.instance = sd.factory()
                         return sd.instance
                 return None
 

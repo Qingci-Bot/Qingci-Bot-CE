@@ -108,4 +108,8 @@ log:
   log_file_max_bytes: 10485760 # 单文件最大字节数（默认 10 MB）
   log_file_backup_count: 5     # 保留备份数
   log_dir: logs                # 日志目录（相对路径基于 app_root）
-api_key: ''                   # WebUI/API 鉴权密钥，留空则免鉴权
+api_key: ''                   # WebUI/API 鉴权密钥；留空仅本机(127.0.0.1)免鉴权，
+                              # 局域网/公网访问必须配置（0.0.0.0 监听时非本机请求会被拒绝）
+api:
+  trust_proxy_headers: false  # 反向代理时设为 true 才信任 X-Forwarded-For（登录限流来源 IP 判定）；
+                              # 直连场景务必保持 false，否则攻击者可伪造该头绕过限流

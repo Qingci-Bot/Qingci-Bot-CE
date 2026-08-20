@@ -748,6 +748,7 @@ class PluginManager:
             plugin._status = PluginStatus.LOADED
 
             try:
+                old_tool_names = self._plugin_tools.get(target_name, [])
                 if old_plugin is not None:
                     await self.unload(target_name)
                 existing = self._plugins.get(plugin.name)
@@ -764,6 +765,8 @@ class PluginManager:
                     registered = register_tools(bot.tool_registry, plugin.name, tool_collector)
                     if registered:
                         self._plugin_tools[plugin.name] = registered
+                        # 保留 collector，供重载失败时恢复旧插件工具注册
+                        plugin._tool_collector = tool_collector
                 # 重载场景下 unload 已清除页面注册，需重新收集
                 # （若插件没有页面，_plugin_pages 保持为空即可）
                 self._collect_plugin_pages(plugin)
@@ -773,6 +776,25 @@ class PluginManager:
                     await plugin.on_unload()
                 except (Exception, asyncio.CancelledError):
                     logger.exception(f"插件 {plugin.name} 补偿 on_unload 异常")
+                # 新插件注册失败：清理其已注册的资源，并尽力恢复旧插件，
+                # 避免旧插件已被卸载、新插件未注册导致插件从管理器消失
+                self._plugins.pop(plugin.name, None)
+                self._plugin_tools.pop(plugin.name, None)
+                self._remove_plugin_pages(plugin.name)
+                self._remove_plugin_apis(plugin.name)
+                if old_plugin is not None and target_name not in self._plugins:
+                    self._plugins[target_name] = old_plugin
+                    self._plugin_tools[target_name] = old_tool_names
+                    old_collector = getattr(old_plugin, "_tool_collector", None)
+                    if old_tool_names and old_collector and plugin.bot is not None:
+                        from .llm_tool import register_tools
+
+                        try:
+                            register_tools(plugin.bot.tool_registry, target_name, old_collector)
+                        except Exception:
+                            logger.exception(f"恢复旧插件 {target_name} 工具注册失败")
+                    self._invalidate_matchers_cache()
+                    logger.warning(f"插件 {plugin.name} 注册失败，已恢复旧插件 {target_name}")
                 raise
 
             matcher_count = len(plugin.matchers) if plugin.matchers else 0
@@ -1014,13 +1036,15 @@ class PluginManager:
 
     # ---- 在线安装 ----
 
-    async def install(self, bot, source: str, *, name: str | None = None) -> bool:
+    async def install(
+        self, bot, source: str, *, name: str | None = None, allow_local: bool = False
+    ) -> bool:
         """在线安装插件到外部插件目录并加载
 
         source 支持：
         - git 仓库地址（git+https://... / https://... / git@...）
         - HTTP 指向 zip/tar 归档的 URL
-        - 本地路径（目录或归档文件）
+        - 本地路径（目录或归档文件，仅 allow_local=True 时接受）
 
         安装过程：拉取到 plugins/<name>/ → 加载 requirements.txt 依赖 → 加载插件。
 
@@ -1028,6 +1052,8 @@ class PluginManager:
             bot: Bot 实例（用于加载）
             source: 插件来源
             name: 目标插件名（为空时从来源推断）
+            allow_local: 是否接受本地路径来源。市场安装来源由远端索引下发，
+                必须保持 False（禁止本地路径），防止恶意索引复制服务器任意目录。
 
         Returns:
             是否成功安装并加载
@@ -1037,7 +1063,9 @@ class PluginManager:
         plugin_dir = plugins_dir()
         plugin_dir.mkdir(parents=True, exist_ok=True)
 
-        target_name, target_dir = await self._fetch_plugin(source, name, plugin_dir)
+        target_name, target_dir = await self._fetch_plugin(
+            source, name, plugin_dir, allow_local=allow_local
+        )
         if target_dir is None:
             return False
 
@@ -1060,7 +1088,11 @@ class PluginManager:
             return False
 
     async def _fetch_plugin(
-        self, source: str, name: str | None, plugins_dir: Path
+        self,
+        source: str,
+        name: str | None,
+        plugins_dir: Path,
+        allow_local: bool = False,
     ) -> tuple[str, Path | None]:
         """拉取插件源码到 plugins/ 目录，返回 (插件名, 插件目录)"""
         import shutil
@@ -1071,6 +1103,9 @@ class PluginManager:
         temp_dir: str | None = None
         try:
             if is_local_path:
+                if not allow_local:
+                    logger.error(f"拒绝本地路径插件来源（远程安装仅允许 http(s)/git）: {source}")
+                    return "", None
                 src = Path(source).resolve()
                 if src.is_dir():
                     return await self._copy_plugin_dir(src, name, plugins_dir)
@@ -1185,10 +1220,19 @@ class PluginManager:
         import shutil
         import urllib.request
 
+        from .ssrf import NoRedirectHandler, is_private_url
+
+        # 来源可能由远端市场索引下发：拦截私网/环回地址，防止 SSRF
+        if is_private_url(url):
+            logger.error(f"拒绝下载私网/环回地址的归档: {url}")
+            return False
+
         def _sync_download() -> bool:
             try:
+                # 禁止跟随重定向，防止 302 跳转到内网地址
+                opener = urllib.request.build_opener(NoRedirectHandler)
                 req = urllib.request.Request(url, headers={"User-Agent": "Qingci-Bot-CE"})
-                with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as f:
+                with opener.open(req, timeout=60) as resp, open(dest, "wb") as f:
                     shutil.copyfileobj(resp, f)
                 return True
             except (OSError, urllib.error.URLError) as e:
@@ -1207,6 +1251,14 @@ class PluginManager:
         fname = archive.name.lower()
         if fname.endswith(".zip"):
             with zipfile.ZipFile(archive) as zf:
+                # 安全解压：与下方 tar 分支同规则，预检每个成员路径，
+                # 拒绝绝对路径（含盘符）与 .. 穿越条目，防止 Zip Slip
+                dest_root = dest_dir.resolve()
+                for info in zf.infolist():
+                    member = info.filename.replace("\\", "/")
+                    member_target = (dest_root / member).resolve()
+                    if not member_target.is_relative_to(dest_root):
+                        raise ValueError(f"归档包含非法路径: {info.filename}")
                 zf.extractall(dest_dir)
         elif fname.endswith((".tar.gz", ".tgz", ".tar.bz2", ".tar")):
             with tarfile.open(archive) as tf:

@@ -1,10 +1,12 @@
 """API 鉴权依赖"""
 
+import ipaddress
 import logging
+import os
 import secrets
 from pathlib import Path
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader
 
 logger = logging.getLogger("qingci-bot.api.auth")
@@ -67,18 +69,26 @@ def _get_configured_api_key() -> str | None:
         return None
 
 
-async def require_auth(api_key: str = Depends(_api_key_header)):
+async def require_auth(request: Request, api_key: str = Depends(_api_key_header)):
     """鉴权依赖：校验 X-API-Key 请求头
 
-    如果配置中 api_key 为空，则跳过鉴权（本地开发模式）。
+    配置中 api_key 为空时的免鉴权豁免仅对环回来源（本机）生效：
+    一旦监听地址暴露到局域网/公网（0.0.0.0），非环回请求必须配置 api_key，
+    否则拒绝访问，避免整个管理面（含配置/密钥读写）无认证暴露。
     """
     configured_key = _get_configured_api_key()
     if configured_key is None:
         # 配置读取失败，fail-closed
         raise HTTPException(status_code=503, detail="配置读取失败，服务暂不可用")
     if not configured_key:
-        # 显式未配置 api_key，跳过鉴权
-        return True
+        if _is_loopback_request(request):
+            # 本机访问：显式未配置 api_key，跳过鉴权（本地开发模式）
+            return True
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="未配置 API Key，禁止非本机访问（请配置 api.api_key 后重启）",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
     if not api_key or not secrets.compare_digest(api_key, configured_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -86,3 +96,19 @@ async def require_auth(api_key: str = Depends(_api_key_header)):
             headers={"WWW-Authenticate": "ApiKey"},
         )
     return True
+
+
+def _is_loopback_request(request: Request) -> bool:
+    """请求是否来自环回地址（127.0.0.1 / ::1 / localhost）"""
+    host = request.client.host if request.client else ""
+    if not host:
+        return False
+    # 测试环境：TestClient 固定 client.host="testclient"，视为本机访问
+    if os.environ.get("QINGCI_TEST") == "1":
+        return True
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False

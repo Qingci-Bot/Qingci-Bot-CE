@@ -1290,14 +1290,15 @@ instances/<name>/plugins/
 通过代码调用 `PluginManager.install(bot, source)` 可从远程/本地来源安装插件到 `plugins/` 目录并自动加载：
 
 ```python
-# 支持：git 仓库、HTTP 归档 URL、本地目录或 zip/tar 归档
+# 支持：git 仓库、HTTP 归档 URL
 ok = await bot.plugin_manager.install(
     bot, "https://github.com/user/my_plugin/archive/refs/heads/main.zip"
 )
 ok = await bot.plugin_manager.install(
     bot, "git+https://github.com/user/my_plugin.git", name="my_plugin"
 )
-ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin")
+# 本地目录/归档需显式 allow_local=True（默认拒绝，防止远端来源触达本地路径）
+ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=True)
 ```
 
 安装流程：拉取到 `plugins/<name>/` → 自动安装 `requirements.txt`（或 `plugin.json` 的 `requirements` 字段）声明的 Python 依赖到实例隔离的 `data_root()/deps/` 目录 → 加载插件。来源支持 git 仓库、HTTP 指向 zip/tar 的归档、本地目录或归档文件。
@@ -1491,11 +1492,14 @@ cd web; npm install; npm run build; cd ..
 dist\qingci-bot\
 ├── qingci-bot.exe        # 主程序（带控制台，日志直接可见）
 ├── _internal\            # Python 运行时与依赖（勿动）
+├── ms-playwright\        # 内置 Playwright 无头浏览器（build.ps1 下载，HTML 渲染用）
 ├── web\dist\             # Web UI 静态资源（build.ps1 复制）
 └── instances\            # 实例目录（首次启动自动创建 default 实例，含 config.yaml/plugins/data）
 ```
 
 > 自 v1.5.1 起配置/插件/数据已收敛到 `instances\<name>\` 自包含目录，构建产物不再生成根级 `config.yaml` 或 `data\`。用户数据（配置、插件、数据库、日志）均按实例隔离，随实例目录一起分发。
+
+> **HTML 渲染全内置**：`build.ps1` 会下载 Playwright 无头 Chromium 到产物目录 `ms-playwright\`，运行时 `main.py` 通过 `PLAYWRIGHT_BROWSERS_PATH` 指向它，EXE 开箱即可渲染签到卡等 HTML → 图片，无需最终用户另行 `playwright install chromium`。若构建环境网络不佳导致下载失败，产物仍可运行，仅渲染能力降级（签到卡回退纯文本）。构建期可设 `$env:PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright"` 走国内镜像加速。
 
 ### 运行
 

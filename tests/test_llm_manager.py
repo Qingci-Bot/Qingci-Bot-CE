@@ -458,8 +458,9 @@ async def test_reload_swaps_config(manager):
     new = LLMConfig(provider="deepseek", model="deepseek-chat", api_key="k2")
     await manager.reload(new)
     assert manager._config is new
-    assert manager._sessions == {}
-    assert manager._loaded_sessions == set()
+    # reload 不再清空内存会话：仅调整参数不应重置用户的对话上下文
+    assert manager._sessions == {"private:1": [{"role": "user", "content": "x"}]}
+    assert manager._loaded_sessions == {"private:1"}
     assert manager.adapter.model == "deepseek-chat"
 
 

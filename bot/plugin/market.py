@@ -240,9 +240,13 @@ class MarketClient:
     async def _fetch_via_http(self, url: str) -> MarketIndex:
         import urllib.request
 
+        from .ssrf import NoRedirectHandler
+
         def _sync_fetch() -> MarketIndex:
+            # 禁止跟随重定向，防止 302 跳转到内网地址
+            opener = urllib.request.build_opener(NoRedirectHandler)
             req = urllib.request.Request(url, headers={"User-Agent": "Qingci-Bot-CE"})
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with opener.open(req, timeout=60) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             return MarketIndex(data)
 
@@ -250,6 +254,10 @@ class MarketClient:
         return await asyncio.to_thread(_sync_fetch)
 
     async def _fetch_via_git(self, url: str) -> MarketIndex:
+        from .ssrf import is_allowed_git_url
+
+        if not is_allowed_git_url(url):
+            raise MarketError(f"不支持的 git 来源（仅允许 http(s)/ssh/git 协议）: {url}")
         tmp = tempfile.mkdtemp(prefix="qb-market-")
         try:
             proc = await asyncio.create_subprocess_exec(

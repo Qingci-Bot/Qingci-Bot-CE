@@ -1,6 +1,6 @@
 [project]
 name = "qingci-bot-ce"
-version = "1.9.4"
+version = "1.10.0"
 description = "多平台机器人框架（OneBot 11 / OneBot 12 / Telegram），支持 LLM 对话、Web UI 和 Desktop UI"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
@@ -42,7 +42,7 @@ vector = [
 # 且需单独下载浏览器（playwright install chromium），故为可选特性；缺失时
 # 渲染能力自动降级不可用（调用方回退），不影响框架启动。
 render = [
-    "playwright>=1.40",
+    "playwright>=1.62.0",
 ]
 test = [
     "pytest>=8.0",
@@ -52,9 +52,12 @@ test = [
 ]
 build = [
     "pyinstaller>=6.0",
+    # 打包需收集 playwright Python 包（spec collect_all）并内置无头浏览器
+    # （build.ps1 的 playwright install），故与 render 组并列声明
+    "playwright>=1.62.0",
 ]
 dev = [
-    "qingci-bot-ce[test,build,vector]",
+    "qingci-bot-ce[test,build,vector,render]",
     "ruff==0.16.3",
     "mypy>=1.0",
 ]
@@ -92,6 +95,8 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 [tool.mypy]
+# 有意按 3.12 检查（与推荐运行版本一致，见 CHANGELOG）：
+# requires-python 仍声明 >=3.10 以兼容旧解释器，但类型检查采用更严格/更新的标准
 python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true

@@ -27,6 +27,15 @@ if getattr(sys, "frozen", False) and sys.stdout is None:
 # 直接使用包内本地备份（功能无影响），仅影响极个别新模型的计价信息。
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "true")
 
+# frozen 打包（EXE）内置 Playwright 浏览器：优先使用产物目录下
+# ms-playwright/ 中随包分发的浏览器，避免要求最终用户另行执行
+# `playwright install chromium`。开发环境（非 frozen）不受影响，
+# 仍走 playwright 默认的浏览器查找路径（用户缓存目录）。
+if getattr(sys, "frozen", False):
+    _bundled_browsers = Path(sys.executable).resolve().parent / "ms-playwright"
+    if _bundled_browsers.is_dir():
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(_bundled_browsers))
+
 # 日志配置
 logging.basicConfig(
     level=logging.INFO,
