@@ -132,8 +132,8 @@ class RenameInstanceRequest(BaseModel):
     new_name: str = Field(..., min_length=1, max_length=64)
 
 
-@router.put("/{name}", dependencies=[Depends(require_auth)])
-async def rename_existing_instance(name: str, req: RenameInstanceRequest) -> dict:
+@router.put("/{name}", dependencies=[Depends(require_auth)], response_model=None)
+async def rename_existing_instance(name: str, req: RenameInstanceRequest) -> dict | JSONResponse:
     """重命名实例（重命名目录 + 更新元数据）
 
     支持重命名运行中的实例：当前进程持有打开的 DB，Windows 拒绝重命名含打开
@@ -172,8 +172,8 @@ async def rename_existing_instance(name: str, req: RenameInstanceRequest) -> dic
     return info
 
 
-@router.post("/{name}/start", dependencies=[Depends(require_auth)])
-async def start_instance(name: str) -> dict:
+@router.post("/{name}/start", dependencies=[Depends(require_auth)], response_model=None)
+async def start_instance(name: str) -> dict | JSONResponse:
     """重启到指定实例（当前进程退出，由分离的助手进程在旧进程退出后拉起目标实例）"""
     if get_instance(name) is None:
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}") from None

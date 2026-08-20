@@ -27,7 +27,10 @@ _ALLOWED_GIT_PREFIXES = (
 )
 
 
-def _is_private_ip(ip: ipaddress._BaseAddress) -> bool:
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+
+
+def _is_private_ip(ip: IPAddress) -> bool:
     return (
         ip.is_private
         or ip.is_loopback
@@ -38,7 +41,7 @@ def _is_private_ip(ip: ipaddress._BaseAddress) -> bool:
     )
 
 
-def _parse_ip_literal(hostname: str) -> ipaddress._BaseAddress | None:
+def _parse_ip_literal(hostname: str) -> IPAddress | None:
     """解析 IP 字面量，兼容十进制 / 十六进制 / 八进制混淆形式"""
     try:
         return ipaddress.ip_address(hostname)
@@ -59,13 +62,13 @@ def _parse_ip_literal(hostname: str) -> ipaddress._BaseAddress | None:
     return None
 
 
-def _resolve_ips(hostname: str) -> list[ipaddress._BaseAddress] | None:
+def _resolve_ips(hostname: str) -> list[IPAddress] | None:
     """解析域名全部 A/AAAA 记录；解析失败返回 None"""
     try:
         infos = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
         return None
-    ips: list[ipaddress._BaseAddress] = []
+    ips: list[IPAddress] = []
     for info in infos:
         try:
             ips.append(ipaddress.ip_address(info[4][0]))
