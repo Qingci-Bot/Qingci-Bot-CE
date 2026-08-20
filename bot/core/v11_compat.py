@@ -16,7 +16,59 @@ v12 事件模型（type / detail_type / message[]），v11 平台对核心透明
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+# v11 CQ 码 -> v12 段类型映射（data 字段名同步归一化）
+_CQ_TYPE_TO_V12: dict[str, str] = {
+    "at": "mention",
+    "face": "face",
+    "image": "image",
+    "record": "voice",
+    "video": "video",
+    "reply": "reply",
+    "forward": "forward",
+}
+_CQ_RE = re.compile(r"\[CQ:([a-zA-Z0-9_]+)((?:,[a-zA-Z0-9_]+=[^,\]]*)*)\]")
+
+
+def _parse_cq_string(text: str) -> list[dict[str, Any]]:
+    """把含 CQ 码的 v11 字符串消息解析为 v12 段数组（纯文本保持 text 段）"""
+    segments: list[dict[str, Any]] = []
+    pos = 0
+    for m in _CQ_RE.finditer(text):
+        if m.start() > pos:
+            segments.append({"type": "text", "data": {"text": text[pos : m.start()]}})
+        cq_type = m.group(1)
+        data: dict[str, str] = {}
+        raw_kvs = m.group(2)
+        if raw_kvs:
+            for kv in raw_kvs.lstrip(",").split(","):
+                key, _, value = kv.partition("=")
+                data[key.strip()] = value
+        # 段类型与字段归一化到 v12 命名空间
+        v12_type = _CQ_TYPE_TO_V12.get(cq_type, cq_type)
+        if v12_type == "mention":
+            if data.get("qq") == "all":
+                v12_type = "mention_all"
+                data = {}
+            else:
+                data = {"user_id": data.get("qq", "")}
+        elif v12_type == "reply":
+            # v11 reply 用 data.id，v12 用 data.message_id
+            data = {"message_id": data.get("id", "")}
+        elif v12_type == "image":
+            data = {"file_id": data.get("file", "")}
+        elif v12_type in ("face", "voice", "video"):
+            data = {"file_id": data.get("file", "") or data.get("id", "")}
+        elif v12_type == "text":
+            data = {"text": data.get("text", "")}
+        segments.append({"type": v12_type, "data": data})
+        pos = m.end()
+    if pos < len(text):
+        segments.append({"type": "text", "data": {"text": text[pos:]}})
+    return segments
+
 
 # v11 notice_type -> v12 detail_type（固定映射）
 _NOTICE_TYPE_TO_DETAIL: dict[str, str] = {
@@ -58,10 +110,16 @@ def _base_fields(event: dict, event_type: str, detail_type: str) -> dict[str, An
 
 def _v11_message_to_v12(event: dict) -> dict[str, Any]:
     v12 = _base_fields(event, "message", str(event.get("message_type", "")))
+    # v11 message 可能是字符串（含 CQ 码）或段数组：
+    # 字符串含 CQ 码时解析为 v12 段数组（否则 @bot 的 CQ:at 会被整体包成
+    # text 段，导致 is_at_bot / at_list 失真、@bot /cmd 不触发）
+    raw_message = event.get("message", [])
+    if isinstance(raw_message, str) and "CQ:" in raw_message:
+        raw_message = _parse_cq_string(raw_message)
     v12.update(
         {
             "message_id": str(event.get("message_id", "") or ""),
-            "message": event.get("message", []),
+            "message": raw_message,
             "alt_message": str(event.get("raw_message", "") or ""),
             "user_id": str(event.get("user_id", "") or ""),
             "group_id": str(event.get("group_id", "") or ""),

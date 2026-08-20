@@ -5,6 +5,7 @@ import logging
 import os
 import secrets
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader
@@ -81,7 +82,7 @@ async def require_auth(request: Request, api_key: str = Depends(_api_key_header)
         # 配置读取失败，fail-closed
         raise HTTPException(status_code=503, detail="配置读取失败，服务暂不可用")
     if not configured_key:
-        if _is_loopback_request(request):
+        if _is_loopback_request(request) and _origin_allowed(request):
             # 本机访问：显式未配置 api_key，跳过鉴权（本地开发模式）
             return True
         raise HTTPException(
@@ -98,17 +99,46 @@ async def require_auth(request: Request, api_key: str = Depends(_api_key_header)
     return True
 
 
-def _is_loopback_request(request: Request) -> bool:
-    """请求是否来自环回地址（127.0.0.1 / ::1 / localhost）"""
-    host = request.client.host if request.client else ""
+def is_loopback_host(host: str) -> bool:
+    """host 是否为环回地址（127.0.0.1 / ::1 / localhost）"""
     if not host:
         return False
-    # 测试环境：TestClient 固定 client.host="testclient"，视为本机访问
-    if os.environ.get("QINGCI_TEST") == "1":
-        return True
     if host.lower() == "localhost":
         return True
     try:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+def is_loopback_origin(origin: str) -> bool:
+    """Origin 头是否为环回来源（http://127.0.0.1:8080 / http://localhost:8080 等）"""
+    if not origin:
+        return False
+    try:
+        parsed = urlparse(origin)
+    except ValueError:
+        return False
+    return parsed.scheme in ("http", "https") and is_loopback_host(parsed.hostname or "")
+
+
+def _origin_allowed(request: Request) -> bool:
+    """未配 key 的环回豁免下，校验浏览器 Origin 必须为环回来源
+
+    恶意网页的跨源请求会携带攻击者域名 Origin，即使连接目标是本机
+    （服务端看到 127.0.0.1）也据此拒绝，防止任意网页驱动本地 API。
+    无 Origin 头（curl / 本机工具）视为本机访问放行。
+    """
+    origin = request.headers.get("origin", "")
+    if not origin:
+        return True
+    return is_loopback_origin(origin)
+
+
+def _is_loopback_request(request: Request) -> bool:
+    """请求是否来自环回地址（127.0.0.1 / ::1 / localhost）"""
+    host = request.client.host if request.client else ""
+    # 测试环境：TestClient 固定 client.host="testclient"，视为本机访问
+    if os.environ.get("QINGCI_TEST") == "1":
+        return True
+    return is_loopback_host(host)

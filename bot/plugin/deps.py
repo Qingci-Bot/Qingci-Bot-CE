@@ -62,6 +62,25 @@ def read_requirements(directory: Path) -> list[str]:
     return []
 
 
+def _sanitize_requirements(reqs: list[str]) -> list[str]:
+    """过滤依赖项中的 pip 选项注入（如 --index-url / -e / -r 等）
+
+    插件 requirements.txt / plugin.json 的每一行应是包名约束（如
+    qingci-plugin-sdk>=1.0）；拒绝以 ``-`` 开头的项，防止恶意插件注入
+    任意 pip 命令行选项（覆盖索引源、指定本地路径安装等供给链攻击面）。
+    """
+    clean: list[str] = []
+    for r in reqs:
+        item = r.strip()
+        if not item:
+            continue
+        if item.startswith("-"):
+            logger.warning(f"忽略非依赖行（疑似 pip 选项注入）: {item!r}")
+            continue
+        clean.append(item)
+    return clean
+
+
 def _hash_requirements(reqs: list[str]) -> str:
     h = hashlib.sha256()
     for r in reqs:
@@ -85,6 +104,8 @@ async def ensure_dependencies(directory: Path) -> list[str]:
     if not reqs:
         return []
 
+    # 过滤 pip 选项注入后，声明与安装使用同一份净化列表
+    reqs = _sanitize_requirements(reqs)
     want = _hash_requirements(reqs)
     marker = _marker_path(directory.name)
     if marker.is_file() and marker.read_text(encoding="utf-8").strip() == want:

@@ -34,6 +34,11 @@ logger = logging.getLogger("qingci-bot.core.html_renderer")
 
 # 无头浏览器常用参数：--no-sandbox 兼容 Docker/root 环境，
 # --disable-dev-shm-usage 规避容器 /dev/shm 过小导致的崩溃（Windows 上均无害）。
+#
+# 信任边界：--no-sandbox 意味着页面内嵌 JS 在无沙箱 Chromium 中执行，
+# 可发起出站请求/读取本机资源。渲染内容来自已加载插件的 HTML 模板
+# （插件属受信代码）；第三方模板源请视为高风险配置。勿对来源不可信
+# 的 HTML 调用本渲染服务。
 _BROWSER_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"]
 
 # 注入页面以禁用动画/过渡，保证渲染结果稳定可复现

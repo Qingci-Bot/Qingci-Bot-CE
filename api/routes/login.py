@@ -71,10 +71,13 @@ def _purge_expired_login_failures() -> None:
 
 
 def _check_login_rate_limit(ip: str) -> None:
-    """检查是否处于冷却期，是则抛 429"""
+    """检查是否处于冷却期，是则抛 429（冷却期随失败次数指数增长）"""
     record = _login_failures.get(ip)
     if record is not None and record[0] >= _LOGIN_FAIL_LIMIT:
-        if time.time() - record[1] < _LOGIN_COOLDOWN_SECONDS:
+        # 指数退避：连续失败次数越多冷却越长（上限 10 分钟），
+        # 缓解伪造来源轮换绕过限流的暴力尝试
+        cooldown = min(_LOGIN_COOLDOWN_SECONDS * (2 ** (record[0] - _LOGIN_FAIL_LIMIT)), 600)
+        if time.time() - record[1] < cooldown:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="登录失败次数过多，请稍后再试",

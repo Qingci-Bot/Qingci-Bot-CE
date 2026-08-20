@@ -43,6 +43,14 @@ _EVENT_CONCURRENCY = 16
 _MAX_PENDING_EVENTS = 128
 
 
+def _safe_int(value, default: int = 0) -> int:
+    """安全转 int：非数值（字符串/None/非法）回退默认，避免状态接口 500"""
+    try:
+        return int(value or default)
+    except (TypeError, ValueError):
+        return default
+
+
 class QingciBot:
     """Qingci-Bot CE 主类"""
 
@@ -147,6 +155,12 @@ class QingciBot:
 
         # 后台探测 HTML 渲染能力（失败仅记日志，结果供 /api/bot/status 与插件查询）
         self._spawn_background_task(self.html_renderer.probe(), name="html-render-probe")
+
+        # 定期清理限流器过期条目（RateLimiter._data 无自动淘汰，防内存缓慢增长）
+        if self.rate_limiter is not None:
+            self._spawn_background_task(
+                self._rate_limiter_cleanup_loop(), name="rate-limiter-cleanup"
+            )
 
         # 启动调度器与错误告警；失败时连同连接/插件/数据库一并回滚
         try:
@@ -436,8 +450,13 @@ class QingciBot:
                 if matcher_reply is not None:
                     # request Matcher 返回 bool 表示审批结果（True 同意 / False 拒绝）。
                     # 与旧式 on_request 的审批语义对齐：非空结果即执行审批。
+                    # 字符串回复则作为审批回复消息发送（不再静默吞掉）。
                     if post_type == "request" and isinstance(matcher_reply, (bool, int)):
-                        await self._handle_request_approval(event, bool(matcher_reply))
+                        await self._handle_request_approval(
+                            event, bool(matcher_reply), getattr(ctx, "platform", "")
+                        )
+                    elif isinstance(matcher_reply, str):
+                        await self._send_reply(ctx, matcher_reply)
                     return
                 if matcher_blocked:
                     # Matcher 已匹配但未返回结果，跳过旧式回调
@@ -455,7 +474,9 @@ class QingciBot:
                         elif post_type == "request":
                             approve = await plugin.on_request(event)
                             if approve is not None:
-                                await self._handle_request_approval(event, approve)
+                                await self._handle_request_approval(
+                                    event, approve, getattr(ctx, "platform", "")
+                                )
                                 break  # request 已审批，跳出循环
                     except Exception:
                         logger.exception(
@@ -562,12 +583,28 @@ class QingciBot:
         )
         return False
 
-    async def _handle_request_approval(self, event: dict, approve: bool) -> None:
+    async def _rate_limiter_cleanup_loop(self) -> None:
+        """周期清理限流器过期条目（每小时；随 stop() 置 _running=False 退出）"""
+        while self._running:
+            await asyncio.sleep(3600)
+            try:
+                if self.rate_limiter is not None:
+                    self.rate_limiter.cleanup()
+            except Exception:
+                logger.exception("清理限流器过期条目失败")
+
+    async def _handle_request_approval(
+        self, event: dict, approve: bool, platform: str = ""
+    ) -> None:
         """处理加好友/加群请求的审批结果
 
         v11 事件的 request_type（friend/group）在适配器翻译为 v12 事件时
         已映射为 detail_type，故此处优先读取 detail_type；同时兼容未翻译的
         v11 形态（request_type），避免此类事件审批静默失效。
+
+        OneBot 12 / Telegram 平台使用独立的 action 命名空间
+        （friend_request.handle / group_request.handle），不能复用
+        OneBot 11 的 set_*_add_request，故按来源平台选择 action。
         """
         try:
             request_type = event.get("detail_type", "") or event.get("request_type", "")
@@ -579,16 +616,28 @@ class QingciBot:
                     f"请求事件缺少 detail_type/request_type，跳过审批: {self._event_summary(event)}"
                 )
                 return
+            # 按事件来源平台路由连接；未知平台回退主连接
+            conn = self.platforms.get(platform, self.connection)
+            is_v12 = getattr(conn, "name", "") == "onebot12"
             if request_type == "friend":
-                await self.connection.call_api(
-                    "set_friend_add_request", {"flag": flag, "approve": approve}
-                )
+                if is_v12:
+                    await conn.call_api("friend_request.handle", {"flag": flag, "approve": approve})
+                else:
+                    await conn.call_api(
+                        "set_friend_add_request", {"flag": flag, "approve": approve}
+                    )
             elif request_type == "group":
                 sub_type = event.get("sub_type", "")
-                await self.connection.call_api(
-                    "set_group_add_request",
-                    {"flag": flag, "sub_type": sub_type, "approve": approve},
-                )
+                if is_v12:
+                    await conn.call_api(
+                        "group_request.handle",
+                        {"flag": flag, "approve": approve},
+                    )
+                else:
+                    await conn.call_api(
+                        "set_group_add_request",
+                        {"flag": flag, "sub_type": sub_type, "approve": approve},
+                    )
         except Exception:
             logger.exception("处理请求审批失败")
 
@@ -612,7 +661,7 @@ class QingciBot:
                     "display_name": p.display_name,
                     "connected": bool(p.is_connected),
                     "last_heartbeat": p.last_heartbeat,
-                    "self_id": int(getattr(p, "self_id", 0) or 0),
+                    "self_id": _safe_int(getattr(p, "self_id", 0)),
                     **p.status_info(),
                 }
                 for p in self.platforms.values()

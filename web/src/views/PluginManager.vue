@@ -97,7 +97,9 @@ const drawerUrl = computed(() => {
   // 多页面插件优先使用后端返回的页面 URL；追加 cache-buster 强制 iframe 刷新
   const base = drawerPage.value?.url || `/api/plugin-data/${drawerPlugin.value.name}/`;
   const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}t=${Date.now()}`;
+  // 插件静态页面已鉴权：iframe 无法携带请求头，将 api_key 作为 token 传入
+  const key = store.getApiKey();
+  return `${base}${sep}t=${Date.now()}${key ? `&token=${encodeURIComponent(key)}` : ''}`;
 });
 
 const statusLabel = (s) =>

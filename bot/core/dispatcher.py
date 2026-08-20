@@ -324,6 +324,12 @@ class MessageDispatcher:
             session._rebind_send(lambda text: self._send_text(bot, mctx, text))
         step = _PendingStep(matcher, plugin, session, ttl=self.step_ttl)
         async with self._steps_lock:
+            # 惰性回收：顺带清除已过期的阶梯（用户 pause 后不再发言的驻留条目），
+            # 避免 _pending_steps 长期占用内存/引用
+            now = time.monotonic()
+            stale = [k for k, s in self._pending_steps.items() if now > s.expire_at]
+            for k in stale:
+                del self._pending_steps[k]
             self._pending_steps[key] = step
         logger.debug(f"会话阶梯挂起: {key} -> matcher={matcher.owner}")
 

@@ -140,6 +140,24 @@ def run_desktop(args, splash=None):
 
     webview.start(debug=False)
 
+    # 窗口关闭：等待后端线程优雅退出（uvicorn 优雅关停 / bot.stop / DB flush），
+    # 避免 daemon 线程随进程退出被强杀——否则 finally 清理（未落库数据、
+    # 端口释放）不执行
+    if backend_thread.is_alive():
+        try:
+            from api.auth import _get_configured_api_key
+
+            headers = {}
+            key = _get_configured_api_key()
+            if key:
+                headers["X-API-Key"] = key
+            httpx.post(f"http://{args.host}:{args.port}/api/bot/stop", timeout=5, headers=headers)
+        except Exception:
+            logger.debug("请求后端优雅停止失败，等待线程自然退出", exc_info=True)
+        backend_thread.join(timeout=15)
+        if backend_thread.is_alive():
+            logger.warning("后端线程未在 15s 内退出，进程将退出")
+
     # 窗口关闭后停止托盘
     if tray:
         tray.stop()

@@ -15,6 +15,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
+from ..logredact import redact_secrets
 from .adapter import ChatResult, LLMAdapter
 
 logger = logging.getLogger("qingci-bot.llm.litellm_adapter")
@@ -161,7 +162,8 @@ class LiteLLMAdapter(LLMAdapter):
                 )
             )
         except Exception as e:
-            logger.error(f"litellm 调用失败: {e}")
+            # 异常消息可能含完整 URL / Authorization 头，先脱敏再落日志
+            logger.error(f"litellm 调用失败: {redact_secrets(str(e))}")
             raise
 
         # 提取 token 用量（服务未提供时保持 None）
@@ -260,7 +262,8 @@ class LiteLLMAdapter(LLMAdapter):
             return True
         except Exception as e:
             err_type = type(e).__name__
-            self.last_error = f"{err_type}: {e}"
+            # 脱敏后存储（异常文本可能含完整 URL / Key，后续会写入日志/状态）
+            self.last_error = f"{err_type}: {redact_secrets(str(e))}"
             # 防御：_get_litellm() 导入失败时局部变量 litellm 未绑定，
             # 直接引用会二次抛 NameError；改用模块级 _litellm 安全取值。
             # 分类仅用于日志措辞，任何取值失败都不影响失败判定。

@@ -14,6 +14,7 @@ from bot.config import LLM_PROVIDER_PRESETS, ConfigManager, LLMConfig
 from bot.core.bot import get_bot as _get_bot
 from bot.core.tasks import spawn_background_task
 from bot.llm.manager import LLMManager
+from bot.logredact import redact_secrets
 
 logger = logging.getLogger("qingci-bot.api.config")
 
@@ -83,8 +84,19 @@ def _maybe_notify_bot(reload_llm: bool = True):
 
 
 _SENSITIVE_KEYS = {"api_key", "access_token"}
-# 敏感字段支持 key 后缀匹配（如 embedding_api_key），防止同类凭证漏脱敏
-_SENSITIVE_SUFFIXES = ("api_key", "access_token", "secret", "password", "token")
+# 敏感字段支持 key 后缀匹配（如 embedding_api_key / aws_secret_access_key），
+# 防止同类凭证漏脱敏
+_SENSITIVE_SUFFIXES = (
+    "api_key",
+    "access_token",
+    "secret_key",
+    "access_key",
+    "secret",
+    "password",
+    "token",
+    "credential",
+    "auth",
+)
 
 
 def _is_sensitive_key(key: str) -> bool:
@@ -267,7 +279,7 @@ async def test_llm_config(data: dict):
         if not available:
             detail = getattr(manager, "last_error", "") or "未知错误"
             # last_error 可能含完整 URL / Key，仅记录日志，不回显客户端
-            logger.warning(f"LLM 连接测试失败: {detail}")
+            logger.warning(f"LLM 连接测试失败: {redact_secrets(detail)}")
         return {
             "available": available,
             "message": "LLM 连接正常"
@@ -351,7 +363,7 @@ async def list_llm_models(data: dict):
         raise
     except Exception as e:
         # 异常消息可能包含完整 URL（如 Gemini key 在 query 中），不回显给客户端
-        logger.warning(f"查询模型列表失败: provider={provider}, error={e}")
+        logger.warning(f"查询模型列表失败: provider={provider}, error={redact_secrets(str(e))}")
         raise HTTPException(
             status_code=400,
             detail="查询模型列表失败，请检查 API 地址与 Key（详见服务端日志）",

@@ -26,8 +26,12 @@ services:
     restart: unless-stopped
 
     ports:
-      - "8080:8080"       # WebUI / API
-      - "3001:3001"       # OneBot 反向 WS（外部前端连入；需先将实例 onebot.host 改为 0.0.0.0）
+      - "8080:8080"            # WebUI / API
+      # OneBot 反向 WS 仅绑定宿主机环回（外部前端需经宿主机反向代理连入）。
+      # 注意：OneBot 是服务端，access_token 为空时不做校验——
+      # 暴露到局域网/公网意味着任意外部方都可伪装协议端注入任意事件。
+      # 请在实例 config.yaml 配置 onebot.access_token，并把 onebot.host 改为 0.0.0.0。
+      - "127.0.0.1:3001:3001"
 
     volumes:
       # 实例目录（config.yaml / data / plugins）持久化；不随镜像重建，避免写入镜像内丢失

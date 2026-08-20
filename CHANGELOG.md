@@ -5,6 +5,43 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **git 安装分支 SSRF 补齐**：`_fetch_plugin` 的 git 克隆前置 `is_allowed_git_url` + 私网地址校验（与归档下载同基线），`git+file://` / 内网 SSH 来源不再可绕过防护
+- **SSRF 增强**：IP 字面量识别兼容十进制/十六进制/八进制混淆形式；域名连接前解析全部 A/AAAA 记录校验（缓解 DNS rebinding）；scp 风格 `git@host:path` 正确提取 host
+- **tar/zip symlink 逃逸修复**：Python 3.10/3.11 手动预检拒绝 symlink/hardlink 成员（防解压越界覆写）；zip 同步拒绝符号链接条目
+- **归档大小上限**：下载 200MB / 解压总量 1GB 限制（防 zip 炸弹撑爆磁盘）
+- **免鉴权收紧 + CORS 收敛**：未配 api_key 的环回豁免增加 Origin 校验（防任意网页 CSRF 驱动本地 API）；CORS 由 `*` 收敛为环回来源；WebSocket 鉴权与 HTTP 侧对齐（含 Origin 校验）
+- **插件静态页面鉴权**：`/api/plugin-data/*` 静态页面向 `/api/plugin` 鉴权对齐（X-API-Key 头或 query token；未配 key 仅环回+Origin）；卸载时摘除已挂载路由
+- **插件删除路径兜底校验**：`resolve() + is_relative_to` 防恶意插件名越界删除
+- **依赖安装选项注入过滤**：插件 `requirements.txt` 中 `-` 开头项（pip 选项）被拒绝
+- **MCP stdio 环境变量过滤**：剔除 `LD_PRELOAD` 等注入型变量；文档化高权限信任边界
+- **日志密钥脱敏**：LLM 异常文本统一 `redact_secrets`（`?key=`/`Bearer`/`sk-` 等）后再落日志
+- **登录限流指数退避**：连续失败冷却随次数指数增长（上限 10 分钟）
+- **Docker 加固**：非 root 用户运行 + HEALTHCHECK；compose 的 OneBot 端口仅环回映射
+- **基础安全响应头**：`X-Content-Type-Options` / `X-Frame-Options` / `Referrer-Policy`
+- **配置脱敏后缀扩充**：`secret_key`/`access_key`/`credential`/`auth`（`aws_secret_access_key` 不再逃逸）
+
+### Fixed
+
+- **request Matcher 字符串回复不再静默吞掉**：字符串作为审批回复消息发送
+- **审批 action 按平台路由**：OneBot 12 使用 `friend_request.handle` / `group_request.handle`
+- **插件重名覆盖正常卸载旧实例**（清理调度任务/工具/页面，防幽灵资源）
+- **热重载互斥锁**：`_reload_lock` 串行化并发 reload/install
+- **会话阶梯惰性过期清理**：注册新阶梯时顺带回收过期驻留条目
+- **RAG reload 原子替换**：临时表 + rename，建表中途失败不再丢旧索引
+- **`init_db` 迁移漂移检测**：建表后只读 `alembic check`，漂移时告警提示
+- **LLM 工具收尾轮不再多余调用**：收尾轮仍返回 tool_calls 时直接取内容/占位回复
+- **实例切换先响应后退出**：`os._exit` 移入 BackgroundTask，前端可收到切换结果
+- **桌面托盘退出优雅关停**：窗口关闭后请求 `/api/bot/stop` 并等待后端线程退出
+- **v11 CQ 码解析**：字符串消息含 `[CQ:at,...]` 时解析为 v12 段数组（`@bot` 触发恢复）
+- **SDK 依赖锁定**：`qingci-plugin-sdk @ v1.10.0`（pyproject/build.ps1/uv.lock 同步）
+- **`install.sh` sudo 模式传递 `WITH_GUI`**；迁移脚本时间戳解析失败告警
+- **限流器定期清理**：每小时 `RateLimiter.cleanup()` 防内存缓慢增长
+- **EventBus `subscribe_sync` 加线程锁**；`self_id` 安全转换防状态接口 500；备份文件 chmod 0600
+
 ## [1.10.0] - 2026-08-20（安全加固与稳定性修复）
 
 ### Added

@@ -95,7 +95,8 @@ if [ "${SKIP_SYS_DEPS:-0}" != "1" ]; then
     install_sys_deps
   elif command -v sudo >/dev/null 2>&1; then
     echo ">> 需要 root 权限安装系统依赖，尝试 sudo..."
-    sudo bash -c "$(declare -f install_sys_deps); install_sys_deps"
+    # declare -f 只序列化函数体，WITH_GUI 等变量需显式传入子 shell
+    sudo bash -c "$(declare -f install_sys_deps); WITH_GUI=${WITH_GUI:-0}; install_sys_deps"
   else
     echo ">> 非 root 且无 sudo，跳过系统依赖自动安装；如运行报缺库请手工安装（见 README『Linux 部署』）"
   fi

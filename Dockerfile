@@ -32,9 +32,11 @@ RUN pip install --no-cache-dir --prefix=/install .
 FROM python:3.12-slim AS runtime
 
 # git：插件依赖可能按 git 地址解析；tzdata：时区支持；ca-certificates：HTTPS
+# 非 root 运行：卷内含 api_key 与对话数据，容器内以低权限用户降低提权影响面
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git ca-certificates tzdata \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 1000 --shell /usr/sbin/nologin appuser
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -47,13 +49,22 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY . .
 
+# 实例目录属主改为 appuser（挂载卷可写；宿主机挂载时需保证 uid 一致或由宿主机授权）
+RUN mkdir -p /app/instances && chown -R appuser:appuser /app/instances
+
+USER appuser
+
 # 8080：WebUI / API；3001：OneBot 反向 WS（外部前端连入）
 EXPOSE 8080 3001
 
 # 数据挂载点：实例配置(config.yaml)/数据(data)/插件(plugins) 持久化于此
 VOLUME ["/app/instances"]
 
+# 容器健康检查（/api/bot/health 免鉴权）
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/api/bot/health', timeout=3).status==200 else 1)"
+
 # 建议以 `python main.py` 启动（避免 console-script 的 sys.path 依赖）。
 # 不传 --instance：新容器空 /app/instances 下自动创建默认实例；否则会报"实例不存在"。
-# 外部 OneBot 前端连入前，请将实例 config.yaml 的 onebot.host 改为 0.0.0.0
+# 外部 OneBot 前端连入前，请将实例 config.yaml 的 onebot.host 改为 0.0.0.0 并配置 access_token
 CMD ["python", "main.py", "--host", "0.0.0.0"]

@@ -5,6 +5,7 @@
 首次运行使用 Alembic 迁移建表（若迁移脚本可用），否则回退到 create_all。
 """
 
+import logging
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -17,6 +18,8 @@ from sqlmodel import SQLModel
 
 # 数据库文件位于可写数据根目录（默认 app_root()/data，可用 --data-dir 覆盖以实现多实例隔离）
 from ..paths import data_root
+
+logger = logging.getLogger("qingci-bot.db.engine")
 
 _engine: AsyncEngine | None = None
 _session_factory: sessionmaker | None = None
@@ -93,10 +96,13 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
 
 
 async def init_db():
-    """初始化数据库：创建表结构
+    """初始化数据库：创建表结构 + 检测迁移漂移
 
     首次运行时建表（create_all），已存在的表不受影响。
     Alembic 迁移用于后续 schema 演进（手动执行 alembic upgrade head）。
+    建表后额外执行只读的 alembic check 检测模型与迁移脚本漂移，
+    发现漂移时记录告警（提示运行 alembic upgrade head），避免旧库
+    缺失新列/索引而静默带病运行。
     """
     # 确保所有模型被导入，以便 SQLModel.metadata 能发现它们。
     # 用 importlib 显式导入：pyflakes 会把副作用导入误报为未使用
@@ -107,6 +113,30 @@ async def init_db():
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+
+    # 只读漂移检测（线程池执行：alembic check 内部走 asyncio.run，避免嵌套事件循环）
+    import asyncio
+
+    await asyncio.to_thread(_alembic_check)
+
+
+def _alembic_check() -> None:
+    """检测模型与迁移脚本是否漂移（只读，不修改数据库）"""
+    import os
+
+    if os.environ.get("QINGCI_TEST") == "1":
+        # 测试环境使用内存/临时库且高频 init_db，跳过漂移检测
+        return
+    try:
+        from alembic import command
+        from alembic.config import Config as AlembicConfig
+
+        root = Path(__file__).resolve().parents[2]
+        cfg = AlembicConfig(str(root / "alembic.ini"))
+        command.check(cfg)
+        logger.info("数据库 schema 与迁移脚本一致")
+    except Exception as e:
+        logger.warning(f"数据库 schema 与迁移脚本存在漂移，建议执行 `alembic upgrade head`: {e}")
 
 
 async def dispose_engine():

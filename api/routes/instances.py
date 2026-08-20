@@ -13,7 +13,9 @@ import os
 import sys
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from api.audit import record_audit
 from api.auth import require_auth
@@ -157,8 +159,12 @@ async def rename_existing_instance(name: str, req: RenameInstanceRequest) -> dic
             raise HTTPException(
                 status_code=500, detail="派发改名重启助手失败，请稍后重试"
             ) from None
-        os._exit(0)  # noqa: PLR1722 — 主动终止进程完成改名切换
-        return {}  # pragma: no cover — 永不返回
+        # 先返回响应（客户端确认成功）再终止进程完成切换——
+        # 直接 os._exit 会中断 HTTP 响应，前端收不到结果
+        return JSONResponse(
+            content={"ok": True, "message": "正在重启以完成实例改名..."},
+            background=BackgroundTask(os._exit, 0),
+        )
 
     rename_instance(name, req.new_name)
     info = get_instance(req.new_name).to_dict()  # type: ignore[union-attr]  # 刚改名，必然存在
@@ -182,6 +188,9 @@ async def start_instance(name: str) -> dict:
         logger.exception("派发重启助手失败，未切换实例")
         raise HTTPException(status_code=500, detail="派发重启助手失败，请稍后重试") from None
 
-    # 立即退出当前进程，释放实例互斥量，让新进程接管
-    os._exit(0)  # noqa: PLR1722 — 主动终止进程完成切换
-    return {"ok": True}  # pragma: no cover — 永不返回
+    # 先返回响应（客户端确认成功）再终止进程，释放实例互斥量让新进程接管——
+    # 直接 os._exit 会中断 HTTP 响应，前端收不到结果
+    return JSONResponse(
+        content={"ok": True, "message": "正在重启以切换到目标实例..."},
+        background=BackgroundTask(os._exit, 0),
+    )

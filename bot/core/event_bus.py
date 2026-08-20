@@ -12,6 +12,7 @@
 
 import asyncio
 import logging
+import threading
 from collections.abc import Callable
 
 logger = logging.getLogger("qingci-bot.event_bus")
@@ -26,7 +27,8 @@ class EventBus:
     def __init__(self):
         # event_type -> set[handler]
         self._subscribers: dict[str, set[Callable]] = {}
-        self._lock = asyncio.Lock()
+        self._lock = asyncio.Lock()  # 异步路径锁（publish/unsubscribe）
+        self._thread_lock = threading.Lock()  # 同步路径锁（subscribe_sync）
 
     # ---- 订阅 ----
 
@@ -43,8 +45,11 @@ class EventBus:
             self._subscribers.setdefault(event_type, set()).add(handler)
 
     def subscribe_sync(self, event_type: str, handler: Callable) -> None:
-        """同步订阅（兼容非 async 上下文）"""
-        self._subscribers.setdefault(event_type, set()).add(handler)
+        """同步订阅（兼容非 async 上下文；线程锁保护订阅集合）"""
+        if not event_type:
+            raise ValueError("事件类型不能为空")
+        with self._thread_lock:
+            self._subscribers.setdefault(event_type, set()).add(handler)
 
     async def unsubscribe(self, event_type: str, handler: Callable) -> bool:
         """取消订阅，返回是否成功"""

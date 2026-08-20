@@ -240,7 +240,11 @@ class MarketClient:
     async def _fetch_via_http(self, url: str) -> MarketIndex:
         import urllib.request
 
-        from .ssrf import NoRedirectHandler
+        from .ssrf import NoRedirectHandler, is_private_url
+
+        # 与插件归档下载同基线：市场索引同样拦截私网/环回地址
+        if is_private_url(url):
+            raise MarketError(f"拒绝拉取私网/环回地址的市场索引: {url}")
 
         def _sync_fetch() -> MarketIndex:
             # 禁止跟随重定向，防止 302 跳转到内网地址

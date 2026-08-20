@@ -380,11 +380,26 @@ class VectorKnowledgeStore:
 
         db = self._get_db()
         table_name = self._collection_name
+        # 原子替换：先写入临时表，成功后再替换旧表——
+        # 避免建表中途失败（磁盘满等）导致旧索引被删、数据丢失
+        tmp_name = f"{table_name}__new"
+        try:
+            db.drop_table(tmp_name)
+        except Exception:
+            pass
+        db.create_table(tmp_name, table)
         try:
             db.drop_table(table_name)
         except Exception:
             pass
-        db.create_table(table_name, table)
+        try:
+            db.rename_table(tmp_name, table_name)
+        except Exception:
+            logger.warning(
+                f"知识库表替换失败（临时表 {tmp_name} 保留，未覆盖旧数据）: table={table_name}"
+            )
+            self._table = db.open_table(tmp_name)
+            raise
         self._table = db.open_table(table_name)
 
         doc_count = len(set(sources))

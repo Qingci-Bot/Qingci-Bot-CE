@@ -34,6 +34,55 @@ _BUILTIN_PLUGINS: tuple[str, ...] = ("admin", "chat", "help", "imagegen", "knowl
 # 插件名合法性：仅允许字母/数字/下划线/连字符，禁止路径穿越（../ 等）
 _PLUGIN_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
 
+# 归档下载/解压大小上限（防 zip 炸弹撑爆磁盘）
+_MAX_ARCHIVE_BYTES = 200 * 1024 * 1024  # 下载上限 200MB
+_MAX_EXTRACT_BYTES = 1024 * 1024 * 1024  # 解压总量上限 1GB
+
+
+class _AuthStaticFiles:
+    """带鉴权的插件静态文件服务（包装 StaticFiles）
+
+    插件管理页面（/api/plugin-data/...）与 /api/plugin 鉴权对齐：
+    - 配置了 api_key：要求 X-API-Key 头或 ?token= 查询参数
+      （iframe/img 无法携带自定义请求头，故支持 query token 作为前端回退）
+    - 未配置：仅环回来源 + Origin 为环回时放行
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        from fastapi.staticfiles import StaticFiles
+
+        self._inner = StaticFiles(*args, **kwargs)
+
+    async def __call__(self, scope: dict, receive, send) -> None:
+        if scope["type"] == "http" and not self._authorized(scope):
+            from starlette.responses import Response
+
+            await Response("Unauthorized", status_code=401)(scope, receive, send)
+            return
+        await self._inner(scope, receive, send)
+
+    @staticmethod
+    def _authorized(scope: dict) -> bool:
+        import secrets
+        from urllib.parse import parse_qs
+
+        from api.auth import _get_configured_api_key, is_loopback_host, is_loopback_origin
+
+        headers = {k.lower(): v for k, v in (scope.get("headers") or [])}
+        query = parse_qs(scope.get("query_string", b"").decode(errors="replace"))
+        key = headers.get(b"x-api-key", b"").decode() or (query.get("token") or [""])[0]
+        configured = _get_configured_api_key()
+        if configured is None:
+            # 配置读取失败，fail-closed
+            return False
+        if configured:
+            return bool(key) and secrets.compare_digest(key, configured)
+        # 未配 key：环回来源 + Origin 环回（防任意网页驱动本地插件页面）
+        client = scope.get("client") or ("", 0)
+        host = client[0] if isinstance(client, (tuple, list)) else ""
+        origin = headers.get(b"origin", b"").decode()
+        return is_loopback_host(host) and (not origin or is_loopback_origin(origin))
+
 
 def _is_valid_plugin_name(name: str) -> bool:
     """校验插件名是否合法（用于市场安装等从外部输入获取插件名的场景）"""
@@ -131,6 +180,9 @@ class PluginManager:
     def __init__(self):
         self._plugins: dict[str, PluginBase] = {}
         self._cached_matchers: list[Matcher] | None = None
+        # 热重载互斥锁：importlib.reload + 注册非原子，串行化避免并发
+        # reload/install 竞态（新旧插件实例并存、matcher 双份）
+        self._reload_lock = asyncio.Lock()
         # 调度缓存签名：记录构建缓存时各插件 matcher 数量，检测运行期动态增删
         self._matchers_sig: tuple | None = None
         # 事件类型倒排索引: event_type -> 该类型的 Matcher（保持优先级升序）
@@ -276,7 +328,6 @@ class PluginManager:
         """挂载所有已注册插件的静态文件目录"""
         if self._web_app is None:
             return
-        from fastapi.staticfiles import StaticFiles
 
         for plugin_name, pages in self._plugin_pages.items():
             for idx, page in enumerate(pages):
@@ -296,7 +347,7 @@ class PluginManager:
                         try:
                             self._web_app.mount(
                                 mount_path,
-                                StaticFiles(directory=static_dir, html=True),
+                                _AuthStaticFiles(directory=static_dir, html=True),
                                 name=f"plugin-static-{plugin_name}-{idx}",
                             )
                             logger.info(
@@ -383,8 +434,18 @@ class PluginManager:
                 self._mount_all_plugin_pages()
 
     def _remove_plugin_pages(self, name: str) -> None:
-        """移除插件的 Web 管理页面注册"""
+        """移除插件的 Web 管理页面注册，并摘除已挂载的静态路由"""
         self._plugin_pages.pop(name, None)
+        if self._web_app is not None:
+            # 摘除该插件名下所有静态挂载路由，避免卸载后路由残留
+            self._web_app.routes[:] = [
+                r
+                for r in self._web_app.routes
+                if not (
+                    getattr(r, "name", "").startswith(f"plugin-static-{name}-")
+                    or getattr(r, "path", "").startswith(f"/api/plugin-data/{name}")
+                )
+            ]
 
     # ---- 插件级 Web API ----
 
@@ -757,6 +818,9 @@ class PluginManager:
                         f"插件重名覆盖: {plugin.name}（{type(existing).__module__} "
                         f"被 {module.__name__} 替换）"
                     )
+                    # 重名覆盖：被覆盖的旧插件需正常卸载，清理其调度任务 / LLM
+                    # 工具 / Web 页面注册，避免资源残留成为幽灵实例
+                    await self.unload(plugin.name)
                 self._plugins[plugin.name] = plugin
                 # 注册插件声明的 LLM 工具（模块级 @llm_tool），卸载时注销
                 if tool_collector:
@@ -883,7 +947,11 @@ class PluginManager:
         await self.unload(name)
         from ..paths import plugins_dir
 
-        plugin_dir = plugins_dir() / name
+        base = plugins_dir()
+        # 兜底校验：解析后必须位于插件目录内（防插件声明恶意 name 越界删除）
+        plugin_dir = (base / name).resolve()
+        if not plugin_dir.is_relative_to(base.resolve()):
+            raise ValueError(f"非法插件删除路径: {name!r}")
         if not plugin_dir.exists():
             logger.info(f"插件 {name} 无磁盘目录，已仅卸载")
             return
@@ -955,22 +1023,23 @@ class PluginManager:
     # ---- 重载 ----
 
     async def reload(self, name: str, bot) -> None:
-        """重载插件"""
-        plugin = self._plugins.get(name)
-        if not plugin:
-            logger.warning(f"重载失败：插件 {name} 不存在")
-            return
+        """重载插件（_reload_lock 串行化，避免并发 reload 竞态）"""
+        async with self._reload_lock:
+            plugin = self._plugins.get(name)
+            if not plugin:
+                logger.warning(f"重载失败：插件 {name} 不存在")
+                return
 
-        module_path = type(plugin).__module__
-        try:
-            await self._load_or_reload(module_path, bot, replaced_name=name)
-        except Exception as e:
-            # 记录加载错误供 WebUI 展示（reload 失败时实例状态与磁盘/模块脱节）
-            self._load_errors[name] = f"{type(e).__name__}: {e}"
-            logger.exception(f"重载插件 {name} 失败，旧插件保持生效")
-            raise
-        finally:
-            self._invalidate_matchers_cache()
+            module_path = type(plugin).__module__
+            try:
+                await self._load_or_reload(module_path, bot, replaced_name=name)
+            except Exception as e:
+                # 记录加载错误供 WebUI 展示（reload 失败时实例状态与磁盘/模块脱节）
+                self._load_errors[name] = f"{type(e).__name__}: {e}"
+                logger.exception(f"重载插件 {name} 失败，旧插件保持生效")
+                raise
+            finally:
+                self._invalidate_matchers_cache()
 
     # ---- 初始化 ----
 
@@ -1125,7 +1194,14 @@ class PluginManager:
                     and source.rstrip("/").endswith(".git")
                 )
                 if is_git:
+                    from .ssrf import is_allowed_git_url, is_private_url
+
                     repo = source[4:] if source.startswith("git+") else source
+                    # 与 _download_archive 同基线：git 来源同样校验协议白名单
+                    # 与私网地址，防止恶意索引借 git+file:// 或内网 SSH 绕过防护
+                    if not is_allowed_git_url(repo) or is_private_url(repo):
+                        logger.error(f"拒绝不安全的 git 来源: {source}")
+                        return "", None
                     ok = await self._run_subprocess(
                         ["git", "clone", "--depth", "1", repo, str(staging)]
                     )
@@ -1217,7 +1293,6 @@ class PluginManager:
     @staticmethod
     async def _download_archive(url: str, dest: Path) -> bool:
         """下载远程归档文件到 dest（同步 urllib 放入线程池，避免阻塞事件循环）"""
-        import shutil
         import urllib.request
 
         from .ssrf import NoRedirectHandler, is_private_url
@@ -1232,10 +1307,27 @@ class PluginManager:
                 # 禁止跟随重定向，防止 302 跳转到内网地址
                 opener = urllib.request.build_opener(NoRedirectHandler)
                 req = urllib.request.Request(url, headers={"User-Agent": "Qingci-Bot-CE"})
-                with opener.open(req, timeout=60) as resp, open(dest, "wb") as f:
-                    shutil.copyfileobj(resp, f)
+                with opener.open(req, timeout=60) as resp:
+                    # 归档大小上限（防 zip 炸弹撑爆磁盘；Content-Length 缺失时边下边限）
+                    declared = resp.headers.get("Content-Length")
+                    if declared and int(declared) > _MAX_ARCHIVE_BYTES:
+                        logger.error(f"归档声明过大，拒绝下载: {url} ({declared} bytes)")
+                        return False
+                    remaining = _MAX_ARCHIVE_BYTES
+                    with open(dest, "wb") as f:
+                        while True:
+                            chunk = resp.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            remaining -= len(chunk)
+                            if remaining < 0:
+                                logger.error(
+                                    f"归档超过大小上限（{_MAX_ARCHIVE_BYTES}），中止下载: {url}"
+                                )
+                                return False
+                            f.write(chunk)
                 return True
-            except (OSError, urllib.error.URLError) as e:
+            except (OSError, urllib.error.URLError, ValueError) as e:
                 logger.error(f"下载失败 {url}: {e}")
                 return False
 
@@ -1244,6 +1336,7 @@ class PluginManager:
     @staticmethod
     async def _extract_archive(archive: Path, dest_dir: Path) -> Path:
         """解压 zip/tar 归档，返回解压后的根目录"""
+        import stat
         import tarfile
         import zipfile
 
@@ -1251,24 +1344,38 @@ class PluginManager:
         fname = archive.name.lower()
         if fname.endswith(".zip"):
             with zipfile.ZipFile(archive) as zf:
+                # 解压总量上限（防 zip 炸弹）
+                if sum(i.file_size for i in zf.infolist()) > _MAX_EXTRACT_BYTES:
+                    raise ValueError("归档解压后过大，已拒绝")
                 # 安全解压：与下方 tar 分支同规则，预检每个成员路径，
-                # 拒绝绝对路径（含盘符）与 .. 穿越条目，防止 Zip Slip
+                # 拒绝绝对路径（含盘符）与 .. 穿越条目，防止 Zip Slip；
+                # 同时拒绝符号链接条目（防 symlink 逃逸覆写目录外文件）
                 dest_root = dest_dir.resolve()
                 for info in zf.infolist():
                     member = info.filename.replace("\\", "/")
                     member_target = (dest_root / member).resolve()
                     if not member_target.is_relative_to(dest_root):
                         raise ValueError(f"归档包含非法路径: {info.filename}")
+                    mode = (info.external_attr >> 16) & 0xFFFF
+                    if stat.S_ISLNK(mode):
+                        raise ValueError(f"归档包含符号链接，已拒绝: {info.filename}")
                 zf.extractall(dest_dir)
         elif fname.endswith((".tar.gz", ".tgz", ".tar.bz2", ".tar")):
             with tarfile.open(archive) as tf:
+                # 解压总量上限（防 zip 炸弹）
+                if sum(m.size for m in tf.getmembers()) > _MAX_EXTRACT_BYTES:
+                    raise ValueError("归档解压后过大，已拒绝")
                 # 安全解压：Py3.12+ 用 data_filter；旧版本手动预检成员路径，
-                # 拒绝绝对路径与 .. 成员，防止 Zip Slip 覆盖解压目录外文件
+                # 拒绝绝对路径与 .. 成员，并拒绝 symlink/hardlink 成员——
+                # 3.10/3.11 下预检只查文本路径，symlink 可指向解压目录外
+                # 再经后续成员写入实现逃逸（Zip Slip 变体）
                 if hasattr(tarfile, "data_filter"):
                     tf.extractall(dest_dir, filter="data")
                 else:
                     dest_root = dest_dir.resolve()
                     for m in tf.getmembers():
+                        if m.issym() or m.islnk():
+                            raise ValueError(f"归档包含符号链接，已拒绝: {m.name}")
                         member_target = (dest_root / m.name).resolve()
                         if not member_target.is_relative_to(dest_root):
                             raise ValueError(f"归档包含非法路径: {m.name}")

@@ -88,16 +88,26 @@ def create_app() -> FastAPI:
         bot.plugin_manager.set_web_app(app)
 
     # CORS：不使用 allow_credentials=True + allow_origins=["*"]（违反 CORS 规范）
-    # 安全由 X-API-Key 鉴权保证，CORS 仅放开方法/头；
-    # 保持通配允许，否则经局域网 IP / 主机名等非固定源访问 /ui 时，
-    # 所有跨源 API 请求会被浏览器拦截（表现为页面无数据，如消息日志空白）
+    # 通配 allow_origins=["*"] 会让任意恶意网页跨源读取本地 API 响应
+    # （配合未配 api_key 时的环回免鉴权可构成 CSRF 数据窃取）。
+    # 收敛为仅环回来源：局域网/主机名访问页面与 API 同源，不受 CORS 影响；
+    # 仅拦截"外部域名页面跨源调用本机 API"这一攻击面。
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origin_regex=r"^(https?://(127\.0\.0\.1|localhost|\[::1\]|\[0:0:0:0:0:0:0:1\])(:\d+)?)$",
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # 基础安全响应头（X-Frame-Options 兼容 WebUI 在桌面窗口内嵌与插件 iframe）
+    @app.middleware("http")
+    async def _security_headers(request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        return response
 
     # ── 全局异常处理 ──────────────────────────────────────────
     from fastapi import Request
@@ -185,17 +195,38 @@ def create_app() -> FastAPI:
             return sub[len("api-key.") :], sub
         return query_token, None
 
+    def _ws_auth_check(ws: WebSocket, query_token: str) -> tuple[str | None, str | None]:
+        """校验 WebSocket 鉴权（与 HTTP 侧 require_auth 对齐）
+
+        - 配置读取失败：fail-closed
+        - 未配 key：仅环回来源 + Origin 为环回时才放行（防任意网页订阅实时流）
+        - 已配 key：校验子协议/token
+
+        Returns:
+            (错误 reason, 子协议)；reason 为 None 表示鉴权通过
+        """
+        from api.auth import is_loopback_host, is_loopback_origin
+
+        token, subprotocol = _ws_auth(ws, query_token)
+        configured_key = _get_configured_api_key()
+        if configured_key is None:
+            return "服务暂不可用", None
+        if not configured_key:
+            host = ws.client.host if ws.client else ""
+            origin = ws.headers.get("origin", "")
+            if not is_loopback_host(host) or (origin and not is_loopback_origin(origin)):
+                return "未配置 API Key，禁止非本机访问", None
+            return None, subprotocol
+        if not secrets.compare_digest(token, configured_key):
+            return "未授权", None
+        return None, subprotocol
+
     # WebSocket 实时日志（鉴权：子协议或 token 查询参数传递 API Key）
     @app.websocket("/api/ws/log")
     async def ws_log(ws: WebSocket, token: str = Query(default="")):
-        token, subprotocol = _ws_auth(ws, token)
-        configured_key = _get_configured_api_key()
-        if configured_key is None:
-            # 配置读取失败，fail-closed
-            await ws.close(code=4001, reason="服务暂不可用")
-            return
-        if configured_key and not secrets.compare_digest(token, configured_key):
-            await ws.close(code=4001, reason="未授权")
+        reason, subprotocol = _ws_auth_check(ws, token)
+        if reason is not None:
+            await ws.close(code=4001, reason=reason)
             return
         # 连接数限制（accept 前检查）
         if len(_ws_clients) >= _MAX_WS_CLIENTS:
@@ -236,13 +267,9 @@ def create_app() -> FastAPI:
     # 服务端逐块返回 {"type":"delta","text":...}，结束返回 {"type":"done"}。
     @app.websocket("/api/ws/chat")
     async def ws_chat(ws: WebSocket, token: str = Query(default="")):
-        token, subprotocol = _ws_auth(ws, token)
-        configured_key = _get_configured_api_key()
-        if configured_key is None:
-            await ws.close(code=4001, reason="服务暂不可用")
-            return
-        if configured_key and not secrets.compare_digest(token, configured_key):
-            await ws.close(code=4001, reason="未授权")
+        reason, subprotocol = _ws_auth_check(ws, token)
+        if reason is not None:
+            await ws.close(code=4001, reason=reason)
             return
         # 连接数限制（accept 前检查，独立于日志连接池）
         if len(_chat_clients) >= _MAX_WS_CLIENTS:

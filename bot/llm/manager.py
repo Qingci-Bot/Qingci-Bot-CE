@@ -635,16 +635,16 @@ class LLMManager:
                 output = await registry.execute(name, arguments)
                 working.append({"role": "tool", "tool_call_id": tc_id, "content": output})
 
-        # 达到最大轮数仍未产出文本：再调用一次（不带 tools）强制收尾
-        result = await self.adapter.chat_detail(
-            messages=working,
-            system_prompt=system_prompt,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-        _accumulate(result.usage)
-        logger.warning(f"工具调用达到最大轮数 {max_rounds}，强制收尾: model={self._config.model}")
-        return result.content, (total_usage if has_usage else None)
+        # 达到最大轮数仍未产出文本（收尾轮模型仍返回 tool_calls）：直接取其内容，
+        # 空则给占位回复——避免再一次无谓的 LLM 调用（浪费 token/延迟）
+        content = (result.content or "").strip()
+        if not content:
+            logger.warning(
+                f"工具调用达到最大轮数 {max_rounds}，模型未产出文本，返回占位回复: "
+                f"model={self._config.model}"
+            )
+            content = "（工具调用已达上限，未生成回复）"
+        return content, (total_usage if has_usage else None)
 
     # ============ 对话调用 ============
 

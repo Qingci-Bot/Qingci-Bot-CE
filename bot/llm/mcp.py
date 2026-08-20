@@ -54,10 +54,18 @@ class MCPBridge:
                 from mcp import ClientSession
                 from mcp.client.stdio import StdioServerParameters, stdio_client
 
+                # 注意：MCP stdio 的 command/args/env 全部来自配置文件——
+                # 配置该功能等于授予"按配置执行本地命令"能力，属高权限配置面，
+                # 仅应配置可信的本地 MCP 服务（勿配置来源不可信的命令）。
+                # 过滤注入型环境变量，降低配置被攻破时的提权面。
+                env = dict(cfg.env) if cfg.env else None
+                if env:
+                    for _k in ("LD_PRELOAD", "PYTHONPATH", "PYTHONSTARTUP", "BASH_ENV"):
+                        env.pop(_k, None)
                 params = StdioServerParameters(
                     command=cfg.command,
                     args=list(cfg.args or []),
-                    env=dict(cfg.env) if cfg.env else None,
+                    env=env,
                 )
                 transport = stdio_client(params)
                 read, write = await transport.__aenter__()

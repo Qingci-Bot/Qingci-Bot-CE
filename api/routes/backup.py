@@ -7,6 +7,7 @@ data/backups/ 目录（兼容 WAL 模式），保留最近 10 份并清理更旧
 
 import asyncio
 import logging
+import os
 import secrets
 import sqlite3
 from datetime import datetime
@@ -64,6 +65,11 @@ def _do_backup() -> tuple[str, int]:
             dst_conn.close()
     finally:
         src_conn.close()
+    # 备份含对话数据：收紧文件权限（POSIX 0600），防同机其他用户读取
+    try:
+        os.chmod(dst_path, 0o600)
+    except OSError:
+        pass
     _cleanup_old_backups()
     return dst_path.name, dst_path.stat().st_size
 

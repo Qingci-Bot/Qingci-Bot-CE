@@ -403,8 +403,9 @@ async def test_chat_with_tools_max_rounds(manager):
     )
     reply, _ = await manager.chat_with_tools([{"role": "user", "content": "hi"}])
     assert reply == "done"
-    # 2 轮 + 1 次强制收尾
-    assert len(manager._adapter.calls) == 3
+    # 1 轮工具 + 1 轮收尾 = 2 次调用（收尾轮模型仍返回 tool_calls 时
+    # 直接取内容，不再多余地再调一次强制收尾）
+    assert len(manager._adapter.calls) == 2
     assert manager._adapter.calls[-1]["tools"] is None
 
 

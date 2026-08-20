@@ -24,9 +24,10 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 # ---------- [0/3] 独立插件 SDK ----------
 # 外部插件运行时 import qingci_plugin_sdk，必须装进构建环境才能在
 # PyInstaller 打包时一并收集（spec 中 collect_all('qingci_plugin_sdk')）。
-# 直接拉取 Gitee main（Gitee 与 GitHub 实时同步），不依赖本地兄弟目录。
-Write-Host "==> [0/3] installing qingci-plugin-sdk (Gitee main)..." -ForegroundColor Cyan
-uv pip install --python $Python "qingci-plugin-sdk @ git+https://gitee.com/qingci-bot/Plugins-SDK.git@main"
+# 锁定到已发布 tag（与 pyproject.toml 保持一致），保证构建可复现；
+# SDK 发新版后同步更新这里与 pyproject.toml 的 tag。
+Write-Host "==> [0/3] installing qingci-plugin-sdk (v1.10.0)..." -ForegroundColor Cyan
+uv pip install --python $Python "qingci-plugin-sdk @ git+https://gitee.com/qingci-bot/Plugins-SDK.git@v1.10.0"
 if ($LASTEXITCODE -ne 0) { throw "qingci-plugin-sdk install failed with exit code $LASTEXITCODE" }
 
 # ---------- [1/3] PyInstaller build ----------

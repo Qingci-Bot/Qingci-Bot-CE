@@ -218,6 +218,7 @@ def _parse_iso_datetime(value: str) -> datetime:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
     except (ValueError, TypeError):
+        logger.warning(f"时间戳解析失败，回退当前时间（数据时间将被篡改）: {value!r}")
         return datetime.now(timezone.utc)
 
 
