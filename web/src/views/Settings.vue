@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { authHeaders } from '../api/request';
 import { useAppStore } from '../stores/app';
 import { useToast } from '../composables/useToast';
 
@@ -184,10 +185,10 @@ async function backupDb() {
 async function exportCsv() {
   exporting.value = true;
   try {
-    const headers = {};
-    const key = store.getApiKey();
-    if (key) headers['X-API-Key'] = key;
-    const res = await fetch('/api/log/messages/export', { headers });
+    // blob 下载场景不走 request（其返回 JSON），仅复用鉴权头注入
+    const res = await fetch('/api/log/messages/export', {
+      headers: authHeaders(),
+    });
     if (!res.ok) {
       const text = await res.text();
       let msg = text || `HTTP ${res.status}`;

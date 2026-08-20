@@ -1,29 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, reactive } from 'vue';
-import { invalidateAuthStatusCache } from '../router/index.js';
-
-const API = '';
-
-function getApiKey() {
-  return localStorage.getItem('qingci_api_key') || '';
-}
-
-function setApiKey(key) {
-  if (key) {
-    localStorage.setItem('qingci_api_key', key);
-  } else {
-    localStorage.removeItem('qingci_api_key');
-  }
-}
-
-function authHeaders(extra = {}) {
-  const key = getApiKey();
-  const headers = { ...extra };
-  if (key) {
-    headers['X-API-Key'] = key;
-  }
-  return headers;
-}
+import { authHeaders, getApiKey, request, setApiKey } from '../api/request';
 
 // 默认值逐项与后端 bot/config.py 的模型定义保持一致
 const defaultConfig = {
@@ -156,31 +133,11 @@ export const useAppStore = defineStore('app', () => {
   });
 
   async function apiFetch(url, options = {}) {
+    // 统一由独立 API 层处理（鉴权头注入 / JSON 解析 / 401 跳转），
+    // 此处仅保留"错误写入 store.error 供组件提示"的行为
     try {
-      const headers = authHeaders(options.headers || {});
-      const res = await fetch(`${API}${url}`, { ...options, headers });
-      if (res.status === 401) {
-        error.value = 'API Key 鉴权失败，请在设置中配置正确的 API Key';
-        // 失效路由层的鉴权状态缓存，使跳转登录后能重新拉取最新状态
-        invalidateAuthStatusCache();
-        // 跳转登录页（hash 模式直改 location，避免 store 与 router 循环依赖）
-        if (window.location.hash !== '#/login') {
-          window.location.hash = '#/login';
-        }
-        throw new Error(error.value);
-      }
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
-      }
-      if (res.status === 204) return null;
-      try {
-        return await res.json();
-      } catch (parseErr) {
-        throw new Error(`HTTP ${res.status} 响应不是有效 JSON`);
-      }
+      return await request(url, options);
     } catch (e) {
-      // 仅在尚未设置错误信息时赋值，避免覆盖 401 分支已设置的提示
       if (!error.value) error.value = e.message;
       throw e;
     }

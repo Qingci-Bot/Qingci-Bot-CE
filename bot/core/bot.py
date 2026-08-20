@@ -162,6 +162,11 @@ class QingciBot:
                 self._rate_limiter_cleanup_loop(), name="rate-limiter-cleanup"
             )
 
+        # 定期清理过期数据（messages/usage_logs/audit_logs/sessions 保留期，
+        # 防长期运行单表无限膨胀；retention_days<=0 时不启动）
+        if getattr(self.config.log, "retention_days", 0) > 0:
+            self._spawn_background_task(self._data_retention_loop(), name="data-retention-cleanup")
+
         # 启动调度器与错误告警；失败时连同连接/插件/数据库一并回滚
         try:
             if self.config.scheduler.enabled:
@@ -597,6 +602,51 @@ class QingciBot:
                     self.rate_limiter.cleanup()
             except Exception:
                 logger.exception("清理限流器过期条目失败")
+
+    async def _data_retention_loop(self) -> None:
+        """定期清理超过保留期的历史数据（每天；随 stop() 置 _running=False 退出）
+
+        覆盖表：messages / sessions / usage_logs / audit_logs。仅当
+        config.log.retention_days > 0 时由 start() 启动；单次清理失败
+        仅记日志，不影响 Bot 主流程（下次循环重试）。
+        """
+        while self._running:
+            try:
+                retention = getattr(self.config.log, "retention_days", 0)
+                if retention > 0:
+                    await self._purge_expired_data(retention)
+            except Exception:
+                logger.exception("清理过期数据失败")
+            # 每天一次（首次启动后 24h 触发；睡眠分片避免 stop() 等待过久）
+            slept = 0.0
+            while self._running and slept < 86400:
+                await asyncio.sleep(60)
+                slept += 60
+
+    async def _purge_expired_data(self, retention_days: int) -> None:
+        """删除超过保留期的消息/会话/用量/审计记录（按 created_at 批量）"""
+        import datetime
+
+        from sqlalchemy import delete
+
+        from ..db.engine import session_scope
+        from ..db.models import AuditLog, Message, SessionHistory, UsageLog
+
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            days=retention_days
+        )
+        tables = (Message, SessionHistory, UsageLog, AuditLog)
+        total = 0
+        async with session_scope() as session:
+            for model in tables:
+                # 各模型均含 created_at 列；rowcount 在 CursorResult 上，SQLAlchemy
+                # 类型为 Result 基类时用 getattr 兜底（运行时行为一致）
+                result = await session.execute(
+                    delete(model).where(model.created_at < cutoff)  # type: ignore[arg-type,union-attr]
+                )
+                total += getattr(result, "rowcount", 0) or 0
+        if total:
+            logger.info(f"数据保留清理完成：删除 {total} 条超过 {retention_days} 天的记录")
 
     async def _handle_request_approval(
         self, event: dict, approve: bool, platform: str = ""

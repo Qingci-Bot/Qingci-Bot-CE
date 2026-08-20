@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { request } from '../api/request';
 import { useAppStore } from '../stores/app';
 
 const router = useRouter();
@@ -17,22 +18,13 @@ async function doLogin() {
   loading.value = true;
   errorMsg.value = '';
   try {
-    // 免鉴权接口，fetch 直连
-    const res = await fetch('/api/auth/login', {
+    // 登录接口本身免鉴权；401 由本页呈现错误，不走统一跳转（已在登录页）
+    await request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ api_key: apiKey.value.trim() }),
+      skipAuthRedirect: true,
     });
-    if (!res.ok) {
-      const text = await res.text();
-      let msg = text || `HTTP ${res.status}`;
-      try {
-        msg = JSON.parse(text).detail || msg;
-      } catch (e) {
-        // 非 JSON 响应体，直接使用原文本
-      }
-      throw new Error(msg);
-    }
     store.setApiKey(apiKey.value.trim());
     router.push('/');
   } catch (e) {

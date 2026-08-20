@@ -182,3 +182,58 @@ class TestSessionScope:
         # 异常回滚：待提交记录未落库，仅保留此前已提交的记录
         sessions = await db.get_sessions("k")
         assert sessions == []
+
+
+@pytest.mark.asyncio
+class TestDataRetention:
+    """数据保留清理（_purge_expired_data）：删除超过保留期的历史记录"""
+
+    async def test_purge_removes_expired_keeps_recent(self, db):
+        import datetime
+
+        from bot.core.bot import QingciBot
+        from bot.db.engine import session_scope
+        from bot.db.models import AuditLog, Message, SessionHistory, UsageLog
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        old = now - datetime.timedelta(days=30)
+        recent = now - datetime.timedelta(days=1)
+
+        async with session_scope() as session:
+            session.add(
+                Message(message_id="old-m", user_id=1, content="old", role="user", created_at=old)
+            )
+            session.add(
+                Message(
+                    message_id="new-m", user_id=1, content="new", role="user", created_at=recent
+                )
+            )
+            session.add(
+                SessionHistory(session_key="k", role="user", content="old-s", created_at=old)
+            )
+            session.add(UsageLog(session_key="k", model="gpt", created_at=old))
+            session.add(AuditLog(action="test", detail="old-a", created_at=old))
+
+        # retention_days=7：仅删除 30 天前的
+        await QingciBot._purge_expired_data(None, 7)
+
+        async with session_scope() as session:
+            from sqlalchemy import func, select
+
+            msg_count = (
+                await session.execute(select(func.count()).select_from(Message))
+            ).scalar_one()
+            sess_count = (
+                await session.execute(select(func.count()).select_from(SessionHistory))
+            ).scalar_one()
+            usage_count = (
+                await session.execute(select(func.count()).select_from(UsageLog))
+            ).scalar_one()
+            audit_count = (
+                await session.execute(select(func.count()).select_from(AuditLog))
+            ).scalar_one()
+
+        assert msg_count == 1  # 旧消息被删，新消息保留
+        assert sess_count == 0
+        assert usage_count == 0
+        assert audit_count == 0

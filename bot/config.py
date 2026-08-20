@@ -328,6 +328,10 @@ class LogConfig(BaseModel):
     # 日志目录（相对路径基于 app_root，默认 logs/）
     log_dir: str = "logs"
 
+    # 数据保留天数：messages/usage_logs/audit_logs/sessions 中超过保留期的
+    # 记录由 Bot 定期清理，防止长期运行单表无限膨胀；0 或负数 = 不清理（保留全部）
+    retention_days: int = 0
+
 
 class RAGConfig(BaseModel):
     """知识库（RAG）配置（默认关闭）

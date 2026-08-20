@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **数据保留清理**：`config.log.retention_days` 配置保留天数，Bot 每日自动清理 `messages`/`sessions`/`usage_logs`/`audit_logs` 中超过保留期的记录（默认 0 不清理），防止长期运行单表无限膨胀
+- **前端 API 封装层**：新增 `web/src/api/request.js`（X-API-Key 自动注入 / JSON 解析 / 401 统一跳转），`app.js` 与登录/向导视图统一接入；WS 连接抽取为 `useWebSocket` composable（token 子协议注入 + 断线重连），消息日志与对话调试视图复用
+- **v11 翻译收敛 SDK**：`bot/core/v11_compat.py` 改为 `qingci_plugin_sdk.events.translate_v11_event` 薄转发（仅补 OneBot 11 平台字段），v11 <-> v12 协议映射单一来源，消除双实现漂移风险
+
 ### Changed
 
-- **SDK 锁定升级到 v1.10.1**：`qingci-plugin-sdk @ v1.10.1`（pyproject/build.ps1/uv.lock 同步），含 `parse_cq_string` FACE 引用修复
+- **SDK 锁定升级到 v1.11.0**：`qingci-plugin-sdk @ v1.11.0`（pyproject/build.ps1/uv.lock 同步），含 `translate_v11_event` 与 `parse_cq_string` FACE 修复
 
 ## [1.11.0] - 2026-08-20（架构审阅阶段一落地）
 

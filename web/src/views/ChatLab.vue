@@ -1,5 +1,6 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { useWebSocket } from '../composables/useWebSocket';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
@@ -9,46 +10,23 @@ const DEBUG_USER_ID = 900000001;
 
 const messages = ref([]); // { role: 'user'|'assistant'|'error', text, streaming }
 const input = ref('');
-const wsConnected = ref(false);
 const streaming = ref(false);
 const chatBox = ref(null);
-let socket = null;
-let reconnectTimer = null;
-let shouldReconnect = true;
 
-onMounted(() => {
-  connect();
-});
-onUnmounted(() => {
-  shouldReconnect = false;
-  if (reconnectTimer) clearTimeout(reconnectTimer);
-  if (socket) socket.close();
-});
-
-function connect() {
-  if (!shouldReconnect) return;
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const token = store.getApiKey() || '';
-  const protocols = token ? [`api-key.${token}`] : [];
-  socket = new WebSocket(`${proto}//${location.host}/api/ws/chat`, protocols);
-  socket.onopen = () => {
-    wsConnected.value = true;
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-  };
-  socket.onclose = () => {
-    wsConnected.value = false;
-    streaming.value = false;
+const {
+  connected: wsConnected,
+  connect,
+  disconnect,
+  close: closeSocket,
+  send: sendWs,
+} = useWebSocket('/api/ws/chat', {
+  onClose: () => {
     // 正在流式时断开视为停止
+    streaming.value = false;
     const last = messages.value[messages.value.length - 1];
     if (last) last.streaming = false;
-    if (shouldReconnect) {
-      reconnectTimer = setTimeout(connect, 3000);
-    }
-  };
-  socket.onmessage = (event) => {
+  },
+  onMessage: (event) => {
     let data;
     try {
       data = JSON.parse(event.data);
@@ -77,16 +55,23 @@ function connect() {
       }
       streaming.value = false;
     }
-  };
-}
+  },
+});
+
+onMounted(() => {
+  connect();
+});
+onUnmounted(() => {
+  disconnect();
+});
 
 function send() {
   const text = input.value.trim();
-  if (!text || streaming.value || !socket || socket.readyState !== WebSocket.OPEN) return;
+  if (!text || streaming.value) return;
   messages.value.push({ role: 'user', text, streaming: false });
   messages.value.push({ role: 'assistant', text: '', streaming: true });
   streaming.value = true;
-  socket.send(JSON.stringify({ message: text, user_id: DEBUG_USER_ID }));
+  sendWs(JSON.stringify({ message: text, user_id: DEBUG_USER_ID }));
   input.value = '';
   scrollDown();
 }
@@ -95,7 +80,7 @@ function stop() {
   streaming.value = false;
   const last = messages.value[messages.value.length - 1];
   if (last) last.streaming = false;
-  if (socket) socket.close();
+  closeSocket(); // 关闭当前连接，保持重连（下次对话自动恢复）
 }
 
 async function clearSession() {

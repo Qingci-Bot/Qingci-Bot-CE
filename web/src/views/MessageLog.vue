@@ -1,13 +1,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useWebSocket } from '../composables/useWebSocket';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
 const keyword = ref('');
-const wsConnected = ref(false);
-let socket = null;
-let shouldReconnect = true;
-let reconnectTimer = null;
 
 // 会话记录
 const activeTab = ref('messages');
@@ -15,15 +12,31 @@ const sessions = ref([]);
 const currentSession = ref('');
 const sessionMessages = ref([]);
 
+const {
+  connected: wsConnected,
+  connect: connectWebSocket,
+  disconnect: disconnectWebSocket,
+} = useWebSocket('/api/ws/log', {
+  onMessage: (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data?.type === 'ping') return;
+      if (!keyword.value) {
+        store.addLog(data);
+      }
+    } catch (e) {
+      console.warn('WebSocket 消息解析失败:', e);
+    }
+  },
+});
+
 onMounted(() => {
   store.fetchLogs('', 50).catch((e) => console.warn('初始消息日志加载失败:', e));
   connectWebSocket();
 });
 
 onUnmounted(() => {
-  shouldReconnect = false;
-  if (reconnectTimer) clearTimeout(reconnectTimer);
-  if (socket) socket.close();
+  disconnectWebSocket();
 });
 
 function switchTab(tab) {
@@ -66,38 +79,6 @@ async function removeSession(key) {
   } catch (e) {
     console.warn('会话删除失败:', e);
   }
-}
-
-function connectWebSocket() {
-  if (!shouldReconnect) return;
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const token = store.getApiKey() || '';
-  const protocols = token ? [`api-key.${token}`] : [];
-  socket = new WebSocket(`${proto}//${location.host}/api/ws/log`, protocols);
-  socket.onopen = () => {
-    wsConnected.value = true;
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-  };
-  socket.onclose = () => {
-    wsConnected.value = false;
-    if (shouldReconnect) {
-      reconnectTimer = setTimeout(connectWebSocket, 3000);
-    }
-  };
-  socket.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data?.type === 'ping') return;
-      if (!keyword.value) {
-        store.addLog(data);
-      }
-    } catch (e) {
-      console.warn('WebSocket 消息解析失败:', e);
-    }
-  };
 }
 
 async function search() {

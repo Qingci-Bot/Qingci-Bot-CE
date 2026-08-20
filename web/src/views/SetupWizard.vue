@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { request } from '../api/request';
 import { invalidateWizardStatusCache } from '../router';
 
 const router = useRouter();
@@ -68,21 +69,16 @@ async function testConnection() {
     if (apiUrl.value.trim()) body.api_url = apiUrl.value.trim();
     if (model.value.trim()) body.model = model.value.trim();
 
-    // 鉴权已启用时测试连接也需要携带 X-API-Key，与 store.apiFetch 行为保持一致
-    const headers = { 'Content-Type': 'application/json' };
-    const apiKeyHeader = localStorage.getItem('qingci_api_key');
-    if (apiKeyHeader) headers['X-API-Key'] = apiKeyHeader;
-
-    const res = await fetch('/api/config/llm/test', {
+    // 鉴权已启用时测试连接也需要携带 X-API-Key（request 自动注入）
+    const data = await request('/api/config/llm/test', {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await res.json();
-    if (res.ok && data.available) {
+    if (data && data.available) {
       testResult.value = { ok: true, msg: '连接成功' };
     } else {
-      testResult.value = { ok: false, msg: data.message || data.detail || '连接失败' };
+      testResult.value = { ok: false, msg: (data && (data.message || data.detail)) || '连接失败' };
     }
   } catch (e) {
     testResult.value = { ok: false, msg: '网络错误: ' + e.message };
@@ -103,17 +99,11 @@ async function completeSetup() {
       admin_qq: adminId.value.trim() || undefined,
       onebot_port: onebotPort.value.trim() || undefined,
     };
-    const res = await fetch('/api/config/wizard', {
+    await request('/api/config/wizard', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      error.value = data.detail || '配置失败';
-      loading.value = false;
-      return;
-    }
     // 配置完成，跳转首页
     invalidateWizardStatusCache();
     router.push('/');
@@ -127,13 +117,7 @@ async function skipSetup() {
   loading.value = true;
   error.value = '';
   try {
-    const res = await fetch('/api/config/wizard/skip', { method: 'POST' });
-    if (!res.ok) {
-      const data = await res.json();
-      error.value = data.detail || '跳过失败';
-      loading.value = false;
-      return;
-    }
+    await request('/api/config/wizard/skip', { method: 'POST' });
     invalidateWizardStatusCache();
     router.push('/');
   } catch (e) {

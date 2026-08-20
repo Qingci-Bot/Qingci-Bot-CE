@@ -3380,7 +3380,7 @@ requires-dist = [
     { name = "pywebview", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qingci-bot-ce", extras = ["test", "build", "vector", "render"], marker = "extra == 'dev'" },
-    { name = "qingci-plugin-sdk", git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.10.1" },
+    { name = "qingci-plugin-sdk", git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.11.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
@@ -3391,8 +3391,8 @@ provides-extras = ["vector", "render", "test", "build", "dev"]
 
 [[package]]
 name = "qingci-plugin-sdk"
-version = "1.10.1"
-source = { git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.10.1#6a878ab1841efe5d9dad1974e7081f3e5c372933" }
+version = "1.11.0"
+source = { git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.11.0#684ff2c621e33105cea0883e938a75b179295253" }
 
 [[package]]
 name = "qtpy"
