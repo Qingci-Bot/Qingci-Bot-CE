@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **SDK 锁定升级到 v1.12.0**：`qingci-plugin-sdk @ v1.12.0`（pyproject/build.ps1/uv.lock 同步，版本同步无代码变更）
+
 ## [1.12.0] - 2026-08-20（架构审阅阶段二 + 阶段三落地）
 
 ### Added
