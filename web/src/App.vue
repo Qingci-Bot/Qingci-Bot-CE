@@ -27,18 +27,26 @@ const activePlatforms = computed(() => {
   return store.platforms.filter((p) => p.name === main);
 });
 
-const navItems = [
-  { path: '/instances', name: '实例管理', icon: '⊞' },
-  { path: '/', name: '仪表盘', icon: '◈' },
-  { path: '/config', name: 'LLM 配置', icon: '✦' },
-  { path: '/lab', name: '对话调试', icon: '✎' },
-  { path: '/groups', name: '群组配置', icon: '▣' },
-  { path: '/plugins', name: '插件管理', icon: '◇' },
-  { path: '/logs', name: '消息日志', icon: '✉' },
-  { path: '/runlog', name: '运行日志', icon: '⌘' },
-  { path: '/settings', name: '系统设置', icon: '⚙' },
-  { path: '/about', name: '关于', icon: '♢' },
-];
+// 侧边栏导航项：运行日志项跟随 `log.run_log_enabled` 配置显隐，
+// 关闭运行日志采集时隐藏入口（与设置页开关一致，避免出现"无数据入口"）
+const navItems = computed(() => {
+  const runLogEnabled = (store.config.log && store.config.log.run_log_enabled) !== false;
+  const items = [
+    { path: '/instances', name: '实例管理', icon: '⊞' },
+    { path: '/', name: '仪表盘', icon: '◈' },
+    { path: '/config', name: 'LLM 配置', icon: '✦' },
+    { path: '/lab', name: '对话调试', icon: '✎' },
+    { path: '/groups', name: '群组配置', icon: '▣' },
+    { path: '/plugins', name: '插件管理', icon: '◇' },
+    { path: '/logs', name: '消息日志', icon: '✉' },
+    { path: '/settings', name: '系统设置', icon: '⚙' },
+    { path: '/about', name: '关于', icon: '♢' },
+  ];
+  if (runLogEnabled) {
+    items.splice(7, 0, { path: '/runlog', name: '运行日志', icon: '⌘' });
+  }
+  return items;
+});
 
 function isActive(path) {
   return route.path === path;
