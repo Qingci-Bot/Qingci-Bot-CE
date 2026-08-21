@@ -121,11 +121,35 @@ async def ensure_dependencies(directory: Path) -> list[str]:
 
 
 async def _install(reqs: list[str]) -> bool:
-    """把依赖安装到 deps 目录（按运行模式选择 pip 方式）"""
+    """把依赖安装到 deps 目录（按运行模式选择安装器）"""
     target = deps_dir()
     if getattr(sys, "frozen", False):
-        return _install_in_process(target, reqs)
+        return await _install_frozen(target, reqs)
+    # 源码模式：优先 uv（Qingci 的 uv venv 默认不带 pip），其次 python -m pip
+    uv = shutil.which("uv")
+    if uv:
+        cmd = [uv, "pip", "install", "--target", str(target), *reqs]
+        return await _run_installer(cmd)
     return await _install_subprocess(target, reqs)
+
+
+async def _install_frozen(target: Path, reqs: list[str]) -> bool:
+    """打包模式：优先内置 uv 子进程，其次内嵌 pip"""
+    uv = _bundled_uv()
+    if uv is not None:
+        cmd = [uv, "pip", "install", "--target", str(target), *reqs]
+        return await _run_installer(cmd)
+    return _install_in_process(target, reqs)
+
+
+def _bundled_uv() -> str | None:
+    """打包模式定位随产物的 uv 可执行文件；未打包则返回 None"""
+    meipass = getattr(sys, "_MEIPASS", None)  # PyInstaller 专用，非打包环境不存在
+    if meipass:
+        uv = str(Path(meipass, "uv.exe"))
+        if shutil.which(uv):
+            return uv
+    return None
 
 
 def _pip_args(target: Path, reqs: list[str]) -> list[str]:
@@ -139,17 +163,8 @@ def _pip_args(target: Path, reqs: list[str]) -> list[str]:
     ]
 
 
-async def _install_subprocess(target: Path, reqs: list[str]) -> bool:
-    """源码模式安装到 target：优先 uv，其次 python -m pip
-
-    Qingci 的 uv 管理 venv 默认不带 pip，故优先用 uv pip install --target；
-    非 uv 环境回退到 python -m pip。
-    """
-    uv = shutil.which("uv")
-    if uv:
-        cmd = [uv, "pip", "install", "--target", str(target), *reqs]
-    else:
-        cmd = [sys.executable, "-m", "pip", *_pip_args(target, reqs)]
+async def _run_installer(cmd: list[str]) -> bool:
+    """以子进程方式运行安装命令（uv 或 python -m pip），含超时回收"""
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -175,6 +190,12 @@ async def _install_subprocess(target: Path, reqs: list[str]) -> bool:
         logger.error(f"依赖安装失败: {stdout.decode(errors='replace')[-2000:]}")
         return False
     return True
+
+
+async def _install_subprocess(target: Path, reqs: list[str]) -> bool:
+    """源码模式：python -m pip 安装到 target（uv 分支已在 _install 中处理）"""
+    cmd = [sys.executable, "-m", "pip", *_pip_args(target, reqs)]
+    return await _run_installer(cmd)
 
 
 def _install_in_process(target: Path, reqs: list[str]) -> bool:

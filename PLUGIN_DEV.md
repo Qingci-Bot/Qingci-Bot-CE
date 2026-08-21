@@ -271,7 +271,7 @@ class MyPlugin(PluginBase):
 
 **依赖安装规则：**
 - 声明内容未变化时跳过安装（按内容哈希幂等），`requirements.txt` 变更才触发重装
-- 源码运行优先 `uv pip install --target`，无 uv 时回退 `python -m pip`；exe 打包版使用内嵌 pip
+- 安装器：源码与 exe 打包版均优先 `uv pip install --target`（打包版用随产物的 uv.exe，经 `sys._MEIPASS` 定位），无 uv 时回退 `python -m pip`（打包版为内嵌 pip）
 - 安装失败仅记录警告，不阻止插件加载（插件缺依赖 import 时会报 `ModuleNotFoundError`）
 
 **安全开关：** 自动安装由 `config.yaml` 的 `bot.auto_install_plugin_deps` 控制（默认 `true`）。关闭后插件 `requirements.txt` 不再触发任何包安装（降低供给链风险），但依赖缺失时插件会加载失败：

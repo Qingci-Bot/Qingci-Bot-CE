@@ -5,6 +5,16 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-08-21（内置 uv 依赖安装链 + 打包依赖修复）
+
+### Added
+
+- **内置 uv 依赖安装链**：打包（EXE）模式下插件第三方依赖优先通过随产物的 `uv` 子进程安装（`bot/plugin/deps.py` 按 `sys._MEIPASS` 定位），缺失时回退内嵌 pip；构建时 `uv.exe` 由 spec 作为数据文件进入 `_internal`，安装更快速、残留更少
+
+### Fixed
+
+- **打包模式插件依赖无法自动安装**：uv 管理的构建 venv 默认不带 pip，导致 `collect_all('pip')` 收集为空、EXE 内无 pip；现在 build.ps1 构建前用 `uv pip install` 注入 pip 或内置 uv，确保打包产物具备依赖安装能力
+
 ## [1.13.0] - 2026-08-21（问题诊断报告 CE-1~CE-7 + shiguang-1 修复落地）
 
 ### Added
@@ -243,7 +253,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 打包：`qingci-bot-ce.spec` 通过 `collect_all('qingci_plugin_sdk')` 将独立插件 SDK 整体打入 exe，外部插件运行时 `import qingci_plugin_sdk` 不再 `ModuleNotFoundError`；`build.ps1` 在打包前显式安装 `Plugins-SDK`（相对路径依赖在 `pyproject.toml` 中无法解析，故在构建脚本中安装源码包）
 - 测试：新增 `sdk_plugin` 用例，验证 SDK 式插件可被管理器加载、`data_dir` 重定向到 bot 数据根
 - 插件依赖管理：目录型外部插件加载前自动把 `requirements.txt` 声明的第三方依赖安装到实例隔离目录（`data_root()/deps/`）并注入 `sys.path`，插件可 `import` 其专属依赖且不污染主程序环境；`bot.auto_install_plugin_deps` 可关闭以满足供给链安全（默认开启）
-- 打包：`qingci-bot-ce.spec` 内嵌 `pip`（`collect_all('pip')`），打包模式下自动安装插件依赖到实例 `deps` 目录；源码环境优先 `uv pip install --target`，缺失时回退嵌入 pip
+- 打包：`qingci-bot-ce.spec` 内置 `uv`（`shutil.which('uv')` → datas，运行时 `sys._MEIPASS` 定位）并内嵌 `pip`（`collect_all('pip')`），打包模式下自动安装插件依赖到实例 `deps` 目录；源码与打包均优先 `uv pip install --target`，缺失时回退内嵌 pip
 - 性能优化：`BotConfig.admin_set` 预编译集合（`super_admin` + `admin_users` 并集，O(1) 成员判断），权限判定由 O(n) 列表遍历降为 O(1)；`rule` 限流豁免与敏感词豁免同步受益
 - 性能优化：`PluginManager.all_matchers(post_type)` 事件类型倒排索引，事件分发按类型直接取 Matcher，不再对全部 Matcher 线性扫描过滤
 - 测试：新增 39 个用例（告警、限流、API 实例路由、登录路由、`session_scope`、RAG 增量索引等），全套件 193 个全部通过

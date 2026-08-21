@@ -19,6 +19,7 @@
 """
 
 import os
+import shutil
 
 from PyInstaller.utils.hooks import collect_all
 
@@ -59,11 +60,21 @@ pw_datas, pw_binaries, pw_hiddenimports = collect_all('playwright')
 # pip._internal）到实例 deps 目录，需随产物整体收集 pip 及其 vendored 依赖
 pip_datas, pip_binaries, pip_hiddenimports = collect_all('pip')
 
+# 内嵌 uv：打包模式下优先用 uv 子进程安装外部插件依赖（比 pip 更快、更干净）。
+# uv 是独立二进制而非 Python 模块，用 datas 打进 _MEIPASS，运行时由
+# bot/plugin/deps.py 经 sys._MEIPASS 定位并作为子进程调用；缺失则回退内嵌 pip。
+_uv_exe = shutil.which("uv")
+uv_datas = [(_uv_exe, ".")] if _uv_exe else []
+if _uv_exe:
+    print(f"[spec] bundling uv -> {_uv_exe}")
+else:
+    print("[spec] WARNING: uv not found on PATH; plugin deps will fall back to bundled pip")
+
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=litellm_binaries + tiktoken_binaries + pythonnet_binaries + clrloader_binaries + sdk_binaries + pip_binaries + pw_binaries,
-    datas=litellm_datas + tiktoken_datas + pythonnet_datas + clrloader_datas + sdk_datas + pip_datas + pw_datas + [
+    datas=litellm_datas + tiktoken_datas + pythonnet_datas + clrloader_datas + sdk_datas + pip_datas + pw_datas + uv_datas + [
         ('desktop\\app-icon.ico', '.'),
     ],
     hiddenimports=[
