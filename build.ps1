@@ -30,6 +30,25 @@ Write-Host "==> [0/3] installing qingci-plugin-sdk (v1.13.0)..." -ForegroundColo
 uv pip install --python $Python "qingci-plugin-sdk @ git+https://gitee.com/qingci-bot/Plugins-SDK.git@v1.13.0"
 if ($LASTEXITCODE -ne 0) { throw "qingci-plugin-sdk install failed with exit code $LASTEXITCODE" }
 
+# ---------- ensure pip in venv (for bundled deps installer) ----------
+# uv-managed venvs ship without pip by default. In packaged (frozen) mode the
+# plugin deps installer (bot/plugin/deps.py) calls pip._internal in-process, and
+# the spec collects pip via collect_all('pip'). Without pip present in the
+# build venv, collect_all grabs nothing and the bundled EXE cannot auto-install
+# plugin third-party deps. Install pip here so it gets collected into the EXE.
+Write-Host "==> ensuring pip in build venv (for bundled plugin deps)..." -ForegroundColor Cyan
+& $Python -c "import pip" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    # uv-managed venvs ship without pip; install via uv instead of ensurepip
+    # (uv may not offer ensurepip). Needed so collect_all('pip') in the spec
+    # can bundle pip into the EXE for in-process plugin dependency install.
+    & uv pip install --python $Python pip
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "    could not install pip in build venv; EXE will not bundle pip, plugin auto-deps unavailable in packaged mode"
+    }
+}
+& $Python -c "import pip; print('    pip available:', pip.__version__)"
+
 # ---------- [1/3] PyInstaller build ----------
 Write-Host "==> [1/3] PyInstaller build (first run takes 3-10 min)..." -ForegroundColor Cyan
 & $Python -m PyInstaller --noconfirm --clean qingci-bot-ce.spec
