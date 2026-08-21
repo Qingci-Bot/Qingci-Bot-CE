@@ -5,6 +5,12 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-08-21（运行日志采集入口修复）
+
+### Fixed
+
+- **运行日志页始终无记录**：`bot/logformat.py` 的 `apply_logging_from_config` 使用了错误的相对导入 `from ..config` / `from ..paths`（该模块位于 `bot.logformat`，应指向同级包的 `.config` / `.paths`），触发 `ModuleNotFoundError` 后又被函数外层 `except: pass` 静默吞掉，导致 `configure_logging` 从未执行、`RunLogHandler` 从未挂载——运行日志环形缓冲恒为空，WebUI「运行日志」页没有任何记录。现已改为正确的同级相对导入，启动即正常采集，并把累积历史经 `/api/ws/runlog` 快照推送到 WebUI
+
 ## [1.14.0] - 2026-08-21（内置 uv 依赖安装链 + 打包依赖修复）
 
 ### Added
