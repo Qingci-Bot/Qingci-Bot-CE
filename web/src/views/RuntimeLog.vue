@@ -1,15 +1,22 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useWebSocket } from '../composables/useWebSocket';
+import { useAppStore } from '../stores/app';
 
 // 运行日志：实时查看框架运行日志（ERROR/WARN/INFO），支持按级别过滤与清屏
 const MAX_ENTRIES = 500;
 
+const store = useAppStore();
 const wsConnected = ref(false);
 const entries = ref([]);
 const levelFilter = ref('ALL');
 const autoScroll = ref(true);
 const containerRef = ref(null);
+
+// 采集开关状态：关闭时不建立 WS 连接，改为提示"关闭后运行日志页无数据"
+const runLogEnabled = computed(
+  () => (store.config.log && store.config.log.run_log_enabled) !== false,
+);
 
 const LEVELS = ['ALL', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
 
@@ -69,7 +76,17 @@ function scrollToBottom() {
 watch(filterEntries, scrollToBottom, { deep: true });
 onMounted(scrollToBottom);
 
-onMounted(() => {
+onMounted(async () => {
+  // 确保配置已加载（采集开关可能在 `store.config` 中尚未就绪）
+  if (!store.configLoaded) {
+    try {
+      await store.fetchConfig();
+    } catch (e) {
+      // 配置拉取失败不阻塞页面渲染，仅按当前开关状态处理
+    }
+  }
+  // 采集已关闭时直接返回：既不给"实时推送中"的误导，也避免无谓建立连接
+  if (!runLogEnabled.value) return;
   connect();
 });
 
@@ -90,7 +107,7 @@ onUnmounted(() => {
         <div class="card-title">
           运行日志
           <span class="tag tag-status" :class="wsConnected ? 'tag-perm' : 'tag-danger'">
-            {{ wsConnected ? '实时推送中' : '推送断开' }}
+            {{ runLogEnabled ? (wsConnected ? '实时推送中' : '推送断开') : '采集已关闭' }}
           </span>
         </div>
         <div class="runlog-actions">
@@ -110,7 +127,8 @@ onUnmounted(() => {
       <div ref="containerRef" class="runlog-container">
         <div v-if="filterEntries().length === 0" class="empty-state">
           <div class="icon">⌘</div>
-          <div>暂无运行日志，Bot 启动后自动产生</div>
+          <div v-if="runLogEnabled">暂无运行日志，Bot 启动后自动产生</div>
+          <div v-else>运行日志采集已关闭（系统设置 → 日志 可重新开启）</div>
         </div>
         <div v-for="(log, i) in filterEntries()" :key="i" class="log-line">
           <span class="ln-time">{{ log.time }}</span>

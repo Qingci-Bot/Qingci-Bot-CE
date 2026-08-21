@@ -27,6 +27,20 @@ const auditLogs = ref([]);
 const auditLoading = ref(false);
 const runLogEnabled = ref(true);
 
+// "有未保存更改"提示：开关/表单拨动后与已保存快照不一致即置脏标记，
+// 明确告知设置项为"保存后生效"，避免拨动开关切走再回来被误以为没改上（回弹）。
+const formDirty = ref(false);
+let formSnapshot = '';
+function snapshotForm() {
+  return JSON.stringify(form) + '|' + runLogEnabled.value;
+}
+watch(
+  () => snapshotForm(),
+  (v) => {
+    formDirty.value = v !== formSnapshot;
+  },
+);
+
 // 当前实例主平台：onebot 实例只显示 OneBot 连接配置，telegram 实例只显示 Telegram 配置
 const currentPlatform = computed(() => store.currentInstance?.platform || 'onebot');
 
@@ -86,6 +100,8 @@ function resetForm() {
     api_key: store.config.api_key || '',
   });
   runLogEnabled.value = (store.config.log && store.config.log.run_log_enabled) !== false;
+  formSnapshot = snapshotForm();
+  formDirty.value = false;
 }
 
 function parseList(str, asNumber = true) {
@@ -156,7 +172,8 @@ async function saveConfig() {
     newConfig.api_key = form.api_key;
     newConfig.log = { ...(newConfig.log || {}), run_log_enabled: runLogEnabled.value };
     await store.saveConfig(newConfig);
-    showToast('success', '系统设置已保存');
+    resetForm(); // 同步回已保存配置并清除"未保存更改"标记
+    showToast('success', '系统设置已保存并生效');
   } catch (e) {
     showToast('error', `保存失败：${e.message}`);
   } finally {
@@ -603,6 +620,7 @@ async function saveConfigJson() {
           <span>✓</span> {{ saving ? '保存中' : '保存设置' }}
         </button>
       </div>
+      <div v-if="formDirty" class="unsaved-banner">有未保存的更改，点击「保存设置」后生效。</div>
     </div>
   </div>
 </template>
@@ -672,5 +690,16 @@ td.audit-detail {
 .input-group input {
   flex: 1;
   min-width: 0;
+}
+
+/* "有未保存更改"提示条 */
+.unsaved-banner {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--blue, #38bdf8);
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.08);
+  color: var(--blue, #38bdf8);
+  font-size: 13px;
 }
 </style>

@@ -43,9 +43,16 @@ export function authHeaders(extra = {}) {
  * @returns {Promise<Object|null>} 解析后的 JSON；204 返回 null
  */
 export async function request(url, options = {}) {
-  const { skipAuthRedirect = false, ...fetchOptions } = options;
+  const { skipAuthRedirect = false, ...restOptions } = options;
   const headers = authHeaders(options.headers || {});
-  const res = await fetch(`${API}${url}`, { ...fetchOptions, headers });
+  // GET 强制禁用浏览器缓存：避免保存配置后再次拉取命中启发式缓存，导致页面回显旧值
+  const method = String(restOptions.method || 'GET').toUpperCase();
+  const fetchOptions = {
+    ...restOptions,
+    headers,
+    ...(method === 'GET' ? { cache: 'no-store' } : {}),
+  };
+  const res = await fetch(`${API}${url}`, fetchOptions);
   if (res.status === 401) {
     // 优先取服务端 detail（如登录接口的"API Key 错误"），否则用通用提示
     let detail = '';

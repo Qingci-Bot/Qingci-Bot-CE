@@ -200,6 +200,8 @@ def set_run_log_enabled(enabled: bool) -> None:
         _attach_runlog_handler(root_logger)
     else:
         _detach_runlog_handler(root_logger)
+        # 关闭采集时清空已缓冲的旧日志，兑现"关闭后运行日志页无数据"的承诺
+        _runlog_store.clear()
 
 
 # ── 日志轮转 ──────────────────────────────────────────────────
