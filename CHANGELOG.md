@@ -5,6 +5,21 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.3] - 2026-08-21（llm_tool 单收集栈 + OneBot 便捷方法 + 扩展通知类型化）
+
+### Fixed
+
+- **llm_tool 双实现致 SDK 路径导入的工具静默丢失**：`bot/plugin/llm_tool.py` 曾是 SDK 的逐字复制（双收集栈）——按官方示例 `from qingci_plugin_sdk import llm_tool` 声明的工具进 SDK 收集栈、CE 收集栈为空，LLM 无法调用。现改为转发 SDK 声明机制（`LlmToolSpec/llm_tool/begin/end`），仅保留 CE 特有 `register_tools`；两条导入路径走同一收集栈
+- **on_load 子指令旧 SDK 静默回归**：命令 matcher 缺 `sub_matchers` 元数据（SDK <1.13.1）时打告警提示升级，不再静默
+
+### Added
+
+- **OneBot 常用群管理动作便捷方法**：`PlatformAdapter` 新增 `set_group_kick` / `set_group_ban` / `set_group_whole_ban` / `set_group_admin` / `set_group_card` / `set_group_name` / `get_group_member_list` / `get_group_member_info`，经 `_api_action` 自动映射平台动作名（v11 保持 `set_*` 命名，OneBot 12 映射为 `group.*` 点分命名），插件无需区分平台
+
+### Changed
+
+- **SDK 依赖锁定 v1.13.2**（扩展通知类型化：红包运气王/荣誉变更/名片/精华/签到/好友戳等 6 个类型化事件类；pyproject / build.ps1 / uv.lock 同步）
+
 ## [1.16.2] - 2026-08-21（子命令修复 + 段数组回复 + SDK 1.13.1）
 
 ### Fixed
