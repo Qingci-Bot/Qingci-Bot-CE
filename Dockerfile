@@ -26,7 +26,12 @@ COPY pyproject.toml ./
 COPY . .
 
 # 安装到 /install，运行阶段整体拷贝以保持最小运行镜像
-RUN pip install --no-cache-dir --prefix=/install .
+# qingci-plugin-sdk 为 git 依赖，pyproject 默认指 Gitee 镜像（国内拉取更快）；
+# 但 CI 构建环境（GitHub Actions 海外 IP）访问 Gitee 常被限流（HTTP 429），
+# 故构建阶段临时把 SDK 源切到 GitHub 主仓库。仅影响本镜像构建，
+# 不改变源码安装（pip/uv）时对国内用户的 Gitee 默认源。
+RUN sed -i 's#git+https://gitee.com/qingci-bot/Plugins-SDK.git#git+https://github.com/Qingci-Bot/Plugins-SDK.git#g' pyproject.toml \
+    && pip install --no-cache-dir --prefix=/install .
 
 # ── 运行阶段 ──
 FROM python:3.12-slim AS runtime
