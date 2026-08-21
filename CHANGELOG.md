@@ -5,6 +5,13 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.1] - 2026-08-21（插件第三方依赖按插件隔离）
+
+### Changed
+
+- **插件依赖目录按插件隔离**：外部插件第三方依赖由共享的 `data_root()/deps/` 平铺目录改为每插件独立的 `data_root()/deps/<插件名>/` 子目录（`bot/plugin/deps.py`：新增 `deps_root()`、`deps_dir(name)`，`ensure_in_sys_path(name)` 只注入本插件依赖目录）。消除两类风险：① 不同插件声明同名包的不同版本在共享目录互相覆盖（以最后安装者为准）；② 某插件声明的包在 `sys.path` 最前遮蔽框架内置同名包，影响整个进程。无依赖声明的插件不再注入任何 deps 目录（移除隐式共享依赖）。`manager.py` 加载/安装链路同步传插件名；新增 `test_ensure_dependencies_per_plugin_isolation` 覆盖隔离行为
+- **文档同步**：`PLUGIN_DEV.md` / `ARCHITECTURE.md` / `docs/PROJECT_STRUCTURE.md` 与 Plugins-SDK README 的依赖路径统一为 `data_root()/deps/<name>/` 并说明隔离语义（卸载不自动清理依赖目录）
+
 ## [1.16.0] - 2026-08-21（运行日志开关交互相馈与关闭计数清空修复）
 
 ### Fixed
