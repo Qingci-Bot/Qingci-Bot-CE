@@ -41,7 +41,7 @@ Qingci-Bot-CE/
 │   │   ├── composition.py  # 组合根：assemble_bot() 组件装配 + DI 注册（__init__ 不再手写装配）
 │   │   ├── bot.py          # Bot 主类；get_bot() 经 DI 容器解析（resolve_sync），无模块级单例
 │   │   ├── dispatcher.py   # 消息分发 + Matcher 调度（MessageContext 引 protocol.context）
-│   │   └── platforms/      # 多平台适配器：base.py（PlatformAdapter 契约）+ onebot11/onebot12/telegram
+│   │   └── platforms/      # 多平台适配器：base.py（PlatformAdapter 契约 + 高频动作便捷方法 + _api_action 动作名映射）+ onebot11/onebot12/telegram
 │   │                       #   OneBotConnection 实现契约作为「onebot」平台；回复按来源平台路由
 │   ├── alerter.py          # 错误告警器（ERROR 日志阈值 → 私聊通知管理员）
 │   ├── filter.py           # 敏感词过滤器（词库 + 打码）

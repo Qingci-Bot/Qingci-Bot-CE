@@ -1312,7 +1312,20 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 
 ### 常用 OneBot API
 
-通过 `self.connection.call_api(action, params)` 调用：
+通过 `self.connection.call_api(action, params)` 调用（任意 OneBot 标准动作透传）；高频群管理动作另有**便捷方法**（`self.connection.set_group_kick(...)` 等，OneBot 11/12 动作名自动映射，见下方）：
+
+| 便捷方法 | 参数 | 对应动作（v11 → v12） |
+|----------|------|------------------------|
+| `set_group_kick` | `group_id`, `user_id`, `reject_add_request=False` | `set_group_kick` → `group.kick` |
+| `set_group_ban` | `group_id`, `user_id`, `duration=0` | `set_group_ban` → `group.ban` |
+| `set_group_whole_ban` | `group_id`, `enable=True` | `set_group_whole_ban` → `group.whole_ban` |
+| `set_group_admin` | `group_id`, `user_id`, `enable=True` | `set_group_admin` → `group.set_admin` |
+| `set_group_card` | `group_id`, `user_id`, `card=''` | `set_group_card` → `group.set_card` |
+| `set_group_name` | `group_id`, `name` | `set_group_name` → `group.set_name` |
+| `get_group_member_list` | `group_id` | `get_group_member_list` → `group.get_member_list` |
+| `get_group_member_info` | `group_id`, `user_id` | `get_group_member_info` → `group.get_member_info` |
+
+> 便捷方法定义在 `bot.core.platforms.base.PlatformAdapter`，插件经注入的 `self.connection`（OneBot 11/12 适配器）直接调用；OneBot 12 由 `_api_action` 自动映射为 v12 点分动作名，插件无需区分平台。
 
 | Action | 参数 | 说明 |
 |--------|------|------|
@@ -1320,10 +1333,6 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 | `send_group_msg` | `group_id`, `message` | 发送群消息 |
 | `send_private_msg` | `user_id`, `message` | 发送私聊消息 |
 | `delete_msg` | `message_id` | 撤回消息 |
-| `get_group_member_list` | `group_id` | 获取群成员列表 |
-| `get_group_member_info` | `group_id`, `user_id` | 获取群成员信息 |
-| `set_group_kick` | `group_id`, `user_id` | 踢出群成员 |
-| `set_group_ban` | `group_id`, `user_id`, `duration` | 禁言 |
 | `group_poke` | `group_id`, `user_id` | 戳一戳 |
 
 ### 命令管理
