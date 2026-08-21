@@ -497,3 +497,46 @@ async def test_watcher_reloads_loaded_plugin():
     await watcher._reload_plugin("/tmp/plugins/simple/__init__.py")
 
     assert mgr.calls == []
+
+
+# ──────────────────────────────────────────────────────────────────
+# on_command 子指令 matcher 展开（on_load 运行时注册场景）
+# ──────────────────────────────────────────────────────────────────
+
+
+def test_expand_subcommand_matchers_on_load_registration():
+    """on_load 运行时注册的 on_command：子指令 matcher 随 parent 展开注册"""
+    from qingci_plugin_sdk.matcher import on_command
+
+    from bot.plugin.manager import _expand_subcommand_matchers
+
+    async def sub_handler(ctx):  # noqa: ANN001
+        return "sub"
+
+    parent = on_command("admin", subcommands={"ban": sub_handler})(lambda ctx: None)
+    assert parent.meta.get("sub_matchers"), "SDK 应在 parent.meta 挂载子指令 matcher"
+
+    matchers = [parent]
+    _expand_subcommand_matchers(matchers, "demo")
+    assert len(matchers) == 2
+    sub = matchers[1]
+    assert sub.meta.get("is_subcommand") is True
+    assert sub.meta["command"] == "admin ban"
+    assert sub.owner == "demo"
+    assert sub is parent.meta["sub_matchers"][0]
+
+
+def test_expand_subcommand_matchers_dedup():
+    """模块级场景：子 matcher 已被收集进列表时展开不重复"""
+    from qingci_plugin_sdk.matcher import on_command
+
+    from bot.plugin.manager import _expand_subcommand_matchers
+
+    async def sub_handler(ctx):  # noqa: ANN001
+        return "sub"
+
+    parent = on_command("admin", subcommands={"ban": sub_handler})(lambda ctx: None)
+    sub = parent.meta["sub_matchers"][0]
+    matchers = [parent, sub]  # 模拟模块级收集器已收集子 matcher
+    _expand_subcommand_matchers(matchers, "demo")
+    assert len(matchers) == 2

@@ -3298,7 +3298,7 @@ wheels = [
 
 [[package]]
 name = "qingci-bot-ce"
-version = "1.13.0"
+version = "1.16.2"
 source = { editable = "." }
 dependencies = [
     { name = "aiocqhttp" },
@@ -3380,7 +3380,7 @@ requires-dist = [
     { name = "pywebview", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qingci-bot-ce", extras = ["test", "build", "vector", "render"], marker = "extra == 'dev'" },
-    { name = "qingci-plugin-sdk", git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.0" },
+    { name = "qingci-plugin-sdk", git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
@@ -3391,8 +3391,8 @@ provides-extras = ["vector", "render", "test", "build", "dev"]
 
 [[package]]
 name = "qingci-plugin-sdk"
-version = "1.13.0"
-source = { git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.0#a4391adcfa64895fd118107782f2ac78d271df87" }
+version = "1.13.1"
+source = { git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.1#d0e2b8b56036ac63513ef17df17a9acb9095fbe8" }
 
 [[package]]
 name = "qtpy"

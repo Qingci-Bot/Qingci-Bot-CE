@@ -39,6 +39,27 @@ _MAX_ARCHIVE_BYTES = 200 * 1024 * 1024  # 下载上限 200MB
 _MAX_EXTRACT_BYTES = 1024 * 1024 * 1024  # 解压总量上限 1GB
 
 
+def _expand_subcommand_matchers(matchers: list[Matcher], owner: str) -> None:
+    """展开 on_command 子指令 matcher：parent.meta["sub_matchers"] → matchers
+
+    SDK 在 on_command 创建 parent 时把全部子指令 matcher 挂到
+    `parent.meta["sub_matchers"]`，覆盖两类注册场景：
+    - 模块级（import 阶段）：子 matcher 已被收集器收集进 matchers → 按对象 id
+      去重，避免双份；
+    - on_load 运行时注册：子 matcher 仅挂在 parent.meta → 随 parent 展开，
+      修复"父指令已排除子指令、子指令 matcher 又不注册"导致的子命令不触发。
+    """
+    known_ids = {id(m) for m in matchers}
+    for m in list(matchers):
+        for sub in m.meta.get("sub_matchers") or []:
+            if id(sub) in known_ids:
+                continue
+            if not sub.owner:
+                sub.owner = owner
+            matchers.append(sub)
+            known_ids.add(id(sub))
+
+
 class _ReloadRWLock:
     """热重载读写屏障：事件分发共享读、重载独占写
 
@@ -931,6 +952,9 @@ class PluginManager:
                     continue
                 m.owner = plugin.name
                 plugin.matchers.append(m)
+
+            # 展开 on_command 子指令 matcher（详见 _expand_subcommand_matchers）
+            _expand_subcommand_matchers(plugin.matchers, plugin.name)
 
             # 成功：设置状态为 LOADED
             plugin._status = PluginStatus.LOADED

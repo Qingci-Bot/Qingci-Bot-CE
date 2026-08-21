@@ -568,7 +568,11 @@ class QingciBot:
             if ctx.message_id:
                 segments.append(MessageSegment.reply(str(ctx.message_id)))
             segments.append(MessageSegment.mention(str(ctx.user_id)))
-            segments.append(MessageSegment.text(reply))
+            if isinstance(reply, str):
+                segments.append(MessageSegment.text(reply))
+            elif isinstance(reply, list):
+                # handler 返回的 v12 段数组（图片等多媒体）：拼在回复/提及之后
+                segments.extend(reply)
             message = segments
 
         # 按事件来源平台路由；未知平台回退主连接

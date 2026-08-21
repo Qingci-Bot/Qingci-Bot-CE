@@ -55,8 +55,18 @@ def _to_reply(result: Any, post_type: str) -> Any:
 
     事件事件保留原始类型的目的是让 request Matcher 返回的 bool（审批结果）
     可被上层正确识别。
+    消息事件：v12 段数组（list[dict]，每个元素含字符串 type 字段）原样透传，
+    使 handler 可直接返回图片/语音等多媒体段；其余标量统一 str 化。
     """
-    return str(result) if post_type == "message" else result
+    if post_type != "message":
+        return result
+    if (
+        isinstance(result, list)
+        and result
+        and all(isinstance(x, dict) and isinstance(x.get("type"), str) for x in result)
+    ):
+        return result
+    return str(result)
 
 
 class MessageDispatcher:
