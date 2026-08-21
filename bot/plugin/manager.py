@@ -738,14 +738,14 @@ class PluginManager:
         auto_install = bool(getattr(bot.config.bot, "auto_install_plugin_deps", True))
         for module_name in plugins_to_load:
             module_path = f"plugins.{module_name}"
-            # 目录型插件：加载前确保其第三方依赖已装到实例 deps 目录并注入 sys.path
+            # 目录型插件：加载前确保其第三方依赖已装到该插件独立的 deps 子目录并注入 sys.path
             plugin_dir = directory / module_name
             if plugin_dir.is_dir() and (plugin_dir / "__init__.py").is_file():
                 try:
                     if auto_install:
                         await ensure_dependencies(plugin_dir)
                     else:
-                        ensure_in_sys_path()
+                        ensure_in_sys_path(plugin_dir.name)
                 except Exception:
                     logger.exception(f"确保插件 {module_name} 依赖失败")
             try:
@@ -1289,7 +1289,7 @@ class PluginManager:
             return False
 
         # 自动安装依赖（requirements.txt / plugin.json 的 requirements 字段，
-        # 装入实例隔离的 deps 目录而非全局环境）
+        # 装入该插件独立的 deps/<name>/ 子目录而非全局环境）
         await ensure_dependencies(target_dir)
 
         # 确保 plugins 父目录在 sys.path（与 load_external_dir 一致），

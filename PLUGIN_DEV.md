@@ -262,7 +262,7 @@ async def on_load(self):
 {"name": "my_plugin", "requirements": ["httpx>=0.27", "jieba"]}
 ```
 
-加载时 `PluginManager` 自动把依赖安装到**当前实例隔离**的依赖目录（`data_root()/deps/`，实例模式下为 `instances/<name>/data/deps/`），并把该目录注入 `sys.path`，插件可直接 `import` 其专属依赖，不污染主程序环境：
+加载时 `PluginManager` 自动把依赖安装到**当前实例隔离 + 每插件独立**的依赖目录（`data_root()/deps/<插件名>/`，实例模式下为 `instances/<name>/data/deps/<插件名>/`），并把该插件自己的依赖目录注入 `sys.path`，插件可直接 `import` 其声明的依赖，不污染主程序环境：
 
 ```python
 # plugins/my_plugin/__init__.py
@@ -272,6 +272,8 @@ import httpx  # requirements.txt 声明后可直接使用
 class MyPlugin(PluginBase):
     name = "my_plugin"
 ```
+
+> **注意**：依赖按插件隔离在 `deps/<插件名>/` 子目录（非共享平铺），因此不同插件声明**同一包的不同版本**互不影响，也不会遮蔽框架内置包（某插件声明的包只对该插件可见）。卸载插件时不自动删除其依赖目录（与插件数据目录一致，保留以防重装）；需要清理可手动删除 `data_root()/deps/<插件名>/`。
 
 **依赖安装规则：**
 - 声明内容未变化时跳过安装（按内容哈希幂等），`requirements.txt` 变更才触发重装
@@ -1305,7 +1307,7 @@ ok = await bot.plugin_manager.install(
 ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=True)
 ```
 
-安装流程：拉取到 `plugins/<name>/` → 自动安装 `requirements.txt`（或 `plugin.json` 的 `requirements` 字段）声明的 Python 依赖到实例隔离的 `data_root()/deps/` 目录 → 加载插件。来源支持 git 仓库、HTTP 指向 zip/tar 的归档、本地目录或归档文件。
+安装流程：拉取到 `plugins/<name>/` → 自动安装 `requirements.txt`（或 `plugin.json` 的 `requirements` 字段）声明的 Python 依赖到实例隔离的 `data_root()/deps/<name>/` 目录 → 加载插件。来源支持 git 仓库、HTTP 指向 zip/tar 的归档、本地目录或归档文件。
 
 ### 常用 OneBot API
 

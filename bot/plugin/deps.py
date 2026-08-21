@@ -28,8 +28,13 @@ logger = logging.getLogger("qingci-bot.plugin.deps")
 _INSTALL_TIMEOUT = 300
 
 
-def deps_dir() -> Path:
-    """返回实例隔离的插件依赖目录（自动创建）"""
+def deps_root() -> Path:
+    """返回实例隔离的插件依赖根目录（自动创建）
+
+    依赖按插件隔离到 `deps/<plugin_name>/` 子目录，避免跨插件同名不同版本
+    互相覆盖、以及某插件声明的包遮蔽框架内置包；`deps_root()` 本身仅承载
+    安装标记（`.installed/`）。
+    """
     from ..paths import data_root
 
     d = data_root() / "deps"
@@ -37,9 +42,16 @@ def deps_dir() -> Path:
     return d
 
 
-def ensure_in_sys_path() -> None:
-    """把 deps 目录加入 sys.path（幂等），供插件 import 其第三方依赖"""
-    d = deps_dir()
+def deps_dir(name: str) -> Path:
+    """返回指定插件的专属依赖目录（`deps/<name>/`，自动创建）"""
+    d = deps_root() / name
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def ensure_in_sys_path(name: str) -> None:
+    """把指定插件的依赖目录加入 sys.path（幂等），供该插件 import 其第三方依赖"""
+    d = deps_dir(name)
     if str(d) not in sys.path:
         sys.path.insert(0, str(d))
 
@@ -90,39 +102,41 @@ def _hash_requirements(reqs: list[str]) -> str:
 
 
 def _marker_path(name: str) -> Path:
-    return deps_dir() / ".installed" / f"{name}.hash"
+    return deps_root() / ".installed" / f"{name}.hash"
 
 
 async def ensure_dependencies(directory: Path) -> list[str]:
-    """确保插件目录声明的第三方依赖已安装到实例 deps 目录
+    """确保插件目录声明的第三方依赖已安装到该插件独立的 deps 子目录
 
     返回声明的依赖列表；安装失败时记录警告但不抛异常（插件加载时
     若确实缺依赖会以 ImportError 呈现，便于重试）。
     """
     reqs = read_requirements(directory)
-    ensure_in_sys_path()
     if not reqs:
         return []
+    name = directory.name
 
     # 过滤 pip 选项注入后，声明与安装使用同一份净化列表
     reqs = _sanitize_requirements(reqs)
     want = _hash_requirements(reqs)
-    marker = _marker_path(directory.name)
+    marker = _marker_path(name)
     if marker.is_file() and marker.read_text(encoding="utf-8").strip() == want:
+        ensure_in_sys_path(name)
         return reqs
 
-    ok = await _install(reqs)
+    ok = await _install(reqs, deps_dir(name))
     if ok:
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(want, encoding="utf-8")
     else:
-        logger.warning(f"插件 {directory.name} 依赖安装失败，插件可能无法正常工作")
+        logger.warning(f"插件 {name} 依赖安装失败，插件可能无法正常工作")
+    # 无论成败都注入 sys.path：失败时用户手动补装依赖后立即生效
+    ensure_in_sys_path(name)
     return reqs
 
 
-async def _install(reqs: list[str]) -> bool:
-    """把依赖安装到 deps 目录（按运行模式选择安装器）"""
-    target = deps_dir()
+async def _install(reqs: list[str], target: Path) -> bool:
+    """把依赖安装到指定插件的 deps 子目录（按运行模式选择安装器）"""
     if getattr(sys, "frozen", False):
         return await _install_frozen(target, reqs)
     # 源码模式：优先 uv（Qingci 的 uv venv 默认不带 pip），其次 python -m pip

@@ -38,10 +38,10 @@ def test_read_requirements_empty(tmp_path):
 def test_ensure_dependencies_idempotent(tmp_path, monkeypatch):
     set_data_root(tmp_path)
     plugin_dir = _make_plugin(tmp_path, "requests\n")
-    calls: list[list[str]] = []
+    calls: list[tuple[list[str], Path]] = []
 
-    async def fake_install(reqs):
-        calls.append(reqs)
+    async def fake_install(reqs, target):
+        calls.append((reqs, target))
         return True
 
     monkeypatch.setattr(deps, "_install", fake_install)
@@ -49,8 +49,10 @@ def test_ensure_dependencies_idempotent(tmp_path, monkeypatch):
     got = asyncio.run(deps.ensure_dependencies(plugin_dir))
     assert got == ["requests"]
     assert len(calls) == 1
-    # deps 目录已注入 sys.path
-    assert str(deps.deps_dir()) in sys.path
+    # 安装目标是该插件专属的 deps 子目录（非共享平铺目录）
+    assert calls[0][1] == deps.deps_dir("dummy_plugin")
+    # 该插件专属的 deps 子目录已注入 sys.path
+    assert str(deps.deps_dir("dummy_plugin")) in sys.path
 
     # 内容未变 → 幂等跳过（不再触发安装）
     got2 = asyncio.run(deps.ensure_dependencies(plugin_dir))
@@ -61,14 +63,42 @@ def test_ensure_dependencies_idempotent(tmp_path, monkeypatch):
     (plugin_dir / "requirements.txt").write_text("requests\nhttpx\n", encoding="utf-8")
     asyncio.run(deps.ensure_dependencies(plugin_dir))
     assert len(calls) == 2
-    assert calls[-1] == ["requests", "httpx"]
+    assert calls[-1][0] == ["requests", "httpx"]
+
+
+def test_ensure_dependencies_per_plugin_isolation(tmp_path, monkeypatch):
+    """不同插件安装到各自独立的 deps 子目录，互不共享"""
+    set_data_root(tmp_path)
+    plugin_a = tmp_path / "plugin_a"
+    plugin_a.mkdir(parents=True, exist_ok=True)
+    (plugin_a / "requirements.txt").write_text("requests\n", encoding="utf-8")
+    plugin_b = tmp_path / "plugin_b"
+    plugin_b.mkdir(parents=True, exist_ok=True)
+    (plugin_b / "requirements.txt").write_text("aiohttp\n", encoding="utf-8")
+
+    targets: list[Path] = []
+
+    async def fake_install(reqs, target):
+        targets.append(target)
+        return True
+
+    monkeypatch.setattr(deps, "_install", fake_install)
+
+    asyncio.run(deps.ensure_dependencies(plugin_a))
+    asyncio.run(deps.ensure_dependencies(plugin_b))
+
+    assert targets == [deps.deps_dir("plugin_a"), deps.deps_dir("plugin_b")]
+    assert targets[0] != targets[1]
+    # 各自目录均注入 sys.path
+    assert str(deps.deps_dir("plugin_a")) in sys.path
+    assert str(deps.deps_dir("plugin_b")) in sys.path
 
 
 def test_ensure_dependencies_install_failure(tmp_path, monkeypatch):
     set_data_root(tmp_path)
     plugin_dir = _make_plugin(tmp_path, "requests\n")
 
-    async def fake_install(reqs):
+    async def fake_install(reqs, target):
         return False
 
     monkeypatch.setattr(deps, "_install", fake_install)

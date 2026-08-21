@@ -119,7 +119,7 @@ Qingci-Bot-CE/
 │       ├── base.py             # 兼容再导出（指向 protocol/base.py）
 │       ├── manager.py          # 插件管理器（热加载 + 模块级收集 + SDK data_root 重定向）
 │       ├── market.py           # 插件市场：索引拉取/缓存 + 安装/更新编排
-│       ├── deps.py             # 插件第三方依赖自动安装（data_root()/deps + sys.path 注入）
+│       ├── deps.py             # 插件第三方依赖自动安装（data_root()/deps/<name>/ 按插件隔离 + sys.path 注入）
 │       ├── _proc.py            # 子进程公共标志（Windows 隐藏控制台窗口）
 │       ├── ssrf.py             # SSRF 防护（插件网络请求目标校验）
 │       ├── matcher.py          # 兼容再导出（指向 protocol/matcher.py）

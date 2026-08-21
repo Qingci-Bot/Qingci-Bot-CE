@@ -67,7 +67,7 @@ Qingci-Bot-CE/
 │   │   ├── events.py       # 兼容再导出（指向 protocol/events.py）
 │   │   ├── manager.py      # 插件加载/卸载/依赖/元数据 + SDK data_root 实例重定向
 │   │   ├── market.py       # 插件市场：索引拉取/缓存 + 安装/更新编排
-│   │   ├── deps.py         # 插件第三方依赖自动安装（data_root()/deps + sys.path 注入）
+│   │   ├── deps.py         # 插件第三方依赖自动安装（data_root()/deps/<name>/ 按插件隔离 + sys.path 注入）
 │   │   ├── _proc.py        # 子进程公共标志（Windows 隐藏控制台窗口 CREATE_NO_WINDOW）
 │   │   ├── ssrf.py         # SSRF 防护（插件网络请求目标校验）
 │   │   ├── webapi.py       # 插件级 Web API 适配器（register_api → /api/plugin-web/<name>/）
