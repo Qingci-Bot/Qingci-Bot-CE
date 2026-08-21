@@ -78,8 +78,12 @@ try {
 
     function Invoke-PlaywrightInstall {
         param([string[]]$Flags)
+        # CI=1 makes Playwright suppress its ANSI progress bar (which renders as
+        # mojibake in Windows PowerShell) and print a single line per download.
+        $env:CI = "1"
         # stream stdout/stderr to the console, and only return the real exit code
         & $Python -m playwright install chromium @Flags 2>&1
+        Remove-Item Env:CI -ErrorAction SilentlyContinue
         return $LASTEXITCODE
     }
 
