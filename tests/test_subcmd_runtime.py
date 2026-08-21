@@ -1,7 +1,5 @@
 """on_load 运行时注册的 on_command 子指令端到端验证（对应 shiguang 子命令场景）"""
 
-import pytest
-
 
 async def test_on_load_subcommand_matchers_registered_and_dispatched(bot):
     """on_load 内注册的 on_command(subcommands)：子 matcher 随 parent 展开并正确路由"""
