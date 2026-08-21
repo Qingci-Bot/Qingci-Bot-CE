@@ -59,9 +59,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "playwright not importable" }
 
     $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $AppDir "ms-playwright"
-    if (-not $env:PLAYWRIGHT_DOWNLOAD_HOST) {
-        $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://npmmirror.com/mirrors/playwright"
-    }
+    # 无条件强制 npmmirror 镜像源（不能用"仅为空时设置"，否则环境里残留的旧 host
+    # 如已废弃的 playwright.azureedge.net 会劫走下载并全部 400）。npmmirror 经
+    # 覆盖 & playwright 支持通过 PLAYWRIGHT_DOWNLOAD_HOST 覆盖默认 CDN。
+    $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://npmmirror.com/mirrors/playwright"
     function Invoke-PlaywrightInstall {
         param([string[]]$Flags)
         & $Python -m playwright install chromium @Flags
@@ -78,7 +79,7 @@ try {
     }
     if ($installCode -ne 0) {
         Write-Warning "    完整 chromium 亦失败，回退官方源重试 --only-shell ..."
-        $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://playwright.azureedge.net"
+        $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://cdn.playwright.dev"
         $installCode = Invoke-PlaywrightInstall @("--only-shell")
     }
     if ($installCode -ne 0) { throw "playwright install chromium 全部重试失败 (exit=$installCode)" }
