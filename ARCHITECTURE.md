@@ -76,7 +76,7 @@ Qingci-Bot-CE/
 │   ├── alerter.py             # 错误告警器（ERROR 日志阈值 → 私聊通知管理员）
 │   ├── filter.py              # 敏感词过滤器（词库 + 打码）
 │   ├── broadcast.py           # 消息广播（WS 实时推送 broker）
-│   ├── logformat.py           # 结构化 JSON 日志 + 文件轮转
+│   ├── logformat.py           # 结构化 JSON 日志 + 文件轮转 + 运行日志采集（RunLogHandler 环形缓冲）
 │   ├── html_renderer.py       # HTML → 图片渲染服务（Playwright 无头 Chromium，可选依赖）
 │   ├── core/
 │   │   ├── bot.py             # Bot 主类（生命周期、事件调度、全局钩子）
@@ -118,6 +118,10 @@ Qingci-Bot-CE/
 │       │   └── events.py       # 类型化事件（notice/request）
 │       ├── base.py             # 兼容再导出（指向 protocol/base.py）
 │       ├── manager.py          # 插件管理器（热加载 + 模块级收集 + SDK data_root 重定向）
+│       ├── market.py           # 插件市场：索引拉取/缓存 + 安装/更新编排
+│       ├── deps.py             # 插件第三方依赖自动安装（data_root()/deps + sys.path 注入）
+│       ├── _proc.py            # 子进程公共标志（Windows 隐藏控制台窗口）
+│       ├── ssrf.py             # SSRF 防护（插件网络请求目标校验）
 │       ├── matcher.py          # 兼容再导出（指向 protocol/matcher.py）
 │       ├── rule.py             # 兼容再导出（指向 protocol/rule.py）
 │       ├── permission.py       # 兼容再导出（指向 protocol/permission.py）

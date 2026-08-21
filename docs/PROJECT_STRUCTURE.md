@@ -46,7 +46,7 @@ Qingci-Bot-CE/
 │   ├── alerter.py          # 错误告警器（ERROR 日志阈值 → 私聊通知管理员）
 │   ├── filter.py           # 敏感词过滤器（词库 + 打码）
 │   ├── broadcast.py        # 消息广播（WS 实时推送 broker）
-│   ├── logformat.py        # 结构化 JSON 日志 + 文件轮转
+│   ├── logformat.py        # 结构化 JSON 日志 + 文件轮转 + 运行日志采集（RunLogHandler，经 /api/ws/runlog 推送）
 │   ├── html_renderer.py    # HTML → 图片渲染服务（Playwright 无头 Chromium，可选依赖）
 │   ├── plugin/             # 插件系统
 │   │   ├── protocol/       # 插件协议层（薄转发 SDK，唯一实现来源为 Plugins-SDK）
@@ -69,6 +69,7 @@ Qingci-Bot-CE/
 │   │   ├── market.py       # 插件市场：索引拉取/缓存 + 安装/更新编排
 │   │   ├── deps.py         # 插件第三方依赖自动安装（data_root()/deps + sys.path 注入）
 │   │   ├── _proc.py        # 子进程公共标志（Windows 隐藏控制台窗口 CREATE_NO_WINDOW）
+│   │   ├── ssrf.py         # SSRF 防护（插件网络请求目标校验）
 │   │   ├── webapi.py       # 插件级 Web API 适配器（register_api → /api/plugin-web/<name>/）
 │   │   ├── llm_tool.py     # @llm_tool 插件级 LLM 工具声明（注册到 ToolRegistry 的运行时逻辑，保留在本仓库）
 │   │   ├── watcher.py      # 插件自动热重载监听

@@ -19,10 +19,14 @@ npm run build    # 构建生产版本到 web/dist/
 | LLM 配置 | `/config` | 提供商切换（联动 api_url/model）、模型列表拉取、人格管理、MCP 服务器配置、连接测试 |
 | 对话调试台 | `/lab` | 无需进入 QQ 即可流式测试 LLM 回复；独立会话 key，不污染真实对话（走 `/api/ws/chat`） |
 | 群配置 | `/groups` | 各群 Bot 开关与触发模式 |
-| 插件管理 | `/plugins` | 插件列表 / 详情 / 重载 / 加载外部插件 / 卸载 / 禁用 / 启用 |
+| 插件管理 | `/plugins` | 插件列表 / 详情 / 重载 / 加载外部插件 / 卸载 / 禁用 / 启用；内含「命令管理」Tab 与「插件市场」 |
 | 消息日志 | `/logs` | 实时消息流 + 会话记录可视化（按会话分组查看/删除，支持清理与 CSV 导出） |
-| 系统设置 | `/settings` | 服务端/浏览器 API Key 配置 |
+| 运行日志 | `/runlog` | 实时运行日志流 + 级别过滤（受 `log.run_log_enabled` 开关控制；关闭后页面提示无数据，走 `/api/ws/runlog`） |
+| 系统设置 | `/settings` | Bot/OneBot/平台适配器配置、服务端/浏览器 API Key、运行日志采集开关、数据库备份、登录审计 |
+| 实例管理 | `/instances` | 新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用） |
+| 关于 | `/about` | 版本信息 |
 | 登录 | `/login` | API Key 登录（服务端已配置 `api_key` 时显示） |
+| 首次启动向导 | `/setup` | 首次启动引导（配置未完成时自动跳转） |
 
 ---
 
@@ -1395,6 +1399,9 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 | POST | `/llm/models` | 是 | 查询提供商可用模型列表（按 provider 调用对应 API，10s 超时，失败 400 透传原因） |
 | GET | `/onebot` | 是 | 获取 OneBot 配置 |
 | POST | `/llm/test` | 是 | 测试 LLM 连接（返回 `{available, message}`） |
+| GET | `/wizard/status` | 否 | 首次启动向导状态（`needs_setup`） |
+| POST | `/wizard` | 否 | 提交首次启动配置（仅未完成向导时可用） |
+| POST | `/wizard/skip` | 否 | 跳过首次启动向导 |
 
 ### 插件管理 `/api/plugin`
 
@@ -1411,6 +1418,18 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 | GET | `/{name}/config` | 是 | 获取插件配置 JSON Schema 与当前值（用于自动渲染配置表单） |
 | PUT | `/{name}/config` | 是 | 更新插件配置（写入 config.yaml 并应用到插件实例） |
 | GET | `/discover/metadata` | 是 | 无导入发现：扫描插件目录根层 `.py` 文件旁的同名 `plugin.json`（文件型插件） |
+
+### 插件市场 `/api/plugins/market`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | `` | 是 | 拉取市场索引（含缓存 TTL） |
+| GET | `/info` | 是 | 市场源信息（url / mirror / 更新时间） |
+| POST | `/install` | 是 | 安装市场插件（按 `name`） |
+| POST | `/update` | 是 | 更新已安装插件 |
+| POST | `/refresh` | 是 | 强制刷新索引缓存 |
+| GET | `/source` | 是 | 获取当前市场源 |
+| PUT | `/source` | 是 | 修改市场源（url / mirror_url） |
 
 ### 命令管理 `/api/command`
 
@@ -1440,6 +1459,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 | GET | `/list` | 是 | 群配置列表 |
 | GET | `/{group_id}` | 是 | 获取单群配置 |
 | PUT | `/{group_id}` | 是 | 更新群配置（Bot 开关等） |
+| DELETE | `/{group_id}` | 是 | 删除群配置（带审计埋点） |
 
 ### 登录与鉴权 `/api/auth`
 
@@ -1460,12 +1480,23 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 |------|------|------|------|
 | GET | `/logs` | 是 | 审计日志倒序查询（配置变更 / 启停 / 登录 / 备份等） |
 
+### 实例管理 `/api/instances`
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | `` | 是 | 实例列表（含端口、主平台、数据占用） |
+| POST | `` | 是 | 创建实例（指定名称与主平台） |
+| DELETE | `/{name}` | 是 | 删除实例 |
+| PUT | `/{name}` | 是 | 重命名实例（同步重命名目录与 instance.json） |
+| POST | `/{name}/start` | 是 | 切换/启动到指定实例（跨进程重启） |
+
 ### WebSocket
 
 | 路径 | 鉴权 | 说明 |
 |------|------|------|
-| `/api/ws/log` | `token` 查询参数 | 实时推送消息记录，连接后自动接收新消息；60s 心跳保活（90s 无消息断开），连接数上限 32 |
-| `/api/ws/chat` | `token` 查询参数 | 对话调试台：客户端发送 `{"message": "...", "user_id": 900000001}`，服务端逐块返回 `{"type":"delta","text":...}`，结束返回 `{"type":"done"}`；流式调用 LLM，独立连接池（上限 32） |
+| `/api/ws/log` | `token` 查询参数或 `sec-websocket-protocol: api-key.<key>` 子协议 | 实时推送消息记录，连接后自动接收新消息；60s 心跳保活（90s 无消息断开），连接数上限 32 |
+| `/api/ws/chat` | 同上 | 对话调试台：客户端发送 `{"message": "...", "user_id": 900000001}`，服务端逐块返回 `{"type":"delta","text":...}`，结束返回 `{"type":"done"}`；流式调用 LLM，独立连接池（上限 32） |
+| `/api/ws/runlog` | 同上 | 运行日志：连接即回发环形缓冲快照（`{"type":"snapshot"}`），随后实时推送 `{"type":"log"}` 条目；30s 心跳保活 |
 
 ---
 
@@ -1486,15 +1517,15 @@ cd web; npm install; npm run build; cd ..
 
 > `instances/` 目录已被 `.gitignore` 忽略（其中的 `config.yaml` 可能含密钥）。新克隆的仓库中没有该目录，首次启动会自动创建 `default` 实例并生成其 `config.yaml`；如需预先配置，可参考 `config.example.yaml` 在 `instances/default/config.yaml` 中填写。
 
-产物位于 `dist\qingci-bot\`：
+产物位于 `dist\qingci-bot-ce\`：
 
 ```
-dist\qingci-bot\
-├── qingci-bot.exe        # 主程序（带控制台，日志直接可见）
-├── _internal\            # Python 运行时与依赖（勿动）
-├── ms-playwright\        # 内置 Playwright 无头浏览器（build.ps1 下载，HTML 渲染用）
-├── web\dist\             # Web UI 静态资源（build.ps1 复制）
-└── instances\            # 实例目录（首次启动自动创建 default 实例，含 config.yaml/plugins/data）
+dist\qingci-bot-ce\
+├── qingci-bot-ce.exe       # 主程序（windowed 无控制台窗口；日志请开启文件日志）
+├── _internal\              # Python 运行时与依赖（勿动）
+├── ms-playwright\          # 内置 Playwright 无头浏览器（build.ps1 下载，HTML 渲染用）
+├── web\dist\               # Web UI 静态资源（build.ps1 复制）
+└── instances\              # 实例目录（首次启动自动创建 default 实例，含 config.yaml/plugins/data）
 ```
 
 > 自 v1.5.1 起配置/插件/数据已收敛到 `instances\<name>\` 自包含目录，构建产物不再生成根级 `config.yaml` 或 `data\`。用户数据（配置、插件、数据库、日志）均按实例隔离，随实例目录一起分发。
@@ -1504,9 +1535,9 @@ dist\qingci-bot\
 ### 运行
 
 ```powershell
-.\dist\qingci-bot\qingci-bot.exe              # Bot + API 服务
-.\dist\qingci-bot\qingci-bot.exe --no-bot     # 仅 API / Web UI
-.\dist\qingci-bot\qingci-bot.exe --port 9000  # 指定端口
+.\dist\qingci-bot-ce\qingci-bot-ce.exe              # Bot + API 服务
+.\dist\qingci-bot-ce\qingci-bot-ce.exe --no-bot     # 仅 API / Web UI
+.\dist\qingci-bot-ce\qingci-bot-ce.exe --port 9000  # 指定端口
 ```
 
 启动后访问 `http://127.0.0.1:8080/ui/`。
@@ -1515,8 +1546,8 @@ dist\qingci-bot\
 
 ### 注意事项
 
-- 实例目录 `instances\` 按 **exe 所在目录** 相对定位（`app_root`）：分发时整个 `dist\qingci-bot\` 目录一起拷贝，勿单独移动 exe。
+- 实例目录 `instances\` 按 **exe 所在目录** 相对定位（`app_root`）：分发时整个 `dist\qingci-bot-ce\` 目录一起拷贝，勿单独移动 exe。
 - 首次运行自动创建 `instances\default\` 实例并生成默认 `config.yaml`；数据库自动建表（SQLModel create_all）。
 - 重新执行 `build.ps1` 不会覆盖 `instances\` 中已有的实例配置与数据（用户数据始终保留在实例目录内）。
 - `--desktop` 桌面模式依赖系统 WebView2 运行时（pywebview EdgeChromium 后端），未安装的系统可能无法打开窗口。
-- 如需无控制台窗口模式，将 `qingci-bot-ce.spec` 中 `console=True` 改为 `False` 后重新构建。
+- 当前产物为 **windowed 无控制台** 模式（`qingci-bot-ce.spec` 中 `console=False`），日志不直接可见，建议开启文件日志（`log.log_file_enabled: true`）；如需控制台窗口排障，将 `console` 改为 `True` 后重新构建。

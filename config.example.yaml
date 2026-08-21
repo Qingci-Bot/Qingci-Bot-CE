@@ -14,6 +14,8 @@ bot:
   user_blacklist: []           # 用户黑名单
   log_json: false
   wizard_skipped: false        # 是否跳过了首次配置引导
+  auto_install_plugin_deps: true  # 自动安装插件声明的第三方依赖到实例隔离 deps 目录
+                                  # （关闭可降低供给链风险，但依赖缺失时插件会加载失败）
 onebot:
   enabled: true                # 是否启动 OneBot 反向 WS 服务端（Telegram 主平台实例可设为 false）
   host: 127.0.0.1
@@ -110,6 +112,8 @@ log:
   log_dir: logs                # 日志目录（相对路径基于 app_root）
   retention_days: 0            # 数据保留天数：messages/sessions/usage_logs/audit_logs
                                # 超过保留期的记录每天自动清理（0=不清理，保留全部）
+  record_all_messages: true    # 框架级消息记录/广播：全量收发消息写库 + WS 实时推送
+                               # （关闭后仅内置 chat 的 LLM 对话记录）
   run_log_enabled: true        # 运行日志采集：WebUI"运行日志"页实时查看（关闭后无数据）
 api_key: ''                   # WebUI/API 鉴权密钥；留空仅本机(127.0.0.1)免鉴权，
                               # 局域网/公网访问必须配置（0.0.0.0 监听时非本机请求会被拒绝）

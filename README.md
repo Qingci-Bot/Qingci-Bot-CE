@@ -24,7 +24,7 @@
 - **增强能力**：AI 图片生成、轻量知识库（关键词检索零依赖；向量检索需可选依赖 lancedb）、会话摘要（历史裁剪）、Function Calling（内置时间/一言/群事件查询工具）、MCP 服务器接入、定时任务调度器、LLM 用量统计
 - **HTML 渲染服务**：基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG（可选依赖 `[render]`），供签到卡等「HTML 模板 → 图片消息」插件复用；playwright 未安装/浏览器缺失时自动降级不可用，不影响框架启动
 - **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式），支持在线备份与消息 CSV 导出
-- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板 + 插件市场一键安装/更新/搜索）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 登录审计 / 系统设置。独立「实例管理」页面支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）
+- **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板 + 插件市场一键安装/更新/搜索）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 运行日志（实时日志流 + 级别过滤，受 `log.run_log_enabled` 开关控制）/ 登录审计 / 系统设置。独立「实例管理」页面支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）
 - **桌面应用**：PyWebView 套壳 + 系统托盘（关闭窗口自动驻留后台）；启动时显示即时加载画面，重型模块延迟导入，双击 exe 后无感知等待
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖；litellm 延迟导入，启动不加载重型依赖
 
@@ -265,7 +265,7 @@ LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不�
 |------|------|--------|
 | `--no-bot` | 仅启动 API 服务 | - |
 | `--desktop` | 启动桌面应用 | - |
-| `--port` | API 端口 | 8080 |
+| `--port` | API 端口 | 实例元数据端口（首个实例 8080，后续递增） |
 | `--host` | API 监听地址 | 127.0.0.1 |
 | `--config` | 配置文件路径 | 实例内 `config.yaml` |
 | `--instance` | 启动到指定实例（`instances/<name>/` 自包含目录） | 默认实例 |
@@ -317,7 +317,7 @@ api_key: your-secret-key
   - `GET /api/auth/status`、`POST /api/auth/login`（登录与鉴权状态）
   - `GET /api/config/wizard/status`、`POST /api/config/wizard`、`POST /api/config/wizard/skip`（首次启动向导）
 - 在 Web UI 的「系统设置」页面可同时配置服务端 Key 和浏览器端 Key
-- WebSocket（`/api/ws/log`、`/api/ws/chat`）通过 `token` 查询参数鉴权，方式同上
+- WebSocket（`/api/ws/log`、`/api/ws/chat`、`/api/ws/runlog`）通过 `token` 查询参数或 `sec-websocket-protocol: api-key.<key>` 子协议鉴权，方式同上
 
 ## 配置文件说明
 
@@ -334,6 +334,7 @@ bot:
   group_blacklist: []              # 群黑名单（平台无关字符串标识）
   user_blacklist: []               # 用户黑名单
   log_json: false                  # 结构化 JSON 日志（false 使用普通文本日志）
+  auto_install_plugin_deps: true   # 自动安装插件声明的第三方依赖（关闭以降低供给链风险）
 onebot:
   enabled: true                    # 是否启动 OneBot 反向 WS 服务端（Telegram/OneBot 12 主平台实例可设为 false）
   host: 127.0.0.1
@@ -427,7 +428,11 @@ log:
   log_file_max_bytes: 10485760     # 单文件最大字节数（默认 10 MB）
   log_file_backup_count: 5         # 保留备份数
   log_dir: logs                    # 日志目录（相对项目根目录）
+  retention_days: 0                # 数据保留天数（messages/usage/audit/sessions 超期自动清理；0=不清理）
+  record_all_messages: true        # 框架级消息记录/广播（关闭后仅内置 chat 的 LLM 对话写库）
+  run_log_enabled: true            # 运行日志采集（关闭后 WebUI「运行日志」页无数据）
 api_key: ''                        # API 鉴权密钥
+lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 ```
 
 ## 进阶功能说明（功能开关均默认关闭）

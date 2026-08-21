@@ -36,12 +36,12 @@
 
 ### 版本号管理
 
-升级版本号时**不要手动逐文件修改**，使用统一脚本一次同步三处来源：
-`pyproject.toml`（打包/CI 读取）、`bot/__init__.py`（`__version__`，后端 `/api/bot/status` 及 Web 关于页据此动态显示）、`web/package.json`（前端构建）。
+升级版本号时**不要手动逐文件修改**，使用统一脚本一次同步五处文件：
+`pyproject.toml`（打包/CI 读取）、`bot/__init__.py`（`__version__`，后端 `/api/bot/status` 及 Web 关于页据此动态显示）、`web/package.json`（前端构建）与 `web/package-lock.json`（含 `packages` 两处）。
 
 ```bash
-python scripts/bump_version.py 1.7.0      # 从单一输入同步升级三处
-python scripts/bump_version.py --check    # 提交前自查三处是否一致（防止漏改）
+python scripts/bump_version.py 1.16.0     # 从单一输入同步升级全部版本字段
+python scripts/bump_version.py --check    # 提交前自查各处是否一致（防止漏改）
 ```
 
 任一文件缺失版本字段、版本格式非法时脚本会明确报错，绝不静默漏改。升级版本后请同步更新 `CHANGELOG.md`（Keep a Changelog 风格）。
@@ -93,8 +93,10 @@ npm run format    # 代码格式化
 
 ```bash
 uv pip install -e ".[build]"
-pyinstaller qingci-bot-ce.spec
+.\build.ps1        # 一键打包（含 Web UI 构建、SDK -e 安装、Playwright 浏览器下载）
 ```
+
+> 构建详见 [PLUGIN_DEV.md](PLUGIN_DEV.md)「打包为 exe」与 `build.ps1`；直接执行 `pyinstaller qingci-bot-ce.spec` 也能出包，但缺少 Web UI 产物复制与浏览器下载步骤。
 
 ## 项目结构
 
