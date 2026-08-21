@@ -47,6 +47,7 @@ Qingci-Bot-CE/
 │   ├── filter.py           # 敏感词过滤器（词库 + 打码）
 │   ├── broadcast.py        # 消息广播（WS 实时推送 broker）
 │   ├── logformat.py        # 结构化 JSON 日志 + 文件轮转 + 运行日志采集（RunLogHandler，经 /api/ws/runlog 推送）
+│   ├── logredact.py        # 日志脱敏（API Key / token 打码）
 │   ├── html_renderer.py    # HTML → 图片渲染服务（Playwright 无头 Chromium，可选依赖）
 │   ├── plugin/             # 插件系统
 │   │   ├── protocol/       # 插件协议层（薄转发 SDK，唯一实现来源为 Plugins-SDK）

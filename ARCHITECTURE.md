@@ -77,6 +77,7 @@ Qingci-Bot-CE/
 │   ├── filter.py              # 敏感词过滤器（词库 + 打码）
 │   ├── broadcast.py           # 消息广播（WS 实时推送 broker）
 │   ├── logformat.py           # 结构化 JSON 日志 + 文件轮转 + 运行日志采集（RunLogHandler 环形缓冲）
+│   ├── logredact.py           # 日志脱敏（API Key / token 打码）
 │   ├── html_renderer.py       # HTML → 图片渲染服务（Playwright 无头 Chromium，可选依赖）
 │   ├── core/
 │   │   ├── bot.py             # Bot 主类（生命周期、事件调度、全局钩子）
@@ -96,6 +97,7 @@ Qingci-Bot-CE/
 │   │   ├── litellm_adapter.py # litellm 实现（100+ 提供商）
 │   │   ├── manager.py         # 会话管理 + Token 裁剪 + 摘要 + 持久化
 │   │   ├── tools.py           # Function Calling 工具注册表
+│   │   ├── events_tools.py    # 类型化事件缓冲 + 事件查询 LLM 工具
 │   │   └── mcp.py             # MCP 服务器接入（stdio/HTTP）
 │   ├── rag/
 │   │   └── knowledge.py       # 知识库（keyword 关键词检索 + vector 向量检索，后者需 lancedb）
@@ -168,6 +170,10 @@ Qingci-Bot-CE/
 │   ├── single_instance.py     # 单实例保护（Windows 命名互斥量，由数据根目录派生）
 │   ├── relaunch.py            # 跨进程重启助手（切换/重命名实例后重启）
 │   └── app-icon.ico           # 应用图标（exe 图标 + 托盘图标）
+├── scripts/                   # 运维/构建辅助脚本
+│   ├── bump_version.py        # 版本号统一升级（pyproject/bot/__init__/web/package*）
+│   ├── verify_migrations.py   # 迁移与模型漂移校验（CI 使用）
+│   └── migrate_sqlite_to_pg.py # SQLite → PostgreSQL 数据迁移
 └── data/                      # 可写数据根目录（实例模式下默认 instances/<name>/data；--data-dir 可覆盖）
     └── qingci-bot.db          # SQLite 数据库文件
 ```
