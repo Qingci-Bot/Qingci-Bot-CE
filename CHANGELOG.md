@@ -5,6 +5,17 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.2] - 2026-08-21（子命令修复 + 段数组回复 + SDK 1.13.1）
+
+### Fixed
+
+- **on_load 运行时注册的 on_command 子指令不触发**：插件在 `on_load` 内 `self.matchers.append(on_command(..., subcommands=...)(...))` 时，SDK 的子指令 matcher 只进模块级收集器（import 阶段已关闭）而被静默丢弃，父指令又已排除子指令——子命令完全不回复。配合 SDK 1.13.1（子指令 matcher 挂到 `parent.meta["sub_matchers"]`），`PluginManager` 在插件加载时经 `_expand_subcommand_matchers` 按对象 id 去重展开注册（模块级场景不双份），对 `签到管理/排行/我的/商店` 等所有 on_load 注册子命令的插件生效
+- **Matcher handler 返回 v12 段数组被 `str()` 化为字典文本**：`dispatcher._to_reply` 对消息事件强制 `str(result)`，handler 返回图片链（`list[dict]`）时用户收到 `[{'type': 'image', ...}]` 原文。现对「全部元素为含 `type` 字段的 dict」的列表原样透传；`bot._send_reply` 群聊前缀拼接支持段数组（reply/mention 后追加段）——`/签到帮助` 等返回段数组的插件恢复图片发送
+
+### Changed
+
+- **SDK 依赖锁定 v1.13.1**：`qingci-plugin-sdk @ git+...@v1.13.1`（含子指令 matcher 挂载修复；`uv.lock` 同步）
+
 ## [1.16.1] - 2026-08-21（插件第三方依赖按插件隔离）
 
 ### Changed
