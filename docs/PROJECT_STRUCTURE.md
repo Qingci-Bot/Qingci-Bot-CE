@@ -117,7 +117,7 @@ Qingci-Bot-CE/
 │   └── versions/           # 版本迁移脚本
 ├── tests/                  # pytest 测试
 │   ├── test_*.py           # 按被测模块命名
-│   └── plugin_pkg/         # 测试用插件包（dep/di/p1/p2 等）
+│   └── plugin_pkg/         # 测试用插件包（dep/di/p1/p2/sdk_llm_tool/subcmd_runtime 等）
 ├── scripts/                # 一次性/运维脚本（如 SQLite→PostgreSQL 迁移）
 ├── docs/                   # 规范文档（本文档 + CODING_STANDARDS.md）
 ├── build.ps1               # Windows 构建脚本（打包前 -e 安装 Plugins-SDK）

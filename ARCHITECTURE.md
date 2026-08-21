@@ -174,6 +174,8 @@ Qingci-Bot-CE/
 │   ├── bump_version.py        # 版本号统一升级（pyproject/bot/__init__/web/package*）
 │   ├── verify_migrations.py   # 迁移与模型漂移校验（CI 使用）
 │   └── migrate_sqlite_to_pg.py # SQLite → PostgreSQL 数据迁移
+├── tests/                     # pytest 测试（按 test_<模块>.py 命名；plugin_pkg/ 为测试插件包）
+│   └── plugin_pkg/            # 测试用插件（dep/di/p1/p2/sdk_llm_tool/subcmd_runtime 等）
 └── data/                      # 可写数据根目录（实例模式下默认 instances/<name>/data；--data-dir 可覆盖）
     └── qingci-bot.db          # SQLite 数据库文件
 ```
