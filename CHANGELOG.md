@@ -5,6 +5,17 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-08-21（运行日志开关交互相馈与关闭计数清空修复）
+
+### Fixed
+
+- **关闭采集后仍"实时推送中"**：前端运行日志页不感知开关、无条件连接 `/api/ws/runlog`；后端 WS 端点与采集开关脱钩，且关闭时环形缓冲中的旧日志不清理——与设置页"关闭后运行日志页无数据"文案矛盾。现关闭 `log.run_log_enabled` 后：`set_run_log_enabled(False)` 即时清空缓冲；运行日志页连接前校验开关，关闭时不建立 WS 连接，状态标签显示"采集已关闭"、空态给出"系统设置 → 日志 可重新开启"提示
+- **设置页开关回弹且无"未保存"提示**：`Settings.vue` 各开关为"保存后生效"模式，拨动后不写后端、无任何提示，切走再回来读回旧值（回弹）。新增"有未保存的更改，点击保存设置后生效"提示条，并在保存成功后同步回已保存配置、清除脏标记、提示"已保存并生效"
+
+### Changed
+
+- **禁用 GET 浏览器缓存**：统一 API 请求层（`web/src/api/request.js`）对 GET 请求加 `cache: 'no-store'`，避免保存配置后再次拉取命中浏览器启发式缓存，导致页面回显旧值
+
 ## [1.15.0] - 2026-08-21（运行日志采集入口修复）
 
 ### Fixed
