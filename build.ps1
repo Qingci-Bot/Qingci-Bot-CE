@@ -100,10 +100,18 @@ try {
         # CI=1 makes Playwright suppress its ANSI progress bar (which renders as
         # mojibake in Windows PowerShell) and print a single line per download.
         $env:CI = "1"
-        # stream stdout/stderr to the console, and only return the real exit code
-        & $Python -m playwright install chromium @Flags 2>&1
+        # CRITICAL: capture the child output to a temp log file instead of letting
+        # it flow to the console. A PowerShell function's return value is the
+        # concatenation of ALL unredirected output, so `& $Python ... 2>&1` would
+        # leak the download progress into `$code` and make `-ne 0` always true
+        # (a string is never 0), i.e. every download reported as a failure even
+        # when it succeeded. Redirecting everything to a file keeps the real exit
+        # code in `$code` and hides the raw progress/mojibake from the console.
+        $logFile = Join-Path $env:TEMP ("pw-install-{0}.log" -f ([guid]::NewGuid()))
+        & $Python -m playwright install chromium @Flags *> $logFile
+        $rc = $LASTEXITCODE
         Remove-Item Env:CI -ErrorAction SilentlyContinue
-        return $LASTEXITCODE
+        return $rc
     }
 
     $browserDir = $env:PLAYWRIGHT_BROWSERS_PATH
