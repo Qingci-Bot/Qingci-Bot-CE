@@ -361,7 +361,8 @@ async def order(ctx: MatcherContext) -> str:
 插件可用 `@llm_tool` 装饰器直接注册 Function Calling 工具，让插件参与 LLM 推理，构建「LLM 原生插件」。工具在插件加载时自动注册到全局 `ToolRegistry`，卸载时自动注销。
 
 ```python
-from bot.plugin.llm_tool import llm_tool
+from qingci_plugin_sdk import llm_tool  # 推荐（与独立 SDK 插件一致）
+# 或 from bot.plugin.llm_tool import llm_tool（转发同一机制，二者等价）
 
 
 # 简写：描述取函数 docstring，参数由调用方/模型推断

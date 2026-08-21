@@ -544,7 +544,7 @@ class QingciBot:
             f"notice_type={event.get('notice_type')}"
         )
 
-    async def _send_reply(self, ctx: MessageContext, reply: str) -> bool:
+    async def _send_reply(self, ctx: MessageContext, reply: str | list) -> bool:
         """发送插件回复（按 ctx.platform 路由到对应平台适配器）
 
         OneBot 12 迁移（方案 A）：群聊回复前缀不再拼 CQ 码字符串，

@@ -85,6 +85,20 @@ async def test_llm_tool_unregistered_on_unload(bot):
     assert bot.tool_registry.has("p1_tool_add") is False
 
 
+async def test_llm_tool_via_sdk_path_registered(bot):
+    """插件从 qingci_plugin_sdk 导入 llm_tool（官方 hello 用法）时工具必须注册
+
+    回归：CE 曾逐字复制 SDK 的 llm_tool 实现形成双收集栈，SDK 路径导入的
+    工具进 SDK 收集栈、CE 收集栈为空，导致工具被静默丢弃。
+    """
+    await bot.load_plugin("plugin_pkg.sdk_llm_tool_plugin")
+    assert bot.tool_registry.has("sdk_llm_tool_sdk_get_time") is True
+    assert "sdk_llm_tool_sdk_get_time" in bot.plugin_manager._plugin_tools.get("sdk_llm_tool", [])
+
+    result = await bot.tool_registry.execute("sdk_llm_tool_sdk_get_time", {})
+    assert result == "12:00"
+
+
 async def test_config_schema_generated(bot):
     """Config 内嵌 pydantic 类自动生成 JSON Schema（含类型与默认值）"""
     await bot.load_plugin("plugin_pkg.p1_plugin")

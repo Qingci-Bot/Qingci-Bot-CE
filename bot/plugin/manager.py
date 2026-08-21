@@ -51,6 +51,13 @@ def _expand_subcommand_matchers(matchers: list[Matcher], owner: str) -> None:
     """
     known_ids = {id(m) for m in matchers}
     for m in list(matchers):
+        if "command" in m.meta and "sub_matchers" not in m.meta:
+            # SDK < 1.13.1 不挂 sub_matchers：on_load 运行时注册的子指令会静默丢失
+            logger.warning(
+                f"插件 {owner} 的命令 matcher {m.meta.get('command')!r} 缺少 "
+                f"sub_matchers 元数据（qingci-plugin-sdk 版本过旧，需 >=1.13.1），"
+                f"on_load 注册的子指令可能不触发"
+            )
         for sub in m.meta.get("sub_matchers") or []:
             if id(sub) in known_ids:
                 continue
