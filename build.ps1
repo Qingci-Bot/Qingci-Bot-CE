@@ -47,49 +47,68 @@ if (Test-Path (Join-Path $WebSrc "index.html")) {
 }
 
 # ---------- [2.5/3] bundle Playwright browser ----------
-# 全内置 HTML 渲染：把 Chromium 浏览器下载到产物目录 ms-playwright/，
-# 运行时由 main.py 设 PLAYWRIGHT_BROWSERS_PATH 指向它，EXE 开箱即可渲染签到卡，
-# 无需最终用户另行 `playwright install chromium`。
-# 官方 CDN 在国内下载极慢/易超时，默认走 npmmirror 镜像；可用环境变量覆盖：
-#   $env:PLAYWRIGHT_DOWNLOAD_HOST="https://playwright.azureedge.net"
-Write-Host "==> [2.5/3] bundling Playwright chromium (headless shell)..." -ForegroundColor Cyan
+# Bundle a Chromium browser into dist/ms-playwright/ so the EXE can render HTML
+# out of the box (sign-in card) without requiring end users to run
+# `playwright install chromium`. Runtime reads PLAYWRIGHT_BROWSERS_PATH to point
+# at this folder.
+# Download strategy: prefer the npmmirror mirror (fast in CN), fall back to the
+# official CDN. Success is decided by the on-disk browser dir, NOT the exit code,
+# because Playwright writes progress to stdout which PowerShell swallows into the
+# return value and may report a non-zero status even after a successful download.
+Write-Host "==> [2.5/3] bundling Playwright browser..." -ForegroundColor Cyan
 try {
-    # playwright 作为构建期依赖被安装（render 分组），这里先确认可导入
+    # playwright is a build-time dependency (render extra); assert it is importable
     & $Python -c "import playwright.async_api"
     if ($LASTEXITCODE -ne 0) { throw "playwright not importable" }
 
     $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $AppDir "ms-playwright"
-    # 无条件强制 npmmirror 镜像源（不能用"仅为空时设置"，否则环境里残留的旧 host
-    # 如已废弃的 playwright.azureedge.net 会劫走下载并全部 400）。npmmirror 经
-    # 覆盖 & playwright 支持通过 PLAYWRIGHT_DOWNLOAD_HOST 覆盖默认 CDN。
+    # Clear stale/custom download-host vars so a leftover env value (e.g. the
+    # deprecated playwright.azureedge.net) cannot hijack the downloads.
+    Remove-Item Env:PLAYWRIGHT_DOWNLOAD_HOST -ErrorAction SilentlyContinue
+    Remove-Item Env:PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST -ErrorAction SilentlyContinue
     $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://npmmirror.com/mirrors/playwright"
+
+    # A browser is present if the headless-shell or full-chromium dir exists.
+    function Test-BrowserBundled {
+        param([string]$Dir)
+        if (-not (Test-Path $Dir)) { return $false }
+        return (Get-ChildItem -Path $Dir -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "chromium" }).Count -gt 0
+    }
+
     function Invoke-PlaywrightInstall {
         param([string[]]$Flags)
-        & $Python -m playwright install chromium @Flags
+        # stream stdout/stderr to the console, and only return the real exit code
+        & $Python -m playwright install chromium @Flags 2>&1
         return $LASTEXITCODE
     }
-    # 优先 --only-shell（体积小，足以支撑 HTML 渲染）。
-    # npmmirror 的 chromium-headless-shell 产物长期滞后（新 revision 404），
-    # 失败时回退完整 chromium --no-shell（跳过缺失的 headless-shell，镜像有完整 chromium）。
-    # 两者皆失败（如官方 CDN 超时）最后回退官方源重试 --only-shell。
-    $installCode = Invoke-PlaywrightInstall @("--only-shell")
-    if ($installCode -ne 0) {
-        Write-Warning "    --only-shell 下载失败（镜像 headless-shell 滞后），回退完整 chromium --no-shell ..."
-        $installCode = Invoke-PlaywrightInstall @("--no-shell")
-    }
-    if ($installCode -ne 0) {
-        Write-Warning "    完整 chromium 亦失败，回退官方源重试 --only-shell ..."
-        $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://cdn.playwright.dev"
-        $installCode = Invoke-PlaywrightInstall @("--only-shell")
-    }
-    if ($installCode -ne 0) { throw "playwright install chromium 全部重试失败 (exit=$installCode)" }
 
-    if (-not (Test-Path $env:PLAYWRIGHT_BROWSERS_PATH)) {
-        throw "browser bundle dir missing: $env:PLAYWRIGHT_BROWSERS_PATH"
+    $browserDir = $env:PLAYWRIGHT_BROWSERS_PATH
+    # Try only-shell first (small, enough for HTML rendering), then full chromium
+    # (mirror lags on the headless-shell revision and 404s; full chromium is
+    # always synced), then fall back to the official CDN.
+    $attempts = @(
+        @{ Host = "https://npmmirror.com/mirrors/playwright"; Flags = @("--only-shell") },
+        @{ Host = "https://npmmirror.com/mirrors/playwright"; Flags = @("--no-shell") },
+        @{ Host = "https://cdn.playwright.dev";                 Flags = @("--only-shell") }
+    )
+    $ok = Test-BrowserBundled $browserDir
+    foreach ($a in $attempts) {
+        if ($ok) { break }
+        Write-Host "    downloading from $($a.Host) ($($a.Flags -join ' '))..."
+        $env:PLAYWRIGHT_DOWNLOAD_HOST = $a.Host
+        $code = Invoke-PlaywrightInstall @($a.Flags)
+        if ($code -ne 0) {
+            Write-Warning "    download failed (exit=$code), trying next source..."
+        }
+        $ok = Test-BrowserBundled $browserDir
     }
-    Write-Host "    bundled Playwright browsers -> $env:PLAYWRIGHT_BROWSERS_PATH"
+    if (-not $ok) {
+        throw "browser bundle dir missing or empty: $browserDir"
+    }
+    Write-Host "    bundled Playwright browser -> $browserDir"
 } catch {
-    Write-Warning "    Playwright 浏览器内置失败（EXE 将不带渲染能力，签到卡会降级纯文本）: $_"
+    Write-Warning "    Playwright browser bundling failed (EXE will lack render capability; sign-in card degrades to text): $_"
 }
 
 # ---------- [3/3] ensure output folder exists ----------
