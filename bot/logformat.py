@@ -213,7 +213,7 @@ def _resolve_log_dir(config: object) -> Path:
     else:
         p = Path("logs")
     if not p.is_absolute():
-        from ..paths import data_root
+        from .paths import data_root
 
         p = data_root() / p
     return p
@@ -305,7 +305,7 @@ def apply_logging_from_config(config_path: Union[str, "object"]) -> None:
     try:
         from pathlib import Path
 
-        from ..config import ConfigManager
+        from .config import ConfigManager
 
         cfg = ConfigManager(Path(str(config_path)))
         loaded = cfg.load()
