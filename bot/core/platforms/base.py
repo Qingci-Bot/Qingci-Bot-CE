@@ -188,6 +188,76 @@ class PlatformAdapter:
         """
         raise NotImplementedError(f"平台 {self.name} 不支持请求审批")
 
+    # ============ OneBot 常用动作便捷封装 ============
+
+    def _api_action(self, action: str) -> str:
+        """平台动作名映射：默认 OneBot 11 命名；OneBot 12 覆写为 v12 命名
+
+        便捷方法统一以 v11 动作名书写，经此钩子映射到平台实际动作名
+        （OneBot 12 为 `group.kick` 等点分命名空间）。
+        """
+        return action
+
+    async def set_group_kick(
+        self, group_id: int, user_id: int, reject_add_request: bool = False
+    ) -> dict:
+        """移出群成员（OneBot action: set_group_kick / group.kick）"""
+        return await self.call_api(
+            self._api_action("set_group_kick"),
+            {
+                "group_id": int(group_id),
+                "user_id": int(user_id),
+                "reject_add_request": bool(reject_add_request),
+            },
+        )
+
+    async def set_group_ban(self, group_id: int, user_id: int, duration: int = 0) -> dict:
+        """群禁言（duration=0 解除禁言；OneBot action: set_group_ban / group.ban）"""
+        return await self.call_api(
+            self._api_action("set_group_ban"),
+            {"group_id": int(group_id), "user_id": int(user_id), "duration": int(duration)},
+        )
+
+    async def set_group_whole_ban(self, group_id: int, enable: bool = True) -> dict:
+        """全体禁言 / 解除（OneBot action: set_group_whole_ban / group.whole_ban）"""
+        return await self.call_api(
+            self._api_action("set_group_whole_ban"),
+            {"group_id": int(group_id), "enable": bool(enable)},
+        )
+
+    async def set_group_admin(self, group_id: int, user_id: int, enable: bool = True) -> dict:
+        """设置 / 取消群管理员（OneBot action: set_group_admin / group.set_admin）"""
+        return await self.call_api(
+            self._api_action("set_group_admin"),
+            {"group_id": int(group_id), "user_id": int(user_id), "enable": bool(enable)},
+        )
+
+    async def set_group_card(self, group_id: int, user_id: int, card: str = "") -> dict:
+        """设置群名片（card 为空清除；OneBot action: set_group_card / group.set_card）"""
+        return await self.call_api(
+            self._api_action("set_group_card"),
+            {"group_id": int(group_id), "user_id": int(user_id), "card": str(card)},
+        )
+
+    async def set_group_name(self, group_id: int, name: str) -> dict:
+        """设置群名（OneBot action: set_group_name / group.set_name）"""
+        return await self.call_api(
+            self._api_action("set_group_name"), {"group_id": int(group_id), "group_name": str(name)}
+        )
+
+    async def get_group_member_list(self, group_id: int) -> dict:
+        """获取群成员列表（OneBot action: get_group_member_list / group.get_member_list）"""
+        return await self.call_api(
+            self._api_action("get_group_member_list"), {"group_id": int(group_id)}
+        )
+
+    async def get_group_member_info(self, group_id: int, user_id: int) -> dict:
+        """获取群成员信息（OneBot action: get_group_member_info / group.get_member_info）"""
+        return await self.call_api(
+            self._api_action("get_group_member_info"),
+            {"group_id": int(group_id), "user_id": int(user_id)},
+        )
+
     # ============ 工具 ============
 
     @staticmethod

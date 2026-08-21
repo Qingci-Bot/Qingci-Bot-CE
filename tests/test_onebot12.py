@@ -293,3 +293,73 @@ async def test_ws_connect_notifications(adapter):
 
     # 全部断开后状态翻转
     assert adapter.is_connected is False
+
+
+# ---------- 便捷动作方法（P2） ----------
+
+
+@pytest.mark.asyncio
+async def test_group_action_convenience_methods_v12(monkeypatch):
+    """便捷方法经 _api_action 映射为 OneBot 12 点分动作名（group.kick 等）"""
+    a = OneBot12Adapter(host="127.0.0.1", port=TEST_PORT + 3, enabled=True)
+    calls: list[tuple[str, dict]] = []
+
+    async def fake_call(action, params=None, timeout=30):
+        calls.append((action, params))
+        return {"status": "ok"}
+
+    monkeypatch.setattr(a, "_call", fake_call)
+
+    await a.set_group_kick(20001, 10001)
+    assert calls[-1] == (
+        "group.kick",
+        {"group_id": 20001, "user_id": 10001, "reject_add_request": False},
+    )
+
+    await a.set_group_ban(20001, 10001, duration=60)
+    assert calls[-1] == ("group.ban", {"group_id": 20001, "user_id": 10001, "duration": 60})
+
+    await a.set_group_whole_ban(20001, enable=False)
+    assert calls[-1] == ("group.whole_ban", {"group_id": 20001, "enable": False})
+
+    await a.set_group_admin(20001, 10001)
+    assert calls[-1] == ("group.set_admin", {"group_id": 20001, "user_id": 10001, "enable": True})
+
+    await a.set_group_card(20001, 10001, card="nick")
+    assert calls[-1] == ("group.set_card", {"group_id": 20001, "user_id": 10001, "card": "nick"})
+
+    await a.set_group_name(20001, "新群名")
+    assert calls[-1] == ("group.set_name", {"group_id": 20001, "group_name": "新群名"})
+
+    await a.get_group_member_list(20001)
+    assert calls[-1] == ("group.get_member_list", {"group_id": 20001})
+
+    await a.get_group_member_info(20001, 10001)
+    assert calls[-1] == ("group.get_member_info", {"group_id": 20001, "user_id": 10001})
+
+
+@pytest.mark.asyncio
+async def test_group_action_convenience_methods_v11_names(monkeypatch):
+    """便捷方法默认动作名（v11）透传——基类不覆写 _api_action 时"""
+    from bot.core.platforms.base import PlatformAdapter
+
+    calls: list[tuple[str, dict]] = []
+
+    async def fake_call_api(action, params=None, timeout=30):
+        calls.append((action, params))
+        return {}
+
+    a = PlatformAdapter()
+    monkeypatch.setattr(a, "call_api", fake_call_api)  # 实例级，避免类属性 self 绑定
+
+    await a.set_group_kick(20001, 10001)
+    assert calls[-1] == (
+        "set_group_kick",
+        {"group_id": 20001, "user_id": 10001, "reject_add_request": False},
+    )
+
+    await a.set_group_ban(20001, 10001)
+    assert calls[-1] == ("set_group_ban", {"group_id": 20001, "user_id": 10001, "duration": 0})
+
+    await a.get_group_member_info(20001, 10001)
+    assert calls[-1] == ("get_group_member_info", {"group_id": 20001, "user_id": 10001})

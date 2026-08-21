@@ -305,6 +305,19 @@ class OneBot12Adapter(PlatformAdapter):
         """调用 OneBot 12 标准动作（JSON-RPC 透传）"""
         return await self._call(action, params, timeout)
 
+    def _api_action(self, action: str) -> str:
+        """v11 便捷动作名 -> OneBot 12 点分命名空间（group.kick 等）"""
+        return {
+            "set_group_kick": "group.kick",
+            "set_group_ban": "group.ban",
+            "set_group_whole_ban": "group.whole_ban",
+            "set_group_admin": "group.set_admin",
+            "set_group_card": "group.set_card",
+            "set_group_name": "group.set_name",
+            "get_group_member_list": "group.get_member_list",
+            "get_group_member_info": "group.get_member_info",
+        }.get(action, action)
+
     async def approve_request(
         self,
         flag: str,
