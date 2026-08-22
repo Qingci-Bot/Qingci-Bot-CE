@@ -243,14 +243,19 @@ async function loadExternal() {
   }
 }
 
-async function unload(name) {
+async function unload(name, purge = false) {
+  const message = purge
+    ? `彻底删除插件 ${name}？将删除插件文件、数据目录与第三方依赖，此操作不可恢复！`
+    : `卸载插件 ${name}？将删除插件文件，保留数据与依赖（实例模式下仅卸载不删文件）。`;
+  if (!window.confirm(message)) return;
   loading.value = name;
   try {
-    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const query = purge ? '?purge=true' : '';
+    await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}${query}`, { method: 'DELETE' });
     await store.fetchStatus();
     // 同步刷新 /api/plugin 详情缓存，卸载成功的插件立即从列表消失
     await fetchPluginDetails();
-    showToast('success', `插件 ${name} 已卸载`);
+    showToast('success', purge ? `插件 ${name} 已彻底删除` : `插件 ${name} 已卸载`);
   } catch (e) {
     showToast('error', `卸载失败：${e.message}`);
   } finally {
@@ -498,6 +503,12 @@ async function marketApplySource() {
 }
 
 async function marketUninstall(name) {
+  if (
+    !window.confirm(
+      `卸载插件 ${name}？将删除插件文件，保留数据与依赖（实例模式下仅卸载不删文件）。`,
+    )
+  )
+    return;
   marketAction.value = `uninstall:${name}`;
   try {
     await store.apiFetch(`/api/plugin/${encodeURIComponent(name)}`, { method: 'DELETE' });
@@ -694,6 +705,13 @@ function openHomepage(url) {
                 @click="unload(plugin.name)"
               >
                 卸载
+              </button>
+              <button
+                class="btn btn-danger btn-sm"
+                :disabled="loading === plugin.name"
+                @click="unload(plugin.name, true)"
+              >
+                彻底删除
               </button>
             </div>
           </div>

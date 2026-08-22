@@ -56,6 +56,26 @@ def ensure_in_sys_path(name: str) -> None:
         sys.path.insert(0, str(d))
 
 
+def cleanup_dependencies(name: str) -> None:
+    """彻底清理插件依赖：移除 sys.path 注入项、删除依赖目录与安装标记
+
+    供插件「彻底删除（purge）」时调用；仅卸载/保留数据的场景不应调用。
+    """
+    # 移除已注入的 sys.path 条目（幂等：可能存在 0/1 次）
+    d = deps_dir(name)
+    while str(d) in sys.path:
+        sys.path.remove(str(d))
+    # 删除依赖目录（ignore_errors：目录不存在/占用时静默，日志兜底）
+    if d.exists():
+        shutil.rmtree(d, ignore_errors=True)
+    # 删除安装标记
+    marker = _marker_path(name)
+    try:
+        marker.unlink(missing_ok=True)
+    except OSError:
+        logger.warning(f"删除依赖安装标记失败: {marker}", exc_info=True)
+
+
 def read_requirements(directory: Path) -> list[str]:
     """读取插件的依赖声明：requirements.txt 优先，其次 plugin.json 的 requirements 字段"""
     req_file = directory / "requirements.txt"

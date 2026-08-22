@@ -5,6 +5,24 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.8] - 2026-08-22（插件卸载语义：仅卸载 / 彻底删除）
+
+### Added
+
+- **插件「彻底删除（purge）」语义**：`DELETE /api/plugin/{name}?purge=true` 在卸载后一并删除插件数据目录（`data_root()/plugins/<name>/`）、第三方依赖（`data_root()/deps/<name>/`）、安装标记（`.installed/<name>.hash`），并从 `sys.path` 移除注入项（`bot/plugin/deps.py::cleanup_dependencies`，while 幂等）；默认（无参数）仍只删代码目录、保留数据与依赖
+- **前端「彻底删除」入口**：插件列表新增「彻底删除」按钮（红色、二次确认文案「操作不可恢复」）；「卸载」与市场卸载均增加确认对话框，明确「保留数据与依赖」
+
+### Fixed
+
+- **实例模式下代码目录与数据目录重合时默认不删文件（P1）**：`PluginManager.remove` 现计算 `code_and_data_merge`（`plugins_dir()/name` 与 `data_root()/plugins/<name>` 解析后相等，如 `--data-dir` 指向实例目录时），重合时默认仅卸载不删文件，防止连带删除插件数据；需彻底删除必须显式 `purge=true`
+- **依赖目录与安装标记从不清理（P2）**：purge 前清理 `deps/<name>/`、`.installed/<name>.hash` 与 `sys.path` 注入条目，避免磁盘孤岛与进程内残留
+
+### Changed
+
+- `remove(name)` 签名增加 `purge: bool = False` 关键字参数（默认行为不变：卸载 + 删代码目录）
+- 卸载 API 审计记录包含 `purge` 标记，响应新增 `"purged"` 字段
+- `PLUGIN_DEV.md` 数据目录 / 依赖段落同步更新为「默认保留、purge 才删」语义
+
 ## [1.16.7] - 2026-08-22（系统级备份下载/恢复）
 
 ### Added

@@ -245,7 +245,7 @@ async def stats(
 
 ### 插件数据目录（data_dir）
 
-每个插件拥有专属数据目录 `data_root()/plugins/<name>/`（默认 `app_root()/data/plugins/<name>/`；实例模式下为 `instances/<name>/data/plugins/<name>/`），用于持久化运行时数据（缓存、导出文件等）。目录自动创建，卸载插件不删除。
+每个插件拥有专属数据目录 `data_root()/plugins/<name>/`（默认 `app_root()/data/plugins/<name>/`；实例模式下为 `instances/<name>/data/plugins/<name>/`），用于持久化运行时数据（缓存、导出文件等）。目录自动创建；**卸载插件（默认）不删除数据目录**（保留以防重装），仅「彻底删除（purge=true）」时才一并删除数据目录与第三方依赖。
 
 ```python
 async def on_load(self):
@@ -273,7 +273,7 @@ class MyPlugin(PluginBase):
     name = "my_plugin"
 ```
 
-> **注意**：依赖按插件隔离在 `deps/<插件名>/` 子目录（非共享平铺），因此不同插件声明**同一包的不同版本**互不影响，也不会遮蔽框架内置包（某插件声明的包只对该插件可见）。卸载插件时不自动删除其依赖目录（与插件数据目录一致，保留以防重装）；需要清理可手动删除 `data_root()/deps/<插件名>/`。
+> **注意**：依赖按插件隔离在 `deps/<插件名>/` 子目录（非共享平铺），因此不同插件声明**同一包的不同版本**互不影响，也不会遮蔽框架内置包（某插件声明的包只对该插件可见）。卸载插件（默认）不删除其依赖目录（与插件数据目录一致，保留以防重装）；「彻底删除（`DELETE /api/plugin/{name}?purge=true`）」会一并清理 `deps/<插件名>/`、安装标记并从 `sys.path` 移除注入项。
 
 **依赖安装规则：**
 - 声明内容未变化时跳过安装（按内容哈希幂等），`requirements.txt` 变更才触发重装

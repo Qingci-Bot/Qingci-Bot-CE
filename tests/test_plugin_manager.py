@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -162,6 +164,137 @@ async def test_remove_without_disk_dir_only_unloads(bot):
     await pm.remove("simple")
     assert pm.get("simple") is None
     assert pm.all_matchers() == []
+
+
+def _remove_deps_sys_path(data_root: Path):
+    """清理测试注入的 sys.path 依赖条目（跨测试隔离）"""
+    import bot.plugin.deps as deps
+
+    d = deps.deps_dir("simple")
+    while str(d) in sys.path:
+        sys.path.remove(str(d))
+
+
+def _make_plugin_dir(base: Path, name: str = "simple") -> Path:
+    d = base / name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "plugin.json").write_text('{"name": "simple", "version": "1.0.0"}', encoding="utf-8")
+    return d
+
+
+async def test_remove_default_keeps_data_and_deps(bot, tmp_path):
+    """默认 remove（purge=False）删代码目录，但保留数据目录与第三方依赖（P2 语义）"""
+    from bot import paths
+
+    old_plugins, old_data = paths.plugins_dir(), paths.data_root()
+    code_root, data_root = tmp_path / "code", tmp_path / "data"
+    paths.set_plugins_dir(code_root)
+    paths.set_data_root(data_root)
+    try:
+        plugin_dir = _make_plugin_dir(code_root)
+        # 模拟插件数据目录与依赖安装产物
+        data_dir = data_root / "plugins" / "simple"
+        data_dir.mkdir(parents=True)
+        (data_dir / "state.json").write_text("{}", encoding="utf-8")
+        marker = data_root / "deps" / ".installed" / "simple.hash"
+        marker.parent.mkdir(parents=True)
+        marker.write_text("abc", encoding="utf-8")
+        import bot.plugin.deps as deps
+
+        deps.ensure_in_sys_path("simple")
+        deps_dir = deps.deps_dir("simple")
+        assert str(deps_dir) in sys.path
+
+        pm = bot.plugin_manager
+        await pm.load_external("plugin_pkg.simple_plugin", bot)
+        assert pm.get("simple") is not None
+
+        await pm.remove("simple")
+        assert pm.get("simple") is None
+        assert pm.all_matchers() == []
+        # 仅代码目录被删，数据与依赖保留（便于重装）
+        assert not plugin_dir.exists()
+        assert data_dir.is_dir()
+        assert deps_dir.is_dir()
+        assert marker.is_file()
+        assert str(deps_dir) in sys.path
+    finally:
+        paths.set_plugins_dir(old_plugins)
+        paths.set_data_root(old_data)
+        _remove_deps_sys_path(tmp_path)
+
+
+async def test_remove_purge_deletes_data_and_deps(bot, tmp_path):
+    """purge=True 应彻底删除：代码、数据目录、依赖目录、安装标记与 sys.path 注入"""
+    from bot import paths
+
+    old_plugins, old_data = paths.plugins_dir(), paths.data_root()
+    code_root, data_root = tmp_path / "code", tmp_path / "data"
+    paths.set_plugins_dir(code_root)
+    paths.set_data_root(data_root)
+    try:
+        plugin_dir = _make_plugin_dir(code_root)
+        data_dir = data_root / "plugins" / "simple"
+        data_dir.mkdir(parents=True)
+        (data_dir / "state.json").write_text("{}", encoding="utf-8")
+        marker = data_root / "deps" / ".installed" / "simple.hash"
+        marker.parent.mkdir(parents=True)
+        marker.write_text("abc", encoding="utf-8")
+        import bot.plugin.deps as deps
+
+        deps.ensure_in_sys_path("simple")
+        deps_dir = deps.deps_dir("simple")
+        assert str(deps_dir) in sys.path
+
+        pm = bot.plugin_manager
+        await pm.load_external("plugin_pkg.simple_plugin", bot)
+        assert pm.get("simple") is not None
+
+        await pm.remove("simple", purge=True)
+        assert pm.get("simple") is None
+        # 代码 / 数据 / 依赖 / 标记 / sys.path 注入全部清除
+        assert not plugin_dir.exists()
+        assert not data_dir.exists()
+        assert not deps_dir.exists()
+        assert not marker.exists()
+        assert str(deps_dir) not in sys.path
+    finally:
+        paths.set_plugins_dir(old_plugins)
+        paths.set_data_root(old_data)
+        _remove_deps_sys_path(tmp_path)
+
+
+async def test_remove_merged_paths_only_unloads(bot, tmp_path):
+    """代码目录与数据目录重合（实例模式）时，默认 remove 仅卸载不删文件，
+    purge=True 才彻底删除（P1 防数据丢失）"""
+    from bot import paths
+
+    old_plugins, old_data = paths.plugins_dir(), paths.data_root()
+    # 模拟实例模式：plugins_dir() == data_root()/plugins（代码与数据同目录）
+    data_root = tmp_path / "inst"
+    paths.set_data_root(data_root)
+    paths.set_plugins_dir(data_root / "plugins")
+    try:
+        plugin_dir = _make_plugin_dir(data_root / "plugins")
+        (plugin_dir / "state.json").write_text("{}", encoding="utf-8")
+
+        pm = bot.plugin_manager
+        await pm.load_external("plugin_pkg.simple_plugin", bot)
+        assert pm.get("simple") is not None
+
+        await pm.remove("simple")
+        assert pm.get("simple") is None
+        # 重合路径默认不删任何文件（防实例模式下连带删除插件数据）
+        assert plugin_dir.is_dir()
+        assert (plugin_dir / "state.json").is_file()
+
+        # purge=True 才彻底删除
+        await pm.load_external("plugin_pkg.simple_plugin", bot)
+        await pm.remove("simple", purge=True)
+        assert not plugin_dir.exists()
+    finally:
+        paths.set_plugins_dir(old_plugins)
+        paths.set_data_root(old_data)
 
 
 async def test_shutdown_unloads_all(bot):

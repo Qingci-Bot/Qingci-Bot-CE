@@ -1127,33 +1127,63 @@ class PluginManager:
         self._load_errors.pop(name, None)
         self._invalidate_matchers_cache()
 
-    async def remove(self, name: str) -> None:
-        """卸载并删除插件（模块 + 磁盘插件目录）
+    async def remove(self, name: str, *, purge: bool = False) -> None:
+        """卸载并删除插件
 
-        与 unload 的区别：unload 仅卸载模块（文件保留，可随时重新加载），
-        remove 在 unload 基础上删除 data 目录下 `plugins/{name}` 目录，
-        使市场/插件列表状态完全清除。
+        purge=False（默认）：卸载 + 删除插件代码目录，保留数据与依赖
+        （便于重装）。实例模式下代码目录与数据目录重合
+        （instances/<inst>/plugins/<name>），删除代码目录会连带删除插件数据，
+        为避免数据丢失，重合时默认仅卸载不删文件（P1 修复，见插件卸载评估报告）。
+        purge=True：彻底删除——卸载 + 删除代码目录、独立数据目录
+        （data_root()/plugins/<name>）与第三方依赖（deps/、安装标记、sys.path 注入）。
         """
         await self.unload(name)
-        from ..paths import plugins_dir
+        from ..paths import data_root, plugins_dir
 
         base = plugins_dir()
         # 兜底校验：解析后必须位于插件目录内（防插件声明恶意 name 越界删除）
         plugin_dir = (base / name).resolve()
         if not plugin_dir.is_relative_to(base.resolve()):
             raise ValueError(f"非法插件删除路径: {name!r}")
-        if not plugin_dir.exists():
-            logger.info(f"插件 {name} 无磁盘目录，已仅卸载")
-            return
-        if not plugin_dir.is_dir():
-            logger.warning(f"插件 {name} 磁盘路径非目录，跳过删除: {plugin_dir}")
-            return
+
+        data_dir = (data_root() / "plugins" / name).resolve()
+        # 实例模式下 plugins_dir 与 data_root()/plugins 重合 → 代码目录即数据目录
+        code_and_data_merge = plugin_dir == data_dir
+
         import shutil
 
-        try:
-            shutil.rmtree(plugin_dir)
-        except OSError as e:
-            raise RuntimeError(f"插件 {name} 目录删除失败（文件可能被占用）: {plugin_dir}") from e
+        def _rmtree(path: Path, label: str) -> None:
+            if not path.exists():
+                return
+            if not path.is_dir():
+                logger.warning(f"插件 {name} {label}路径非目录，跳过删除: {path}")
+                return
+            try:
+                shutil.rmtree(path)
+            except OSError as e:
+                raise RuntimeError(f"插件 {name} {label}删除失败（文件可能被占用）: {path}") from e
+
+        if purge:
+            _rmtree(plugin_dir, "代码/数据目录")
+            if not code_and_data_merge:
+                _rmtree(data_dir, "数据目录")
+            from .deps import cleanup_dependencies
+
+            try:
+                cleanup_dependencies(name)
+            except Exception:
+                logger.exception(f"清理插件 {name} 依赖异常")
+            logger.info(f"插件已彻底删除: {name} (purge)")
+            return
+
+        if code_and_data_merge:
+            # 实例模式：默认删除即删数据，仅卸载保留文件，彻底删除需 purge
+            logger.info(
+                f"插件 {name} 实例模式下代码与数据同目录，仅卸载不删文件"
+                "（如需彻底删除请使用 purge）"
+            )
+            return
+        _rmtree(plugin_dir, "代码目录")
         logger.info(f"插件已删除: {name} ({plugin_dir})")
 
     # ---- 禁用/启用 ----

@@ -144,16 +144,21 @@ async def load_plugin(data: LoadPluginRequest, request: Request):
 
 
 @router.delete("/{name}", dependencies=[Depends(require_auth)])
-async def unload_plugin(name: str, request: Request):
-    """卸载并删除插件（含磁盘目录）"""
+async def unload_plugin(name: str, request: Request, purge: bool = False):
+    """卸载并删除插件
+
+    purge=false（默认）：删除插件代码目录，保留数据与依赖；
+    purge=true：彻底删除（含数据目录与第三方依赖，不可恢复）。
+    实例模式下代码与数据同目录，默认仅卸载不删文件，需 purge 才删。
+    """
     bot = _get_bot_instance()
     if name in _BUILTIN_PLUGINS:
         raise HTTPException(status_code=400, detail=f"不允许删除内置插件 {name}")
     if not bot.plugin_manager.get(name):
         raise HTTPException(status_code=404, detail=f"插件 {name} 不存在")
-    await bot.plugin_manager.remove(name)
-    await record_audit("plugin_unload", f"卸载并删除插件: {name}", request)
-    return {"message": f"插件 {name} 已卸载"}
+    await bot.plugin_manager.remove(name, purge=purge)
+    await record_audit("plugin_unload", f"卸载并删除插件: {name} purge={purge}", request)
+    return {"message": f"插件 {name} 已卸载", "purged": purge}
 
 
 @router.post("/{name}/disable", dependencies=[Depends(require_auth)])
