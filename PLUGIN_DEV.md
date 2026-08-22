@@ -393,9 +393,9 @@ def add(a: int, b: int) -> int:
 - 插件卸载时框架自动从 `ToolRegistry` 注销其全部工具
 - 工具实际参与调用需 `config.yaml` 中 `llm.enable_tools` 开启
 
-### 指令系统增强（别名 / 子指令 / 类型化参数）
+### 指令系统增强（别名 / 子指令 / 类型化参数 / help 可见性）
 
-`on_command` 新增三个能力，更灵活地组织命令：
+`on_command` 提供以下能力，更灵活地组织命令：
 
 **命令别名（aliases）：** 同一命令多个触发词，`ctx.command` 为实际命中的词。
 
@@ -438,7 +438,15 @@ async def weather(ctx: MatcherContext, city: str = "", days: int = 1) -> str:
 # /weather 北京 3 -> city="北京"（str），days=3（int），输出 "北京: 3 天预报"
 ```
 
-三个能力可自由组合。
+**help 可见性（hidden_in_help）：** 置 `True` 的命令（如内部/调试命令）不出现在宿主的 `/help` 列表（SDK v1.13.5+）。命令别名会随 `/help`（文本与图片）一并展示。
+
+```python
+@on_command("debug", hidden_in_help=True)
+async def debug(ctx: MatcherContext) -> str:
+    return "内部调试命令，不在 /help 显示"
+```
+
+上述能力可自由组合。
 
 ### 插件级配置 UI（Config schema 自动生成）
 
@@ -825,7 +833,7 @@ class MyPlugin(PluginBase):
 | 函数 | 说明 |
 |------|------|
 | `on_message(rule, permission, priority, block, temp)` | 通用消息匹配器 |
-| `on_command(cmd, rule, permission, priority, block, temp, aliases, subcommands, args_schema)` | 命令匹配器（自动解析参数到 `ctx.args`；支持别名 / 子指令 / 类型化参数） |
+| `on_command(cmd, rule, permission, priority, block, temp, aliases, subcommands, args_schema, hidden_in_help)` | 命令匹配器（自动解析参数到 `ctx.args`；支持别名 / 子指令 / 类型化参数；`hidden_in_help=True` 不进 `/help` 列表） |
 | `on_startswith(prefix, ...)` | 前缀匹配器 |
 | `on_keyword(keywords, ...)` | 关键词匹配器 |
 | `on_notice(rule, priority, block, temp)` | 通知事件匹配器 |
