@@ -5,6 +5,24 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.10] - 2026-08-23（OneBot 12 协议符合度与 Telegram 转换修复）
+
+### Fixed
+
+- **Telegram `message_edited` 事件补编辑时间（P2·D1）**：`_normalize_edited` 的 `time` 原写死为 0、丢失编辑时间；现改用 `edit_date`，依赖 time 的逻辑不再失真
+- **`callback_query` 事件补触发时间（P3·D2）**：`time` 沿附带消息的 `date`，纯 inline（无 message）时保持 0
+- **Telegram `sender` 展示名合并姓/名（P3·D3）**：`nickname`/`card` 原仅取 `first_name`，现合并 `first_name + last_name`，`username` 单独保留
+
+### Added
+
+- **Telegram 多图媒体组（MediaGroup，P3·D4）**：`_send_media` 在多条 image/video 且均可参数直传时走 `sendMediaGroup`（caption 仅附首条媒体）；含本地/base64 上传或 voice/record 时降级逐条发送
+- **OneBot 12 严格 `self` 对象兼容（P2·B1）**：`onebot12._on_event` 在扁平 `self_id` 缺失时回退读 `self.user_id` 并向后透传扁平字段（SDK v1.13.6 的 `from_v12_event` 亦同步回退）
+
+### Changed
+
+- **文档标注 self_id 扁平约定与点分动作名依赖**：`ARCHITECTURE.md` 事件模型节与 `README §5.2` 说明「self_id 为扁平约定、缺失回退 self.user_id」及「群管动作依赖实现端支持 `group.*` 点分命名空间」
+- 新增 6 项平台单测（edit_date / callback time / sender 展示名 / MediaGroup 直传与降级）；CE 单测 500/500、覆盖率 59.1%，ruff / mypy 干净
+
 ## [1.16.9] - 2026-08-22（help 长文本渲染成图片 + 锁定 SDK v1.13.5）
 
 ### Added

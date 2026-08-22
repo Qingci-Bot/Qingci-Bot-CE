@@ -213,7 +213,9 @@ mypy bot api
 - 地址：`ws://127.0.0.1:3002/`（端口默认 3002，需与 `config.yaml` 的 `platforms.onebot12.port` 保持一致）
 - Access Token：留空或与 `config.yaml` 中 `platforms.onebot12.access_token` 保持一致（实现端以 `Authorization: Bearer` 或 `?access_token=` 携带）
 
-事件以 OneBot 12 标准格式（`type`/`detail_type`/`message[]`）直接进入核心调度，动作以 JSON-RPC（`send_message` 等）调用——与 v11 相比省去翻译层，回复段原生 v12 表达。
+事件以 OneBot 12 标准格式（`type`/`detail_type`/`message[]`）直接进入核心调度，动作以 JSON-RPC（`send_message` 等）调用——与 v11 相比省去翻译层，回复段原生 v12 表达。群管动作（`set_group_kick` 等 v11 便捷名）由 `_api_action` 映射为 `group.*` 点分命名空间（如 `group.kick`/`group.ban`）——依赖实现端支持此点分扩展约定（NapCat / Lagrange.OneBot 均支持）。
+
+> OneBot 12 机器人在事件的 `self_id`（扁平字段）可能缺失：官方 v12 标准事件携带 `self` 对象（`{platform, user_id}`），本项目优先读取 `self_id`、缺失时回退读 `self.user_id`，无需你额外配置。
 
 ## 6. 配置 LLM
 

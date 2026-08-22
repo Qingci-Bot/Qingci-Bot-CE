@@ -35,6 +35,7 @@ on_notice() 消费。offset 游标采用整批确认：先以 max(update_id)+1 �
 
 import asyncio
 import base64
+import json
 import logging
 import mimetypes
 import re
@@ -568,6 +569,12 @@ class TelegramAdapter(PlatformAdapter):
         user_id = self._safe_int(from_user.get("id"))
         chip_id = self._safe_int(chat.get("id"))
 
+        # 完整展示名：Telegram 把姓/名拆为 first_name + last_name，
+        # nickname/card 合并为完整名，避免 only_first_name 缺少 last_name。
+        first_name = str(from_user.get("first_name", "") or "")
+        last_name = str(from_user.get("last_name", "") or "")
+        display_name = " ".join(p for p in (first_name, last_name) if p) or first_name
+
         event = {
             "type": "message",
             "detail_type": detail_type,
@@ -584,8 +591,8 @@ class TelegramAdapter(PlatformAdapter):
             "group_id": str(chip_id) if detail_type == "group" else "",
             "sender": {
                 "user_id": str(user_id),
-                "nickname": str(from_user.get("first_name", "") or ""),
-                "card": str(from_user.get("first_name", "") or ""),
+                "nickname": display_name,
+                "card": display_name,
                 "username": str(from_user.get("username", "") or ""),
                 "platform": self.name,
             },
@@ -619,7 +626,9 @@ class TelegramAdapter(PlatformAdapter):
             "impl": self.name,
             "platform": self.name,
             "self_id": str(self.self_id),
-            "time": 0,
+            # 保留编辑时间：edited_message 携带 edit_date（Unix 秒），
+            # 避免 time 恒为 0 导致依赖 time 的逻辑失真。
+            "time": message.get("edit_date", 0),
             "message_id": event.get("message_id", ""),
             "user_id": event.get("user_id", ""),
             "group_id": event.get("group_id", ""),
@@ -652,7 +661,9 @@ class TelegramAdapter(PlatformAdapter):
             "impl": self.name,
             "platform": self.name,
             "self_id": str(self.self_id),
-            "time": 0,
+            # callback_query 本身无时间戳，但常附带消息；用消息 date 作为
+            # 触发时间的近似（纯 inline 无 message 时保持 0）。
+            "time": (msg or {}).get("date", 0),
             "message_id": str((msg or {}).get("message_id", "")),
             "user_id": str(user_id),
             "group_id": str(chat_id) if chat_type in ("group", "supergroup") else "",
@@ -846,26 +857,57 @@ class TelegramAdapter(PlatformAdapter):
         caption: str = "",
         reply_id: int = 0,
     ) -> dict:
-        """发送媒体：file_id/http(s) URL 走参数，本地/base64 走 multipart 上传
+        """发送媒体：file_id/http(s) 直传，本地/base64 multipart 上传
 
-        image → sendPhoto，record → sendVoice，video → sendVideo；
-        caption 附着于首条媒体，reply_id 命中时回复指定消息。
+        - 单条：image → sendPhoto，record → sendVoice，video → sendVideo；
+        - 多条：全部为 image/video 且可参数直传时走 sendMediaGroup 媒体组
+          （Telegram 媒体组仅支持 photo/video），caption 附首条媒体；
+          含 upload 或 voice/record 时降级逐条发送（caption 仅附首条）；
+        - reply_id 命中时回复指定消息。
         """
+        # 预解析一次，避免为判断"可入组"重复解析/读取本地文件。
+        resolved = [
+            (str(seg.get("type") or ""), self._resolve_image(str(seg.get("file") or "")))
+            for seg in media
+        ]
+        can_group = len(media) > 1 and all(
+            seg_type in ("image", "video") and kind == "param"
+            for seg_type, (kind, _, _) in resolved
+        )
+        if can_group:
+            input_media: list[dict] = []
+            for idx, (seg, (_, (_, val, _))) in enumerate(zip(media, resolved, strict=True)):
+                item: dict[str, Any] = {
+                    "type": "photo" if seg.get("type") == "image" else "video",
+                    "media": val,
+                }
+                # 长描述仅附首条媒体（Telegram 媒体组 caption 只显示首条）
+                if caption and idx == 0:
+                    item["caption"] = caption
+                input_media.append(item)
+            params: dict[str, Any] = {
+                "chat_id": chat_id,
+                "media": json.dumps(input_media, ensure_ascii=False),
+            }
+            if reply_id:
+                params["reply_to_message_id"] = reply_id
+            return await self._api("sendMediaGroup", **params)
+
         result: dict = {}
         for idx, seg in enumerate(media):
             action, field = _MEDIA_API.get(str(seg.get("type") or ""), _MEDIA_API["image"])
-            params: dict[str, Any] = {"chat_id": chat_id}
+            send_params: dict[str, Any] = {"chat_id": chat_id}
             if caption and idx == 0:
-                params["caption"] = caption
+                send_params["caption"] = caption
             if reply_id:
-                params["reply_to_message_id"] = reply_id
+                send_params["reply_to_message_id"] = reply_id
             kind, val, media_file = self._resolve_image(str(seg.get("file") or ""))
             if kind == "upload":
                 assert media_file is not None
-                result = await self._api(action, files={field: media_file}, **params)
+                result = await self._api(action, files={field: media_file}, **send_params)
             else:
-                params[field] = val
-                result = await self._api(action, **params)
+                send_params[field] = val
+                result = await self._api(action, **send_params)
         return result or {}
 
     @staticmethod

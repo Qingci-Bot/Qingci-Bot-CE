@@ -221,7 +221,13 @@ class OneBot12Adapter(PlatformAdapter):
         """收到 OneBot 12 事件：更新状态并上报（事件已 v12 格式，直通 Dispatcher）"""
         self._last_heartbeat = time.time()
         self._connected = True
-        self_id = str(event.get("self_id") or "")
+        # B1：兼容严格遵守规范（仅发 self 对象）的实现端——扁平 self_id
+        # 缺失时回退读 self.user_id，并在下游事件中回填扁平字段。
+        self_id = str(
+            event.get("self_id")
+            or (event.get("self") or {}).get("user_id")
+            or ""
+        )
         if self_id:
             self.self_id = self_id
             self._clients[ws]["self_id"] = self_id
@@ -234,6 +240,7 @@ class OneBot12Adapter(PlatformAdapter):
         # 覆盖 platform 为适配器名（内部路由语义，与 v11/telegram 一致）
         event = dict(event)
         event["platform"] = self.name
+        event["self_id"] = self_id or str(event.get("self_id", "") or "")
 
         if event.get("type") == "meta":
             await self.emit_metaevent(event)

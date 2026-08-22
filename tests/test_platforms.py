@@ -11,6 +11,7 @@
 """
 
 import asyncio
+import json
 from types import SimpleNamespace
 
 import httpx
@@ -108,6 +109,7 @@ def test_normalize_edited_private(adapter):
         {
             "message_id": 42,
             "date": 1786889000,
+            "edit_date": 1786889999,
             "from": {"id": 10001, "first_name": "Alice"},
             "chat": {"id": 20001, "type": "private"},
             "text": "改后的内容",
@@ -120,6 +122,8 @@ def test_normalize_edited_private(adapter):
     assert notice["alt_message"] == "改后的内容"
     assert notice["message"][0]["type"] == "text"
     assert notice["platform"] == "telegram"
+    # D1：编辑事件保留 edit_date 作为 time，不再恒为 0
+    assert notice["time"] == 1786889999
 
 
 def test_normalize_edited_group_has_group_id(adapter):
@@ -147,6 +151,7 @@ def test_normalize_callback_group(adapter):
             "data": "page:2",
             "message": {
                 "message_id": 10,
+                "date": 1786889000,
                 "chat": {"id": 30001, "type": "supergroup", "title": "群"},
             },
         },
@@ -158,6 +163,8 @@ def test_normalize_callback_group(adapter):
     assert notice["message_id"] == "10"
     assert notice["data"] == "page:2"
     assert notice["callback_query_id"] == "cb-123"
+    # D2：callback_query 沿附带消息的 date 作为触发时间
+    assert notice["time"] == 1786889000
 
 
 def test_normalize_callback_inline_without_message(adapter):
@@ -982,6 +989,69 @@ async def test_send_media_with_reply(adapter, monkeypatch):
     assert calls["params"]["photo"] == "AgABg"
     assert calls["params"]["reply_to_message_id"] == 9
     assert calls["params"]["caption"] == "配图"
+
+
+async def test_send_media_group(adapter, monkeypatch):
+    """D4：多图且可参数直传时走 sendMediaGroup 媒体组，caption 仅附首条"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["method"], calls["params"] = method, params
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg(
+        "group",
+        30001,
+        [
+            {"type": "image", "data": {"file_id": "AgACgA"}},
+            {"type": "image", "data": {"file_id": "AgACgB"}},
+            {"type": "text", "data": {"text": "多图说明"}},
+        ],
+    )
+    assert calls["method"] == "sendMediaGroup"
+    media = json.loads(calls["params"]["media"])
+    assert len(media) == 2
+    assert all(m["type"] == "photo" for m in media)
+    assert media[0]["caption"] == "多图说明"
+    assert "caption" not in media[1]
+
+
+async def test_send_media_group_ignores_upload(adapter, monkeypatch):
+    """D4：含本地/base64 上传时降级逐条发送，不强制 sendMediaGroup"""
+    calls = []
+
+    async def fake_api(method, **params):
+        calls.append((method, params))
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg(
+        "group",
+        30001,
+        [
+            {"type": "image", "data": {"file_id": "AgACgA"}},  # 可直传
+            {"type": "image", "data": {"file_id": "base64://aGVsbG8="}},  # 需上传
+        ],
+    )
+    assert [m for m, _ in calls] == ["sendPhoto", "sendPhoto"]
+    assert calls[0][1]["photo"] == "AgACgA"
+    assert "photo" not in calls[1][1]  # upload 走 files
+
+
+def test_normalize_message_sender_display_name(adapter):
+    """D3：sender 昵称合并 first_name+last_name，username 单独保留"""
+    msg = _message()
+    msg["from"] = {
+        "id": 10001,
+        "first_name": "Zhou",
+        "last_name": "Zhe",
+        "username": "luoqingciya",
+    }
+    event = adapter._normalize_message(msg)
+    assert event["sender"]["nickname"] == "Zhou Zhe"
+    assert event["sender"]["card"] == "Zhou Zhe"
+    assert event["sender"]["username"] == "luoqingciya"
 
 
 def test_resolve_image_refs(adapter):

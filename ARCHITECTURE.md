@@ -226,6 +226,8 @@ Qingci-Bot-CE/
 
 核心统一消费 **OneBot 12 事件模型**——事件以 `{type, detail_type, ...}` 标识（`message` / `notice` / `request` / `meta`），消息以标准 `{type, data}` 段数组表达，媒体统一用 `file_id` 引用。为兼顾存量 OneBot 11 输入与旧插件兼容，采用**双模归一化**：
 
+> **`self_id` 字段约定**：官方 v12 标准事件携带 `self` 对象（`{platform, user_id}`），而 NapCat 等实现端广泛以扁平 `self_id` 透传。本项目以扁平 `self_id` 为主、缺失时回退读 `self.user_id`（`from_v12_event` 与 `onebot12._on_event` 均已实现），以兼容两类实现端。
+
 - **`bot/core/v11_compat.py`**：纯函数翻译 v11 事件 → v12 事件。`message_type` → `detail_type`、`raw_message` → `alt_message`、`post_type` → `type`，ID 字段字符串化；notice 按 `notice_type`+`sub_type` 细分（`group_increase` → `group_member_increase`、`group_admin`+`set` → `group_admin_set`、`group_ban`+`lift_ban` → `group_member_unban` 等），与 SDK 事件映射表对称。无法识别的事件类型原样返回（防御性，不丢事件）
 - **`MessageContext`**（SDK `context.py`）：`from_v12_event` 以 v12 事件构造上下文，保留 v11 兼容字段（`post_type` / `message_type` 由 v12 字段派生），`post_type`/`message_type`/`raw_message` 供存量插件继续读取；`segments` 统一存 v12 标准段
 - **消息段双向转换**（SDK `segments.py`）：`Message.from_raw` 嗅探段数组，v11 段（`at`/`at_all`/`record`/`face`/`forward`/`reply: id`）自动归一化为 v12（`mention`/`mention_all`/`voice`/`text`/`reply: message_id`）；`segments_to_v11`/`as_v11_segments()` 提供 v11 兼容视图
