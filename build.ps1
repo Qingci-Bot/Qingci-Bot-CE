@@ -37,8 +37,12 @@ if ($LASTEXITCODE -ne 0) { throw "qingci-plugin-sdk install failed with exit cod
 # build venv, collect_all grabs nothing and the bundled EXE cannot auto-install
 # plugin third-party deps. Install pip here so it gets collected into the EXE.
 Write-Host "==> ensuring pip in build venv (for bundled plugin deps)..." -ForegroundColor Cyan
-& $Python -c "import pip" 2>&1 | Out-Null
+# 用 2>$null 丢弃 stderr 而非 2>&1 | Out-Null：$ErrorActionPreference="Stop" 下
+# PowerShell 5.1 会把 native stderr 转成 terminating error 中断脚本（pip 缺失时
+# python 打印的 Traceback 会误杀构建）；这里只关心退出码。
+& $Python -c "import pip" 2>$null
 if ($LASTEXITCODE -ne 0) {
+    Write-Host "    pip absent in uv-managed venv; installing via uv (normal path)..." -ForegroundColor DarkGray
     # uv-managed venvs ship without pip; install via uv instead of ensurepip
     # (uv may not offer ensurepip). Needed so collect_all('pip') in the spec
     # can bundle pip into the EXE for in-process plugin dependency install.
