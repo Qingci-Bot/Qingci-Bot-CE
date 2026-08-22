@@ -5,6 +5,17 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.7] - 2026-08-22（系统级备份下载/恢复）
+
+### Added
+
+- **数据库备份可下载**：新增 `GET /api/backup/db/download?filename=`，鉴权 + 文件名白名单（仅 `qingci-bot_*.db`）防路径穿越；设置页「数据管理」在备份成功后出现「下载备份」按钮
+- **数据库在线恢复**：新增 `POST /api/backup/restore`（multipart 上传 .db）——SQLite 完整性校验（`PRAGMA integrity_check`）→ 自动备份当前库 → `dispose_engine` 释放连接池 → 原子替换主库；设置页新增「从备份恢复数据库」上传区（恢复前确认 + 成功后提示刷新）
+
+### Security
+
+- 备份下载/恢复均经 `require_auth` 鉴权，并记录审计（`db_backup_download` / `db_restore`）
+
 ## [1.16.6] - 2026-08-22（锁定插件 SDK v1.13.4）
 
 ### Changed

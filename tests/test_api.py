@@ -118,6 +118,81 @@ class TestAuthRequired:
         assert data["api_key"] == "***"
 
 
+class TestBackupRestore:
+    """系统级备份/下载/恢复（monkeypatch db_path 隔离真实数据库）"""
+
+    @staticmethod
+    def _fake_db(tmp_path, monkeypatch):
+        import sqlite3
+
+        import api.routes.backup as backup_mod
+
+        fake_db = tmp_path / "qingci-bot.db"
+        conn = sqlite3.connect(str(fake_db))
+        conn.execute("CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT)")
+        conn.execute("INSERT INTO t(name) VALUES ('hello')")
+        conn.commit()
+        conn.close()
+        monkeypatch.setattr(backup_mod, "db_path", lambda: fake_db)
+        return fake_db
+
+    def test_backup_requires_auth(self, client, tmp_path, monkeypatch):
+        self._fake_db(tmp_path, monkeypatch)
+        assert client.post("/api/backup/db").status_code == 401
+        assert client.get("/api/backup/db/download?filename=x.db").status_code == 401
+        assert client.post("/api/backup/restore").status_code == 401
+
+    def test_backup_download_restore_roundtrip(self, client, tmp_path, monkeypatch):
+        fake_db = self._fake_db(tmp_path, monkeypatch)
+        h = _auth_headers()
+
+        backed = client.post("/api/backup/db", headers=h)
+        assert backed.status_code == 200, backed.text
+        filename = backed.json()["filename"]
+        assert filename.startswith("qingci-bot_") and filename.endswith(".db")
+
+        downloaded = client.get(f"/api/backup/db/download?filename={filename}", headers=h)
+        assert downloaded.status_code == 200
+        assert downloaded.content[:16] == b"SQLite format 3\x00"
+
+        restored = client.post(
+            "/api/backup/restore",
+            headers=h,
+            files={"file": ("backup.db", downloaded.content, "application/octet-stream")},
+        )
+        assert restored.status_code == 200, restored.text
+        body = restored.json()
+        assert body["success"] is True
+        assert body["backup_name"].startswith("qingci-bot_")
+
+        # 恢复后的库可正常读取且包含原数据
+        import sqlite3
+
+        conn = sqlite3.connect(str(fake_db))
+        row = conn.execute("SELECT name FROM t").fetchone()
+        conn.close()
+        assert row == ("hello",)
+
+    def test_backup_download_rejects_path_traversal(self, client, tmp_path, monkeypatch):
+        self._fake_db(tmp_path, monkeypatch)
+        h = _auth_headers()
+        resp = client.get("/api/backup/db/download?filename=..%2F..%2F..%2Fsecret.db", headers=h)
+        assert resp.status_code == 400
+        resp2 = client.get("/api/backup/db/download?filename=evil.txt", headers=h)
+        assert resp2.status_code == 400
+
+    def test_backup_restore_rejects_invalid_file(self, client, tmp_path, monkeypatch):
+        self._fake_db(tmp_path, monkeypatch)
+        h = _auth_headers()
+        resp = client.post(
+            "/api/backup/restore",
+            headers=h,
+            files={"file": ("fake.db", b"not a sqlite db", "application/octet-stream")},
+        )
+        assert resp.status_code == 400
+        assert "SQLite" in resp.json()["detail"]
+
+
 class TestBotStatus:
     """Bot 状态端点测试"""
 
