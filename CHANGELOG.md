@@ -5,6 +5,17 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.4] - 2026-08-22（插件配置热生效 + 敏感字段脱敏）
+
+### Added
+
+- **插件配置热生效钩子 `on_config_update`**：`_load_plugin_config` 写入新配置后调用插件同名钩子，WebUI 保存配置免重载即时生效（配合 shiguang 1.0.4 的 M18）。插件可选实现该钩子刷新自身运行期快照，未实现时行为不变
+- **插件配置敏感字段脱敏**：`get_config_values` 对 `token` / `secret` / `password` / `api_key` 等字段不回显明文（WebUI 表单显示为空），避免 `pixiv_refresh_token` 等密钥明文回显（M19）
+
+### Fixed
+
+- **配置保存空串误清空密钥**：`update_config` 改为与现有配置合并后写回——敏感字段提交空值时保留已有值，避免「读取脱敏→保存空串」误清空 token/密码（M19）
+
 ## [1.16.3] - 2026-08-21（llm_tool 单收集栈 + OneBot 便捷方法 + 扩展通知类型化）
 
 ### Fixed
