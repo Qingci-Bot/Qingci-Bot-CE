@@ -26,8 +26,8 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 # PyInstaller 打包时一并收集（spec 中 collect_all('qingci_plugin_sdk')）。
 # 锁定到已发布 tag（与 pyproject.toml 保持一致），保证构建可复现；
 # SDK 发新版后同步更新这里与 pyproject.toml 的 tag。
-Write-Host "==> [0/3] installing qingci-plugin-sdk (v1.13.2)..." -ForegroundColor Cyan
-uv pip install --python $Python "qingci-plugin-sdk @ git+https://gitee.com/qingci-bot/Plugins-SDK.git@v1.13.2"
+Write-Host "==> [0/3] installing qingci-plugin-sdk (v1.13.4)..." -ForegroundColor Cyan
+uv pip install --python $Python "qingci-plugin-sdk @ git+https://gitee.com/qingci-bot/Plugins-SDK.git@v1.13.4"
 if ($LASTEXITCODE -ne 0) { throw "qingci-plugin-sdk install failed with exit code $LASTEXITCODE" }
 
 # ---------- ensure pip in venv (for bundled deps installer) ----------

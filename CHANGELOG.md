@@ -5,6 +5,13 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **锁定插件 SDK 至 v1.13.4**：pyproject.toml / build.ps1 / uv.lock 三处由 `@v1.13.2` 同步升级到 `@v1.13.4`（SDK 跨协议一致性 + 代码审阅修复），构建与 CI 可复现
+- **测试适配 `on_startswith` 剥离前导 `/`**：SDK 前缀规则与 command 对齐（`/天气` 触发 `on_startswith("天气")`），`tests/test_rule.py::test_chained` 组合前缀改用 `!`/`#`
+
 ## [1.16.5] - 2026-08-22（跨协议一致性修复）
 
 ### Fixed

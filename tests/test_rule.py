@@ -137,7 +137,7 @@ class TestRuleComposition:
         assert not await check(r, make_ctx(message_type="private"))
 
     async def test_chained(self):
-        r = is_group() & (startswith("!") | startswith("/"))
+        r = is_group() & (startswith("!") | startswith("#"))
         assert await check(r, make_ctx("!cmd", message_type="group"))
-        assert await check(r, make_ctx("/cmd", message_type="group"))
+        assert await check(r, make_ctx("#cmd", message_type="group"))
         assert not await check(r, make_ctx("cmd", message_type="group"))
