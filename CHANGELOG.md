@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `remove(name)` 签名增加 `purge: bool = False` 关键字参数（默认行为不变：卸载 + 删代码目录）
 - 卸载 API 审计记录包含 `purge` 标记，响应新增 `"purged"` 字段
-- `PLUGIN_DEV.md` 数据目录 / 依赖段落同步更新为「默认保留、purge 才删」语义
+- **文档同步**：`PLUGIN_DEV.md` 数据目录 / 依赖段落与插件管理 API 表、`README.md` 插件系统/Web UI 特性、Plugins-SDK `README.md` 与 `base.py::data_dir` docstring 统一为「默认保留、purge 才删」语义
 
 ## [1.16.7] - 2026-08-22（系统级备份下载/恢复）
 

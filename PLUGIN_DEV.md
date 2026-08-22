@@ -1431,7 +1431,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 | GET | `/{name}` | 是 | 获取插件详情 |
 | POST | `/{name}/reload` | 是 | 重载插件 |
 | POST | `/load` | 是 | 加载外部插件（仅允许 `plugins.*` / `bot.plugin.builtin.*` 白名单前缀） |
-| DELETE | `/{name}` | 是 | 卸载插件（内置插件 chat/admin/help/imagegen/knowledge 不可卸载） |
+| DELETE | `/{name}` | 是 | 卸载插件（默认删代码目录、保留数据与依赖；`?purge=true` 彻底删除——一并删除数据目录与第三方依赖，不可恢复；内置插件 chat/admin/help/imagegen/knowledge 不可卸载） |
 | POST | `/{name}/disable` | 是 | 禁用插件（保留实例，跳过事件分发） |
 | POST | `/{name}/enable` | 是 | 启用插件（恢复事件分发） |
 | GET | `/{name}/metrics` | 是 | 获取插件执行指标（调用次数、平均耗时、错误率） |
