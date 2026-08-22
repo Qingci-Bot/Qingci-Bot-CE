@@ -270,6 +270,42 @@ async def test_call_api_passthrough(adapter, monkeypatch):
     assert calls["method"] == "getChatMemberCount"
 
 
+async def test_call_api_rejects_unsupported_onebot_actions(adapter, monkeypatch):
+    """Telegram 无群管/成员能力：OB 动作应明确抛错而非透传成小写方法名（会 404）"""
+    monkeypatch.setattr(adapter, "_api", lambda *a, **k: {})
+    for action in (
+        "set_group_kick",
+        "set_group_ban",
+        "get_group_member_info",
+        "get_group_member_list",
+    ):
+        with pytest.raises(NotImplementedError, match=action):
+            await adapter.call_api(action, {})
+
+
+async def test_send_msg_reply_with_non_numeric_id_ignored(adapter, monkeypatch):
+    """reply 段 message_id 非数字时静默丢弃引用，不回落 0 也不抛异常"""
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["method"] = method
+        calls["params"] = params
+        return {}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    await adapter.send_msg(
+        "group",
+        20001,
+        [
+            {"type": "reply", "data": {"message_id": "gen-1-2"}},
+            {"type": "text", "data": {"text": "hi"}},
+        ],
+    )
+    assert calls["method"] == "sendMessage"
+    assert calls["params"]["text"] == "hi"
+    assert "reply_to_message_id" not in calls["params"]
+
+
 # ---------- 配置解析 ----------
 
 

@@ -302,8 +302,12 @@ class OneBot12Adapter(PlatformAdapter):
     async def call_api(
         self, action: str, params: dict | None = None, timeout: float = _ACTION_TIMEOUT
     ) -> dict:
-        """调用 OneBot 12 标准动作（JSON-RPC 透传）"""
-        return await self._call(action, params, timeout)
+        """调用 OneBot 12 标准动作（JSON-RPC 透传）
+
+        动作名先经 _api_action 映射（v11 便捷动作名 → v12 点分命名空间），
+        使插件以 v11 动作名直接调用时在 OB11/OB12 上行为一致。
+        """
+        return await self._call(self._api_action(action), params, timeout)
 
     def _api_action(self, action: str) -> str:
         """v11 便捷动作名 -> OneBot 12 点分命名空间（group.kick 等）"""

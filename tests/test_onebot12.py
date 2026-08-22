@@ -183,6 +183,32 @@ async def test_call_api_private_text(adapter):
 
 
 @pytest.mark.asyncio
+async def test_call_api_maps_v11_action_to_v12_namespace(adapter):
+    """call_api 动作名先经 _api_action 映射：v11 便捷动作 → v12 点分命名空间
+
+    跨协议一致性：插件以 v11 动作名直接调用时，OB11/OB12 行为一致。
+    """
+    async with aiohttp.ClientSession() as session:
+        async with session.ws_connect(WS_URL) as ws:
+            fut = asyncio.ensure_future(
+                adapter.call_api("set_group_kick", {"group_id": "20001", "user_id": "10001"})
+            )
+            req = await asyncio.wait_for(ws.receive_json(), timeout=5)
+            assert req["action"] == "group.kick"
+            assert req["params"]["group_id"] == "20001"
+            await ws.send_json(
+                {
+                    "status": "ok",
+                    "retcode": 0,
+                    "data": {},
+                    "message": "",
+                    "echo": req["echo"],
+                }
+            )
+            await asyncio.wait_for(fut, timeout=5)
+
+
+@pytest.mark.asyncio
 async def test_call_api_error_response(adapter):
     """动作失败：status != ok 抛出 RuntimeError 并带实现端 message"""
     async with aiohttp.ClientSession() as session:

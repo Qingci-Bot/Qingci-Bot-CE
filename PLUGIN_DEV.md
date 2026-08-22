@@ -1237,6 +1237,14 @@ async def on_edited(ctx: MatcherContext, event: MessageEditedEvent) -> str | Non
     return f"你刚刚把消息改成了：{event.alt_message}"
 ```
 
+**跨协议动作与能力约定**（详见《跨协议一致性审查报告-OneBot11-12-Telegram-2026-08-22.md》）：
+
+- **发消息一律用 `send_msg`（或 `ctx.send`）**，不要用裸 `call_api("send_private_msg" / "send_message")` 动作名——三端动作命名空间不同（OB11 无 `send_message`、OB12 无 `send_private_msg`、Telegram 透传的是 camelCase 方法名），没有跨端通用的动作名。`send_msg` 是唯一跨平台安全的发送入口。
+- **`call_api` 动作名先经 `_api_action` 映射**：OB12 会把 v11 便捷动作名（`set_group_kick` 等）映射到 v12 点分命名空间（`group.kick`），OB11 原样透传。插件以 v11 动作名调用时三端行为一致。
+- **Telegram 不支持群管/成员动作**：`set_group_*`、`get_group_member_*` 等会抛 `NotImplementedError`（而非透传成小写方法名 404）。依赖群管/成员信息的插件（入群欢迎、管理员指令、成员统计）需自行处理 Telegram 平台缺失。
+- **不要依赖私聊 `sub_type` 做路由**：三端语义不同（OB11 真实 `friend/group/temp/other`、OB12 原生无 `sub_type`、Telegram 固定 `friend`）。私聊判断统一用 `ctx.message_type == "private"`。
+- **`mention` 段在 Telegram 降级为可见文本** `@<id>`（不触发真实 @ 通知，OB11/12 为真实 @）；`reply` 段的非数字 `message_id`（OB12 字符串 id / 派生 id）在 Telegram 会被静默丢弃引用。跨平台提及/引用不可靠，插件不应依赖这两者在 Telegram 上触发通知或精确引用。
+
 ### 全局事件钩子（消息中间件）
 
 Bot 提供全局前置 / 后置钩子，用于横切统计、审计、预处理，建议在插件 `on_load` 中注册：

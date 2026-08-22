@@ -5,6 +5,21 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.5] - 2026-08-22（跨协议一致性修复）
+
+### Fixed
+
+- **`call_api` 动作命名空间三端不统一（P1）**：`onebot12.call_api` 此前裸 JSON-RPC 透传，`_api_action` 映射只对基类便捷方法生效——插件直接 `call_api("set_group_kick")` 在 OB12 上因动作名未映射而失败。现 `call_api` 先经 `_api_action` 映射（v11 便捷动作名 → v12 点分命名空间），OB11/OB12 以 v11 动作名调用行为一致
+- **Telegram 群管/成员动作透传成小写方法名 404（P1）**：`set_group_*`、`get_group_member_*` 等此前被透传为 Telegram 小写方法名直接 404（晦涩错误）。现对无对应能力的前缀动作明确抛 `NotImplementedError("Telegram 不支持 OneBot 动作: X")`
+- **reply 段非数字 `message_id` 在 Telegram 引用错位/丢失（P2）**：OB12 字符串 id / `gen-` 派生 id 此前 `int()` 解析失败回落 `0`，可能误引用消息 0。现非数字 id 静默丢弃引用（不设置 `reply_to_message_id`）
+- **Telegram 私聊 `sub_type` 语义注释（P2）**：与 OB11（真实 friend/group/temp/other）/ OB12（无 sub_type）的差异以注释固化约定，插件统一用 `message_type == "private"` 判断私聊
+- **Telegram `mention` 段降级为可见文本（P2）**：与 OB11/12 真实 @ 的差异以注释固化约定（不触发真实通知）
+- **Telegram `is_at_bot` 死代码注释对齐（P3）**：说明该提示字段会被 SDK `from_v12_event` 按 `self_id in at_list` 覆盖，勿据此路由
+
+### Changed
+
+- **跨协议动作与能力约定文档化**：`PLUGIN_DEV.md` 新增「跨协议动作与能力约定」一节（发消息用 `send_msg`、`call_api` 经 `_api_action` 映射、Telegram 群管能力缺失、私聊 sub_type / mention / reply 跨端差异）
+
 ## [1.16.4] - 2026-08-22（插件配置热生效 + 敏感字段脱敏）
 
 ### Added

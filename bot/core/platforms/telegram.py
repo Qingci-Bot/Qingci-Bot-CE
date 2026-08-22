@@ -71,6 +71,11 @@ _MEDIA_API: dict[str, tuple[str, str]] = {
     "video": ("sendVideo", "video"),
 }
 
+# OneBot 群管/成员动作前缀：Telegram 无对应能力，call_api 应明确报错而非透传
+# （透传会变成小写 Telegram 方法名 → 404 晦涩错误）。
+# 注意：send_private_msg / send_group_msg / get_group_info 已有专属映射，不受影响。
+_UNSUPPORTED_OB_ACTION_PREFIXES = ("set_group_", "get_group_member_", "set_friend_", "get_friend_")
+
 
 class TelegramAPIError(RuntimeError):
     """Telegram Bot API 调用失败"""
@@ -521,6 +526,9 @@ class TelegramAdapter(PlatformAdapter):
         if chat_type not in ("private", "group", "supergroup"):
             return None
         detail_type = "private" if chat_type == "private" else "group"
+        # sub_type 私聊语义三端不同（OB11 真实 friend/group/temp/other、
+        # OB12 原生无 sub_type、Telegram 固定 friend）。约定：插件不应依赖
+        # 私聊 sub_type 做路由，统一用 message_type == "private"。
         sub_type = "friend" if detail_type == "private" else "normal"
 
         # 文本（v12 text 段）
@@ -532,6 +540,11 @@ class TelegramAdapter(PlatformAdapter):
         # 群聊命中时写入 mention 段，dispatcher 据此推导 ctx.is_at_bot；
         # 私聊无需 mention 段（SDK 触发规则已放行 message_type == "private"）。
         at_segments, at_list = self._collect_at(message, text)
+        # is_at_bot 为归一化阶段提示字段：SDK from_v12_event 会按
+        # self_id in at_list 重算并覆盖（context.py），私聊最终恒为 False
+        # （由 to_me 规则的 message_type == "private" 兜底）。此值仅对直接
+        # 读取 raw_event 的调用方可见，勿据此做路由判断（跨端对齐见
+        # 跨协议一致性审查报告 P3）。
         is_at_bot = bool(at_segments) or detail_type == "private"
         segments.extend(at_segments)
 
@@ -794,13 +807,18 @@ class TelegramAdapter(PlatformAdapter):
                 if f:
                     media.append({"type": seg_type, "file": f})
             elif seg_type == "reply":
-                try:
-                    reply_id = int(str(data.get("message_id") or data.get("id") or "0"))
-                except ValueError:
-                    reply_id = 0
+                # 跨协议一致性：非数字 message_id（OB12 字符串 id / gen- 派生 id）
+                # 无法作为 Telegram reply_to_message_id，静默丢弃引用，
+                # 避免 int() 解析失败或误引用到消息 0。
+                raw_reply_id = str(data.get("message_id") or data.get("id") or "").strip()
+                if raw_reply_id.isdigit():
+                    reply_id = int(raw_reply_id)
             elif seg_type == "text":
                 text_parts.append(str(data.get("text", "")))
             elif seg_type == "mention":
+                # 跨平台降级约定：Telegram 无稳定的 user_id→username 解析，
+                # mention 渲染为可见文本 @<id>（不触发真实 @ 通知）；
+                # OB11/12 为真实 @。插件不应依赖 mention 在 Telegram 触发通知。
                 text_parts.append(f"@{data.get('user_id', '')}")
             elif seg_type == "mention_all":
                 text_parts.append("@所有人")
@@ -900,6 +918,9 @@ class TelegramAdapter(PlatformAdapter):
         elif action == "get_group_info":
             # Telegram 无群资料 API，返回最小兼容结构
             return {"group_id": self._safe_int(params.get("group_id")), "group_name": "Telegram 群"}
+        elif action.startswith(_UNSUPPORTED_OB_ACTION_PREFIXES):
+            # Telegram 无群管/成员能力：明确报错而非透传成小写方法名（会 404）
+            raise NotImplementedError(f"Telegram 不支持 OneBot 动作: {action}")
         else:
             method, mapped = action, params
             return await self._api(method, **mapped)
