@@ -410,11 +410,6 @@ rag:
   chunk_overlap: 50                # 相邻分块重叠字符数
   max_inject_chars: 800            # 注入 system_prompt 的参考资料长度上限
   collection_name: qingci_knowledge # LanceDB 集合名（vector 模式使用）
-platforms:
-  telegram:                        # Telegram 平台适配器（默认关闭）
-    enabled: false                 # true 启用后接入 Telegram（Bot API 长轮询）
-    token: ''                      # Bot API token（@BotFather 获取）
-    poll_interval: 1.0             # 长轮询间隔（秒）
 session_summary:
   enabled: false                   # 会话摘要（默认关闭；与 llm.enable_summary 等价）
   keep_recent_turns: 3             # 摘要时保留最近 N 轮原文

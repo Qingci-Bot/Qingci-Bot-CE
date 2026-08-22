@@ -14,8 +14,8 @@
 
 请通过以下方式私下报告：
 
-1. 发送邮件至项目维护者
-2. 或在 GitHub 主仓库（https://github.com/Qingci-Bot/Qingci-Bot-CE）提交私密 Security Advisory
+1. 在 GitHub 主仓库（https://github.com/Qingci-Bot/Qingci-Bot-CE）提交私密 Security Advisory（推荐）
+2. 或发送邮件至安全联系邮箱（维护者尚未在文档中公开邮箱地址，请通过上面的 GitHub Security Advisory 渠道报告；若已设置，请在此处填写实际邮箱）
 
 请在报告中包含：
 
