@@ -7,8 +7,8 @@ license = "GPL-3.0-or-later"
 dependencies = [
     # 独立插件 SDK：协议层（PluginBase/Matcher/Permission/Rule/MessageContext）唯一来源，
     # bot/plugin/ 下为薄转发。构建/本地开发用 build.ps1 的 -e 安装优先；git 依赖供 CI 与干净环境。
-    # 锁定到已发布的 tag（@v1.13.5）保证构建可复现；SDK 发新版后手动更新此处并重新 uv lock。
-    "qingci-plugin-sdk @ git+https://gitee.com/qingci-bot/Plugins-SDK.git@v1.13.5",
+    # 锁定到已发布的 tag（@v1.13.6）保证构建可复现；SDK 发新版后手动更新此处并重新 uv lock。
+    "qingci-plugin-sdk @ git+https://gitee.com/qingci-bot/Plugins-SDK.git@v1.13.6",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
     "websockets>=14.0",
