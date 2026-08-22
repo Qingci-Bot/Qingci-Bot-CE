@@ -5,6 +5,22 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.9] - 2026-08-22（help 长文本渲染成图片 + 锁定 SDK v1.13.5）
+
+### Added
+
+- **`/help` 渲染成图片（方案 F，主链路）**：命令列表由纯文本改为 HTML → PNG 图片（复用 `bot.html_renderer`），不再受 QQ/TG 单条消息字数硬上限（2000/4096）约束，命令再多也不被"腰斩"。按插件拆图：单图高度超预算自动拆多张，单插件命令过多时内部再拆子图；渲染产物为临时文件并延迟清理（300s）。渲染能力不可用/失败时回退纯文本，绝不开天窗
+- **`/help <插件名|分类|命令>` 参数筛选（方案 A）**：按目标过滤后输出，既是缩小图片内容，也提供可复制的文字详情，弥补"图片内命令名不可复制"短板；未命中提示"未找到相关命令"
+- **`hidden_in_help` 可见性标注（方案 E）**：`on_command(hidden_in_help=True)` 注册的内部/调试命令不再出现在 `/help` 列表（配套 SDK v1.13.5）
+- **命令别名展示（P3）**：`/help` 文本与图片均展示命令别名（`meta["aliases"]`，SDK v1.13.5 起记录）
+
+### Changed
+
+- **文本兜底折叠（方案 C）**：渲染不可用时纯文本输出，命令行数超过阈值（40）折叠为仅命令名并提示用 `/help <插件名>` 查看单个插件
+- **删除"支持分类筛选"虚假注释**：`_cmd_help` 现实际支持按插件名/分类/命令名筛选；模块注释澄清 help `priority=1` 高优先级可能抢占同名命令的风险
+- **锁定插件 SDK 至 v1.13.5**：pyproject.toml / build.ps1 / uv.lock 三处同步（SDK 新增 `on_command.hidden_in_help` 参数与 `meta["aliases"]`）
+- 新增 11 项 help 单测（渲染段结构 / 文本兜底 / 筛选 / hidden 过滤 / 别名 / 折叠 / 拆图 / escape 防注入 / 临时文件清理）
+
 ## [1.16.8] - 2026-08-22（插件卸载语义：仅卸载 / 彻底删除）
 
 ### Added
