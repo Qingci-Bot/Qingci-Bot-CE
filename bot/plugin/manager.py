@@ -554,10 +554,13 @@ class PluginManager:
         cfg = plugin.plugin_config
         if hasattr(cfg, "model_dump"):
             try:
-                return cast(dict, cfg.model_dump())
+                values = cast(dict, cfg.model_dump())
             except Exception:
-                pass
-        return dict(cfg)
+                values = dict(cfg)
+        else:
+            values = dict(cfg)
+        # M19：敏感字段（token/secret/password/api_key 等）脱敏，WebUI 不回显明文
+        return {k: ("" if (_is_secret_field(k) and v) else v) for k, v in values.items()}
 
     async def update_config(self, name: str, values: dict, bot) -> bool:
         """更新插件配置：写入 config.yaml 并重新校验应用到插件实例
@@ -574,7 +577,21 @@ class PluginManager:
         if not plugin:
             return False
         try:
-            bot.config.set_plugin_config(name, values)
+            # M19：与现有配置合并后写回——敏感字段提交空值时保留已有值，
+            # 避免「读取脱敏→保存空串」误清空 token/密码等密钥。
+            existing = plugin.plugin_config
+            if existing is not None:
+                existing_dict = (
+                    existing.model_dump() if hasattr(existing, "model_dump") else dict(existing)
+                )
+            else:
+                existing_dict = {}
+            merged = dict(existing_dict)
+            for key, value in (values or {}).items():
+                if _is_secret_field(key) and value in ("", None):
+                    continue
+                merged[key] = value
+            bot.config.set_plugin_config(name, merged)
             await self._load_plugin_config(plugin, bot)
             return True
         except Exception:
@@ -1060,6 +1077,15 @@ class PluginManager:
                 plugin.plugin_config = config_dict
         else:
             plugin.plugin_config = config_dict
+
+        # M18：配置更新后通知插件刷新运行期快照（插件可定义 on_config_update
+        # 把新配置热应用到自身状态，避免必须重载插件才生效）。
+        try:
+            hook = getattr(plugin, "on_config_update", None)
+            if callable(hook):
+                await hook()
+        except Exception:
+            logger.exception(f"插件 {plugin.name} on_config_update 异常")
 
     # ---- 卸载 ----
 
@@ -1633,6 +1659,12 @@ class PluginManager:
         if plugin is not None and plugin.matchers and matcher in plugin.matchers:
             plugin.matchers.remove(matcher)
             self._invalidate_matchers_cache()
+
+
+def _is_secret_field(name: str) -> bool:
+    """M19：判断配置字段是否敏感（token/secret/password/api_key 等），用于脱敏与空值保护。"""
+    lowered = str(name).casefold()
+    return any(hint in lowered for hint in ("token", "secret", "password", "api_key", "apikey"))
 
 
 def _schema_from_annotations(config_cls: type) -> dict:
