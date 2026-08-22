@@ -223,11 +223,7 @@ class OneBot12Adapter(PlatformAdapter):
         self._connected = True
         # B1：兼容严格遵守规范（仅发 self 对象）的实现端——扁平 self_id
         # 缺失时回退读 self.user_id，并在下游事件中回填扁平字段。
-        self_id = str(
-            event.get("self_id")
-            or (event.get("self") or {}).get("user_id")
-            or ""
-        )
+        self_id = str(event.get("self_id") or (event.get("self") or {}).get("user_id") or "")
         if self_id:
             self.self_id = self_id
             self._clients[ws]["self_id"] = self_id
