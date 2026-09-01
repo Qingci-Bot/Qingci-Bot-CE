@@ -91,7 +91,7 @@ npm run format    # 代码格式化
 
 ### 构建 EXE / AppImage / Docker
 
-桌面分发为两步打包：先出 Python 后端 onedir，再用 electron-builder 出便携版单文件 EXE（Windows）或 AppImage（Linux）。
+桌面分发为两步打包：先出 Python 后端 onedir，再用 electron-builder 出桌面壳 EXE（Windows 安装版 + 绿色解压 zip）或 AppImage（Linux）。
 
 ```bash
 # 第一步：Python 后端 onedir（含 Web UI 构建、SDK -e 安装、Playwright 浏览器下载）
@@ -100,13 +100,13 @@ uv pip install -e ".[build]"
 ./build-linux.sh  # Linux（等价脚本；国内跑 SDK 走 Gitee 默认源）
 
 # 第二步：Electron 桌面壳（需 Node.js 18+/npm；内嵌上一步产出的后端）
-.\build-electron.ps1                          # Windows 便携版 EXE
+.\build-electron.ps1                          # Windows 安装版 Setup.exe + 绿色解压 zip
 cd desktop/electron && npm run build:linux     # Linux AppImage
 ```
 
 **发布流水线（推荐，自动）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 Release、推 Docker 镜像到 `ghcr.io`，无需手动上传/构建，见 [`.github/workflows/release.yml`](.github/workflows/release.yml)。
 
-> 构建详见 [PLUGIN_DEV.md](PLUGIN_DEV.md)「打包为 exe」与 `build.ps1` / `build-linux.sh` / `build-electron.ps1`。onedir（`dist\qingci-bot-ce\`）只含后端不含桌面壳；桌面壳由 electron-builder 承担，Windows 便携 EXE 数据落于 `%APPDATA%\Qingci-Bot-CE`，Linux AppImage 走稳定用户目录。直接执行 `pyinstaller qingci-bot-ce.spec` 也能出 onedir 后端，但缺少 Web UI 产物复制与浏览器下载步骤。
+> 构建详见 [PLUGIN_DEV.md](PLUGIN_DEV.md)「打包为 exe」与 `build.ps1` / `build-linux.sh` / `build-electron.ps1`。onedir（`dist\qingci-bot-ce\`）只含后端不含桌面壳；桌面壳由 electron-builder 承担，Windows 安装版/绿色解压版与 Linux AppImage 的实例与数据均随可执行目录 `instances\` 自包含分发。直接执行 `pyinstaller qingci-bot-ce.spec` 也能出 onedir 后端，但缺少 Web UI 产物复制与浏览器下载步骤。
 
 ## 项目结构
 

@@ -73,7 +73,7 @@ Qingci-Bot-CE/
 ├── alembic.ini                # Alembic 迁移配置
 ├── config.example.yaml        # 配置模板（脱敏；实例配置在 instances/<name>/config.yaml）
 ├── build.ps1                  # PyInstaller 打包脚本（第一步：后端 onedir）
-├── build-electron.ps1         # Electron 打包脚本（第二步：先 build.ps1 出后端 onedir，再 electron-builder 出便携 EXE）
+├── build-electron.ps1         # Electron 打包脚本（第二步：先 build.ps1 出后端 onedir，再 electron-builder 出安装版 Setup.exe + 绿色解压 zip）
 ├── qingci-bot-ce.spec         # PyInstaller 打包配置
 ├── bot/
 │   ├── config.py              # 配置管理（Pydantic 模型）

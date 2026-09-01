@@ -36,7 +36,7 @@
 
 - **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板 + 卸载/彻底删除 + 插件市场一键安装/更新/搜索）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 运行日志（实时日志流 + 级别过滤，受 `log.run_log_enabled` 开关控制）/ 登录审计 / 系统设置。独立「实例管理」页面支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）
 
-- **桌面应用**：Electron + Python 混合架构 — Electron 桌面壳 spawn Python 后端（`main.py --backend`）并加载其 Web UI；系统托盘（关闭窗口自动驻留后台）、启动画面、单实例（按 data-dir 退化的控制端口）均由壳承担；`build-electron.ps1` 产出便携版单文件 EXE 一键分发
+- **桌面应用**：Electron + Python 混合架构 — Electron 桌面壳 spawn Python 后端（`main.py --backend`）并加载其 Web UI；系统托盘（关闭窗口自动驻留后台）、启动画面、单实例（按 data-dir 退化的控制端口）均由壳承担；`build-electron.ps1` 产出安装版 Setup.exe + 绿色解压 zip 一键分发
 
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖；litellm 延迟导入，启动不加载重型依赖
 
@@ -52,7 +52,7 @@
 
 - Node.js 18+（仅构建 Web UI 时需要，`web/dist` 已存在可跳过）
 
-- 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 18+（`desktop/electron`）；最终用户运行 `build-electron.ps1` 产出的便携版 EXE 无需额外运行时
+- 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 18+（`desktop/electron`）；最终用户运行 `build-electron.ps1` 产出的安装版 / 绿色解压版 EXE 无需额外运行时
 
 ## 1. 安装
 
@@ -87,9 +87,9 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 >
 > **打包版（EXE）已全内置**：`build.ps1` 构建时自动下载无头 Chromium 到产物目录 `ms-playwright\`，运行时经 `PLAYWRIGHT_BROWSERS_PATH` 定位，EXE 开箱即可渲染签到卡，无需最终用户再执行安装。构建期同样可用上述 `PLAYWRIGHT_DOWNLOAD_HOST` 走国内镜像。
 >
-> **桌面壳打包另见**：`build.ps1` 产出的 onedir（`dist\qingci-bot-ce\`）实例数据随 `instances\<name>\` 自包含分发；`build-electron.ps1`（electron-builder）在 onedir 基础上产出便携版单文件 EXE，内嵌后端并按当前实例解析，实例/数据落于 `%APPDATA%\Qingci-Bot-CE`（经 `QINGCI_USER_DATA` 注入），避免便携版解压到系统临时目录导致数据丢失。桌面壳打包需 Node.js 18+，用户运行便携 EXE 无需额外运行时。
+> **桌面壳打包另见**：`build.ps1` 产出的 onedir（`dist\qingci-bot-ce\`）与 `build-electron.ps1`（electron-builder，产出 NSIS 安装版 Setup.exe + 绿色解压 zip）实例与数据均随可执行目录 `instances\<name>\` 自包含分发（DB/日志/插件数据），便于整体拷贝迁移；桌面壳需 Node.js 18+，用户运行安装版/绿色解压版无需额外运行时。
 >
-> **Linux 桌面（AppImage）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.ps1` 的对应脚）产出 onedir，再经 `electron-builder --linux` 打成 AppImage；数据目录与 Windows 便携版一致走稳定用户目录。
+> **Linux 桌面（AppImage）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.ps1` 的对应脚）产出 onedir，再经 `electron-builder --linux` 打成 AppImage；数据目录同样随可执行目录 `instances\` 自包含分发。
 >
 > **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.ps1`/`build-linux.sh` 分别出后端、`build-electron.ps1`/`electron-builder --linux` 出 EXE / AppImage，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](.github/workflows/release.yml)。
 >

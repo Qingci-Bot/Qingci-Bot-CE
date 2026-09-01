@@ -5,6 +5,12 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.3] - 2026-09-01（数据目录跟随可执行目录）
+
+### Changed
+
+- **数据目录跟随可执行目录**：移除打包形态下 `QINGCI_USER_DATA` 对 `%APPDATA%\Qingci-Bot-CE` 的实例/数据重定向，安装版与绿色解压版统一随 EXE 目录 `instances\<name>\` 自包含分发（DB/日志/插件数据），便于整体拷贝迁移；绿色解压版请放固定目录后运行，避免解压到系统临时目录导致数据丢失。壳主进程日志随实例写 `instances\<name>\data\logs\electron.log`
+
 ## [1.17.0] - 2026-09-01（Electron + Python 混合架构桌面端）
 
 ### Changed
@@ -13,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **桌面能力迁至 Electron 侧**：系统托盘、按 data-dir 的单实例锁与聚焦、启动画面、关闭驻留后台、退出/重载全部由 Electron 承担；Python 仅做内嵌后端
 - **实例切换/改名由 Electron 接管**：后端按需打印机器可读 `QINGCI_RELAUNCH <json>` 信号，Electron 终止当前后端并按目标参数重新拉起，壳进程不退出（丝滑切换）
 - **移除 PyWebView 模式**：删除 pywebview / pystray / pillow 依赖及 `--desktop` / `desktop/app.py` / `tray.py` / `splash.py` 相关实现
-- **新增 Electron 打包链路**：`build-electron.ps1` + electron-builder（便携版 EXE，内嵌 Python 后端 onedir 为 extraResources/backend）；新增 CI `electron` 校验 job
+- **新增 Electron 打包链路**：`build-electron.ps1` + electron-builder（安装版 Setup.exe + 绿色解压 zip，内嵌 Python 后端 onedir 为 extraResources/backend）；新增 CI `electron` 校验 job
 
 ## [1.16.10] - 2026-08-23（OneBot 12 协议符合度与 Telegram 转换修复）
 

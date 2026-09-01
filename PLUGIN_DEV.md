@@ -1659,11 +1659,11 @@ dist\qingci-bot-ce\
 
 - 当前产物为 **windowed 无控制台** 模式（`qingci-bot-ce.spec` 中 `console=False`），日志不直接可见，建议开启文件日志（`log.log_file_enabled: true`）；如需控制台窗口排障，将 `console` 改为 `True` 后重新构建。
 
-- 桌面 GUI 由 Electron 壳（`desktop\electron\`）承担：分发用 `build-electron.ps1` 生成便携版 EXE，其内嵌 Python 后端（`--backend`）就绪时通过标准输出上报端口供壳加载 Web UI；不依赖系统 WebView2 / pywebview。
+- 桌面 GUI 由 Electron 壳（`desktop\electron\`）承担：分发用 `build-electron.ps1` 生成桌面壳 EXE（安装版 + 绿色解压 zip），其内嵌 Python 后端（`--backend`）就绪时通过标准输出上报端口供壳加载 Web UI；不依赖系统 WebView2 / pywebview。
 
-### 桌面壳（Electron 便携版）打包
+### 桌面壳（Electron）打包
 
-`build.ps1` 产出的 onedir 是"后端形态"（可加 `--backend` 由壳拉起，也可直接命令行运行 Bot/API）。要给最终用户一个免配置的桌面应用，再跑第二步 `build-electron.ps1` 出便携版单文件 EXE。
+`build.ps1` 产出的 onedir 是"后端形态"（可加 `--backend` 由壳拉起，也可直接命令行运行 Bot/API）。要给最终用户一个免配置的桌面应用，再跑第二步 `build-electron.ps1` 出安装版 / 绿色解压版 EXE。
 
 ```powershell
 # 先决条件
@@ -1678,11 +1678,11 @@ dist\qingci-bot-ce\
 .\dist\electron\Qingci-Bot-CE-<version>-win-x64.exe   # 启动桌面壳
 ```
 
-- **运行方式**：双击便携 EXE 即由 Electron 壳启动——先解析当前实例 → spawn 内嵌 Python 后端（`--backend`）→ 就绪后加载 Web UI；系统托盘、按 data-dir 的单实例锁与聚焦、启动画面、关闭驻留后台全部由壳承担。
+- **运行方式**：双击桌面 EXE（安装版或绿色解压版）即由 Electron 壳启动——先解析当前实例 → spawn 内嵌 Python 后端（`--backend`）→ 就绪后加载 Web UI；系统托盘、按 data-dir 的单实例锁与聚焦、启动画面、关闭驻留后台全部由壳承担。
 
-- **数据位置**：便携版解压到系统临时目录运行，若实例数据留在临时目录会在退出/系统清理时丢失。因此打包形态下实例与数据经 `QINGCI_USER_DATA` 落于 `%APPDATA%\Qingci-Bot-CE`；这与 onedir 形态"随 exe 旁 `instances\` 自包含分发"不同。
+- **数据位置**：安装版/绿色解压版均随可执行目录自包含分发——实例与数据统一落在 EXE 旁的 `instances\<name>\`（DB/日志/插件数据），便于整体拷贝迁移。绿色解压版请放到固定目录后运行，勿直接解压到系统临时目录，以免数据随临时目录清理而丢失。
 
-- **调试**：壳主进程日志写 `%APPDATA%\Qingci-Bot-CE\logs\electron.log`；后端超时（默认 90s 未就绪）会展示错误页并可重试/查看日志。
+- **调试**：壳主进程日志随实例数据写 `instances\<name>\data\logs\electron.log`；后端超时（默认 90s 未就绪）会展示错误页并可重试/查看日志。
 
 ### 桌面壳（Linux AppImage）打包
 
@@ -1696,13 +1696,13 @@ cd desktop/electron && npm ci && npx electron-builder --linux --publish never
 
 - 产物：`dist/electron/Qingci-Bot-CE-<version>-linux-x64.AppImage`（内嵌后端为 `resources/backend`）。
 - 运行：双击/`./Qingci-Bot-CE-<version>-linux-x64.AppImage` 即由 Electron 壳启动（需系统具备 FUSE/libfuse2）。
-- 数据位置：打包形态经 `QINGCI_USER_DATA` 走稳定用户目录，与 Windows 便携版一致。
+- 数据位置：随可执行目录自包含分发，与 Windows 一致落于程序目录 `instances\` 下。
 - 注意：海外 CI 构建时 SDK 走 Gitee 源会被限流（429），`build-linux.sh` 支持用环境变量 `QINGCI_SDK_GIT_URL` 覆盖为 GitHub 主仓库（release 流水线已注入）。
 
 ### 自动发布（GitHub Actions）
 
 打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](.github/workflows/release.yml)，各平台自动联编：
-- Windows 便携 EXE（`build.ps1` + `build-electron.ps1`）
+- Windows 桌面 EXE（安装版 Setup.exe + 绿色解压 zip，`build.ps1` + `build-electron.ps1`）
 - Linux AppImage（`build-linux.sh` + `electron-builder --linux`）
 - Docker 镜像（tag：`vX.Y.Z` / `X.Y` / `X` / `latest`）
 

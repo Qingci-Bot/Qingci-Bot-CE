@@ -177,7 +177,6 @@ let pendingRelaunchArgs = null; // 后端请求切实例时的目标启动参数
 let readyTimer = null;          // 后端就绪超时定时器
 let abnormalExitCount = 0;      // 连续异常退出计数（防抖）
 let lastAbnormalExit = 0;       // 上一次异常退出时间戳
-let _stableDataRoot = null;     // 打包形态下后端可写数据根（稳定用户数据目录）
 
 // RELAUNCH 信号参数白名单：仅允许派生自后端 _build_start_args 的转发标志
 const RELAUNCH_ALLOWED = new Set(["--instance", "--data-dir", "--host", "--port", "--config", "--rename-dir", "--no-bot"]);
@@ -199,14 +198,12 @@ function sanitizeRelaunchArgs(arr) {
 }
 
 /**
- * 后端进程环境变量。打包（便携/安装）形态下注入 QINGCI_USER_DATA，让后端把
- * 实例/数据落到稳定用户目录——便携版 EXE 解压到临时目录运行，数据若留在其中
- * 会在退出或系统清理临时目录时丢失。开发/onedir 直跑不注入，维持随目录分发。
+ * 后端进程环境变量。维持随程序目录自包含分发：不额外设置数据根变量，
+ * 后端（bot/paths.py 的 instances_dir）默认把实例/数据落在可执行目录旁的
+ * instances/ 下。源码/onedir/便携 EXE 行为一致。
  */
 function backendEnv() {
-  const env = Object.assign({}, process.env);
-  if (_stableDataRoot) env.QINGCI_USER_DATA = _stableDataRoot;
-  return env;
+  return Object.assign({}, process.env);
 }
 
 function makeWindow({ error = false } = {}) {
@@ -478,12 +475,8 @@ ipcMain.on("quit", () => {
 });
 
 app.whenReady().then(async () => {
-  // 打包（便携/安装）形态下，将后端可写数据根指向稳定的用户数据目录
-  // （%APPDATA%/Qingci-Bot-CE），避免便携版解压运行的实例数据落到系统临时目录。
-  if (!isDev()) {
-    app.setPath("userData", path.join(app.getPath("appData"), "Qingci-Bot-CE"));
-    _stableDataRoot = app.getPath("userData");
-  }
+  // 数据随可执行目录自包含分发：不重定向 userData/数据根，后端默认落于
+  // EXE 旁 instances/ 下，便于整体拷贝迁移。
   try {
     const { isPrimary, meta, server } = await acquireSingleInstance();
     instanceMeta = meta;

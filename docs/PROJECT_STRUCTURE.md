@@ -124,7 +124,7 @@ Qingci-Bot-CE/
 ├── scripts/                # 一次性/运维脚本（如 SQLite→PostgreSQL 迁移）
 ├── docs/                   # 规范文档（本文档 + CODING_STANDARDS.md）
 ├── build.ps1               # Windows 构建脚本（打包前 -e 安装 Plugins-SDK）
-├── build-electron.ps1      # Electron 打包脚本（先 build.ps1 出后端 onedir，再 electron-builder 出便携 EXE）
+├── build-electron.ps1      # Electron 打包脚本（先 build.ps1 出后端 onedir，再 electron-builder 出安装版 Setup.exe + 绿色解压 zip）
 ├── qingci-bot-ce.spec      # PyInstaller 打包配置（collect_all 打包 SDK）
 ├── pyproject.toml          # 依赖（含 git 依赖 qingci-plugin-sdk）、ruff/mypy/pytest 配置
 ├── alembic.ini             # 迁移配置
