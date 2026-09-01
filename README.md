@@ -72,6 +72,8 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 >
 > **打包版（EXE）已全内置**：`build.ps1` 构建时自动下载无头 Chromium 到产物目录 `ms-playwright\`，运行时经 `PLAYWRIGHT_BROWSERS_PATH` 定位，EXE 开箱即可渲染签到卡，无需最终用户再执行安装。构建期同样可用上述 `PLAYWRIGHT_DOWNLOAD_HOST` 走国内镜像。
 >
+> **桌面壳打包另见**：`build.ps1` 产出的 onedir（`dist\qingci-bot-ce\`）实例数据随 `instances\<name>\` 自包含分发；`build-electron.ps1`（electron-builder）在 onedir 基础上产出便携版单文件 EXE，内嵌后端并按当前实例解析，实例/数据落于 `%APPDATA%\Qingci-Bot-CE`（经 `QINGCI_USER_DATA` 注入），避免便携版解压到系统临时目录导致数据丢失。桌面壳打包需 Node.js 18+，用户运行便携 EXE 无需额外运行时。
+>
 > 浏览器缺失或下载失败时渲染能力自动降级不可用（`/api/bot/status` 的 `render` 字段可查状态），不影响框架启动。
 > 插件协议层 SDK（`qingci-plugin-sdk`）作为 git 依赖（默认指 [Gitee 镜像](https://gitee.com/qingci-bot/Plugins-SDK)，国内拉取更快）随核心依赖安装；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.ps1` 一致），覆盖 git 依赖版本。
 >
@@ -136,7 +138,7 @@ docker compose down         # 停止
 chmod +x install.sh
 ./install.sh                        # 核心依赖（自动检测 Python>=3.10，优先 uv，否则 pip）
 ./install.sh --vector               # 追加向量知识库（lancedb）
-./install.sh --with-gui             # 追加桌面 GUI 系统库（仅需桌面模式时；可选）
+./install.sh --with-gui             # 历史参数（桌面 GUI 已由 Electron 壳承担，保留仅为兼容，实际不再安装）
 ./install.sh --dev                  # 追加测试/构建/质量工具
 ```
 

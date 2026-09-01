@@ -28,7 +28,7 @@ for arg in "$@"; do
     --help|-h)
       echo "用法: ./install.sh [--vector] [--with-gui] [--dev]"
       echo "  --vector    追加安装向量知识库依赖（lancedb）"
-      echo "  --with-gui  追加安装桌面 GUI 系统库（桌面模式下才需要）"
+      echo "  --with-gui  历史参数（桌面 GUI 已由 Electron 壳承担，保留仅为兼容，实际不再安装）"
       echo "  --dev       追加安装测试/构建/代码质量工具"
       exit 0
       ;;

@@ -13,22 +13,22 @@ npm run build    # 构建生产版本到 web/dist/
 
 ## Web UI 页面
 
-| 页面 | 路由 | 说明 |
-|------|------|------|
-| 仪表盘 | `/` | 运行状态卡片 + LLM 用量统计图表（依赖 `log.usage_tracking`） |
-| LLM 配置 | `/config` | 提供商切换（联动 api_url/model）、模型列表拉取、人格管理、MCP 服务器配置、连接测试 |
-| 对话调试台 | `/lab` | 无需进入 QQ 即可流式测试 LLM 回复；独立会话 key，不污染真实对话（走 `/api/ws/chat`） |
-| 群配置 | `/groups` | 各群 Bot 开关与触发模式 |
-| 插件管理 | `/plugins` | 插件列表 / 详情 / 重载 / 加载外部插件 / 卸载 / 禁用 / 启用；内含「命令管理」Tab 与「插件市场」 |
-| 消息日志 | `/logs` | 实时消息流 + 会话记录可视化（按会话分组查看/删除，支持清理与 CSV 导出） |
-| 运行日志 | `/runlog` | 实时运行日志流 + 级别过滤（受 `log.run_log_enabled` 开关控制；关闭后页面提示无数据，走 `/api/ws/runlog`） |
-| 系统设置 | `/settings` | Bot/OneBot/平台适配器配置、服务端/浏览器 API Key、运行日志采集开关、数据库备份、登录审计 |
-| 实例管理 | `/instances` | 新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用） |
-| 关于 | `/about` | 版本信息 |
-| 登录 | `/login` | API Key 登录（服务端已配置 `api_key` 时显示） |
-| 首次启动向导 | `/setup` | 首次启动引导（配置未完成时自动跳转） |
+| 页面     | 路由           | 说明                                                                         |
+| ------ | ------------ | -------------------------------------------------------------------------- |
+| 仪表盘    | `/`          | 运行状态卡片 + LLM 用量统计图表（依赖 `log.usage_tracking`）                               |
+| LLM 配置 | `/config`    | 提供商切换（联动 api\_url/model）、模型列表拉取、人格管理、MCP 服务器配置、连接测试                        |
+| 对话调试台  | `/lab`       | 无需进入 QQ 即可流式测试 LLM 回复；独立会话 key，不污染真实对话（走 `/api/ws/chat`）                   |
+| 群配置    | `/groups`    | 各群 Bot 开关与触发模式                                                             |
+| 插件管理   | `/plugins`   | 插件列表 / 详情 / 重载 / 加载外部插件 / 卸载 / 禁用 / 启用；内含「命令管理」Tab 与「插件市场」                 |
+| 消息日志   | `/logs`      | 实时消息流 + 会话记录可视化（按会话分组查看/删除，支持清理与 CSV 导出）                                   |
+| 运行日志   | `/runlog`    | 实时运行日志流 + 级别过滤（受 `log.run_log_enabled` 开关控制；关闭后页面提示无数据，走 `/api/ws/runlog`） |
+| 系统设置   | `/settings`  | Bot/OneBot/平台适配器配置、服务端/浏览器 API Key、运行日志采集开关、数据库备份、登录审计                     |
+| 实例管理   | `/instances` | 新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用）                                            |
+| 关于     | `/about`     | 版本信息                                                                       |
+| 登录     | `/login`     | API Key 登录（服务端已配置 `api_key` 时显示）                                           |
+| 首次启动向导 | `/setup`     | 首次启动引导（配置未完成时自动跳转）                                                         |
 
----
+***
 
 ## 插件开发
 
@@ -38,28 +38,33 @@ npm run build    # 构建生产版本到 web/dist/
 
 ### 命名规范
 
-| 项目 | 规范 | 示例 |
-|------|------|------|
-| 目录名 | 小写英文 + 下划线，与 `name` 一致，**不能以 `_` 开头** | `chat/`、`my_plugin/` |
-| 入口文件 | 目录下的 `__init__.py` | `chat/__init__.py` |
-| 类名 | `{Name}Plugin` 帕斯卡命名 | `ChatPlugin`、`HelloPlugin` |
-| `name` 属性 | 小写英文 + 下划线，插件唯一标识，**必填** | `"chat"`、`"my_plugin"` |
+| 项目        | 规范                                            | 示例                         |
+| --------- | --------------------------------------------- | -------------------------- |
+| 目录名       | 小写英文 + 下划线，与 `name` 一致，**不能以** **`_`** **开头** | `chat/`、`my_plugin/`       |
+| 入口文件      | 目录下的 `__init__.py`                            | `chat/__init__.py`         |
+| 类名        | `{Name}Plugin` 帕斯卡命名                          | `ChatPlugin`、`HelloPlugin` |
+| `name` 属性 | 小写英文 + 下划线，插件唯一标识，**必填**                      | `"chat"`、`"my_plugin"`     |
 
 **硬性约束：**
+
 - 目录名以 `_` 开头（如 `_template/`）会被跳过，不会加载
+
 - 每个插件包只能定义 **1 个** `PluginBase` 子类，多个会报错
+
 - 插件类必须定义在 `__init__.py` 模块内，不能从其他模块 `import` 进来
+
 - `name` 与其他已加载插件重名时**警告并覆盖**（后加载者胜出，仅记录 warning 不报错）
+
 - 单文件 `.py` 插件仍兼容，但推荐使用目录结构
 
 ### 目录结构要求
 
 框架通过扫描 `plugins/` 目录识别插件。**目录型插件**（推荐）和**文件型插件**（兼容）的判断规则：
 
-| 形态 | 识别条件 | 入口 |
-|------|----------|------|
+| 形态  | 识别条件                                    | 入口                                 |
+| --- | --------------------------------------- | ---------------------------------- |
 | 目录型 | 目录内存在 `__init__.py` **或** `plugin.json` | `__init__.py`（必须含 `PluginBase` 子类） |
-| 文件型 | `plugins/<name>.py` | 文件本身 |
+| 文件型 | `plugins/<name>.py`                     | 文件本身                               |
 
 **同名优先**：若 `plugins/chat/` 和 `plugins/chat.py` 同时存在，目录型优先，文件型被忽略。
 
@@ -78,17 +83,23 @@ plugins/my_plugin/          # 目录名 = 插件名（不能以 _ 或 . 开头�
 ```
 
 **硬性要求：**
+
 - 目录名不能以 `_` 或 `.` 开头，否则跳过加载
+
 - `__init__.py` 必须存在，且其中定义**恰好 1 个** `PluginBase` 子类
+
 - 插件类必须直接定义在 `__init__.py` 中，不能从子模块 `import` 导入
+
 - 若 `__init__.py` 不存在但 `plugin.json` 存在，目录被识别为插件但加载会失败（缺少入口）
+
 - 其他 `.py` 文件（如 `utils.py`）可自由存放，不会被解析为独立插件
 
----
+***
 
 Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持两种开发方式：
 
 - **新式（推荐）**：用 `on_command`/`on_message` 等装饰器注册 Matcher，配合 Rule 规则匹配和 Permission 权限控制
+
 - **旧式（兼容）**：重写 `on_message` 方法，返回回复文本
 
 两种方式可共存，Dispatcher 按 priority 优先调度 Matcher，无匹配时回退到旧式 `on_message`。
@@ -97,10 +108,10 @@ Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，�
 
 插件协议层（`PluginBase`/`Matcher`/`Permission`/`Rule`/`MessageContext`）统一由独立插件 SDK 维护，主项目 `bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 为薄转发。两种插件形态的基类是**同一个类**，只是导入入口不同：
 
-| 形态 | 基类导入 | 适用场景 |
-|------|----------|----------|
-| 内置式 | `from bot.plugin.base import PluginBase` | 与主项目同仓库开发的插件（底层即转发 SDK） |
-| 独立 SDK 式（推荐） | `from qingci_plugin_sdk import PluginBase` | 独立工作区开发、可分发/版本化的插件 |
+| 形态           | 基类导入                                       | 适用场景                    |
+| ------------ | ------------------------------------------ | ----------------------- |
+| 内置式          | `from bot.plugin.base import PluginBase`   | 与主项目同仓库开发的插件（底层即转发 SDK） |
+| 独立 SDK 式（推荐） | `from qingci_plugin_sdk import PluginBase` | 独立工作区开发、可分发/版本化的插件      |
 
 SDK 式插件在 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 工作区开发（SDK 已随 exe 打包，插件运行时无需另行安装），两类插件混用不受影响：`PluginManager` 自动识别 SDK 式 `PluginBase` 子类，并调用 `set_data_root()` 将数据目录重定向到当前实例（`data_root()/plugins/<name>/`），保持实例隔离。由于内置插件的 `bot.plugin.base` 也是 SDK 转发，内置插件同样经此路径，实例隔离行为一致。
 
@@ -150,13 +161,13 @@ class MyPlugin(PluginBase):
 
 插件状态由 `PluginStatus` 枚举管理，替代原 `enabled` 布尔值：
 
-| 状态 | 值 | 说明 |
-|------|------|------|
-| `LOADING` | `"loading"` | 正在加载（on_load 执行中） |
-| `LOADED` | `"loaded"` | 已加载，正常运行 |
-| `DISABLED` | `"disabled"` | 已禁用，跳过事件分发 |
-| `ERROR` | `"error"` | 加载/运行出错 |
-| `UNLOADING` | `"unloading"` | 正在卸载（on_unload 执行中） |
+| 状态          | 值             | 说明                   |
+| ----------- | ------------- | -------------------- |
+| `LOADING`   | `"loading"`   | 正在加载（on\_load 执行中）   |
+| `LOADED`    | `"loaded"`    | 已加载，正常运行             |
+| `DISABLED`  | `"disabled"`  | 已禁用，跳过事件分发           |
+| `ERROR`     | `"error"`     | 加载/运行出错              |
+| `UNLOADING` | `"unloading"` | 正在卸载（on\_unload 执行中） |
 
 ```python
 # 状态属性（只读）
@@ -168,21 +179,21 @@ plugin.enabled  # bool，向后兼容：LOADING/LOADED 为 True
 
 插件加载后，以下属性由 `PluginManager` 自动注入：
 
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| `self.bot` | `QingciBot` | Bot 主实例 |
-| `self.db` | `Database` | SQLite 数据库（基于 SQLModel） |
-| `self.config` | `ConfigManager` | 配置管理器（可读写 `config.yaml`） |
-| `self.connection` | `OneBotConnection` | OneBot 连接（可调用 QQ API） |
-| `self.llm` | `LLMManager` | LLM 管理器（基于 litellm） |
-| `self.scheduler` | `BotScheduler` | 定时任务调度器 |
-| `self.tool_registry` | `ToolRegistry` | Function Calling 工具注册表 |
-| `self.knowledge_store` | `KnowledgeStore` | 知识库（RAG 未启用时为 None） |
-| `self.session_state` | `SessionStateManager` | 会话状态（TTL 键值存储） |
-| `self.event_bus` | `EventBus` | 跨插件事件总线（发布-订阅） |
-| `self.matchers` | `list[Matcher]` | Matcher 列表（在 `on_load` 中填充） |
-| `self.i18n` | `I18n` | 国际化翻译器（`self._ = self.i18n.t`） |
-| `self.data_dir` | `Path` | 插件专属数据目录（自动创建） |
+| 属性                     | 类型                    | 说明                             |
+| ---------------------- | --------------------- | ------------------------------ |
+| `self.bot`             | `QingciBot`           | Bot 主实例                        |
+| `self.db`              | `Database`            | SQLite 数据库（基于 SQLModel）        |
+| `self.config`          | `ConfigManager`       | 配置管理器（可读写 `config.yaml`）       |
+| `self.connection`      | `OneBotConnection`    | OneBot 连接（可调用 QQ API）          |
+| `self.llm`             | `LLMManager`          | LLM 管理器（基于 litellm）            |
+| `self.scheduler`       | `BotScheduler`        | 定时任务调度器                        |
+| `self.tool_registry`   | `ToolRegistry`        | Function Calling 工具注册表         |
+| `self.knowledge_store` | `KnowledgeStore`      | 知识库（RAG 未启用时为 None）            |
+| `self.session_state`   | `SessionStateManager` | 会话状态（TTL 键值存储）                 |
+| `self.event_bus`       | `EventBus`            | 跨插件事件总线（发布-订阅）                 |
+| `self.matchers`        | `list[Matcher]`       | Matcher 列表（在 `on_load` 中填充）    |
+| `self.i18n`            | `I18n`                | 国际化翻译器（`self._ = self.i18n.t`） |
+| `self.data_dir`        | `Path`                | 插件专属数据目录（自动创建）                 |
 
 ### 依赖注入容器（DI Container）
 
@@ -204,16 +215,20 @@ class MyPlugin(PluginBase):
 `PluginManager._init_plugin` 会先调用 `await bot.di.inject(plugin)` 按类型自动注入，再手动赋值兜底保证兼容。
 
 **注入特性：**
+
 - 支持 `Optional[X]` / `X | None` 类型注解（自动提取内部类型）
+
 - 不会覆盖已设置的非 None 属性值
+
 - 支持 `register_as(InterfaceType, instance)` 接口绑定
 
 **生命周期：**
-| 生命周期 | 说明 |
-|---------|------|
-| `SINGLETON` | 全局唯一实例（默认） |
+
+| 生命周期        | 说明               |
+| ----------- | ---------------- |
+| `SINGLETON` | 全局唯一实例（默认）       |
 | `TRANSIENT` | 每次 resolve 创建新实例 |
-| `SCOPED` | 同一 scope 内返回同一实例 |
+| `SCOPED`    | 同一 scope 内返回同一实例 |
 
 ### handler 参数级依赖注入（Depends）
 
@@ -234,6 +249,7 @@ async def stats(
 ```
 
 **参数解析规则（按顺序）：**
+
 1. 注解为 `MatcherContext` 类型，或参数名为 `ctx`/`match` → 注入匹配上下文
 2. 默认值为 `Depends(...)` → 按其依赖解析（支持类型 / 可调用依赖）
 3. 注解为 `Bot` 类型 → 注入 `bot` 实例
@@ -243,7 +259,7 @@ async def stats(
 
 `Depends` 接受 `use_cache=True` 参数（当前保留兼容、暂未实现缓存）；可调用依赖的返回值会自动等待 `await`。
 
-### 插件数据目录（data_dir）
+### 插件数据目录（data\_dir）
 
 每个插件拥有专属数据目录 `data_root()/plugins/<name>/`（默认 `app_root()/data/plugins/<name>/`；实例模式下为 `instances/<name>/data/plugins/<name>/`），用于持久化运行时数据（缓存、导出文件等）。目录自动创建；**卸载插件（默认）不删除数据目录**（保留以防重装），仅「彻底删除（purge=true）」时才一并删除数据目录与第三方依赖。
 
@@ -276,8 +292,11 @@ class MyPlugin(PluginBase):
 > **注意**：依赖按插件隔离在 `deps/<插件名>/` 子目录（非共享平铺），因此不同插件声明**同一包的不同版本**互不影响，也不会遮蔽框架内置包（某插件声明的包只对该插件可见）。卸载插件（默认）不删除其依赖目录（与插件数据目录一致，保留以防重装）；「彻底删除（`DELETE /api/plugin/{name}?purge=true`）」会一并清理 `deps/<插件名>/`、安装标记并从 `sys.path` 移除注入项。
 
 **依赖安装规则：**
+
 - 声明内容未变化时跳过安装（按内容哈希幂等），`requirements.txt` 变更才触发重装
+
 - 安装器：源码与 exe 打包版均优先 `uv pip install --target`（打包版用随产物的 uv.exe，经 `sys._MEIPASS` 定位），无 uv 时回退 `python -m pip`（打包版为内嵌 pip）
+
 - 安装失败仅记录警告，不阻止插件加载（插件缺依赖 import 时会报 `ModuleNotFoundError`）
 
 **安全开关：** 自动安装由 `config.yaml` 的 `bot.auto_install_plugin_deps` 控制（默认 `true`）。关闭后插件 `requirements.txt` 不再触发任何包安装（降低供给链风险），但依赖缺失时插件会加载失败：
@@ -292,12 +311,12 @@ bot:
 
 插件可覆写以下钩子，在 Bot 与连接的关键节点获得通知（全部为可选，异常隔离，不影响主流程）：
 
-| 钩子 | 触发时机 | 说明 |
-|------|----------|------|
-| `on_startup()` | Bot 启动完成、所有插件加载完毕后 | 连接数据库、注册后台任务等耗时初始化 |
-| `on_shutdown()` | Bot 停止时（在 `on_unload` 之前） | 释放 `on_startup` 中申请的资源 |
-| `on_bot_connect()` | 有 OneBot 11 会话（协议端）连接到反向 WebSocket | 初始连接与重连均触发，用于初始化会话资源 |
-| `on_metaevent(event)` | 元事件到达（heartbeat / lifecycle 等） | 返回 `True` 表示已消费 |
+| 钩子                    | 触发时机                               | 说明                     |
+| --------------------- | ---------------------------------- | ---------------------- |
+| `on_startup()`        | Bot 启动完成、所有插件加载完毕后                 | 连接数据库、注册后台任务等耗时初始化     |
+| `on_shutdown()`       | Bot 停止时（在 `on_unload` 之前）          | 释放 `on_startup` 中申请的资源 |
+| `on_bot_connect()`    | 有 OneBot 11 会话（协议端）连接到反向 WebSocket | 初始连接与重连均触发，用于初始化会话资源   |
+| `on_metaevent(event)` | 元事件到达（heartbeat / lifecycle 等）     | 返回 `True` 表示已消费        |
 
 ```python
 class MyPlugin(PluginBase):
@@ -342,21 +361,25 @@ async def order(ctx: MatcherContext) -> str:
 ```
 
 **API 速查：**
-| 方法 | 说明 |
-|------|------|
-| `await subscribe(event_type, handler)` | 订阅事件；handler 为 `async (event_type, data) -> None`，也支持 sync |
-| `await unsubscribe(event_type, handler)` | 取消订阅 |
-| `await publish(event_type, **data)` | 发布事件，异步通知所有订阅者（异常隔离，单个订阅者异常不影响其他） |
-| `subscribe_sync(event_type, handler)` | 同步订阅（非 async 上下文使用） |
-| `has_subscribers(event_type)` | 是否有订阅者 |
-| `await clear()` | 清空所有订阅 |
+
+| 方法                                       | 说明                                                         |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| `await subscribe(event_type, handler)`   | 订阅事件；handler 为 `async (event_type, data) -> None`，也支持 sync |
+| `await unsubscribe(event_type, handler)` | 取消订阅                                                       |
+| `await publish(event_type, **data)`      | 发布事件，异步通知所有订阅者（异常隔离，单个订阅者异常不影响其他）                          |
+| `subscribe_sync(event_type, handler)`    | 同步订阅（非 async 上下文使用）                                        |
+| `has_subscribers(event_type)`            | 是否有订阅者                                                     |
+| `await clear()`                          | 清空所有订阅                                                     |
 
 - 订阅 `"*"` 接收所有事件（通配）
+
 - 事件 `data` 为 dict，`publish` 的关键字参数即为其内容
+
 - 事件总线已注入 DI 容器（`EventBus` 类型），handler 参数级 DI 中可按 `Depends(EventBus)` 或类型注解获取
+
 - 插件卸载时需自行 `unsubscribe`（或依赖 `EventBus` 常驻实例的引用）
 
-### 插件级 LLM 工具声明（@llm_tool）
+### 插件级 LLM 工具声明（@llm\_tool）
 
 插件可用 `@llm_tool` 装饰器直接注册 Function Calling 工具，让插件参与 LLM 推理，构建「LLM 原生插件」。工具在插件加载时自动注册到全局 `ToolRegistry`，卸载时自动注销。
 
@@ -389,8 +412,11 @@ def add(a: int, b: int) -> int:
 ```
 
 - 工具注册名自动加插件名前缀（`<plugin>_<工具名>`），避免跨插件冲突；如上方 `get_weather` 在 `weather` 插件中注册为 `weather_get_weather`
+
 - 需在插件的 `__init__.py` 模块中使用（模块级装饰器，随插件加载收集）
+
 - 插件卸载时框架自动从 `ToolRegistry` 注销其全部工具
+
 - 工具实际参与调用需 `config.yaml` 中 `llm.enable_tools` 开启
 
 ### 指令系统增强（别名 / 子指令 / 类型化参数 / help 可见性）
@@ -425,9 +451,10 @@ async def admin(ctx: MatcherContext) -> str:
 async def _ban(ctx: MatcherContext) -> str:
     return f"已封禁 {ctx.args}"  # ctx.args 为子指令后的剩余参数
 ```
+
 父指令自动排除已声明的子指令（不会拦截 `admin ban xx`），子指令消息必然命中对应子指令 Matcher。
 
-**类型化参数（args_schema）：** 按空白切分 `ctx.args` 并按类型转换，结果注入 handler 同名形参。类型转换失败保留原字符串，不崩溃。
+**类型化参数（args\_schema）：** 按空白切分 `ctx.args` 并按类型转换，结果注入 handler 同名形参。类型转换失败保留原字符串，不崩溃。
 
 ```python
 @on_command("weather", args_schema={"city": str, "days": int})
@@ -438,7 +465,7 @@ async def weather(ctx: MatcherContext, city: str = "", days: int = 1) -> str:
 # /weather 北京 3 -> city="北京"（str），days=3（int），输出 "北京: 3 天预报"
 ```
 
-**help 可见性（hidden_in_help）：** 置 `True` 的命令（如内部/调试命令）不出现在宿主的 `/help` 列表（SDK v1.13.5+）。命令别名会随 `/help`（文本与图片）一并展示。
+**help 可见性（hidden\_in\_help）：** 置 `True` 的命令（如内部/调试命令）不出现在宿主的 `/help` 列表（SDK v1.13.5+）。命令别名会随 `/help`（文本与图片）一并展示。
 
 ```python
 @on_command("debug", hidden_in_help=True)
@@ -466,8 +493,11 @@ class MyPlugin(PluginBase):
 ```
 
 - 字段的 `default` / `description` / `required` 自动映射到表单（必填字段带 `*`，布尔渲染为开关，整数渲染为数字输入框）
+
 - 保存后写入 `config.yaml` 的 `plugins.<name>` 节，并即时应用到 `self.plugin_config`
+
 - 未定义 `Config` 时返回 `None`，前端不显示配置按钮
+
 - 相关 API：`GET /api/plugin/{name}/config`（获取 schema + 当前值）、`PUT /api/plugin/{name}/config`（更新）
 
 ### 自动热重载（PluginWatcher）
@@ -482,14 +512,16 @@ hot_reload:
 ```
 
 - 按文件 mtime 检测变更与新增，命中已加载插件时自动 `reload`
+
 - 重载失败时旧插件保持生效，不影响运行
+
 - 监听目录为 `app_root()/plugins/`，目录型（`__init__.py`）与文件型（`.py`）插件均支持
 
-### 细粒度事件处理钩子（run_preprocessor / on_calling_api）
+### 细粒度事件处理钩子（run\_preprocessor / on\_calling\_api）
 
 除事件级钩子与插件级 `before/after_handler` 外，框架提供两个更细粒度的全局钩子，用于跨插件横切逻辑：
 
-**Matcher 运行前钩子（run_preprocessor）：** 在 Matcher 匹配成功、handler 运行前触发，用于横切鉴权、审计、改写上下文。通过注入的 `bot` 注册：
+**Matcher 运行前钩子（run\_preprocessor）：** 在 Matcher 匹配成功、handler 运行前触发，用于横切鉴权、审计、改写上下文。通过注入的 `bot` 注册：
 
 ```python
 @on_command("admin")
@@ -508,11 +540,14 @@ bot.add_matcher_preprocessor(check_admin)  # 此处的 bot 为注入的 Bot 实�
 ```
 
 - 钩子签名 `async (bot, matcher, mctx) -> str | None`（也支持 sync）；返回非 None 作为拦截回复并停止整个分发链
+
 - 仅在规则/权限匹配成功后触发；未命中任何 Matcher 的事件不触发
+
 - 单个钩子异常隔离（记录后继续下一个），不影响主链路
+
 - 与事件级 `register_pre_hook`（事件级别、调度前）和插件级 `register_before`（插件内、handler 前）三级钩子互补
 
-**平台接口调用钩子（on_calling_api）：** 每次 Bot 调用 OneBot API 前触发，用于横切鉴权、参数改写、审计。通过 `bot.register_api_hook(fn)`（或 `connection.on_api_call(fn)`）注册：
+**平台接口调用钩子（on\_calling\_api）：** 每次 Bot 调用 OneBot API 前触发，用于横切鉴权、参数改写、审计。通过 `bot.register_api_hook(fn)`（或 `connection.on_api_call(fn)`）注册：
 
 ```python
 bot.register_api_hook(check_api)
@@ -528,6 +563,7 @@ async def check_api(api_name: str, params: dict) -> dict | None:
 ```
 
 - 钩子签名 `async (api_name, params) -> dict | None`；返回新 params 替换原参数，返回 None 保持原样，抛异常则阻止该次 API 调用
+
 - 覆盖所有经 `OneBotConnection.call_api` 的调用（含 `send_*`/`get_*` 便捷方法）
 
 ### 国际化（i18n）
@@ -551,14 +587,16 @@ class MyPlugin(PluginBase):
 ```
 
 - 全局语言由 `config.yaml` 的 `lang` 字段控制（默认 `zh-CN`），Bot 启动时自动应用到所有插件
+
 - 未命中的 key 原样返回，便于发现缺失资源而不崩溃
+
 - 支持 `{placeholder}` 格式化；`self.i18n.load_dir()` 也可手动加载翻译目录
 
 ### 会话状态（SessionState / TTL 键值存储）
 
 借鉴 NoneBot2 的 `session.state`，提供带过期时间的会话级临时键值存储，适用于多步骤对话、表单填写、等待确认等场景。
 
-**在 handler 中通过 `ctx.session_state` 使用：**
+**在 handler 中通过** **`ctx.session_state`** **使用：**
 
 ```python
 async def _handle_register(self, ctx: MatcherContext) -> str:
@@ -578,7 +616,7 @@ async def _handle_register(self, ctx: MatcherContext) -> str:
         return f"注册完成！{name}，{ctx.plain_text}岁"
 ```
 
-**在插件中通过 `self.session_state` 使用：**
+**在插件中通过** **`self.session_state`** **使用：**
 
 ```python
 # 按用户/群聊隔离
@@ -590,34 +628,37 @@ self.session_state.set("banned_keywords", ["广告"], group_id=456)
 ```
 
 **会话键规则：**
-| 场景 | 会话键 |
-|------|--------|
-| 私聊 | `private:{user_id}` |
+
+| 场景    | 会话键                          |
+| ----- | ---------------------------- |
+| 私聊    | `private:{user_id}`          |
 | 群聊+用户 | `group:{group_id}:{user_id}` |
-| 群聊共享 | `group:{group_id}` |
-| 自定义 | `custom_key` 参数 |
+| 群聊共享  | `group:{group_id}`           |
+| 自定义   | `custom_key` 参数              |
 
 **API 速查：**
-| 方法 | 说明 |
-|------|------|
-| `get(key, default)` | 获取值，过期自动删除 |
+
+| 方法                       | 说明             |
+| ------------------------ | -------------- |
+| `get(key, default)`      | 获取值，过期自动删除     |
 | `set(key, value, ttl=0)` | 设置值，ttl=0 永不过期 |
-| `pop(key, default)` | 获取并删除键 |
-| `expire(key, ttl)` | 为已有键设置过期时间 |
-| `ttl(key)` | 获取键剩余过期时间（秒） |
-| `delete(key)` | 删除键 |
-| `clear()` | 清空当前会话状态 |
-| `keys()` | 返回所有有效键 |
-| `items()` | 返回所有有效键值对 |
-| `count()` | 获取有效键数量 |
+| `pop(key, default)`      | 获取并删除键         |
+| `expire(key, ttl)`       | 为已有键设置过期时间     |
+| `ttl(key)`               | 获取键剩余过期时间（秒）   |
+| `delete(key)`            | 删除键            |
+| `clear()`                | 清空当前会话状态       |
+| `keys()`                 | 返回所有有效键        |
+| `items()`                | 返回所有有效键值对      |
+| `count()`                | 获取有效键数量        |
 
 **SessionStateManager 全局操作（需 await）：**
-| 方法 | 说明 |
-|------|------|
-| `await stats()` | 获取统计信息（会话数、键数） |
-| `await remove_session(user_id=...)` | 显式删除会话 |
-| `await serialize()` | 序列化所有会话状态 |
-| `await deserialize(data)` | 从序列化数据恢复 |
+
+| 方法                                  | 说明             |
+| ----------------------------------- | -------------- |
+| `await stats()`                     | 获取统计信息（会话数、键数） |
+| `await remove_session(user_id=...)` | 显式删除会话         |
+| `await serialize()`                 | 序列化所有会话状态      |
+| `await deserialize(data)`           | 从序列化数据恢复       |
 
 ### 插件依赖（require）
 
@@ -638,6 +679,7 @@ class MyPlugin(PluginBase):
 ```
 
 - 依赖已注册则跳过；未注册时尝试加载 `bot.plugin.builtin.<name>` 模块
+
 - 依赖缺失或形成循环依赖时插件加载失败（报错并保持旧插件生效）
 
 **PEP 440 版本约束：**
@@ -648,7 +690,7 @@ require = ["admin>=1.1"]  # 依赖 admin 插件 1.1 及以上
 require = ["knowledge"]  # 无版本约束
 ```
 
-### 插件级配置（plugin_config）
+### 插件级配置（plugin\_config）
 
 插件可通过定义 `Config` 内嵌类声明配置项，框架自动从 `config.yaml` 的 `plugins.<name>` 节加载：
 
@@ -704,7 +746,7 @@ class MyPlugin(PluginBase):
 
 > 注意：获取导出使用 `get_exports()` 方法，`require` 仅作为类属性声明依赖（两者原本重名，已拆分）。
 
-### 插件级中间件（register_before / register_after）
+### 插件级中间件（register\_before / register\_after）
 
 每个插件可注册 handler 前置/后置钩子，拦截或修改 handler 返回值：
 
@@ -745,7 +787,7 @@ class MyPlugin(PluginBase):
 
 框架提供 `GET /api/plugin/discover/metadata` API 扫描插件目录根层 `.py` 文件旁的同名 `plugin.json`（文件型插件），无需导入模块即可发现元信息。
 
-### Web 管理页面（register_page）
+### Web 管理页面（register\_page）
 
 插件可注册自带的 Web 管理页面，入口自动显示在「插件管理」页面的插件卡片上，点击后右侧滑出抽屉 iframe 加载。
 
@@ -760,13 +802,15 @@ class MyPlugin(PluginBase):
 ```
 
 **参数说明：**
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `title` | `str` | 页面标题，显示在按钮上 |
-| `icon` | `str` | 图标字符，可选，默认 `◇` |
+
+| 参数           | 类型    | 说明                                                   |
+| ------------ | ----- | ---------------------------------------------------- |
+| `title`      | `str` | 页面标题，显示在按钮上                                          |
+| `icon`       | `str` | 图标字符，可选，默认 `◇`                                       |
 | `static_dir` | `str` | 静态文件目录的绝对路径，可选。省略时自动探测插件 `__init__.py` 同级的 `web/` 目录 |
 
 **推荐目录结构：**
+
 ```
 plugins/my_plugin/
 ├── __init__.py
@@ -779,7 +823,7 @@ plugins/my_plugin/
 
 **静态文件挂载：** 框架自动将 `web/` 目录挂载到 `/api/plugin-data/{plugin_name}/`，前端通过 iframe 加载。插件页面需预构建为纯静态 HTML/CSS/JS，不依赖框架前端构建链。
 
-### 插件级 Web API（register_api）
+### 插件级 Web API（register\_api）
 
 插件可注册 HTTP 接口（管理页面后端、数据查询等），框架统一挂载到 `/api/plugin-web/{plugin_name}/{path}`，鉴权对齐现有 API 体系（`X-API-Key`），无需引入独立服务。
 
@@ -807,37 +851,44 @@ class MyPlugin(PluginBase):
 ```
 
 **handler 契约：**
+
 - 参数：`request`（FastAPI `Request`，可读 `query_params` / `headers`、`await request.json()` 取 JSON body、`await request.form()` 取上传文件）
+
 - 返回值：`Response` 对象原样返回；`(data, status_code)` 二元组按 JSON 序列化并指定状态码；`dict` / `list` / `str` 自动 JSON 序列化
 
 **参数说明：**
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `path` | `str` | 相对路径（固定字面路径，不含 `{id}` 动态段；动态取值经 query 参数传递），如 `ranking`、`content-safety/terms/add` |
-| `handler` | `callable` | 处理函数（见上方契约） |
-| `methods` | `list[str]` | HTTP 方法列表，默认 `["GET"]` |
-| `description` | `str` | 接口描述（调试/文档用） |
+
+| 参数            | 类型          | 说明                                                                                 |
+| ------------- | ----------- | ---------------------------------------------------------------------------------- |
+| `path`        | `str`       | 相对路径（固定字面路径，不含 `{id}` 动态段；动态取值经 query 参数传递），如 `ranking`、`content-safety/terms/add` |
+| `handler`     | `callable`  | 处理函数（见上方契约）                                                                        |
+| `methods`     | `list[str]` | HTTP 方法列表，默认 `["GET"]`                                                             |
+| `description` | `str`       | 接口描述（调试/文档用）                                                                       |
 
 > 插件热重载/卸载后路由自动指向新实现或返回 404，无需重启服务。前端页面（`register_page`）可通过 `/api/plugin-web/{plugin_name}/...` 直接调用接口。
 
 ### Matcher / Rule / Permission
 
 **核心概念：**
+
 - **Matcher**：绑定 handler + rule + permission + priority 的匹配单元
+
 - **Rule**：消息匹配规则（前缀/命令/正则等），支持 `&`/`|`/`~` 组合
+
 - **Permission**：权限检查（管理员/私聊/群聊等），支持 `&`/`|`/`~` 组合
+
 - **MatcherContext**：增强版 MessageContext，额外注入 `bot`/`plugin`/`matcher` + `command`/`args`/`match`
 
 **工厂函数：**
 
-| 函数 | 说明 |
-|------|------|
-| `on_message(rule, permission, priority, block, temp)` | 通用消息匹配器 |
+| 函数                                                                                                            | 说明                                                                               |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `on_message(rule, permission, priority, block, temp)`                                                         | 通用消息匹配器                                                                          |
 | `on_command(cmd, rule, permission, priority, block, temp, aliases, subcommands, args_schema, hidden_in_help)` | 命令匹配器（自动解析参数到 `ctx.args`；支持别名 / 子指令 / 类型化参数；`hidden_in_help=True` 不进 `/help` 列表） |
-| `on_startswith(prefix, ...)` | 前缀匹配器 |
-| `on_keyword(keywords, ...)` | 关键词匹配器 |
-| `on_notice(rule, priority, block, temp)` | 通知事件匹配器 |
-| `on_request(rule, priority, block, temp)` | 请求事件匹配器 |
+| `on_startswith(prefix, ...)`                                                                                  | 前缀匹配器                                                                            |
+| `on_keyword(keywords, ...)`                                                                                   | 关键词匹配器                                                                           |
+| `on_notice(rule, priority, block, temp)`                                                                      | 通知事件匹配器                                                                          |
+| `on_request(rule, priority, block, temp)`                                                                     | 请求事件匹配器                                                                          |
 
 **一次性匹配器（temp=True）**：匹配执行后自动从所属插件移除，适用于"等待下一次对话"等只应触发一次的场景，例如"输入数字确认操作"：
 
@@ -855,19 +906,19 @@ self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 
 继承自 `MessageContext`，额外字段：
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `ctx.bot` | `QingciBot` | Bot 实例（供模块级 handler 访问依赖） |
-| `ctx.plugin` | `PluginBase` | 当前插件实例 |
-| `ctx.matcher` | `Matcher` | 当前匹配器 |
-| `ctx.command` | `str` | 匹配到的命令名（`command` 规则写入） |
-| `ctx.args` | `str` | 命令参数 / 前缀后的剩余文本 |
-| `ctx.match` | `re.Match` | 正则匹配结果（`regex` 规则写入） |
-| `ctx.subcommand` | `str` | 子指令名（`subcommand` 规则写入，如 `admin ban` 中的 `ban`） |
-| `ctx.parsed_args` | `dict` | `args_schema` 类型化解析后的命令参数字典 |
-| `ctx.session` | `Session` | 会话阶梯句柄（多轮交互，`pause`/`finish`/`reject`） |
-| `ctx.session_state` | `SessionStateManager` | TTL 会话状态（`get`/`set` 等） |
-| `ctx.event` | `NoticeEvent` | 类型化事件对象（notice/request 事件注入，消息事件为 None） |
+| 字段                  | 类型                    | 说明                                             |
+| ------------------- | --------------------- | ---------------------------------------------- |
+| `ctx.bot`           | `QingciBot`           | Bot 实例（供模块级 handler 访问依赖）                      |
+| `ctx.plugin`        | `PluginBase`          | 当前插件实例                                         |
+| `ctx.matcher`       | `Matcher`             | 当前匹配器                                          |
+| `ctx.command`       | `str`                 | 匹配到的命令名（`command` 规则写入）                        |
+| `ctx.args`          | `str`                 | 命令参数 / 前缀后的剩余文本                                |
+| `ctx.match`         | `re.Match`            | 正则匹配结果（`regex` 规则写入）                           |
+| `ctx.subcommand`    | `str`                 | 子指令名（`subcommand` 规则写入，如 `admin ban` 中的 `ban`） |
+| `ctx.parsed_args`   | `dict`                | `args_schema` 类型化解析后的命令参数字典                    |
+| `ctx.session`       | `Session`             | 会话阶梯句柄（多轮交互，`pause`/`finish`/`reject`）         |
+| `ctx.session_state` | `SessionStateManager` | TTL 会话状态（`get`/`set` 等）                        |
+| `ctx.event`         | `NoticeEvent`         | 类型化事件对象（notice/request 事件注入，消息事件为 None）        |
 
 基础字段（同 MessageContext）：`type` / `detail_type` / `event_id`（v12 事件标识）/ `raw_event` / `message_type` / `sub_type` / `message_id` / `user_id` / `group_id` / `self_id` / `channel_id` / `guild_id` / `plain_text` / `raw_message` / `segments`（v12 标准段数组）/ `is_at_bot` / `at_list` / `images` / `sender` / `platform`
 
@@ -1038,7 +1089,7 @@ class WelcomePlugin(PluginBase):
 
 > 通知事件统一由 SDK 类型化（`GroupIncreaseNotice` 等，`typedef 事件` handler 参数注入即自动填充）。框架内核为 OneBot 12 事件模型，但 `send_group_msg`/`send_private_msg` 等便捷发送仍接受 v12 段数组并自动转为平台 CQ 码，插件无需关心 v11/v12 差异。
 
-### 示例五：旧式 on_message（向后兼容，已弃用）
+### 示例五：旧式 on\_message（向后兼容，已弃用）
 
 旧式插件无需改动，继续工作；但 `on_message`/`on_notice`/`on_request` 已标记 **deprecated**，新插件请优先使用 Matcher（`on_message(rule=...)` 装饰器等）：
 
@@ -1106,33 +1157,37 @@ async def test_group_and_permission(bot):
 
 **TestBot 常用 API：**
 
-| 方法/属性 | 说明 |
-|---------|------|
-| `await load_plugin(module_path)` | 加载插件模块（完整链路：依赖解析 + on_load） |
-| `await send(event)` | 发送事件，返回 Bot 回复（str），无回复返回 None |
-| `await send_private(text, user_id=10001)` | 发送私聊消息 |
-| `await send_group(text, user_id, group_id)` | 发送群聊消息 |
-| `sent_messages` | 插件主动发送的所有消息 `[(type, target, text)]` |
-| `api_calls` | 插件调用过的所有 OneBot API `[(action, params)]` |
-| `get_plugin(name)` | 获取已加载插件实例 |
-| `await cleanup()` | 卸载插件并清空会话状态 |
+| 方法/属性                                       | 说明                                       |
+| ------------------------------------------- | ---------------------------------------- |
+| `await load_plugin(module_path)`            | 加载插件模块（完整链路：依赖解析 + on\_load）             |
+| `await send(event)`                         | 发送事件，返回 Bot 回复（str），无回复返回 None           |
+| `await send_private(text, user_id=10001)`   | 发送私聊消息                                   |
+| `await send_group(text, user_id, group_id)` | 发送群聊消息                                   |
+| `sent_messages`                             | 插件主动发送的所有消息 `[(type, target, text)]`     |
+| `api_calls`                                 | 插件调用过的所有 OneBot API `[(action, params)]` |
+| `get_plugin(name)`                          | 获取已加载插件实例                                |
+| `await cleanup()`                           | 卸载插件并清空会话状态                              |
 
 **事件构造器：**
 
-| 函数 | 说明 |
-|------|------|
-| `private_message(text, user_id=10001, at_bot=False)` | 私聊消息（v11 段） |
-| `group_message(text, user_id=10001, group_id=20001, at_bot=False)` | 群聊消息（v11 段） |
-| `make_message_event(text, ...)` | 通用消息事件（支持 images、sender 等） |
-| `make_notice_event(notice_type, ...)` | 通知事件（如 `group_increase`） |
-| `make_request_event(request_type, ...)` | 请求事件（如 `friend` / `group`） |
+| 函数                                                                 | 说明                         |
+| ------------------------------------------------------------------ | -------------------------- |
+| `private_message(text, user_id=10001, at_bot=False)`               | 私聊消息（v11 段）                |
+| `group_message(text, user_id=10001, group_id=20001, at_bot=False)` | 群聊消息（v11 段）                |
+| `make_message_event(text, ...)`                                    | 通用消息事件（支持 images、sender 等） |
+| `make_notice_event(notice_type, ...)`                              | 通知事件（如 `group_increase`）   |
+| `make_request_event(request_type, ...)`                            | 请求事件（如 `friend` / `group`） |
 
 > OneBot 12 事件/测试构造器见 `make_v12_message_event` / `make_v12_notice_event` / `make_v12_request_event`（构造 `type`/`detail_type` 的 v12 事件，其中消息段为 v12 标准段：`mention`/`image(file_id)` 等）。两类事件均可被 Dispatcher 以双模归一化正确解析。
 
 **特性：**
+
 - 完整走 Dispatcher 调度链路（Matcher + 旧式 `on_message` 回退），与生产行为一致
+
 - 会话状态（`ctx.session_state`）、依赖注入、插件级配置均可用
+
 - 默认 `FakeConfig` 的 `admin_users=[10001]`，可传入自定义 config 覆盖
+
 - 插件主动发送的消息记录在 `sent_messages`，便于断言
 
 ### 调度顺序
@@ -1141,8 +1196,11 @@ async def test_group_and_permission(bot):
 2. 收集所有 Matcher，按 `priority` 升序排序（越小越先执行）
 3. 依次检查每个 Matcher 的 `permission` 和 `rule`
 4. 匹配成功则执行 `handler`：
+
    - 返回非 `None`（回复文本）→ 发送回复，**停止整个分发链**
+
    - 返回 `None` + `block=True` → 停止后续 Matcher
+
    - 返回 `None` + `block=False` → 继续下一个 Matcher
 5. 所有 Matcher 都未匹配 → 回退到旧式 `on_message`（跳过已注册 Matcher 的插件）
 
@@ -1206,32 +1264,36 @@ await self.connection.send_msg("group", ctx.group_id, msg.as_dicts())
 **为什么一样：**
 
 - 插件 API 一致：`PluginBase` / `Matcher` / `Permission` / `Rule` / `MessageContext` 与平台无关
+
 - 事件模型一致：`type` / `detail_type` / `{type, data}` 消息段，媒体以 `file_id` 引用
+
 - 发送一致：`send_msg` / `send_group_msg` / `send_private_msg` 接受 v12 段数组，回复按 `ctx.platform` 自动路由回对应适配器
+
 - 权限一致：`super_admin` / `admin_users` 等以平台无关字符串 ID 配置
 
 **平台差异对照：**
 
-| 维度 | QQ（OneBot 11/12） | Telegram |
-|------|--------------------|----------|
-| 标准 notice 事件 | 完整（撤回/禁言/poke/好友添加/上传等） | 仅成员进出群、管理员变更被归一化 |
-| 平台特有扩展事件 | 无 | `message_edited` / `callback_query` / `message_reaction`（用 `on_notice()` 消费） |
-| 群聊触发 | 默认直接响应 | 需 `@Bot` 提及（at 触发模式），私聊天然放行 |
-| 媒体段映射 | `face`/`record` 等 QQ 段 | `photo→image`、`voice→voice`、`video→video` |
-| 回调按钮 | 无 | `callback_query` 需 `call_api("answer_callback_query")` 应答 |
-| 发送者字段 | `nickname`/`card` | `first_name`/`username` |
+| 维度           | QQ（OneBot 11/12）        | Telegram                                                                     |
+| ------------ | ----------------------- | ---------------------------------------------------------------------------- |
+| 标准 notice 事件 | 完整（撤回/禁言/poke/好友添加/上传等） | 仅成员进出群、管理员变更被归一化                                                             |
+| 平台特有扩展事件     | 无                       | `message_edited` / `callback_query` / `message_reaction`（用 `on_notice()` 消费） |
+| 群聊触发         | 默认直接响应                  | 需 `@Bot` 提及（at 触发模式），私聊天然放行                                                  |
+| 媒体段映射        | `face`/`record` 等 QQ 段  | `photo→image`、`voice→voice`、`video→video`                                    |
+| 回调按钮         | 无                       | `callback_query` 需 `call_api("answer_callback_query")` 应答                    |
+| 发送者字段        | `nickname`/`card`       | `first_name`/`username`                                                      |
 
 **Telegram 特有扩展事件**（QQ 无对应事件，均以扩展 notice `detail_type` 承载，插件用 `on_notice()` 消费）：
 
-| detail_type | 说明 | SDK 类型化事件 |
-|-------------|------|----------------|
-| `message_edited` | 消息被编辑（携带新文本 `alt_message` 与 v12 段数组，不触发消息回复） | `MessageEditedEvent` |
-| `callback_query` | 内联按钮回调（携带 `data` / `callback_query_id`，可 `call_api("answer_callback_query")` 应答） | `NoticeEvent` |
-| `message_reaction` | 消息表情反应（新/旧表情列表，`sub_type` 区分 add/remove/change） | `NoticeEvent` |
+| detail\_type       | 说明                                                                               | SDK 类型化事件            |
+| ------------------ | -------------------------------------------------------------------------------- | -------------------- |
+| `message_edited`   | 消息被编辑（携带新文本 `alt_message` 与 v12 段数组，不触发消息回复）                                     | `MessageEditedEvent` |
+| `callback_query`   | 内联按钮回调（携带 `data` / `callback_query_id`，可 `call_api("answer_callback_query")` 应答） | `NoticeEvent`        |
+| `message_reaction` | 消息表情反应（新/旧表情列表，`sub_type` 区分 add/remove/change）                                  | `NoticeEvent`        |
 
 **实践建议：**
 
 - 写**通用插件**时只依赖 v12 标准事件与消息段，QQ / Telegram 直接通用
+
 - 只有做平台特有功能（如监听消息编辑、内联按钮回调）时才用扩展事件，并建议用 `ctx.platform` 判断来源，避免在 QQ 上误触发：
 
 ```python
@@ -1247,11 +1309,15 @@ async def on_edited(ctx: MatcherContext, event: MessageEditedEvent) -> str | Non
 
 **跨协议动作与能力约定**（详见《跨协议一致性审查报告-OneBot11-12-Telegram-2026-08-22.md》）：
 
-- **发消息一律用 `send_msg`（或 `ctx.send`）**，不要用裸 `call_api("send_private_msg" / "send_message")` 动作名——三端动作命名空间不同（OB11 无 `send_message`、OB12 无 `send_private_msg`、Telegram 透传的是 camelCase 方法名），没有跨端通用的动作名。`send_msg` 是唯一跨平台安全的发送入口。
-- **`call_api` 动作名先经 `_api_action` 映射**：OB12 会把 v11 便捷动作名（`set_group_kick` 等）映射到 v12 点分命名空间（`group.kick`），OB11 原样透传。插件以 v11 动作名调用时三端行为一致。
+- **发消息一律用** **`send_msg`（或** **`ctx.send`）**，不要用裸 `call_api("send_private_msg" / "send_message")` 动作名——三端动作命名空间不同（OB11 无 `send_message`、OB12 无 `send_private_msg`、Telegram 透传的是 camelCase 方法名），没有跨端通用的动作名。`send_msg` 是唯一跨平台安全的发送入口。
+
+- **`call_api`** **动作名先经** **`_api_action`** **映射**：OB12 会把 v11 便捷动作名（`set_group_kick` 等）映射到 v12 点分命名空间（`group.kick`），OB11 原样透传。插件以 v11 动作名调用时三端行为一致。
+
 - **Telegram 不支持群管/成员动作**：`set_group_*`、`get_group_member_*` 等会抛 `NotImplementedError`（而非透传成小写方法名 404）。依赖群管/成员信息的插件（入群欢迎、管理员指令、成员统计）需自行处理 Telegram 平台缺失。
-- **不要依赖私聊 `sub_type` 做路由**：三端语义不同（OB11 真实 `friend/group/temp/other`、OB12 原生无 `sub_type`、Telegram 固定 `friend`）。私聊判断统一用 `ctx.message_type == "private"`。
-- **`mention` 段在 Telegram 降级为可见文本** `@<id>`（不触发真实 @ 通知，OB11/12 为真实 @）；`reply` 段的非数字 `message_id`（OB12 字符串 id / 派生 id）在 Telegram 会被静默丢弃引用。跨平台提及/引用不可靠，插件不应依赖这两者在 Telegram 上触发通知或精确引用。
+
+- **不要依赖私聊** **`sub_type`** **做路由**：三端语义不同（OB11 真实 `friend/group/temp/other`、OB12 原生无 `sub_type`、Telegram 固定 `friend`）。私聊判断统一用 `ctx.message_type == "private"`。
+
+- **`mention`** **段在 Telegram 降级为可见文本** `@<id>`（不触发真实 @ 通知，OB11/12 为真实 @）；`reply` 段的非数字 `message_id`（OB12 字符串 id / 派生 id）在 Telegram 会被静默丢弃引用。跨平台提及/引用不可靠，插件不应依赖这两者在 Telegram 上触发通知或精确引用。
 
 ### 全局事件钩子（消息中间件）
 
@@ -1330,26 +1396,26 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 
 通过 `self.connection.call_api(action, params)` 调用（任意 OneBot 标准动作透传）；高频群管理动作另有**便捷方法**（`self.connection.set_group_kick(...)` 等，OneBot 11/12 动作名自动映射，见下方）：
 
-| 便捷方法 | 参数 | 对应动作（v11 → v12） |
-|----------|------|------------------------|
-| `set_group_kick` | `group_id`, `user_id`, `reject_add_request=False` | `set_group_kick` → `group.kick` |
-| `set_group_ban` | `group_id`, `user_id`, `duration=0` | `set_group_ban` → `group.ban` |
-| `set_group_whole_ban` | `group_id`, `enable=True` | `set_group_whole_ban` → `group.whole_ban` |
-| `set_group_admin` | `group_id`, `user_id`, `enable=True` | `set_group_admin` → `group.set_admin` |
-| `set_group_card` | `group_id`, `user_id`, `card=''` | `set_group_card` → `group.set_card` |
-| `set_group_name` | `group_id`, `name` | `set_group_name` → `group.set_name` |
-| `get_group_member_list` | `group_id` | `get_group_member_list` → `group.get_member_list` |
-| `get_group_member_info` | `group_id`, `user_id` | `get_group_member_info` → `group.get_member_info` |
+| 便捷方法                    | 参数                                                | 对应动作（v11 → v12）                                   |
+| ----------------------- | ------------------------------------------------- | ------------------------------------------------- |
+| `set_group_kick`        | `group_id`, `user_id`, `reject_add_request=False` | `set_group_kick` → `group.kick`                   |
+| `set_group_ban`         | `group_id`, `user_id`, `duration=0`               | `set_group_ban` → `group.ban`                     |
+| `set_group_whole_ban`   | `group_id`, `enable=True`                         | `set_group_whole_ban` → `group.whole_ban`         |
+| `set_group_admin`       | `group_id`, `user_id`, `enable=True`              | `set_group_admin` → `group.set_admin`             |
+| `set_group_card`        | `group_id`, `user_id`, `card=''`                  | `set_group_card` → `group.set_card`               |
+| `set_group_name`        | `group_id`, `name`                                | `set_group_name` → `group.set_name`               |
+| `get_group_member_list` | `group_id`                                        | `get_group_member_list` → `group.get_member_list` |
+| `get_group_member_info` | `group_id`, `user_id`                             | `get_group_member_info` → `group.get_member_info` |
 
 > 便捷方法定义在 `bot.core.platforms.base.PlatformAdapter`，插件经注入的 `self.connection`（OneBot 11/12 适配器）直接调用；OneBot 12 由 `_api_action` 自动映射为 v12 点分动作名，插件无需区分平台。
 
-| Action | 参数 | 说明 |
-|--------|------|------|
-| `send_msg` | `user_id` / `group_id`, `message` | 发送消息 |
-| `send_group_msg` | `group_id`, `message` | 发送群消息 |
-| `send_private_msg` | `user_id`, `message` | 发送私聊消息 |
-| `delete_msg` | `message_id` | 撤回消息 |
-| `group_poke` | `group_id`, `user_id` | 戳一戳 |
+| Action             | 参数                                | 说明     |
+| ------------------ | --------------------------------- | ------ |
+| `send_msg`         | `user_id` / `group_id`, `message` | 发送消息   |
+| `send_group_msg`   | `group_id`, `message`             | 发送群消息  |
+| `send_private_msg` | `user_id`, `message`              | 发送私聊消息 |
+| `delete_msg`       | `message_id`                      | 撤回消息   |
+| `group_poke`       | `group_id`, `user_id`             | 戳一戳    |
 
 ### 命令管理
 
@@ -1373,25 +1439,34 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 
 **API 端点：**
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/command/conflicts` | 列出所有命令及冲突信息（含 `permission` 权限等级） |
-| PUT | `/api/command/{owner}/{command}` | 更新命令状态（`disabled` / `priority`） |
+| 方法  | 路径                               | 说明                               |
+| --- | -------------------------------- | -------------------------------- |
+| GET | `/api/command/conflicts`         | 列出所有命令及冲突信息（含 `permission` 权限等级） |
+| PUT | `/api/command/{owner}/{command}` | 更新命令状态（`disabled` / `priority`）  |
 
 ### 注意事项
 
 - `on_load` 和 `on_unload` 是 `@abstractmethod`，**必须实现**（可以是 `pass`）
+
 - `on_disable` 和 `on_enable` 是可选钩子：禁用/启用不触发 `on_load`/`on_unload`，仅做轻量清理（如停用/恢复定时任务）
+
 - 插件被禁用后，实例保留在内存中，Matcher 和旧式回调均不触发，API 返回的 `enabled` 字段反映当前状态
+
 - 插件中不要使用阻塞操作（如 `time.sleep`），用 `asyncio.sleep` 代替
+
 - Matcher handler 返回空字符串 `""` 也会被当作回复发送（判空为 `is not None`）；旧式 `on_message` 返回空字符串不会发送，不需要回复时返回 `None`
+
 - 插件可通过 `self.config` 修改配置，但需调用 `self.config.save()` 持久化
+
 - 热重载会重新执行模块代码，类级别的可变状态会丢失
+
 - 模块级装饰器注册的 Matcher 会自动关联到同模块的 PluginBase 子类
+
 - 插件重载采用"先建后拆"：新版本加载成功前旧插件保持生效；新版本加载失败时旧插件继续工作，不会出现插件真空
+
 - 重载后的模块若不再定义插件类，重载接口会返回失败（而非静默成功），旧插件保持生效
 
----
+***
 
 ## API 接口
 
@@ -1400,133 +1475,135 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 **错误响应与超时说明：**
 
 - `/api/bot/start`、`/stop`、`/restart` 有超时保护（启动 30s / 停止 15s），超时返回 `504` 并自动尝试清理残留资源，可通过 `/api/bot/status` 确认实际状态
+
 - `/api/plugin/load` 请求体必须为 JSON 且包含字符串字段 `module_path`，类型非法时返回 `422`
+
 - 所有 `5xx` 错误的 `detail` 为通用文案（不暴露内部异常细节），详细原因见服务端日志
 
 ### Bot 控制 `/api/bot`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/status` | 否 | 获取 Bot 运行状态 |
-| GET | `/health` | 否 | 健康检查 |
-| POST | `/start` | 是 | 启动 Bot |
-| POST | `/stop` | 是 | 停止 Bot |
-| POST | `/restart` | 是 | 重启 Bot |
+| 方法   | 路径         | 鉴权 | 说明          |
+| ---- | ---------- | -- | ----------- |
+| GET  | `/status`  | 否  | 获取 Bot 运行状态 |
+| GET  | `/health`  | 否  | 健康检查        |
+| POST | `/start`   | 是  | 启动 Bot      |
+| POST | `/stop`    | 是  | 停止 Bot      |
+| POST | `/restart` | 是  | 重启 Bot      |
 
 ### 配置管理 `/api/config`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `` | 是 | 获取完整配置（敏感字段脱敏为 `***`） |
-| PUT | `` | 是 | 更新配置（深度合并，`***` 占位符自动过滤） |
-| GET | `/bot` | 是 | 获取 Bot 配置 |
-| PUT | `/bot` | 是 | 更新 Bot 配置 |
-| GET | `/llm` | 是 | 获取 LLM 配置 |
-| PUT | `/llm` | 是 | 更新 LLM 配置（provider=custom 时强制校验 api_url） |
-| GET | `/llm/presets` | 是 | 获取 LLM 提供商预设（api_url + 推荐 model，切换 provider 自动联动） |
-| POST | `/llm/models` | 是 | 查询提供商可用模型列表（按 provider 调用对应 API，10s 超时，失败 400 透传原因） |
-| GET | `/onebot` | 是 | 获取 OneBot 配置 |
-| POST | `/llm/test` | 是 | 测试 LLM 连接（返回 `{available, message}`） |
-| GET | `/wizard/status` | 否 | 首次启动向导状态（`needs_setup`） |
-| POST | `/wizard` | 否 | 提交首次启动配置（仅未完成向导时可用） |
-| POST | `/wizard/skip` | 否 | 跳过首次启动向导 |
+| 方法   | 路径               | 鉴权 | 说明                                                  |
+| ---- | ---------------- | -- | --------------------------------------------------- |
+| GET  | \`\`             | 是  | 获取完整配置（敏感字段脱敏为 `***`）                               |
+| PUT  | \`\`             | 是  | 更新配置（深度合并，`***` 占位符自动过滤）                            |
+| GET  | `/bot`           | 是  | 获取 Bot 配置                                           |
+| PUT  | `/bot`           | 是  | 更新 Bot 配置                                           |
+| GET  | `/llm`           | 是  | 获取 LLM 配置                                           |
+| PUT  | `/llm`           | 是  | 更新 LLM 配置（provider=custom 时强制校验 api\_url）           |
+| GET  | `/llm/presets`   | 是  | 获取 LLM 提供商预设（api\_url + 推荐 model，切换 provider 自动联动）  |
+| POST | `/llm/models`    | 是  | 查询提供商可用模型列表（按 provider 调用对应 API，10s 超时，失败 400 透传原因） |
+| GET  | `/onebot`        | 是  | 获取 OneBot 配置                                        |
+| POST | `/llm/test`      | 是  | 测试 LLM 连接（返回 `{available, message}`）                |
+| GET  | `/wizard/status` | 否  | 首次启动向导状态（`needs_setup`）                             |
+| POST | `/wizard`        | 否  | 提交首次启动配置（仅未完成向导时可用）                                 |
+| POST | `/wizard/skip`   | 否  | 跳过首次启动向导                                            |
 
 ### 插件管理 `/api/plugin`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `` | 是 | 获取插件列表（含状态、分类、Web 管理页面入口） |
-| GET | `/{name}` | 是 | 获取插件详情 |
-| POST | `/{name}/reload` | 是 | 重载插件 |
-| POST | `/load` | 是 | 加载外部插件（仅允许 `plugins.*` / `bot.plugin.builtin.*` 白名单前缀） |
-| DELETE | `/{name}` | 是 | 卸载插件（默认删代码目录、保留数据与依赖；`?purge=true` 彻底删除——一并删除数据目录与第三方依赖，不可恢复；内置插件 chat/admin/help/imagegen/knowledge 不可卸载） |
-| POST | `/{name}/disable` | 是 | 禁用插件（保留实例，跳过事件分发） |
-| POST | `/{name}/enable` | 是 | 启用插件（恢复事件分发） |
-| GET | `/{name}/metrics` | 是 | 获取插件执行指标（调用次数、平均耗时、错误率） |
-| GET | `/{name}/config` | 是 | 获取插件配置 JSON Schema 与当前值（用于自动渲染配置表单） |
-| PUT | `/{name}/config` | 是 | 更新插件配置（写入 config.yaml 并应用到插件实例） |
-| GET | `/discover/metadata` | 是 | 无导入发现：扫描插件目录根层 `.py` 文件旁的同名 `plugin.json`（文件型插件） |
+| 方法     | 路径                   | 鉴权 | 说明                                                                                                         |
+| ------ | -------------------- | -- | ---------------------------------------------------------------------------------------------------------- |
+| GET    | \`\`                 | 是  | 获取插件列表（含状态、分类、Web 管理页面入口）                                                                                  |
+| GET    | `/{name}`            | 是  | 获取插件详情                                                                                                     |
+| POST   | `/{name}/reload`     | 是  | 重载插件                                                                                                       |
+| POST   | `/load`              | 是  | 加载外部插件（仅允许 `plugins.*` / `bot.plugin.builtin.*` 白名单前缀）                                                     |
+| DELETE | `/{name}`            | 是  | 卸载插件（默认删代码目录、保留数据与依赖；`?purge=true` 彻底删除——一并删除数据目录与第三方依赖，不可恢复；内置插件 chat/admin/help/imagegen/knowledge 不可卸载） |
+| POST   | `/{name}/disable`    | 是  | 禁用插件（保留实例，跳过事件分发）                                                                                          |
+| POST   | `/{name}/enable`     | 是  | 启用插件（恢复事件分发）                                                                                               |
+| GET    | `/{name}/metrics`    | 是  | 获取插件执行指标（调用次数、平均耗时、错误率）                                                                                    |
+| GET    | `/{name}/config`     | 是  | 获取插件配置 JSON Schema 与当前值（用于自动渲染配置表单）                                                                        |
+| PUT    | `/{name}/config`     | 是  | 更新插件配置（写入 config.yaml 并应用到插件实例）                                                                            |
+| GET    | `/discover/metadata` | 是  | 无导入发现：扫描插件目录根层 `.py` 文件旁的同名 `plugin.json`（文件型插件）                                                           |
 
 ### 插件市场 `/api/plugins/market`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `` | 是 | 拉取市场索引（含缓存 TTL） |
-| GET | `/info` | 是 | 市场源信息（url / mirror / 更新时间） |
-| POST | `/install` | 是 | 安装市场插件（按 `name`） |
-| POST | `/update` | 是 | 更新已安装插件 |
-| POST | `/refresh` | 是 | 强制刷新索引缓存 |
-| GET | `/source` | 是 | 获取当前市场源 |
-| PUT | `/source` | 是 | 修改市场源（url / mirror_url） |
+| 方法   | 路径         | 鉴权 | 说明                         |
+| ---- | ---------- | -- | -------------------------- |
+| GET  | \`\`       | 是  | 拉取市场索引（含缓存 TTL）            |
+| GET  | `/info`    | 是  | 市场源信息（url / mirror / 更新时间） |
+| POST | `/install` | 是  | 安装市场插件（按 `name`）           |
+| POST | `/update`  | 是  | 更新已安装插件                    |
+| POST | `/refresh` | 是  | 强制刷新索引缓存                   |
+| GET  | `/source`  | 是  | 获取当前市场源                    |
+| PUT  | `/source`  | 是  | 修改市场源（url / mirror\_url）   |
 
 ### 命令管理 `/api/command`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/conflicts` | 是 | 列出所有已注册命令，自动标记同名冲突 |
-| PUT | `/{owner}/{command}` | 是 | 更新命令：`disabled`（bool）禁用/启用，`priority`（int 0–100）调整优先级 |
+| 方法  | 路径                   | 鉴权 | 说明                                                    |
+| --- | -------------------- | -- | ----------------------------------------------------- |
+| GET | `/conflicts`         | 是  | 列出所有已注册命令，自动标记同名冲突                                    |
+| PUT | `/{owner}/{command}` | 是  | 更新命令：`disabled`（bool）禁用/启用，`priority`（int 0–100）调整优先级 |
 
 ### 消息日志与用量 `/api/log`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/messages` | 是 | 搜索消息记录 |
-| GET | `/messages/count` | 是 | 获取消息总数 |
-| GET | `/messages/export` | 是 | 导出消息记录（CSV 流式，utf-8-sig，Excel 直接打开不乱码） |
-| GET | `/usage` | 是 | LLM 用量统计（依赖 `log.usage_tracking`） |
-| DELETE | `/messages` | 是 | 删除消息记录；支持 `user_id` / `group_id` / `before_days` 过滤，全部删除需显式 `confirm=true` |
-| DELETE | `/sessions` | 是 | 清除所有会话（需 `confirm=true`） |
-| GET | `/sessions` | 是 | 会话列表（按最后活跃排序，含条数与归属 QQ） |
-| GET | `/sessions/messages` | 是 | 查看指定会话历史（`?key=private:10001` 或 `group:10001:20002`） |
-| DELETE | `/sessions/one` | 是 | 删除指定会话（`?key=会话key`，带审计） |
+| 方法     | 路径                   | 鉴权 | 说明                                                                         |
+| ------ | -------------------- | -- | -------------------------------------------------------------------------- |
+| GET    | `/messages`          | 是  | 搜索消息记录                                                                     |
+| GET    | `/messages/count`    | 是  | 获取消息总数                                                                     |
+| GET    | `/messages/export`   | 是  | 导出消息记录（CSV 流式，utf-8-sig，Excel 直接打开不乱码）                                     |
+| GET    | `/usage`             | 是  | LLM 用量统计（依赖 `log.usage_tracking`）                                          |
+| DELETE | `/messages`          | 是  | 删除消息记录；支持 `user_id` / `group_id` / `before_days` 过滤，全部删除需显式 `confirm=true` |
+| DELETE | `/sessions`          | 是  | 清除所有会话（需 `confirm=true`）                                                   |
+| GET    | `/sessions`          | 是  | 会话列表（按最后活跃排序，含条数与归属 QQ）                                                    |
+| GET    | `/sessions/messages` | 是  | 查看指定会话历史（`?key=private:10001` 或 `group:10001:20002`）                       |
+| DELETE | `/sessions/one`      | 是  | 删除指定会话（`?key=会话key`，带审计）                                                   |
 
 ### 群配置 `/api/group`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/list` | 是 | 群配置列表 |
-| GET | `/{group_id}` | 是 | 获取单群配置 |
-| PUT | `/{group_id}` | 是 | 更新群配置（Bot 开关等） |
-| DELETE | `/{group_id}` | 是 | 删除群配置（带审计埋点） |
+| 方法     | 路径            | 鉴权 | 说明             |
+| ------ | ------------- | -- | -------------- |
+| GET    | `/list`       | 是  | 群配置列表          |
+| GET    | `/{group_id}` | 是  | 获取单群配置         |
+| PUT    | `/{group_id}` | 是  | 更新群配置（Bot 开关等） |
+| DELETE | `/{group_id}` | 是  | 删除群配置（带审计埋点）   |
 
 ### 登录与鉴权 `/api/auth`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/status` | 否 | 是否需要登录（配置 api_key 是否非空） |
-| POST | `/login` | 否 | 登录；按来源 IP 防暴力限流，连续失败 5 次后冷却 60 秒返回 429 |
+| 方法   | 路径        | 鉴权 | 说明                                     |
+| ---- | --------- | -- | -------------------------------------- |
+| GET  | `/status` | 否  | 是否需要登录（配置 api\_key 是否非空）               |
+| POST | `/login`  | 否  | 登录；按来源 IP 防暴力限流，连续失败 5 次后冷却 60 秒返回 429 |
 
 ### 数据库备份 `/api/backup`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| POST | `/db` | 是 | 在线备份到 `data/backups/`（sqlite backup API，文件名带随机后缀，保留最近 10 份） |
+| 方法   | 路径    | 鉴权 | 说明                                                          |
+| ---- | ----- | -- | ----------------------------------------------------------- |
+| POST | `/db` | 是  | 在线备份到 `data/backups/`（sqlite backup API，文件名带随机后缀，保留最近 10 份） |
 
 ### 审计日志 `/api/audit`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `/logs` | 是 | 审计日志倒序查询（配置变更 / 启停 / 登录 / 备份等） |
+| 方法  | 路径      | 鉴权 | 说明                             |
+| --- | ------- | -- | ------------------------------ |
+| GET | `/logs` | 是  | 审计日志倒序查询（配置变更 / 启停 / 登录 / 备份等） |
 
 ### 实例管理 `/api/instances`
 
-| 方法 | 路径 | 鉴权 | 说明 |
-|------|------|------|------|
-| GET | `` | 是 | 实例列表（含端口、主平台、数据占用） |
-| POST | `` | 是 | 创建实例（指定名称与主平台） |
-| DELETE | `/{name}` | 是 | 删除实例 |
-| PUT | `/{name}` | 是 | 重命名实例（同步重命名目录与 instance.json） |
-| POST | `/{name}/start` | 是 | 切换/启动到指定实例（跨进程重启） |
+| 方法     | 路径              | 鉴权 | 说明                            |
+| ------ | --------------- | -- | ----------------------------- |
+| GET    | \`\`            | 是  | 实例列表（含端口、主平台、数据占用）            |
+| POST   | \`\`            | 是  | 创建实例（指定名称与主平台）                |
+| DELETE | `/{name}`       | 是  | 删除实例                          |
+| PUT    | `/{name}`       | 是  | 重命名实例（同步重命名目录与 instance.json） |
+| POST   | `/{name}/start` | 是  | 切换/启动到指定实例（跨进程重启）             |
 
 ### WebSocket
 
-| 路径 | 鉴权 | 说明 |
-|------|------|------|
-| `/api/ws/log` | `token` 查询参数或 `sec-websocket-protocol: api-key.<key>` 子协议 | 实时推送消息记录，连接后自动接收新消息；60s 心跳保活（90s 无消息断开），连接数上限 32 |
-| `/api/ws/chat` | 同上 | 对话调试台：客户端发送 `{"message": "...", "user_id": 900000001}`，服务端逐块返回 `{"type":"delta","text":...}`，结束返回 `{"type":"done"}`；流式调用 LLM，独立连接池（上限 32） |
-| `/api/ws/runlog` | 同上 | 运行日志：连接即回发环形缓冲快照（`{"type":"snapshot"}`），随后实时推送 `{"type":"log"}` 条目；30s 心跳保活 |
+| 路径               | 鉴权                                                        | 说明                                                                                                                                        |
+| ---------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/ws/log`    | `token` 查询参数或 `sec-websocket-protocol: api-key.<key>` 子协议 | 实时推送消息记录，连接后自动接收新消息；60s 心跳保活（90s 无消息断开），连接数上限 32                                                                                          |
+| `/api/ws/chat`   | 同上                                                        | 对话调试台：客户端发送 `{"message": "...", "user_id": 900000001}`，服务端逐块返回 `{"type":"delta","text":...}`，结束返回 `{"type":"done"}`；流式调用 LLM，独立连接池（上限 32） |
+| `/api/ws/runlog` | 同上                                                        | 运行日志：连接即回发环形缓冲快照（`{"type":"snapshot"}`），随后实时推送 `{"type":"log"}` 条目；30s 心跳保活                                                               |
 
----
+***
 
 ## 打包为 exe
 
@@ -1575,7 +1652,35 @@ dist\qingci-bot-ce\
 ### 注意事项
 
 - 实例目录 `instances\` 按 **exe 所在目录** 相对定位（`app_root`）：分发时整个 `dist\qingci-bot-ce\` 目录一起拷贝，勿单独移动 exe。
-- 首次运行自动创建 `instances\default\` 实例并生成默认 `config.yaml`；数据库自动建表（SQLModel create_all）。
+
+- 首次运行自动创建 `instances\default\` 实例并生成默认 `config.yaml`；数据库自动建表（SQLModel create\_all）。
+
 - 重新执行 `build.ps1` 不会覆盖 `instances\` 中已有的实例配置与数据（用户数据始终保留在实例目录内）。
+
 - 当前产物为 **windowed 无控制台** 模式（`qingci-bot-ce.spec` 中 `console=False`），日志不直接可见，建议开启文件日志（`log.log_file_enabled: true`）；如需控制台窗口排障，将 `console` 改为 `True` 后重新构建。
+
 - 桌面 GUI 由 Electron 壳（`desktop\electron\`）承担：分发用 `build-electron.ps1` 生成便携版 EXE，其内嵌 Python 后端（`--backend`）就绪时通过标准输出上报端口供壳加载 Web UI；不依赖系统 WebView2 / pywebview。
+
+### 桌面壳（Electron 便携版）打包
+
+`build.ps1` 产出的 onedir 是"后端形态"（可加 `--backend` 由壳拉起，也可直接命令行运行 Bot/API）。要给最终用户一个免配置的桌面应用，再跑第二步 `build-electron.ps1` 出便携版单文件 EXE。
+
+```powershell
+# 先决条件
+#  1) 已执行 .\build.ps1，产物位于 dist\qingci-bot-ce\（后端 onedir）
+#  2) Node.js 18+ 与 npm 可用
+.\build-electron.ps1
+```
+
+- 产物：`dist\electron\Qingci-Bot-CE-<version>-win-x64.exe`（electron-builder portable，内嵌后端为 `resources\backend`，Playwright Chromium 随其一并内置）。
+
+```powershell
+.\dist\electron\Qingci-Bot-CE-<version>-win-x64.exe   # 启动桌面壳
+```
+
+- **运行方式**：双击便携 EXE 即由 Electron 壳启动——先解析当前实例 → spawn 内嵌 Python 后端（`--backend`）→ 就绪后加载 Web UI；系统托盘、按 data-dir 的单实例锁与聚焦、启动画面、关闭驻留后台全部由壳承担。
+
+- **数据位置**：便携版解压到系统临时目录运行，若实例数据留在临时目录会在退出/系统清理时丢失。因此打包形态下实例与数据经 `QINGCI_USER_DATA` 落于 `%APPDATA%\Qingci-Bot-CE`；这与 onedir 形态"随 exe 旁 `instances\` 自包含分发"不同。
+
+- **调试**：壳主进程日志写 `%APPDATA%\Qingci-Bot-CE\logs\electron.log`；后端超时（默认 90s 未就绪）会展示错误页并可重试/查看日志。
+

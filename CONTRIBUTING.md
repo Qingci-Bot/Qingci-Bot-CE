@@ -91,12 +91,18 @@ npm run format    # 代码格式化
 
 ### 构建 EXE
 
+桌面分发为两步打包：先出 Python 后端 onedir，再用 electron-builder 出便携版单文件 EXE。
+
 ```bash
+# 第一步：Python 后端 onedir（含 Web UI 构建、SDK -e 安装、Playwright 浏览器下载）
 uv pip install -e ".[build]"
-.\build.ps1        # 一键打包（含 Web UI 构建、SDK -e 安装、Playwright 浏览器下载）
+.\build.ps1
+
+# 第二步：Electron 桌面壳便携版 EXE（需 Node.js 18+/npm；内嵌上一步产出的后端）
+.\build-electron.ps1
 ```
 
-> 构建详见 [PLUGIN_DEV.md](PLUGIN_DEV.md)「打包为 exe」与 `build.ps1`；直接执行 `pyinstaller qingci-bot-ce.spec` 也能出包，但缺少 Web UI 产物复制与浏览器下载步骤。
+> 构建详见 [PLUGIN_DEV.md](PLUGIN_DEV.md)「打包为 exe」与 `build.ps1` / `build-electron.ps1`。`build.ps1` 只产出后端 onedir（`dist\qingci-bot-ce\`），不包含桌面壳；桌面壳由 `build-electron.ps1`（electron-builder）承担，产物为便携单文件 EXE，实例/数据落于 `%APPDATA%\Qingci-Bot-CE`。直接执行 `pyinstaller qingci-bot-ce.spec` 也能出 onedir 后端，但缺少 Web UI 产物复制与浏览器下载步骤。
 
 ## 项目结构
 
