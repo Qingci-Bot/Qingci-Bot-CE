@@ -16,7 +16,7 @@
 |----------|----------|----------|----------|
 | Python 缓存 | `Qingci-Bot-CE/.pytest_cache/`、`.mypy_cache/`、`.ruff_cache/`、`__pycache__/` | 根目录或其他子项目 | `.gitignore` 已忽略 |
 | 覆盖率 | `Qingci-Bot-CE/.coverage`、`htmlcov/` | 根目录 | 已忽略 |
-| 前端依赖/构建 | `web/node_modules/`、`web/dist/` | 根目录 | 已忽略 |
+| 前端依赖/构建 | `web/node_modules/`、`web/dist/`、`desktop/electron/node_modules`、`dist/`（electron-builder 输出） | 根目录 | 已忽略 |
 | 虚拟环境 | `Qingci-Bot-CE/.venv/` | 根目录 | 已忽略 |
 | 安装元数据 | `*.egg-info/` | 根目录 | 已忽略 |
 | 运行时数据 | `data/`、`*.db` | 根目录 | 已忽略 |
@@ -107,7 +107,10 @@ Qingci-Bot-CE/
 │       ├── router/         # 路由
 │       ├── composables/    # 组合式函数
 │       └── styles/         # 全局样式
-├── desktop/                # 桌面应用壳（app/splash/tray/single_instance/relaunch + 图标资源）
+├── desktop/                # Electron-Python 混合架构的桌面层
+│   ├── electron/           # Electron 桌面壳（main.js/preload.js/build），负责 spawn 后端、UI 加载、托盘/单实例/启动画面
+│   ├── py/                 # Python 侧桌面辅助（single_instance.py 单实例互斥、relaunch.py CLI/headless 重启助手）
+│   └── assets/             # 应用图标（app-icon.ico，Python exe + Electron 共用）
 ├── plugins/                # 外部插件目录（运行时加载；实例模式下为 instances/<name>/plugins）
 │   ├── _template/          # 插件模板（下划线前缀 = 非正式/模板，不参与加载）
 │   │   └── plugin.json     # 插件元数据模板
@@ -121,6 +124,7 @@ Qingci-Bot-CE/
 ├── scripts/                # 一次性/运维脚本（如 SQLite→PostgreSQL 迁移）
 ├── docs/                   # 规范文档（本文档 + CODING_STANDARDS.md）
 ├── build.ps1               # Windows 构建脚本（打包前 -e 安装 Plugins-SDK）
+├── build-electron.ps1      # Electron 打包脚本（先 build.ps1 出后端 onedir，再 electron-builder 出便携 EXE）
 ├── qingci-bot-ce.spec      # PyInstaller 打包配置（collect_all 打包 SDK）
 ├── pyproject.toml          # 依赖（含 git 依赖 qingci-plugin-sdk）、ruff/mypy/pytest 配置
 ├── alembic.ini             # 迁移配置

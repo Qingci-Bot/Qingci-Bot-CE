@@ -3,8 +3,8 @@
 用法:
     python main.py                  # 启动 Bot + API 服务
     python main.py --no-bot         # 仅启动 API 服务（Web UI）
-    python main.py --desktop        # 启动桌面应用
     python main.py --port 8080      # 指定 API 端口
+    python main.py --backend        # 由 Electron 壳拉起的后端进程（仅供桌面壳使用）
 """
 
 import argparse
@@ -54,7 +54,16 @@ from bot.paths import app_root  # noqa: E402 — 仅 sys + pathlib，极轻量
 def parse_args():
     parser = argparse.ArgumentParser(description="Qingci-Bot CE")
     parser.add_argument("--no-bot", action="store_true", help="仅启动 API 服务")
-    parser.add_argument("--desktop", action="store_true", help="启动桌面应用")
+    parser.add_argument(
+        "--backend",
+        action="store_true",
+        help="由 Electron 壳拉起的后端进程：仅运行 Bot+API，就绪时打印机器可读端口供主机发现",
+    )
+    parser.add_argument(
+        "--resolve-instance",
+        action="store_true",
+        help="仅解析实例元数据并打印 JSON（data_dir/config/port/host/instance），不启动任何服务；供 Electron 壳预探测",
+    )
     parser.add_argument(
         "--port", type=int, default=None, help="API 端口（默认 8080；实例模式下取实例元数据端口）"
     )
@@ -78,19 +87,18 @@ def parse_args():
         help="配置文件路径（默认 <应用根>/config.yaml；指定 --instance 时默认取实例内 config.yaml）",
     )
     args = parser.parse_args()
-    # UX：frozen windowed 下双击（无任何参数）没有控制台也没有窗口，
-    # 用户感知为"点了没反应"；此时默认启用桌面模式提供可见窗口。
-    # 显式传参（--no-bot/--port 等）时保持原行为不变。
-    if getattr(sys, "frozen", False) and len(sys.argv) <= 1 and not args.desktop:
-        args.desktop = True
     return args
 
 
 # ── 后端服务（重型导入延迟到函数内）───────────────────────────
 
 
-async def run_bot_and_api(args):
-    """在同个事件循环中运行 Bot 和 API 服务"""
+async def run_bot_and_api(args, ready_callback=None):
+    """在同个事件循环中运行 Bot 和 API 服务
+
+    ready_callback: 可选回调，API 服务端口确定并可用后调用
+                    （Electron 壳用它发现后端地址）。
+    """
 
     # 重型导入：仅在需要启动后端时才加载
     import uvicorn  # noqa: E402
@@ -119,6 +127,27 @@ async def run_bot_and_api(args):
         server = uvicorn.Server(config)
 
         logger.info(f"Web UI: http://{args.host}:{args.port}/ui")
+
+        # 等待端口可用的通知任务，与 serve() 并行。
+        # 不依赖 uvicorn 内部 started 标志（版本间不一致），改为对健康端点的
+        # HTTP 探测——服务真实可服务才算就绪，更贴近 Electron 主机预期。
+        if ready_callback is not None:
+            import httpx  # noqa: E402
+
+            async def _notify_when_ready():
+                base = f"http://{args.host}:{args.port}"
+                for _ in range(600):  # 最多等 60s
+                    try:
+                        # 免鉴权专用健康检查端点；探测成功即视为后端就绪
+                        r = await httpx.AsyncClient(timeout=1).get(f"{base}/api/bot/health")
+                        if r.status_code < 500:
+                            break
+                    except Exception:
+                        pass
+                    await asyncio.sleep(0.1)
+                ready_callback(port=args.port)
+
+            asyncio.create_task(_notify_when_ready())
 
         await server.serve()
     except (asyncio.CancelledError, KeyboardInterrupt):
@@ -152,7 +181,7 @@ def main():
     # 跨进程重启助手模式：桌面/CLI 切换实例、运行中实例改名时，由分离的助手
     # 进程等待旧进程退出后重新拉起。必须在任何重型逻辑（实例解析/单实例保护/
     # 启动画面）之前处理，命中即退出本进程。
-    from desktop.relaunch import run_helper_if_requested
+    from desktop.py.relaunch import run_helper_if_requested
 
     if run_helper_if_requested():
         return
@@ -161,7 +190,9 @@ def main():
 
     from bot.paths import set_data_root, set_desktop_flag, set_plugins_dir
 
-    set_desktop_flag(bool(args.desktop) or (getattr(sys, "frozen", False) and len(sys.argv) <= 1))
+    # 桌面壳标识：由 Electron 以 --backend 拉起时置位，供切换/重启实例时
+    # 决定由 Electron 抑或 detached 助手接手（见 api/routes/instances.py）
+    set_desktop_flag(bool(args.backend))
 
     # 启动必须绑定实例（无全局模式）：--instance 显式指定，否则自动选择默认实例
     # （default 优先，其次名称排序第一个）；实例数为 0 时自动创建 default，确保至少一个。
@@ -196,40 +227,61 @@ def main():
     if args.port is None:
         args.port = 8080
 
+    # Electron 壳预探测模式：仅输出实例元数据（与真实启动完全一致的推导结果），
+    # 供 Electron 主进程在 spawn 后端前定位 data_dir、端口、前后端进程的启动参数。
+    if args.resolve_instance:
+        import json  # noqa: E402
+
+        print(
+            json.dumps(
+                {
+                    "instance": args.instance,
+                    "data_dir": str(data_dir),
+                    "config": args.config,
+                    "port": args.port,
+                    "host": args.host,
+                }
+            ),
+            flush=True,
+        )
+        return
+
     # 单实例保护：按数据根派生互斥名——同一实例重复双击聚焦已有窗口；
-    # 不同实例（不同 --data-dir）互不阻塞，可多开。必须在 splash 之前检查，避免闪现启动画面。
-    from desktop.single_instance import (
+    # 不同实例（不同 --data-dir）互不阻塞，可多开。
+    # Electron 后端模式（--backend）由 Electron 壳负责单实例/聚焦，此处跳过互斥。
+    from desktop.py.single_instance import (  # noqa: E402
         SingleInstance,
-        bring_existing_to_front,
         mutex_name_for_data_dir,
     )
 
-    _instance = SingleInstance(name=mutex_name_for_data_dir(data_dir))
-    if not _instance.acquire():
-        if args.desktop:
-            bring_existing_to_front()
-        logger.info("已有实例正在运行，本次启动退出")
-        return
-
-    if args.desktop:
-        # 桌面模式：在任何重型操作前先显示启动画面
-        # splash.py 仅依赖 ctypes + threading（标准库），极轻量
-        splash = None
-        try:
-            from desktop.splash import SplashScreen
-
-            splash = SplashScreen()
-            splash.show()
-        except Exception:
-            logger.warning("启动画面创建失败，跳过", exc_info=True)
+    if args.backend:
+        _instance = None
+    else:
+        _instance = SingleInstance(name=mutex_name_for_data_dir(data_dir))
+        if not _instance.acquire():
+            logger.info("已有实例正在运行，本次启动退出")
+            return
 
     # 结构化日志：config.bot.log_json=True 时切换 JSON 格式
     apply_logging_from_config(args.config)
 
-    if args.desktop:
-        from desktop.app import run_desktop
+    # Electron 后端模式（--backend）：仅运行 Bot+API，不创建任何窗口/托盘，
+    # 就绪时打印 "\x1eQINGCI_READY <port>\x1e" 供 Electron 主机解析（RS 分隔，
+    # 避免与普通日志行混淆）。退出时由 Electron 壳负责终止本进程。
+    if args.backend:
 
-        run_desktop(args, splash)
+        def _on_ready(*, port):
+            print(f"\x1eQINGCI_READY {port}\x1e", flush=True)
+
+        try:
+            asyncio.run(run_bot_and_api(args, ready_callback=_on_ready))
+        except KeyboardInterrupt:
+            logger.info("收到退出信号")
+        except asyncio.CancelledError:
+            logger.warning("运行被取消")
+        except Exception:
+            logger.exception("运行异常")
+            sys.exit(1)
         return
 
     try:

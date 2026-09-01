@@ -5,6 +5,16 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-09-01（Electron + Python 混合架构桌面端）
+
+### Changed
+
+- **桌面 UI 迁移到 Electron + Python 混合架构（替代 PyWebView）**：Electron 桌面壳 spawn Python 后端（`main.py --backend`），就绪时经标准输出 `\x1eQINGCI_READY <port>\x1e` 上报端口，壳加载后端 HTTP 提供的 Web UI
+- **桌面能力迁至 Electron 侧**：系统托盘、按 data-dir 的单实例锁与聚焦、启动画面、关闭驻留后台、退出/重载全部由 Electron 承担；Python 仅做内嵌后端
+- **实例切换/改名由 Electron 接管**：后端按需打印机器可读 `QINGCI_RELAUNCH <json>` 信号，Electron 终止当前后端并按目标参数重新拉起，壳进程不退出（丝滑切换）
+- **移除 PyWebView 模式**：删除 pywebview / pystray / pillow 依赖及 `--desktop` / `desktop/app.py` / `tray.py` / `splash.py` 相关实现
+- **新增 Electron 打包链路**：`build-electron.ps1` + electron-builder（便携版 EXE，内嵌 Python 后端 onedir 为 extraResources/backend）；新增 CI `electron` 校验 job
+
 ## [1.16.10] - 2026-08-23（OneBot 12 协议符合度与 Telegram 转换修复）
 
 ### Fixed

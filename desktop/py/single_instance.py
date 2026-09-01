@@ -24,7 +24,6 @@ _ERROR_ALREADY_EXISTS = 183
 # user32 SW_RESTORE
 _SW_RESTORE = 9
 
-# 桌面主窗口标题（与 desktop/main.py 的 webview 窗口标题保持一致）
 WINDOW_TITLE = "Qingci-Bot CE"
 
 # 默认互斥名（后续打包/多配置场景可复用模块并传入不同 name）

@@ -6,6 +6,7 @@
   不能用 __file__（frozen 时指向 _internal 内部）定位。
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -56,7 +57,16 @@ def plugins_dir() -> Path:
 
 
 def instances_dir() -> Path:
-    """返回实例注册表根目录（默认 app_root()/instances，每个实例一个子目录）"""
+    """返回实例注册表根目录（默认 app_root()/instances，每个实例一个子目录）
+
+    打包（便携/安装）形态下，Electron 壳经环境变量 QINGCI_USER_DATA 指向稳定的
+    用户数据目录。否则便携版免安装 EXE 会解压到系统临时目录运行，实例数据将落在
+    临时目录里，退出或系统清理临时目录后即丢失。源码/onedir 直跑不设该变量，
+    实例仍随 app_root()/instances 自包含分发。
+    """
+    stable = os.environ.get("QINGCI_USER_DATA")
+    if stable:
+        return Path(stable).resolve() / "instances"
     return app_root() / "instances"
 
 

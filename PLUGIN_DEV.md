@@ -1577,5 +1577,5 @@ dist\qingci-bot-ce\
 - 实例目录 `instances\` 按 **exe 所在目录** 相对定位（`app_root`）：分发时整个 `dist\qingci-bot-ce\` 目录一起拷贝，勿单独移动 exe。
 - 首次运行自动创建 `instances\default\` 实例并生成默认 `config.yaml`；数据库自动建表（SQLModel create_all）。
 - 重新执行 `build.ps1` 不会覆盖 `instances\` 中已有的实例配置与数据（用户数据始终保留在实例目录内）。
-- `--desktop` 桌面模式依赖系统 WebView2 运行时（pywebview EdgeChromium 后端），未安装的系统可能无法打开窗口。
 - 当前产物为 **windowed 无控制台** 模式（`qingci-bot-ce.spec` 中 `console=False`），日志不直接可见，建议开启文件日志（`log.log_file_enabled: true`）；如需控制台窗口排障，将 `console` 改为 `True` 后重新构建。
+- 桌面 GUI 由 Electron 壳（`desktop\electron\`）承担：分发用 `build-electron.ps1` 生成便携版 EXE，其内嵌 Python 后端（`--backend`）就绪时通过标准输出上报端口供壳加载 Web UI；不依赖系统 WebView2 / pywebview。

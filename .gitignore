@@ -8,6 +8,9 @@ htmlcov/
 *.egg-info/
 dist/
 build/
+# Electron 壳的构建资源（boot.html / icon.png 需随源码提交，供 electron-builder 打包）
+!desktop/electron/build/
+!desktop/electron/build/**
 data/
 *.db
 instances/

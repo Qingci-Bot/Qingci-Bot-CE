@@ -8,6 +8,7 @@ POST   /api/instances/{name}/start  重启到指定实例
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -31,9 +32,29 @@ from bot.instances import (
     rename_instance,
 )
 from bot.paths import data_root
-from desktop.relaunch import spawn_relaunch
+from desktop.py.relaunch import spawn_relaunch
 
 logger = logging.getLogger("qingci-bot.api.instances")
+
+# 与 Electron 壳（desktop/electron/src/main.js）约定的机器可读重启信号：
+# \x1eQINGCI_RELAUNCH <json 目标启动参数>\x1e。后端收到切换/重启请求时不采用
+# detached 助手进程重拉 python，而是让 Electron 壳终止当前后端并按参数重新拉起。
+RS = "\x1e"
+
+
+def _request_relaunch(args: list[str]) -> None:
+    """请求重启到目标实例。
+
+    桌面壳（Electron --backend）：向 stdout 打印 RELAUNCH 信号，由 Electron 终止
+    当前后端并按 args 重新拉起，丝滑切换（壳进程不退出）。
+    CLI / headless：沿用 detached 助手进程（desktop/py/relaunch.py），等待旧进程退出后
+    拉起目标实例；此路径对前端与 supervisor 完全透明。
+    """
+    if "--backend" in sys.argv:
+        print(f"{RS}QINGCI_RELAUNCH {json.dumps(args)}{RS}", flush=True)
+        return
+    spawn_relaunch(args)
+
 
 router = APIRouter()
 
@@ -48,13 +69,10 @@ def _current_instance_name() -> str | None:
 
 
 def _build_start_args(name: str) -> list[str]:
-    """构造重启到指定实例的应用参数（保留桌面/无Bot/监听地址/端口/数据目录/配置等标志）"""
+    """构造重启到指定实例的应用参数（保留无Bot/监听地址/端口/数据目录/配置等标志）"""
     args = ["--instance", name]
-    # 保留桌面模式（frozen windowed 下 sys.argv 无 --desktop，需用显式标志判断）
-    from bot.paths import is_desktop
-
-    if is_desktop():
-        args.append("--desktop")
+    # 桌面壳（Electron --backend）重启由 Electron 接手（见 _request_relaunch），
+    # 无需在此附加 --desktop；CLI 模式亦然（--desktop 已被移除）。
     if "--no-bot" in sys.argv:
         args.append("--no-bot")
     # 透传带值标志：支持 `--flag value` 与 `--flag=value` 两种写法
@@ -142,6 +160,8 @@ async def rename_existing_instance(name: str, req: RenameInstanceRequest) -> dic
     """
     if get_instance(name) is None:
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}") from None
+    if req.new_name == name:
+        raise HTTPException(status_code=400, detail=f"新名称与当前名称相同: {name}") from None
     if not is_valid_name(req.new_name):
         raise HTTPException(status_code=400, detail=f"非法实例名: {req.new_name!r}") from None
     if get_instance(req.new_name) is not None:
@@ -152,7 +172,9 @@ async def rename_existing_instance(name: str, req: RenameInstanceRequest) -> dic
 
     if is_running:
         try:
-            spawn_relaunch(["--rename-dir", name, req.new_name] + _build_start_args(req.new_name))
+            _request_relaunch(
+                ["--rename-dir", name, req.new_name] + _build_start_args(req.new_name)
+            )
         except Exception:
             # 派发失败时不退出当前进程，返回错误由前端提示，主流程不受影响
             logger.exception("派发改名重启助手失败，未执行改名")
@@ -182,7 +204,7 @@ async def start_instance(name: str) -> dict | JSONResponse:
 
     await record_audit("instance.start", f"切换到实例 {name}")
     try:
-        spawn_relaunch(_build_start_args(name))
+        _request_relaunch(_build_start_args(name))
     except Exception:
         # 派发失败时不退出当前进程，返回错误由前端提示，主流程不受影响
         logger.exception("派发重启助手失败，未切换实例")

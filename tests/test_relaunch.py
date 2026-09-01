@@ -6,7 +6,7 @@ import sys
 import pytest
 
 import bot.instances as inst_mod
-import desktop.relaunch as relaunch
+import desktop.py.relaunch as relaunch
 
 
 @pytest.fixture(autouse=True)

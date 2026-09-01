@@ -33,7 +33,7 @@ def test_db_path_follows_data_root(tmp_path, monkeypatch):
 
 
 def test_mutex_name_derivation_stable_and_distinct(tmp_path):
-    from desktop.single_instance import mutex_name_for_data_dir
+    from desktop.py.single_instance import mutex_name_for_data_dir
 
     a = mutex_name_for_data_dir(tmp_path / "botA")
     b = mutex_name_for_data_dir(tmp_path / "botB")

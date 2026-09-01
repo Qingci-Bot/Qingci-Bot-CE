@@ -6,7 +6,7 @@
 #   chmod +x install.sh
 #   ./install.sh              # 创建 .venv 并安装核心运行依赖
 #   ./install.sh --vector     # 额外安装向量知识库依赖（lancedb）
-#   ./install.sh --with-gui   # 额外安装桌面 GUI 系统库（需用 --desktop 时）
+#   ./install.sh --with-gui   # （历史参数，保留兼容）桌面 GUI 已由 Electron 壳承担，无需额外系统库
 #   ./install.sh --dev        # 额外安装测试/构建/代码质量工具
 #
 # 默认 Headless 模式（Bot + WebUI/API），无需任何 GUI 系统依赖。
@@ -60,10 +60,8 @@ echo "使用 Python: $PY（$("$PY" --version)）"
 # ── 系统依赖安装（可选，需 root）───────────────────────────
 install_sys_deps() {
   local pkgs="git ca-certificates build-essential python3-venv python3-pip"
-  if [ "$WITH_GUI" = "1" ]; then
-    # 桌面模式：pywebview(GTK 后端) + pystray(libappindicator)
-    pkgs="$pkgs libwebkit2gtk-4.1-0 libgtk-3-0 gir1.2-webkit2-4.1 gir1.2-gtk-3.0 libappindicator3-1"
-  fi
+  # 桌面 GUI 现由 Electron 壳（desktop/electron）承担，不走 Python system 库；
+  # 无需再为主机安装 pywebview/pystray 依赖。
   if command -v apt-get >/dev/null 2>&1; then
     echo ">> 检测到 apt，安装系统依赖：$pkgs"
     apt-get update
@@ -71,18 +69,10 @@ install_sys_deps() {
   elif command -v dnf >/dev/null 2>&1; then
     # dnf 基础包与 apt 不同名（无 build-essential/python3-venv），用发行版精简集
     dnf_pkgs="git gcc python3-devel ca-certificates"
-    if [ "$WITH_GUI" = "1" ]; then
-      # --with-gui：补装桌面模式（pywebview GTK / pystray）所需系统库
-      dnf_pkgs="$dnf_pkgs webkit2gtk4.1 gtk3 gir1.2-webkit2-4.1 libappindicator-gtk3"
-    fi
     echo ">> 检测到 dnf，安装系统依赖：$dnf_pkgs"
     dnf install -y $dnf_pkgs
   elif command -v apk >/dev/null 2>&1; then
     apk_pkgs="git gcc musl-dev python3-dev ca-certificates"
-    if [ "$WITH_GUI" = "1" ]; then
-      # Alpine：--with-gui 时补装 pywebview GTK / pystray 依赖
-      apk_pkgs="$apk_pkgs py3-gobject3 py3-cairo gtk+3.0 webkit2gtk libappindicator"
-    fi
     echo ">> 检测到 apk，安装系统依赖：$apk_pkgs"
     apk add --no-cache $apk_pkgs
   else
@@ -113,7 +103,7 @@ VENV_PY="$ENVDIR/bin/python"
 # ── 安装依赖（优先 uv，否则 pip）───────────────────────────
 extras=""
 [ "$WITH_VECTOR" = "1" ] && extras="$extras,vector"
-# GUI 系统库已由上方 install_sys_deps 安装，无需 Python extra（pywebview/pystray 在核心依赖里）
+# 桌面 GUI 由 Electron 壳承担，不再需要 Python 端的图形 extra
 [ "$WITH_DEV" = "1" ] && extras="$extras,dev"
 if [ -n "$extras" ]; then
   EXTRAS_STR="${extras#,}"   # 去掉前导逗号

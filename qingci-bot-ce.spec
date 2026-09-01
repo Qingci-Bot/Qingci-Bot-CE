@@ -41,12 +41,6 @@ litellm_datas = [
 # "Unknown encoding cl100k_base"，需整体收集并显式导入
 tiktoken_datas, tiktoken_binaries, tiktoken_hiddenimports = collect_all('tiktoken_ext')
 
-# desktop 模式：pywebview 的 EdgeChromium 后端依赖 pythonnet（.NET 运行时）；
-# pythonnet/runtime 下的 DLL 是数据文件，不会被 modulegraph 自动收集，
-# 需 collect_all 一并打入
-pythonnet_datas, pythonnet_binaries, pythonnet_hiddenimports = collect_all('pythonnet')
-clrloader_datas, clrloader_binaries, clrloader_hiddenimports = collect_all('clr_loader')
-
 # 独立插件 SDK（qingci_plugin_sdk）：外部插件运行时 import 它，必须随主程序
 # 打包；整体收集全部子模块，保证数据目录重定向等特性可用
 sdk_datas, sdk_binaries, sdk_hiddenimports = collect_all('qingci_plugin_sdk')
@@ -73,15 +67,13 @@ else:
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=litellm_binaries + tiktoken_binaries + pythonnet_binaries + clrloader_binaries + sdk_binaries + pip_binaries + pw_binaries,
-    datas=litellm_datas + tiktoken_datas + pythonnet_datas + clrloader_datas + sdk_datas + pip_datas + pw_datas + uv_datas + [
-        ('desktop\\app-icon.ico', '.'),
+    binaries=litellm_binaries + tiktoken_binaries + sdk_binaries + pip_binaries + pw_binaries,
+    datas=litellm_datas + tiktoken_datas + sdk_datas + pip_datas + pw_datas + uv_datas + [
+        ('desktop\\assets\\app-icon.ico', '.'),
     ],
     hiddenimports=[
         *litellm_hiddenimports,
         *tiktoken_hiddenimports,
-        *pythonnet_hiddenimports,
-        *clrloader_hiddenimports,
         *sdk_hiddenimports,
         *pip_hiddenimports,
         *pw_hiddenimports,
@@ -126,21 +118,10 @@ a = Analysis(
         # ---- 向量知识库（VectorKnowledgeStore 内延迟导入）----
         'lancedb',
         'pyarrow',
-        # ---- desktop 模式（pywebview / pystray） ----
-        'webview',
-        # pywebview 平台后端为动态导入，需显式声明（Windows: WinForms + EdgeChromium）
-        'webview.platforms.winforms',
-        'webview.platforms.edgechromium',
-        # pythonnet/.NET 加载链
-        'clr',
-        'clr_loader',
-        'pythonnet',
-        'pystray',
-        'pystray._win32',
-        'PIL',
-        # desktop 启动画面（main.py 中条件导入，显式声明确保打包）
-        'desktop.splash',
-        # desktop/main.py 中以模块名导入入口脚本
+        # ---- desktop 导出（Python 侧桌面辅助：跨进程重启助手 / 单实例互斥） ----
+        'desktop.py.relaunch',
+        'desktop.py.single_instance',
+        # ---- 以模块名形式被导入的入口脚本 ----
         'main',
     ],
     hookspath=[],
@@ -169,7 +150,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,       # console=True 便于查看日志；改 False 可去掉控制台窗口
-    icon='desktop\\app-icon.ico',
+    icon='desktop\\assets\\app-icon.ico',
 )
 
 coll = COLLECT(

@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from desktop.single_instance import SingleInstance, bring_existing_to_front
+from desktop.py.single_instance import SingleInstance, bring_existing_to_front
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="命名互斥量仅 Windows 有效")

@@ -1,6 +1,6 @@
 [project]
 name = "qingci-bot-ce"
-version = "1.16.10"
+version = "1.17.0"
 description = "多平台机器人框架（OneBot 11 / OneBot 12 / Telegram），支持 LLM 对话、Web UI 和 Desktop UI"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
@@ -24,9 +24,6 @@ dependencies = [
     "httpx>=0.28.0",
     "litellm>=1.50.0",
     "apscheduler>=3.10,<4",
-    "pywebview>=5.0",
-    "pystray>=0.19.0",
-    "pillow>=11.0",
     "mcp>=1.6,<2",
 ]
 

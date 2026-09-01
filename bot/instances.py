@@ -9,9 +9,9 @@
 实例与运行进程解耦：本模块只负责磁盘上的实例目录管理，
 不持有运行状态。运行实例判定由上层（当前进程 data_root 归属）提供。
 
-> 与 `desktop/single_instance.py` 的「单实例」区分：本模块指**数据级多实例**
+> 与 `desktop/py/single_instance.py` 的「单实例」区分：本模块指**数据级多实例**
 > （每个实例一个自包含目录，可用不同 --data-dir 并行运行）；
-> `desktop/single_instance.py` 指**进程级单例互斥**（同数据目录只允许一个进程）。
+> `desktop/py/single_instance.py` 指**进程级单例互斥**（同数据目录只允许一个进程）。
 """
 
 from __future__ import annotations

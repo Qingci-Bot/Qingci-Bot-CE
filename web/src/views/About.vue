@@ -23,8 +23,9 @@ onMounted(() => {
       </div>
       <div class="about-section">
         <p>
-          <strong>Qingci-Bot CE</strong> 是一个基于 Python 的多平台机器人框架，支持 OneBot 11（反向
-          WebSocket）与 Telegram 等平台，提供 LLM 智能对话、Web UI 和桌面应用。
+          <strong>Qingci-Bot CE</strong> 是一个基于 Python 的多平台机器人框架，支持 OneBot
+          11/12（反向 WebSocket）与 Telegram 等平台，提供 LLM 智能对话、Web 管理端与 Electron
+          桌面应用。
         </p>
         <p>
           项目采用 <strong>GPLv3</strong> 开源许可，代码托管于
@@ -74,9 +75,7 @@ onMounted(() => {
             <span class="feature-icon">▣</span>
             <div>
               <div class="feature-title">桌面应用</div>
-              <div class="feature-desc">
-                PyWebView 套壳 + 系统托盘，开机自启，关闭窗口自动驻留后台
-              </div>
+              <div class="feature-desc">Electron 桌面壳 + 系统托盘，关闭窗口自动驻留后台</div>
             </div>
           </div>
         </div>
@@ -236,11 +235,12 @@ onMounted(() => {
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
-              <a href="https://github.com/python-pillow/Pillow" target="_blank" rel="noopener"
-                >Pillow</a
-              >
+              <a href="https://www.electronjs.org/" target="_blank" rel="noopener">Electron</a>
             </div>
-            <div class="thanks-desc">图像处理库，用于托盘图标渲染与图片类插件的生成能力。</div>
+            <div class="thanks-desc">
+              Electron 桌面壳：spawn Python 后端（--backend）并加载 Web
+              UI，承担系统托盘、单实例与启动画面等桌面能力。
+            </div>
           </div>
           <div class="thanks-item">
             <div class="thanks-name">
@@ -249,22 +249,7 @@ onMounted(() => {
               >
             </div>
             <div class="thanks-desc">
-              Python 应用打包工具，将 Qingci-Bot CE 打包为跨平台桌面可执行文件。
-            </div>
-          </div>
-          <div class="thanks-item">
-            <div class="thanks-name">
-              <a href="https://github.com/r0x0r/pywebview" target="_blank" rel="noopener"
-                >pywebview</a
-              >
-              &nbsp;/&nbsp;
-              <a href="https://github.com/moses-palmer/pystray" target="_blank" rel="noopener"
-                >pystray</a
-              >
-            </div>
-            <div class="thanks-desc">
-              pywebview 将 Web UI 封装为原生桌面窗口；pystray
-              提供系统托盘支持，实现关闭驻留后台与开机自启。
+              Python 应用打包工具，将 Qingci-Bot CE 后端固化到 Electron 旁的内嵌后端目录。
             </div>
           </div>
           <div class="thanks-item">
@@ -307,6 +292,10 @@ onMounted(() => {
           <div class="version-item">
             <span class="version-label">Python</span>
             <span class="version-value">3.10+</span>
+          </div>
+          <div class="version-item">
+            <span class="version-label">桌面壳</span>
+            <span class="version-value">Electron</span>
           </div>
         </div>
       </div>
@@ -405,7 +394,7 @@ onMounted(() => {
 
 .version-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
 }
 

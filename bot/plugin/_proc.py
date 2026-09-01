@@ -1,8 +1,9 @@
 """子进程执行辅助（跨平台隐藏控制台窗口）
 
-GUI 桌面模式（pywebview + pythonw）下，asyncio.create_subprocess_exec 启动
-git / uv / pip 等控制台程序时，Windows 会为新进程创建可见的 cmd 窗口。
-统一通过本模块传入 ``creationflags=NO_WINDOW_FLAG`` 隐藏窗口。
+桌面壳（Electron 拉起的后端、无控制台窗口/无头）模式下，asyncio
+create_subprocess_exec 启动 git / uv / pip 等控制台程序时，Windows 会为
+新进程创建可见的 cmd 窗口。统一通过本模块传入
+``creationflags=NO_WINDOW_FLAG`` 隐藏窗口。
 
 用法::
 

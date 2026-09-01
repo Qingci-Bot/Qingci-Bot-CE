@@ -25,7 +25,7 @@
 - **HTML 渲染服务**：基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG（可选依赖 `[render]`），供签到卡等「HTML 模板 → 图片消息」插件复用；playwright 未安装/浏览器缺失时自动降级不可用，不影响框架启动
 - **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式），支持在线备份与消息 CSV 导出
 - **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板 + 卸载/彻底删除 + 插件市场一键安装/更新/搜索）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 运行日志（实时日志流 + 级别过滤，受 `log.run_log_enabled` 开关控制）/ 登录审计 / 系统设置。独立「实例管理」页面支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）
-- **桌面应用**：PyWebView 套壳 + 系统托盘（关闭窗口自动驻留后台）；启动时显示即时加载画面，重型模块延迟导入，双击 exe 后无感知等待
+- **桌面应用**：Electron + Python 混合架构 — Electron 桌面壳 spawn Python 后端（`main.py --backend`）并加载其 Web UI；系统托盘（关闭窗口自动驻留后台）、启动画面、单实例（按 data-dir 退化的控制端口）均由壳承担；`build-electron.ps1` 产出便携版单文件 EXE 一键分发
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖；litellm 延迟导入，启动不加载重型依赖
 
 ---
@@ -37,7 +37,7 @@
 - Python 3.10+（推荐 3.12）
 - 任意 OneBot 11 协议端（如 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot) / NapCat / go-cqhttp）
 - Node.js 18+（仅构建 Web UI 时需要，`web/dist` 已存在可跳过）
-- 桌面模式额外依赖系统 WebView2 运行时（见「打包为 exe」注意事项）
+- 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 18+（`desktop/electron`）；最终用户运行 `build-electron.ps1` 产出的便携版 EXE 无需额外运行时
 
 ## 1. 安装
 
@@ -81,7 +81,6 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiohttp aiosqlite \
 >   sqlmodel alembic "sqlalchemy[asyncio]" litellm pydantic pyyaml httpx \
 >   "apscheduler>=3.10,<4" "mcp>=1.6,<2" \
->   pywebview pystray pillow \
 >   --python .venv\Scripts\python.exe
 > ```
 
@@ -97,12 +96,11 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 # 自定义端口
 .venv\Scripts\python main.py --port 9000
 
-# 桌面应用
-.venv\Scripts\python main.py --desktop
-
 # 以指定实例启动（instances/<name>/ 自包含目录：config.yaml + data/ + plugins/）
 .venv\Scripts\python main.py --instance <name>
 ```
+
+> 桌面 GUI 通过 **Electron 壳**（`desktop/electron`，打包见 `build-electron.ps1`）运行：壳 spawn Python 后端（`main.py --backend`）并加载其 Web UI，系统托盘/单实例/启动画面均由 Electron 承担，不再使用 `--desktop`/pywebview。
 
 启动必须绑定一个实例（无全局模式）：未指定 `--instance` 时自动选择默认实例（`default` 优先，其次名称排序第一个）；若实例数为 0 则自动创建 `default` 实例。每个实例是 `instances/<name>/` 下的自包含目录，独立「实例管理」页（`/instances`）支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）；切换会以目标实例重启进程。**创建实例时可绑定主平台**（OneBot / OneBot 12 / Telegram）：创建后系统设置即针对该平台语义落位——OneBot 主平台实例启动反向 WS 服务端（`onebot.enabled`），Telegram 主平台实例自动关闭反向 WS 并启用 Telegram 适配器，`super_admin` / 管理员 / 黑白名单均以平台无关字符串 ID 配置。
 
@@ -151,8 +149,8 @@ chmod +x install.sh
 - WebUI：`http://127.0.0.1:8080/ui`
 - 编辑实例配置：`instances/default/config.yaml`
 - 外部 OneBot 前端连入前，把该实例 `onebot.host` 改为 `0.0.0.0`
-- **桌面 GUI（`--desktop`）**：Linux 下需要 GTK 系系统库（`libwebkit2gtk` / `libgtk-3` / `libappindicator`，Debian 系可看 `install.sh --with-gui` 列出的包名）；启动画面（splash）为 Windows 专属，Linux 自动跳过。**建议 Linux 优先使用 Docker 或 Headless + WebUI 模式**
-- 单实例保护基于 Windows 命名互斥量，Linux 下自动降级（允许多开，不阻塞启动）
+- **桌面 GUI**：通过 Electron 壳（`desktop/electron`）运行；Linux 下 Electron 需要系统动态库（Debian 系含 `libgtk-3`/`libnss3`/`libasound2` 等，可用 `npx electron-builder` 文档对照）。**建议 Linux 优先使用 Docker 或 Headless + WebUI 模式**
+- 单实例保护：Electron 侧按 data-dir 退化的控制端口实现——同一实例（同 data-dir）重复启动聚焦已有窗口，不同实例（不同 data-dir）可并行多开；CLI/Headless 模式基于命名互斥量，Linux 下自动降级（允许多开，不阻塞启动）
 
 ## 3. 运行测试
 
@@ -266,7 +264,8 @@ LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不�
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `--no-bot` | 仅启动 API 服务 | - |
-| `--desktop` | 启动桌面应用 | - |
+| `--backend` | 由 Electron 壳拉起的后端进程（仅桌面壳用；就绪时打印机器可读端口） | - |
+| `--resolve-instance` | 仅解析实例元数据并打印 JSON（供 Electron 壳预探测），不启动服务 | - |
 | `--port` | API 端口 | 实例元数据端口（首个实例 8080，后续递增） |
 | `--host` | API 监听地址 | 127.0.0.1 |
 | `--config` | 配置文件路径 | 实例内 `config.yaml` |
