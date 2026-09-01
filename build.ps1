@@ -40,11 +40,18 @@ if ($LASTEXITCODE -ne 0) { throw "qingci-plugin-sdk install failed with exit cod
 # build venv, collect_all grabs nothing and the bundled EXE cannot auto-install
 # plugin third-party deps. Install pip here so it gets collected into the EXE.
 Write-Host "==> ensuring pip in build venv (for bundled plugin deps)..." -ForegroundColor Cyan
-# 用 2>$null 丢弃 stderr 而非 2>&1 | Out-Null：$ErrorActionPreference="Stop" 下
-# PowerShell 5.1 会把 native stderr 转成 terminating error 中断脚本（pip 缺失时
-# python 打印的 Traceback 会误杀构建）；这里只关心退出码。
-& $Python -c "import pip" 2>$null
-if ($LASTEXITCODE -ne 0) {
+# 不要用 2>&1 | Out-Null：$ErrorActionPreference="Stop" 下 PowerShell 5.1 会把
+# native stderr 包装成 terminating NativeCommandError，pip 缺失时 python 打印的
+# Traceback 会直接中断脚本。即便写 2>$null 在 PS 5.1 + Stop 下仍可能抛错，
+# 因此用 try/catch 兜底，仅以退出码判断 pip 是否可用。
+$pipMissing = $false
+try {
+    & $Python -c "import pip" 2>$null
+    $pipMissing = ($LASTEXITCODE -ne 0)
+} catch {
+    $pipMissing = $true
+}
+if ($pipMissing) {
     Write-Host "    pip absent in uv-managed venv; installing via uv (normal path)..." -ForegroundColor DarkGray
     # uv-managed venvs ship without pip; install via uv instead of ensurepip
     # (uv may not offer ensurepip). Needed so collect_all('pip') in the spec
@@ -54,7 +61,11 @@ if ($LASTEXITCODE -ne 0) {
         Write-Warning "    could not install pip in build venv; EXE will not bundle pip, plugin auto-deps unavailable in packaged mode"
     }
 }
-& $Python -c "import pip; print('    pip available:', pip.__version__)"
+try {
+    & $Python -c "import pip; print('    pip available:', pip.__version__)" 2>$null
+} catch {
+    Write-Warning "    pip import failed; plugin auto-deps may be unavailable in packaged mode"
+}
 
 # ---------- [1/3] PyInstaller build ----------
 Write-Host "==> [1/3] PyInstaller build (first run takes 3-10 min)..." -ForegroundColor Cyan
