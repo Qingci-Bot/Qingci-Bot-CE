@@ -1,0 +1,232 @@
+# 发布流水线：打 v* tag 触发，全自动构建并上传分发包
+#
+# 触发：
+#   1) git tag v1.17.0 && git push origin v1.17.0   -> 构建 EXE/AppImage 并上传同名 Release，
+#      同时构建并推送 Docker 镜像到 ghcr.io
+#   2) workflow_dispatch（手动）-> 仅重建并上传 EXE/AppImage 到指定 Release（不推镜像）
+#
+# 产物：
+#   - Windows 便携 EXE（PyInstaller 后端 onedir + electron-builder portable）
+#   - Linux AppImage（PyInstaller 后端 onedir + electron-builder AppImage）
+#   - Docker 镜像（ghcr.io，tag: vX.Y.Z / X.Y / X / latest）
+#
+# 每个平台先产后端 onedir，再让 electron-builder 打成便携/AppImage，
+# 与本地 build.ps1 + build-electron.ps1 / build-linux.sh 链路一致。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "发布版本（如 v1.17.0，须以 v 开头）"
+        required: false
+        default: ""
+
+env:
+  QINGCI_SDK_GIT_URL: https://github.com/Qingci-Bot/Plugins-SDK.git
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      ver: ${{ steps.resolve.outputs.ver }}
+    permissions:
+      contents: write
+    steps:
+      - name: Resolve version
+        id: resolve
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            ver="${{ github.event.inputs.tag_name }}"
+          else
+            ver="${GITHUB_REF_NAME}"
+          fi
+          ver="${ver#refs/tags/}"
+          case "$ver" in
+            v*) ;;
+            *) echo "::error::版本号必须以 v 开头（如 v1.17.0），收到: $ver"; exit 1 ;;
+          esac
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $ver"
+
+      - uses: actions/checkout@v4
+
+      - name: Ensure release exists (create if missing)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${{ steps.resolve.outputs.ver }}"
+          if ! gh release view "$ver" >/dev/null 2>&1; then
+            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              gh release create "$ver" --title "$ver" --notes "自动发布流水线产物，未提供手动说明。"
+            else
+              # 手动触发（dispatch）且 Git 内无该 tag 时，从当前 HEAD 建 tag 并发布
+              gh release create "$ver" --target "$GITHUB_SHA" --title "$ver" --notes "自动发布流水线产物，未提供手动说明。"
+            fi
+            echo "Created release $ver"
+          else
+            echo "Release $ver already exists, will upload assets"
+            gh release view "$ver" --json isDraft -q .isDraft | grep -q false || gh release edit "$ver" --draft=false
+          fi
+
+  windows-exe:
+    name: Windows portable EXE
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python (build venv)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Create venv + install deps
+        shell: powershell
+        run: |
+          uv venv .venv
+          uv pip install -e ".[build]"
+
+      - name: Set up Node.js (for Web UI build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web UI build
+        shell: powershell
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build backend onedir (build.ps1)
+        shell: powershell
+        env:
+          PLAYWRIGHT_DOWNLOAD_HOST: https://npmmirror.com/mirrors/playwright
+          CI: "1"
+        run: .\build.ps1
+
+      - name: Package portable EXE (build-electron.ps1)
+        shell: powershell
+        working-directory: desktop/electron
+        run: |
+          npm ci
+          ..\..\..\build-electron.ps1
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: powershell
+        run: |
+          $ver = "${{ needs.prepare.outputs.ver }}"
+          $exe = Get-ChildItem "dist\electron\*.exe" | Where-Object { $_.Name -notlike "*unpacked*" } | Select-Object -First 1
+          if (-not $exe) { throw "portable exe not found under dist\electron" }
+          gh release upload "$ver" "$($exe.FullName)" dist\qingci-bot-ce.sha256 --clobber
+
+  linux-appimage:
+    name: Linux AppImage
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python + uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.12"
+
+      - name: Create venv + install deps
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -e ".[build]"
+
+      - name: Set up Node.js (for Web UI build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web UI build
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build backend onedir (build-linux.sh)
+        run: ./build-linux.sh
+
+      - name: Package AppImage (electron-builder --linux)
+        working-directory: desktop/electron
+        run: |
+          npm ci
+          npx electron-builder --linux --publish never
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${{ needs.prepare.outputs.ver }}"
+          appimage=$(ls dist/electron/*.AppImage 2>/dev/null | head -n1)
+          if [ -z "$appimage" ]; then echo "::error::AppImage not found under dist/electron"; exit 1; fi
+          gh release upload "$ver" "$appimage" dist/qingci-bot-ce.sha256 --clobber
+
+  docker:
+    name: Docker image (ghcr.io)
+    if: github.event_name == 'push'
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

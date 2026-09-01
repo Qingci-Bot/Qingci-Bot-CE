@@ -2,7 +2,7 @@
 
 > **代码托管**：本项目以 [GitHub](https://github.com/Qingci-Bot/Qingci-Bot-CE) 为唯一仓库；贡献与提 PR 一律以 GitHub 为准。
 
-> 本项目底层核心代码由 [**Zhou Zhe (aka luoqingci)**](https://github.com/luoqingciya) 原创，并授予 [Qingci-Bot](https://github.com/Qingci-Bot) 组织持续开发。
+> 本项目底层核心代码由 **[Zhou Zhe (aka luoqingci)](https://github.com/luoqingciya)** 原创，并授予 [Qingci-Bot](https://github.com/Qingci-Bot) 组织持续开发。
 
 基于 Python 的多平台机器人框架，内部统一采用 **OneBot 12 事件模型**（`type` / `detail_type` / `message[]` 消息段），基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接任意 OneBot 11 反向 WebSocket 协议端（如 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot) / NapCat / go-cqhttp，作为兼容输入层自动翻译为 v12 事件），支持 LLM 智能对话、Web UI 和桌面应用。适配器将各平台归一化为 OneBot 12 内部模型，插件对来源平台完全无感知。
 
@@ -15,28 +15,43 @@
 ## 特性
 
 - **OneBot 12 内核**：内部统一采用 OneBot 12 事件模型（`type` / `detail_type` / 标准 `{type,data}` 消息段，媒体以 `file_id` 引用）；基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接任意 OneBot 11 反向 WebSocket 协议端（如 LLBot / NapCat / go-cqhttp），v11 事件在入口由 `v11_compat` 翻译层自动归一化为 v12 事件，并对存量插件保留 v11 兼容字段（`post_type` / `message_type` / `raw_message`）——OneBot 11 只是"众多平台之一"
-- **多平台适配器**：平台协议归一化为 OneBot 12 内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot 11（v11 反向 WS + `v11_compat` 翻译）+ **OneBot 12（原生反向 WS，事件直通无需翻译，动作 JSON-RPC；扩展通知如红包运气王/荣誉变更/名片变更/精华消息/群签到/好友戳一戳已类型化，插件可 `on_notice` + 类型注解消费）** + Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `voice`、video → `video` v12 段；发送将 v12 `image`/`voice`/`video` 段映射到 `sendPhoto`/`sendVoice`/`sendVideo`）、回复段与成员变动通知（成员进出群/权限变更归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_*` notice）；长轮询采用有限并发消费（慢更新不阻塞同批）且失败更新自动确认跳过避免重放，连接失败指数退避并自动重连，Bot Token 支持运行时热更新（自动重验身份），HTTP 超时/重试可配置，API 调用错误按 401/403/404 分类，平台状态接口暴露连接健康指标（连续错误数/最近错误与断连时间/退避状态）
+
+- **多平台适配器**：平台协议归一化为 OneBot 12 内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot 11（v11 反向 WS + `v11_compat` 翻译）+ **OneBot 12（原生反向 WS，事件直通无需翻译，动作 JSON-RPC；扩展通知如红包运气王/荣誉变更/名片变更/精华消息/群签到/好友戳一戳已类型化，插件可** **`on_notice`** **+ 类型注解消费）** + Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `voice`、video → `video` v12 段；发送将 v12 `image`/`voice`/`video` 段映射到 `sendPhoto`/`sendVoice`/`sendVideo`）、回复段与成员变动通知（成员进出群/权限变更归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_*` notice）；长轮询采用有限并发消费（慢更新不阻塞同批）且失败更新自动确认跳过避免重放，连接失败指数退避并自动重连，Bot Token 支持运行时热更新（自动重验身份），HTTP 超时/重试可配置，API 调用错误按 401/403/404 分类，平台状态接口暴露连接健康指标（连续错误数/最近错误与断连时间/退避状态）
+
 - **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 7 大提供商（OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义），含流式响应、Function Calling、多模态；填好 API Key 后可一键拉取提供商可用模型列表
-- **人格/人设系统**：可配置多组人格（system_prompt 集合），聊天中 `/persona` 命令随时切换（会话级覆盖），Web UI 可视化管理
+
+- **人格/人设系统**：可配置多组人格（system\_prompt 集合），聊天中 `/persona` 命令随时切换（会话级覆盖），Web UI 可视化管理
+
 - **会话上下文管理**：按群聊/用户独立维护对话历史，内存 + 数据库双写持久化，按条数与 Token 双重裁剪（可选摘要压缩）；Web UI 按会话分组可视化查看 / 删除
-- **插件系统**：借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持命令/前缀/关键词/正则/通知/请求匹配，优先级调度、权限控制、插件间依赖声明（require + PEP 440 版本约束）、插件级配置（config.yaml 节）、插件间导出/导入（export/require）、插件级中间件（before/after handler）、handler 参数级依赖注入（Depends）、全局生命周期钩子（on_startup/on_shutdown/on_bot_connect/on_metaevent）、跨插件事件总线（EventBus 发布-订阅）、插件级 LLM 工具声明（`@llm_tool` 参与 Function Calling）、指令系统增强（别名 / 子指令 / 类型化参数）、插件数据目录（data_dir）、国际化（i18n）、在线插件安装与依赖自动安装、配置 schema 自动生成 Web 配置表单、开发期自动热重载、细粒度事件处理钩子（run_preprocessor Matcher 运行前钩子 + on_calling_api 平台接口调用钩子）、插件状态管理（PluginStatus 枚举）、执行指标监控、元数据发现（plugin.json）；支持加载/卸载/重载/禁用/启用，禁用时保留实例并跳过事件分发；卸载默认仅删代码目录、保留数据与依赖（便于重装），插件管理页可「彻底删除（purge）」连数据目录与第三方依赖一并清除。协议层（PluginBase/Matcher/Rule/Permission/MessageContext）由独立插件 SDK 单一维护，内置插件与外部插件行为一致
+
+- **插件系统**：借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持命令/前缀/关键词/正则/通知/请求匹配，优先级调度、权限控制、插件间依赖声明（require + PEP 440 版本约束）、插件级配置（config.yaml 节）、插件间导出/导入（export/require）、插件级中间件（before/after handler）、handler 参数级依赖注入（Depends）、全局生命周期钩子（on\_startup/on\_shutdown/on\_bot\_connect/on\_metaevent）、跨插件事件总线（EventBus 发布-订阅）、插件级 LLM 工具声明（`@llm_tool` 参与 Function Calling）、指令系统增强（别名 / 子指令 / 类型化参数）、插件数据目录（data\_dir）、国际化（i18n）、在线插件安装与依赖自动安装、配置 schema 自动生成 Web 配置表单、开发期自动热重载、细粒度事件处理钩子（run\_preprocessor Matcher 运行前钩子 + on\_calling\_api 平台接口调用钩子）、插件状态管理（PluginStatus 枚举）、执行指标监控、元数据发现（plugin.json）；支持加载/卸载/重载/禁用/启用，禁用时保留实例并跳过事件分发；卸载默认仅删代码目录、保留数据与依赖（便于重装），插件管理页可「彻底删除（purge）」连数据目录与第三方依赖一并清除。协议层（PluginBase/Matcher/Rule/Permission/MessageContext）由独立插件 SDK 单一维护，内置插件与外部插件行为一致
+
 - **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）
+
 - **增强能力**：AI 图片生成、轻量知识库（关键词检索零依赖；向量检索需可选依赖 lancedb）、会话摘要（历史裁剪）、Function Calling（内置时间/一言/群事件查询工具）、MCP 服务器接入、定时任务调度器、LLM 用量统计
+
 - **HTML 渲染服务**：基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG（可选依赖 `[render]`），供签到卡等「HTML 模板 → 图片消息」插件复用；playwright 未安装/浏览器缺失时自动降级不可用，不影响框架启动
+
 - **数据库 ORM**：SQLModel 模型定义 + Alembic 迁移管理，异步会话（aiosqlite + WAL 模式），支持在线备份与消息 CSV 导出
+
 - **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板 + 卸载/彻底删除 + 插件市场一键安装/更新/搜索）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 运行日志（实时日志流 + 级别过滤，受 `log.run_log_enabled` 开关控制）/ 登录审计 / 系统设置。独立「实例管理」页面支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）
+
 - **桌面应用**：Electron + Python 混合架构 — Electron 桌面壳 spawn Python 后端（`main.py --backend`）并加载其 Web UI；系统托盘（关闭窗口自动驻留后台）、启动画面、单实例（按 data-dir 退化的控制端口）均由壳承担；`build-electron.ps1` 产出便携版单文件 EXE 一键分发
+
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖；litellm 延迟导入，启动不加载重型依赖
 
----
+***
 
 # 使用指南
 
 ## 环境要求
 
 - Python 3.10+（推荐 3.12）
+
 - 任意 OneBot 11 协议端（如 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot) / NapCat / go-cqhttp）
+
 - Node.js 18+（仅构建 Web UI 时需要，`web/dist` 已存在可跳过）
+
 - 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 18+（`desktop/electron`）；最终用户运行 `build-electron.ps1` 产出的便携版 EXE 无需额外运行时
 
 ## 1. 安装
@@ -54,14 +69,14 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 
 > 依赖分组说明：
 >
-> | 分组 | 安装命令 | 内容 |
-> |------|----------|------|
-> | 核心 | `uv pip install -e .` | 运行时依赖（FastAPI、litellm、OneBot、qingci-plugin-sdk 等） |
-> | `[vector]` | `uv pip install -e ".[vector]"` | 向量知识库（lancedb，可选；缺失时 RAG 自动回退关键词检索） |
+> | 分组         | 安装命令                            | 内容                                                                             |
+> | ---------- | ------------------------------- | ------------------------------------------------------------------------------ |
+> | 核心         | `uv pip install -e .`           | 运行时依赖（FastAPI、litellm、OneBot、qingci-plugin-sdk 等）                              |
+> | `[vector]` | `uv pip install -e ".[vector]"` | 向量知识库（lancedb，可选；缺失时 RAG 自动回退关键词检索）                                            |
 > | `[render]` | `uv pip install -e ".[render]"` | HTML → 图片渲染（playwright，可选；安装与 Chromium 下载见下方「启用 HTML 渲染」；缺失时渲染能力自动降级不可用，调用方回退） |
-> | `[test]` | `uv pip install -e ".[test]"` | pytest / pytest-asyncio / pytest-cov / httpx |
-> | `[build]` | `uv pip install -e ".[build]"` | pyinstaller + playwright（`.\build.ps1` 依赖；playwright 用于打包时内置无头浏览器） |
-> | `[dev]` | `uv pip install -e ".[dev]"` | 以上全部 + ruff / mypy（代码质量工具） |
+> | `[test]`   | `uv pip install -e ".[test]"`   | pytest / pytest-asyncio / pytest-cov / httpx                                   |
+> | `[build]`  | `uv pip install -e ".[build]"`  | pyinstaller + playwright（`.\build.ps1` 依赖；playwright 用于打包时内置无头浏览器）             |
+> | `[dev]`    | `uv pip install -e ".[dev]"`    | 以上全部 + ruff / mypy（代码质量工具）                                                     |
 >
 > **启用 HTML 渲染**：源码运行时安装 `[render]` 分组后还需下载 Chromium（国内网络建议走 npm 镜像，否则容易卡住/超时）：
 >
@@ -73,6 +88,10 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > **打包版（EXE）已全内置**：`build.ps1` 构建时自动下载无头 Chromium 到产物目录 `ms-playwright\`，运行时经 `PLAYWRIGHT_BROWSERS_PATH` 定位，EXE 开箱即可渲染签到卡，无需最终用户再执行安装。构建期同样可用上述 `PLAYWRIGHT_DOWNLOAD_HOST` 走国内镜像。
 >
 > **桌面壳打包另见**：`build.ps1` 产出的 onedir（`dist\qingci-bot-ce\`）实例数据随 `instances\<name>\` 自包含分发；`build-electron.ps1`（electron-builder）在 onedir 基础上产出便携版单文件 EXE，内嵌后端并按当前实例解析，实例/数据落于 `%APPDATA%\Qingci-Bot-CE`（经 `QINGCI_USER_DATA` 注入），避免便携版解压到系统临时目录导致数据丢失。桌面壳打包需 Node.js 18+，用户运行便携 EXE 无需额外运行时。
+>
+> **Linux 桌面（AppImage）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.ps1` 的对应脚）产出 onedir，再经 `electron-builder --linux` 打成 AppImage；数据目录与 Windows 便携版一致走稳定用户目录。
+>
+> **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.ps1`/`build-linux.sh` 分别出后端、`build-electron.ps1`/`electron-builder --linux` 出 EXE / AppImage，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](.github/workflows/release.yml)。
 >
 > 浏览器缺失或下载失败时渲染能力自动降级不可用（`/api/bot/status` 的 `render` 字段可查状态），不影响框架启动。
 > 插件协议层 SDK（`qingci-plugin-sdk`）作为 git 依赖（默认指 [Gitee 镜像](https://gitee.com/qingci-bot/Plugins-SDK)，国内拉取更快）随核心依赖安装；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.ps1` 一致），覆盖 git 依赖版本。
@@ -123,9 +142,13 @@ docker compose down         # 停止
 ```
 
 - **端口**：`8080`（WebUI/API）、`3001`（OneBot 反向 WS）
+
 - **数据持久化**：`./instances:/app/instances` 卷挂载实例目录（config.yaml / data / 插件），不随镜像重建丢失
+
 - **首次启动**：自动创建 `instances/default/config.yaml`；设置 `llm.api_key` 后即可对话
+
 - **外部 OneBot 前端连入**：将该实例 `onebot.host` 改为 `0.0.0.0` 后 `docker compose restart`
+
 - 文件内容与完整说明见 `Dockerfile` / `docker-compose.yml`（`.dockerignore` 排除 venv/产物，实例目录不进镜像）
 
 > 构建依赖 `qingci-plugin-sdk`（Gitee git 依赖，见 [pyproject.toml](./pyproject.toml)）需构建期联网；若改用了私有 SDK 克隆地址，请在构建前配置好凭据。
@@ -149,9 +172,13 @@ chmod +x install.sh
 ```
 
 - WebUI：`http://127.0.0.1:8080/ui`
+
 - 编辑实例配置：`instances/default/config.yaml`
+
 - 外部 OneBot 前端连入前，把该实例 `onebot.host` 改为 `0.0.0.0`
+
 - **桌面 GUI**：通过 Electron 壳（`desktop/electron`）运行；Linux 下 Electron 需要系统动态库（Debian 系含 `libgtk-3`/`libnss3`/`libasound2` 等，可用 `npx electron-builder` 文档对照）。**建议 Linux 优先使用 Docker 或 Headless + WebUI 模式**
+
 - 单实例保护：Electron 侧按 data-dir 退化的控制端口实现——同一实例（同 data-dir）重复启动聚焦已有窗口，不同实例（不同 data-dir）可并行多开；CLI/Headless 模式基于命名互斥量，Linux 下自动降级（允许多开，不阻塞启动）
 
 ## 3. 运行测试
@@ -202,6 +229,7 @@ mypy bot api
 在 OneBot 11 协议端（如 LLBot / NapCat / go-cqhttp）中添加反向 WebSocket 连接：
 
 - 地址：`ws://127.0.0.1:3001/ws`（端口默认 3001，需与 `config.yaml` 的 `onebot.port` 保持一致）
+
 - Access Token：留空或与 `config.yaml` 中 `onebot.access_token` 保持一致
 
 协议端会自动携带 OneBot v11 标准的 `X-Client-Role: universal` 和 `X-Self-ID` header 连接。接入的 v11 事件会由 `bot/core/v11_compat.py` 翻译层自动归一化为 OneBot 12 事件（`type`/`detail_type`）后进入核心调度，插件侧仍能读取兼容字段（`post_type`/`message_type`/`raw_message`）。
@@ -211,6 +239,7 @@ mypy bot api
 创建实例时选择 `OneBot 12` 主平台（或手动设置 `platforms.onebot12.enabled: true`），在支持 OneBot 12 的协议端（如 NapCat / Lagrange.OneBot）中添加反向 WebSocket 连接：
 
 - 地址：`ws://127.0.0.1:3002/`（端口默认 3002，需与 `config.yaml` 的 `platforms.onebot12.port` 保持一致）
+
 - Access Token：留空或与 `config.yaml` 中 `platforms.onebot12.access_token` 保持一致（实现端以 `Authorization: Bearer` 或 `?access_token=` 携带）
 
 事件以 OneBot 12 标准格式（`type`/`detail_type`/`message[]`）直接进入核心调度，动作以 JSON-RPC（`send_message` 等）调用——与 v11 相比省去翻译层，回复段原生 v12 表达。群管动作（`set_group_kick` 等 v11 便捷名）由 `_api_action` 映射为 `group.*` 点分命名空间（如 `group.kick`/`group.ban`）——依赖实现端支持此点分扩展约定（NapCat / Lagrange.OneBot 均支持）。
@@ -257,22 +286,25 @@ LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不�
 **MCP 工具**：开启 `enable_tools` 并配置 `mcp_servers` 后，启动时自动连接各服务器并将工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用。修改 MCP 配置后需重启 Bot 生效。
 
 **provider 路由规则**（基于 litellm）：
+
 - `api_url` 非空：统一走 OpenAI 兼容协议（`openai/{model}` + `api_base`），兼容任意 OpenAI 协议服务
+
 - `api_url` 为空：按 provider 直连官方（`deepseek/{model}`、`ollama/{model}` 等）
+
 - `provider: custom`：必须填 `api_url`，走 OpenAI 兼容协议
 
 ## 命令行参数
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--no-bot` | 仅启动 API 服务 | - |
-| `--backend` | 由 Electron 壳拉起的后端进程（仅桌面壳用；就绪时打印机器可读端口） | - |
-| `--resolve-instance` | 仅解析实例元数据并打印 JSON（供 Electron 壳预探测），不启动服务 | - |
-| `--port` | API 端口 | 实例元数据端口（首个实例 8080，后续递增） |
-| `--host` | API 监听地址 | 127.0.0.1 |
-| `--config` | 配置文件路径 | 实例内 `config.yaml` |
-| `--instance` | 启动到指定实例（`instances/<name>/` 自包含目录） | 默认实例 |
-| `--data-dir` | 指定可写数据根目录（DB/日志/插件数据等），用于多实例隔离；未指定时默认落在实例内 `data/` | `instances/<name>/data` |
+| 参数                   | 说明                                                 | 默认值                     |
+| -------------------- | -------------------------------------------------- | ----------------------- |
+| `--no-bot`           | 仅启动 API 服务                                         | -                       |
+| `--backend`          | 由 Electron 壳拉起的后端进程（仅桌面壳用；就绪时打印机器可读端口）             | -                       |
+| `--resolve-instance` | 仅解析实例元数据并打印 JSON（供 Electron 壳预探测），不启动服务            | -                       |
+| `--port`             | API 端口                                             | 实例元数据端口（首个实例 8080，后续递增） |
+| `--host`             | API 监听地址                                           | 127.0.0.1               |
+| `--config`           | 配置文件路径                                             | 实例内 `config.yaml`       |
+| `--instance`         | 启动到指定实例（`instances/<name>/` 自包含目录）                 | 默认实例                    |
+| `--data-dir`         | 指定可写数据根目录（DB/日志/插件数据等），用于多实例隔离；未指定时默认落在实例内 `data/` | `instances/<name>/data` |
 
 ## 管理命令
 
@@ -280,31 +312,31 @@ LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不�
 
 **普通管理员命令**（`bot.admin_users` 中的平台无关用户 ID，如 QQ 号 / Telegram 用户 ID）：
 
-| 命令 | 说明 |
-|------|------|
+| 命令        | 说明                                       |
+| --------- | ---------------------------------------- |
 | `/status` | 查看 Bot 运行状态（OneBot 连接 / LLM 可用性 / 消息记录数） |
-| `/clear` | 清除当前会话历史 |
+| `/clear`  | 清除当前会话历史                                 |
 
 **超级管理员命令**（仅 `bot.super_admin` 对应的平台无关用户 ID）：
 
-| 命令 | 说明 |
-|------|------|
-| `/blacklist add <用户ID>` | 添加用户到黑名单（平台无关用户 ID） |
-| `/blacklist remove <用户ID>` | 从黑名单移除用户 |
-| `/filter on\|off\|reload` | 敏感词过滤开关 / 重载词库（词库为空时会提示编辑 `data/sensitive_words.txt`） |
-| `/group on\|off` | 当前群 Bot 开关 |
-| `/kb add\|list\|search\|remove\|reload` | 知识库管理（需开启 `rag.enabled`） |
+| 命令                                      | 说明                                                    |
+| --------------------------------------- | ----------------------------------------------------- |
+| `/blacklist add <用户ID>`                 | 添加用户到黑名单（平台无关用户 ID）                                   |
+| `/blacklist remove <用户ID>`              | 从黑名单移除用户                                              |
+| `/filter on\|off\|reload`               | 敏感词过滤开关 / 重载词库（词库为空时会提示编辑 `data/sensitive_words.txt`） |
+| `/group on\|off`                        | 当前群 Bot 开关                                            |
+| `/kb add\|list\|search\|remove\|reload` | 知识库管理（需开启 `rag.enabled`）                              |
 
 **所有用户可用命令**（无需管理员权限）：
 
-| 命令 | 说明 |
-|------|------|
-| `/help`（或 `/帮助`） | 按当前用户权限列出可用命令；渲染为图片发送（渲染不可用时回退纯文本，命令过多自动折叠）；`/help <插件名\|分类\|命令>` 可筛选 |
-| `/image <提示词>`（或 `/画图`） | AI 绘图（需开启 `image.enabled`，成功后以图片消息回复） |
-| `/persona` | 查看当前会话人格 |
-| `/persona 列表` | 列出全部可用人格 |
-| `/persona <名称>` | 切换当前会话人格（配置了 `llm.personas` 时可用） |
-| `/persona 重置` | 恢复默认人格或 `system_prompt` |
+| 命令                      | 说明                                                                    |
+| ----------------------- | --------------------------------------------------------------------- |
+| `/help`（或 `/帮助`）        | 按当前用户权限列出可用命令；渲染为图片发送（渲染不可用时回退纯文本，命令过多自动折叠）；`/help <插件名\|分类\|命令>` 可筛选 |
+| `/image <提示词>`（或 `/画图`） | AI 绘图（需开启 `image.enabled`，成功后以图片消息回复）                                 |
+| `/persona`              | 查看当前会话人格                                                              |
+| `/persona 列表`           | 列出全部可用人格                                                              |
+| `/persona <名称>`         | 切换当前会话人格（配置了 `llm.personas` 时可用）                                      |
+| `/persona 重置`           | 恢复默认人格或 `system_prompt`                                               |
 
 ## API 鉴权
 
@@ -315,11 +347,17 @@ api_key: your-secret-key
 ```
 
 - 为空时**不启用鉴权**（仅本地开发推荐）
+
 - 设置后，除以下免鉴权端点外，**所有接口**（含 GET 读操作）都需要携带 `X-API-Key` 请求头：
+
   - `GET /api/bot/status`、`GET /api/bot/health`（状态/健康检查）
+
   - `GET /api/auth/status`、`POST /api/auth/login`（登录与鉴权状态）
+
   - `GET /api/config/wizard/status`、`POST /api/config/wizard`、`POST /api/config/wizard/skip`（首次启动向导）
+
 - 在 Web UI 的「系统设置」页面可同时配置服务端 Key 和浏览器端 Key
+
 - WebSocket（`/api/ws/log`、`/api/ws/chat`、`/api/ws/runlog`）通过 `token` 查询参数或 `sec-websocket-protocol: api-key.<key>` 子协议鉴权，方式同上
 
 ## 配置文件说明
@@ -435,43 +473,49 @@ lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 
 ## 进阶功能说明（功能开关均默认关闭）
 
-| 配置节 | 功能 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `rate_limit` | 对话限流 | `enabled: false` | 每用户每日对话上限 + 两次对话冷却间隔，超限回复提示 |
-| `filter` | 敏感词过滤 | `enabled: false` | 词库为 `data/sensitive_words.txt`（一行一词，支持 `#` 注释）；词库为空时 `/filter` 命令与日志会明确提示；管理员可通过 `exempt_admins` 豁免 |
-| `scheduler` | 定时任务调度器 | `enabled: true` | 调度器基座，由插件注册任务；无任务注册时零副作用 |
-| `hot_reload` | 插件自动热重载 | `enabled: false` | 开发期监听 `plugins/` 目录 `.py` 文件变更并自动重载对应插件；`interval` 为轮询间隔（秒）；生产环境建议关闭 |
-| `alert` | 错误告警 | `enabled: false` | 冷却窗口内 ERROR 日志达到 `error_threshold` 条时向管理员发消息告警，带 `cooldown_minutes` 冷却 |
-| `image` | 图片生成 | `enabled: false` | `/image <提示词>`（或 `/画图`）命令；`image.api_key` 为空时回退 `llm.api_key`；成功后以 v12 `image` 消息段回复 |
-| `render` | HTML → 图片渲染 | `enabled: true` | 基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG，供签到卡等插件复用（可选依赖 `[render]`；Chromium 下载见「启用 HTML 渲染」，国内走 npm 镜像）；未安装/浏览器缺失时自动降级不可用，`/api/bot/status` 的 `render` 字段展示能力状态 |
-| `rag` | 轻量知识库 | `enabled: false` | 双模式：`keyword`（纯 Python 关键词检索，无重型依赖）/ `vector`（LanceDB 向量检索 + litellm embedding，语义更精准；需可选依赖 `lancedb`，未安装时自动回退 keyword 并告警）；开启后对话自动注入检索到的参考资料；`/kb` 命令管理文档（add/list/search/remove/reload）。vector 模式的初始化步骤见 [ARCHITECTURE.md](./ARCHITECTURE.md#向量检索rag初始化) |
-| `session_summary` | 会话摘要 | `enabled: false` | 与 `llm.enable_summary` 等价，任一为 true 即启用；上下文超过条数/token 阈值时将较早消息摘要压缩，保留最近 N 轮原文 |
-| `log.usage_tracking` | LLM 用量入库 | `true` | 可退出的遥测：关闭后 chat/摘要/图片不再写 usage_logs，Dashboard 用量统计将为空 |
-| `llm.enable_tools` | Function Calling | `false` | 启用工具调用（内置 `get_current_time` / `random_quote`，可经 ToolRegistry 扩展）；`max_tool_rounds` 限制最大轮次（默认 5） |
-| `llm.personas` | 人格/人设 | `[]` | 多组 system_prompt；聊天中 `/persona` 切换（会话级覆盖）、`/persona 列表` 查看；Web UI「LLM 配置」管理 |
-| `llm.mcp_servers` | MCP 服务器 | `[]` | 连接外部 MCP 服务器（stdio/HTTP 传输），工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用；需开启 `enable_tools`，修改后重启 Bot 生效 |
-| `llm.provider` | 提供商联动 | `openai` | 切换 provider 自动带出预设 api_url/model（openai/deepseek/ollama/siliconflow/claude/gemini/custom 共 7 个）；`api_url` 非空统一走 OpenAI 兼容协议 |
-| `llm.timeout` / `llm.num_retries` | 请求超时与重试 | `60` / `2` | 单次 LLM 请求超时秒数与失败重试次数 |
-| `market` | 插件市场 | `url` 默认指向 Gitee 镜像（`https://gitee.com/qingci-bot/Plugin-Market.git`，GitHub 主仓库的国内自动同步镜像，拉取更快更稳；可用 `https://github.com/Qingci-Bot/Plugin-Market.git` 切换主仓库） | WebUI「插件管理 → 插件市场」浏览/搜索/一键安装/更新/刷新；`url` 可指向自定义市场索引仓库，`mirror_url` 为索引备用源（主源拉取失败时回退），`refresh_interval` 为索引缓存 TTL（秒）；市场条目可声明 `python_requires` 版本约束，WebUI 对不兼容插件显示提示并禁用安装 |
-| `platforms.telegram` | Telegram 平台适配器 | `enabled: false` | 启用后以 Bot API 长轮询接入 Telegram（`token` 由 @BotFather 获取）；事件归一化为 OneBot 12 内部模型（`type`/`detail_type`/v12 消息段），插件/命令零改动可用；回复自动路由到 Telegram；群聊 `@Bot` 可触发（支持 at 触发模式）；收发支持 v12 `image`/`voice`/`video` 段（photo → `image`、voice → `voice`、video → `video`；发送 `image`/`voice`/`video` 段分别走 `sendPhoto`/`sendVoice`/`sendVideo`，支持 file_id / URL / base64 / 本地路径）与 `reply` 回复段；成员进出群/权限变更归一化为 OneBot `notice`（`group_member_increase` / `group_member_decrease` / `group_admin_set` / `group_admin_unset`），事件插件可响应；`poll_interval` 为轮询间隔（秒） |
-| `bot.log_json` | 结构化 JSON 日志 | `false` | 面向机器可读的日志采集场景 |
-| `log.log_file_enabled` | 文件日志轮转 | `false` | 启用后日志写入 `log_dir/qingci-bot.log`，按 `log_file_max_bytes` 大小轮转，保留 `log_file_backup_count` 个备份 |
+| 配置节                               | 功能               | 默认值                                                                                                                                                         | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rate_limit`                      | 对话限流             | `enabled: false`                                                                                                                                            | 每用户每日对话上限 + 两次对话冷却间隔，超限回复提示                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `filter`                          | 敏感词过滤            | `enabled: false`                                                                                                                                            | 词库为 `data/sensitive_words.txt`（一行一词，支持 `#` 注释）；词库为空时 `/filter` 命令与日志会明确提示；管理员可通过 `exempt_admins` 豁免                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `scheduler`                       | 定时任务调度器          | `enabled: true`                                                                                                                                             | 调度器基座，由插件注册任务；无任务注册时零副作用                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `hot_reload`                      | 插件自动热重载          | `enabled: false`                                                                                                                                            | 开发期监听 `plugins/` 目录 `.py` 文件变更并自动重载对应插件；`interval` 为轮询间隔（秒）；生产环境建议关闭                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `alert`                           | 错误告警             | `enabled: false`                                                                                                                                            | 冷却窗口内 ERROR 日志达到 `error_threshold` 条时向管理员发消息告警，带 `cooldown_minutes` 冷却                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `image`                           | 图片生成             | `enabled: false`                                                                                                                                            | `/image <提示词>`（或 `/画图`）命令；`image.api_key` 为空时回退 `llm.api_key`；成功后以 v12 `image` 消息段回复                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `render`                          | HTML → 图片渲染      | `enabled: true`                                                                                                                                             | 基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG，供签到卡等插件复用（可选依赖 `[render]`；Chromium 下载见「启用 HTML 渲染」，国内走 npm 镜像）；未安装/浏览器缺失时自动降级不可用，`/api/bot/status` 的 `render` 字段展示能力状态                                                                                                                                                                                                                                                                                                                                                               |
+| `rag`                             | 轻量知识库            | `enabled: false`                                                                                                                                            | 双模式：`keyword`（纯 Python 关键词检索，无重型依赖）/ `vector`（LanceDB 向量检索 + litellm embedding，语义更精准；需可选依赖 `lancedb`，未安装时自动回退 keyword 并告警）；开启后对话自动注入检索到的参考资料；`/kb` 命令管理文档（add/list/search/remove/reload）。vector 模式的初始化步骤见 [ARCHITECTURE.md](./ARCHITECTURE.md#向量检索rag初始化)                                                                                                                                                                                                                                                                          |
+| `session_summary`                 | 会话摘要             | `enabled: false`                                                                                                                                            | 与 `llm.enable_summary` 等价，任一为 true 即启用；上下文超过条数/token 阈值时将较早消息摘要压缩，保留最近 N 轮原文                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `log.usage_tracking`              | LLM 用量入库         | `true`                                                                                                                                                      | 可退出的遥测：关闭后 chat/摘要/图片不再写 usage\_logs，Dashboard 用量统计将为空                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `llm.enable_tools`                | Function Calling | `false`                                                                                                                                                     | 启用工具调用（内置 `get_current_time` / `random_quote`，可经 ToolRegistry 扩展）；`max_tool_rounds` 限制最大轮次（默认 5）                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `llm.personas`                    | 人格/人设            | `[]`                                                                                                                                                        | 多组 system\_prompt；聊天中 `/persona` 切换（会话级覆盖）、`/persona 列表` 查看；Web UI「LLM 配置」管理                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `llm.mcp_servers`                 | MCP 服务器          | `[]`                                                                                                                                                        | 连接外部 MCP 服务器（stdio/HTTP 传输），工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用；需开启 `enable_tools`，修改后重启 Bot 生效                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `llm.provider`                    | 提供商联动            | `openai`                                                                                                                                                    | 切换 provider 自动带出预设 api\_url/model（openai/deepseek/ollama/siliconflow/claude/gemini/custom 共 7 个）；`api_url` 非空统一走 OpenAI 兼容协议                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `llm.timeout` / `llm.num_retries` | 请求超时与重试          | `60` / `2`                                                                                                                                                  | 单次 LLM 请求超时秒数与失败重试次数                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `market`                          | 插件市场             | `url` 默认指向 Gitee 镜像（`https://gitee.com/qingci-bot/Plugin-Market.git`，GitHub 主仓库的国内自动同步镜像，拉取更快更稳；可用 `https://github.com/Qingci-Bot/Plugin-Market.git` 切换主仓库） | WebUI「插件管理 → 插件市场」浏览/搜索/一键安装/更新/刷新；`url` 可指向自定义市场索引仓库，`mirror_url` 为索引备用源（主源拉取失败时回退），`refresh_interval` 为索引缓存 TTL（秒）；市场条目可声明 `python_requires` 版本约束，WebUI 对不兼容插件显示提示并禁用安装                                                                                                                                                                                                                                                                                                                                                          |
+| `platforms.telegram`              | Telegram 平台适配器   | `enabled: false`                                                                                                                                            | 启用后以 Bot API 长轮询接入 Telegram（`token` 由 @BotFather 获取）；事件归一化为 OneBot 12 内部模型（`type`/`detail_type`/v12 消息段），插件/命令零改动可用；回复自动路由到 Telegram；群聊 `@Bot` 可触发（支持 at 触发模式）；收发支持 v12 `image`/`voice`/`video` 段（photo → `image`、voice → `voice`、video → `video`；发送 `image`/`voice`/`video` 段分别走 `sendPhoto`/`sendVoice`/`sendVideo`，支持 file\_id / URL / base64 / 本地路径）与 `reply` 回复段；成员进出群/权限变更归一化为 OneBot `notice`（`group_member_increase` / `group_member_decrease` / `group_admin_set` / `group_admin_unset`），事件插件可响应；`poll_interval` 为轮询间隔（秒） |
+| `bot.log_json`                    | 结构化 JSON 日志      | `false`                                                                                                                                                     | 面向机器可读的日志采集场景                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `log.log_file_enabled`            | 文件日志轮转           | `false`                                                                                                                                                     | 启用后日志写入 `log_dir/qingci-bot.log`，按 `log_file_max_bytes` 大小轮转，保留 `log_file_backup_count` 个备份                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
----
+***
 
-> 插件开发、API 接口、前端开发、打包详见 [PLUGIN_DEV.md](./PLUGIN_DEV.md)
+> 插件开发、API 接口、前端开发、打包详见 [PLUGIN\_DEV.md](./PLUGIN_DEV.md)
 >
 > 独立插件开发 SDK：[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) — 零依赖插件开发工具包，无需克隆主项目即可开发插件
 
 ## 文档
 
 - [CHANGELOG.md](./CHANGELOG.md) — 版本变更记录
+
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — 贡献指南
+
 - [SECURITY.md](./SECURITY.md) — 安全策略与漏洞报告
+
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — 系统架构与技术栈
-- [PLUGIN_DEV.md](./PLUGIN_DEV.md) — 插件开发指南
-- [docs/PROJECT_STRUCTURE.md](./docs/PROJECT_STRUCTURE.md) — 项目结构规范（目录职责与产物归属）
-- [docs/CODING_STANDARDS.md](./docs/CODING_STANDARDS.md) — 编码规范（类型 / 命名 / 分层 / Git 约定）
+
+- [PLUGIN\_DEV.md](./PLUGIN_DEV.md) — 插件开发指南
+
+- [docs/PROJECT\_STRUCTURE.md](./docs/PROJECT_STRUCTURE.md) — 项目结构规范（目录职责与产物归属）
+
+- [docs/CODING\_STANDARDS.md](./docs/CODING_STANDARDS.md) — 编码规范（类型 / 命名 / 分层 / Git 约定）
 
 ## 许可证
 

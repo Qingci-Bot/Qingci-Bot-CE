@@ -62,7 +62,8 @@ function resolvePython() {
   }
   // 打包：后端 onedir 经 electron-builder extraResources 复制到 resources/backend/，
   // 与 exe 同目录的 _internal/ms-playwright/web/instances 随之整体保留。
-  const backendExe = path.join(process.resourcesPath, "backend", "qingci-bot-ce.exe");
+  // PyInstaller 产物名跨平台：Windows 为 qingci-bot-ce.exe，Linux/macOS 无扩展名。
+  const backendExe = path.join(process.resourcesPath, "backend", process.platform === "win32" ? "qingci-bot-ce.exe" : "qingci-bot-ce");
   return { cmd: backendExe, script: null };
 }
 

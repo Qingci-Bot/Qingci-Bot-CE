@@ -23,6 +23,10 @@ import shutil
 
 from PyInstaller.utils.hooks import collect_all
 
+# 应用图标（跨平台）：Linux 构建时该文件可能缺失，缺失则不打包 icon 也不传入 EXE，
+# 仅在存在时才加入 datas 与 icon 参数。
+_ICON = os.path.join('desktop', 'assets', 'app-icon.ico')
+
 # 过滤目标：litellm/proxy/_experimental/out 的前端静态产物子树
 _LITELLM_OUT_PREFIX = ("litellm", "proxy", "_experimental", "out")
 
@@ -68,9 +72,9 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=litellm_binaries + tiktoken_binaries + sdk_binaries + pip_binaries + pw_binaries,
-    datas=litellm_datas + tiktoken_datas + sdk_datas + pip_datas + pw_datas + uv_datas + [
-        ('desktop\\assets\\app-icon.ico', '.'),
-    ],
+    datas=litellm_datas + tiktoken_datas + sdk_datas + pip_datas + pw_datas + uv_datas + ([
+        (_ICON, '.'),
+    ] if os.path.exists(_ICON) else []),
     hiddenimports=[
         *litellm_hiddenimports,
         *tiktoken_hiddenimports,
@@ -150,7 +154,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,       # console=True 便于查看日志；改 False 可去掉控制台窗口
-    icon='desktop\\assets\\app-icon.ico',
+    icon=_ICON if os.path.exists(_ICON) else None,
 )
 
 coll = COLLECT(

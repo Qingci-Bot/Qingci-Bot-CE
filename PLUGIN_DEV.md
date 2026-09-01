@@ -1684,3 +1684,25 @@ dist\qingci-bot-ce\
 
 - **调试**：壳主进程日志写 `%APPDATA%\Qingci-Bot-CE\logs\electron.log`；后端超时（默认 90s 未就绪）会展示错误页并可重试/查看日志。
 
+### 桌面壳（Linux AppImage）打包
+
+Linux 与 Windows 同源：先用 `build-linux.sh` 产出后端 onedir（`build.ps1` 的对应脚本，产出 `dist/qingci-bot-ce/`），再经 electron-builder 打 AppImage。
+
+```bash
+# 先决条件：.venv + [build] 依赖、Node.js 18+ 与 npm
+./build-linux.sh
+cd desktop/electron && npm ci && npx electron-builder --linux --publish never
+```
+
+- 产物：`dist/electron/Qingci-Bot-CE-<version>-linux-x64.AppImage`（内嵌后端为 `resources/backend`）。
+- 运行：双击/`./Qingci-Bot-CE-<version>-linux-x64.AppImage` 即由 Electron 壳启动（需系统具备 FUSE/libfuse2）。
+- 数据位置：打包形态经 `QINGCI_USER_DATA` 走稳定用户目录，与 Windows 便携版一致。
+- 注意：海外 CI 构建时 SDK 走 Gitee 源会被限流（429），`build-linux.sh` 支持用环境变量 `QINGCI_SDK_GIT_URL` 覆盖为 GitHub 主仓库（release 流水线已注入）。
+
+### 自动发布（GitHub Actions）
+
+打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](.github/workflows/release.yml)，各平台自动联编：
+- Windows 便携 EXE（`build.ps1` + `build-electron.ps1`）
+- Linux AppImage（`build-linux.sh` + `electron-builder --linux`）
+- Docker 镜像（tag：`vX.Y.Z` / `X.Y` / `X` / `latest`）
+
