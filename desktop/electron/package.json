@@ -37,14 +37,24 @@
     "win": {
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "x64"
           ]
         }
       ],
-      "icon": "icon.ico",
-      "artifactName": "Qingci-Bot-CE-${version}-${os}-${arch}.${ext}"
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Qingci-Bot-CE-${version}-Setup-${arch}.exe"
     },
     "linux": {
       "target": [

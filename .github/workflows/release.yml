@@ -123,7 +123,7 @@ jobs:
           CI: "1"
         run: .\build.ps1
 
-      - name: Package portable EXE (build-electron.ps1)
+      - name: Package Windows desktop (build-electron.ps1)
         shell: powershell
         working-directory: desktop/electron
         run: |
@@ -136,9 +136,11 @@ jobs:
         shell: powershell
         run: |
           $ver = "${{ needs.prepare.outputs.ver }}"
-          $exe = Get-ChildItem "dist\electron\*.exe" | Where-Object { $_.Name -notlike "*unpacked*" } | Select-Object -First 1
-          if (-not $exe) { throw "portable exe not found under dist\electron" }
-          gh release upload "$ver" "$($exe.FullName)" dist\qingci-bot-ce.sha256 --clobber
+          $setup = Get-ChildItem "dist\electron\*.exe" | Where-Object { $_.Name -like "*Setup*" -and $_.Name -notlike "*unpacked*" } | Select-Object -First 1
+          if (-not $setup) { throw "NSIS setup exe not found under dist\electron" }
+          $zip = Get-ChildItem "dist\electron\*.zip" | Select-Object -First 1
+          if (-not $zip) { throw "green zip not found under dist\electron" }
+          gh release upload "$ver" "$($setup.FullName)" "$($zip.FullName)" dist\qingci-bot-ce.sha256 --clobber
 
   linux-appimage:
     name: Linux AppImage

@@ -1,12 +1,13 @@
 # Qingci-Bot CE Electron packaging (Electron + Python hybrid)
-# Produces: dist\electron\Qingci-Bot-CE-<version>-win-x64.exe (portable)
+# Produces Windows targets from desktop\electron\package.json
+#   (default: NSIS 安装版 + 绿色 zip)
 #
 # Prerequisites:
 #   1. Run build.ps1 first -> produces dist\qingci-bot-ce\ (Python backend onedir).
 #   2. Node.js + npm on PATH.
 #
 # Output:
-#   dist\electron\...  (portable exe; the Python backend is bundled as extraResources/backend)
+#   dist\electron\...  (Windows targets; the Python backend is bundled as extraResources/backend)
 
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
@@ -51,17 +52,17 @@ if (-not (Test-Path $BackendBundle)) {
 }
 Write-Host "    backend bundled -> $BackendBundle"
 
-# ---------- [4/4] portable exe ----------
-Write-Host "==> [4/4] electron-builder (portable)..."
-& npx electron-builder --win portable
-if ($LASTEXITCODE -ne 0) { throw "electron-builder (portable) failed" }
+# ---------- [4/4] Windows targets from package.json (NSIS 安装版 + 绿色 zip) ----------
+Write-Host "==> [4/4] electron-builder (Windows targets)..."
+& npx electron-builder --win
+if ($LASTEXITCODE -ne 0) { throw "electron-builder (Windows targets) failed" }
 
 # ---------- finish ----------
-$Artifact = Get-ChildItem -Path $ElectronOut -Filter "*.exe" | Where-Object { $_.Name -notlike "*unpacked*" } | Select-Object -First 1
+$Artifact = Get-ChildItem -Path $ElectronOut -File | Where-Object { $_.Extension -in ".exe", ".zip" -and $_.Name -notlike "*unpacked*" }
 Write-Host ""
 if ($Artifact) {
-    Write-Host "Electron package finished: $($Artifact.FullName)" -ForegroundColor Green
-    Write-Host "Run it to start Qingci-Bot CE (bundled Python backend)."
+    $Artifact | ForEach-Object { Write-Host "Electron package finished: $($_.FullName)" -ForegroundColor Green }
+    Write-Host "Run the installer or unzip the green package to start Qingci-Bot CE (bundled Python backend)."
 } else {
-    Write-Warning "portable exe not found in $ElectronOut"
+    Write-Warning "Windows packages not found in $ElectronOut"
 }
