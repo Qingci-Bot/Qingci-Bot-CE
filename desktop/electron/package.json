@@ -1,6 +1,6 @@
 {
   "name": "qingci-bot-ce-desktop",
-  "version": "1.17.1",
+  "version": "1.17.2",
   "description": "Qingci-Bot CE Electron 桌面壳（Electron + Python 混合架构）",
   "main": "src/main.js",
   "author": "Qingci-Bot",
