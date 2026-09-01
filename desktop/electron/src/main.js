@@ -198,12 +198,15 @@ function sanitizeRelaunchArgs(arr) {
 }
 
 /**
- * 后端进程环境变量。维持随程序目录自包含分发：不额外设置数据根变量，
- * 后端（bot/paths.py 的 instances_dir）默认把实例/数据落在可执行目录旁的
- * instances/ 下。源码/onedir/便携 EXE 行为一致。
+ * 后端进程环境变量。打包形态下注入 QINGCI_APP_DIR 指向桌面 EXE 所在目录，
+ * 让后端（bot/paths.py 的 instances_dir）把实例/数据落在桌面 EXE 旁的
+ * instances/ 下，而非后端 onedir 所在的 resources/backend/。源码/onedir 直跑
+ * 不注入该变量，实例随 app_root()/instances 自包含分发。
  */
 function backendEnv() {
-  return Object.assign({}, process.env);
+  const env = Object.assign({}, process.env);
+  if (!isDev()) env.QINGCI_APP_DIR = path.dirname(app.getPath("exe"));
+  return env;
 }
 
 function makeWindow({ error = false } = {}) {

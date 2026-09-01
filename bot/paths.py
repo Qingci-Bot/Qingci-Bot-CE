@@ -6,6 +6,7 @@
   不能用 __file__（frozen 时指向 _internal 内部）定位。
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -58,10 +59,15 @@ def plugins_dir() -> Path:
 def instances_dir() -> Path:
     """返回实例注册表根目录（默认 app_root()/instances，每个实例一个子目录）
 
-    数据始终随 app_root() 自包含分发：源码/onedir/便携 EXE 一律落在程序所在
-    目录的 instances/ 下，便于整体拷贝迁移。便携版请放置到固定目录后运行，
-    避免解压到系统临时目录导致数据随临时目录清理而丢失。
+    源码/onedir 直跑：实例随 app_root()/instances 自包含。
+    桌面壳（安装版/绿色解压版）形态：后端 onedir 被 electron-builder 复制进
+    resources/backend/（frozen 时 app_root() 指向后端目录），Electron 壳经环境
+    变量 QINGCI_APP_DIR 指向桌面 EXE 所在目录，实例统一落在桌面 EXE 旁的
+    instances/ 下，便于整体拷贝迁移。
     """
+    app_dir = os.environ.get("QINGCI_APP_DIR")
+    if app_dir:
+        return Path(app_dir).resolve() / "instances"
     return app_root() / "instances"
 
 
