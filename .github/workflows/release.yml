@@ -128,7 +128,7 @@ jobs:
         working-directory: desktop/electron
         run: |
           npm ci
-          ..\..\..\build-electron.ps1
+          & "$env:GITHUB_WORKSPACE\build-electron.ps1"
 
       - name: Upload release assets
         env:
