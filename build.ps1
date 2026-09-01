@@ -1,4 +1,4 @@
-# Qingci-Bot CE build script (PyInstaller onedir)
+﻿# Qingci-Bot CE build script (PyInstaller onedir)
 # Usage: .\build.ps1
 # Output: dist\qingci-bot-ce\qingci-bot-ce.exe
 #
