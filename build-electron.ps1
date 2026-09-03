@@ -1,4 +1,4 @@
-# Qingci-Bot CE Electron packaging (Electron + Python hybrid)
+﻿# Qingci-Bot CE Electron packaging (Electron + Python hybrid)
 # Produces Windows targets from desktop\electron\package.json
 #   (default: NSIS 安装版 + 绿色 zip)
 #
