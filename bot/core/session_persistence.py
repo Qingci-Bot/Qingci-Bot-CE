@@ -13,13 +13,19 @@ SessionStateManager.serialize()/deserialize() 已提供进程内快照能力，�
 随实例数据目录自包含分发。
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..paths import data_root
+
+if TYPE_CHECKING:
+    from .session_state import SessionStateManager
 
 logger = logging.getLogger("qingci-bot.session_persistence")
 
@@ -57,7 +63,7 @@ async def save_snapshot(manager, path: str | None = None) -> int:
     return len(data)
 
 
-async def restore_snapshot(manager, path: str | None = None) -> int:
+async def restore_snapshot(manager: SessionStateManager, path: str | None = None) -> int:
     """从快照恢复会话状态，返回恢复的键数；任何异常退化为空，不阻塞启动"""
     target = session_state_path(path)
     if not target.exists():
