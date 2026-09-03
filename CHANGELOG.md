@@ -5,124 +5,151 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.17.3] - 2026-09-01（数据目录跟随可执行目录）
+## \[1.17.3] - 2026-09-01（数据目录跟随可执行目录）
 
 ### Changed
 
 - **数据目录跟随可执行目录**：移除打包形态下 `QINGCI_USER_DATA` 对 `%APPDATA%\Qingci-Bot-CE` 的实例/数据重定向，安装版与绿色解压版统一随 EXE 目录 `instances\<name>\` 自包含分发（DB/日志/插件数据），便于整体拷贝迁移；绿色解压版请放固定目录后运行，避免解压到系统临时目录导致数据丢失。壳主进程日志随实例写 `instances\<name>\data\logs\electron.log`
 
-## [1.17.0] - 2026-09-01（Electron + Python 混合架构桌面端）
+## \[1.17.0] - 2026-09-01（Electron + Python 混合架构桌面端）
 
 ### Changed
 
 - **桌面 UI 迁移到 Electron + Python 混合架构（替代 PyWebView）**：Electron 桌面壳 spawn Python 后端（`main.py --backend`），就绪时经标准输出 `\x1eQINGCI_READY <port>\x1e` 上报端口，壳加载后端 HTTP 提供的 Web UI
+
 - **桌面能力迁至 Electron 侧**：系统托盘、按 data-dir 的单实例锁与聚焦、启动画面、关闭驻留后台、退出/重载全部由 Electron 承担；Python 仅做内嵌后端
+
 - **实例切换/改名由 Electron 接管**：后端按需打印机器可读 `QINGCI_RELAUNCH <json>` 信号，Electron 终止当前后端并按目标参数重新拉起，壳进程不退出（丝滑切换）
+
 - **移除 PyWebView 模式**：删除 pywebview / pystray / pillow 依赖及 `--desktop` / `desktop/app.py` / `tray.py` / `splash.py` 相关实现
+
 - **新增 Electron 打包链路**：`build-electron.ps1` + electron-builder（安装版 Setup.exe + 绿色解压 zip，内嵌 Python 后端 onedir 为 extraResources/backend）；新增 CI `electron` 校验 job
 
-## [1.16.10] - 2026-08-23（OneBot 12 协议符合度与 Telegram 转换修复）
+## \[1.16.10] - 2026-08-23（OneBot 12 协议符合度与 Telegram 转换修复）
 
 ### Fixed
 
-- **Telegram `message_edited` 事件补编辑时间（P2·D1）**：`_normalize_edited` 的 `time` 原写死为 0、丢失编辑时间；现改用 `edit_date`，依赖 time 的逻辑不再失真
-- **`callback_query` 事件补触发时间（P3·D2）**：`time` 沿附带消息的 `date`，纯 inline（无 message）时保持 0
-- **Telegram `sender` 展示名合并姓/名（P3·D3）**：`nickname`/`card` 原仅取 `first_name`，现合并 `first_name + last_name`，`username` 单独保留
+- **Telegram** **`message_edited`** **事件补编辑时间（P2·D1）**：`_normalize_edited` 的 `time` 原写死为 0、丢失编辑时间；现改用 `edit_date`，依赖 time 的逻辑不再失真
+
+- **`callback_query`** **事件补触发时间（P3·D2）**：`time` 沿附带消息的 `date`，纯 inline（无 message）时保持 0
+
+- **Telegram** **`sender`** **展示名合并姓/名（P3·D3）**：`nickname`/`card` 原仅取 `first_name`，现合并 `first_name + last_name`，`username` 单独保留
 
 ### Added
 
 - **Telegram 多图媒体组（MediaGroup，P3·D4）**：`_send_media` 在多条 image/video 且均可参数直传时走 `sendMediaGroup`（caption 仅附首条媒体）；含本地/base64 上传或 voice/record 时降级逐条发送
-- **OneBot 12 严格 `self` 对象兼容（P2·B1）**：`onebot12._on_event` 在扁平 `self_id` 缺失时回退读 `self.user_id` 并向后透传扁平字段（SDK v1.13.6 的 `from_v12_event` 亦同步回退）
+
+- **OneBot 12 严格** **`self`** **对象兼容（P2·B1）**：`onebot12._on_event` 在扁平 `self_id` 缺失时回退读 `self.user_id` 并向后透传扁平字段（SDK v1.13.6 的 `from_v12_event` 亦同步回退）
 
 ### Changed
 
-- **文档标注 self_id 扁平约定与点分动作名依赖**：`ARCHITECTURE.md` 事件模型节与 `README §5.2` 说明「self_id 为扁平约定、缺失回退 self.user_id」及「群管动作依赖实现端支持 `group.*` 点分命名空间」
-- 新增 6 项平台单测（edit_date / callback time / sender 展示名 / MediaGroup 直传与降级）；CE 单测 500/500、覆盖率 59.1%，ruff / mypy 干净
+- **文档标注 self\_id 扁平约定与点分动作名依赖**：`ARCHITECTURE.md` 事件模型节与 `README §5.2` 说明「self\_id 为扁平约定、缺失回退 self.user\_id」及「群管动作依赖实现端支持 `group.*` 点分命名空间」
 
-## [1.16.9] - 2026-08-22（help 长文本渲染成图片 + 锁定 SDK v1.13.5）
+- 新增 6 项平台单测（edit\_date / callback time / sender 展示名 / MediaGroup 直传与降级）；CE 单测 500/500、覆盖率 59.1%，ruff / mypy 干净
+
+## \[1.16.9] - 2026-08-22（help 长文本渲染成图片 + 锁定 SDK v1.13.5）
 
 ### Added
 
-- **`/help` 渲染成图片（方案 F，主链路）**：命令列表由纯文本改为 HTML → PNG 图片（复用 `bot.html_renderer`），不再受 QQ/TG 单条消息字数硬上限（2000/4096）约束，命令再多也不被"腰斩"。按插件拆图：单图高度超预算自动拆多张，单插件命令过多时内部再拆子图；渲染产物为临时文件并延迟清理（300s）。渲染能力不可用/失败时回退纯文本，绝不开天窗
-- **`/help <插件名|分类|命令>` 参数筛选（方案 A）**：按目标过滤后输出，既是缩小图片内容，也提供可复制的文字详情，弥补"图片内命令名不可复制"短板；未命中提示"未找到相关命令"
-- **`hidden_in_help` 可见性标注（方案 E）**：`on_command(hidden_in_help=True)` 注册的内部/调试命令不再出现在 `/help` 列表（配套 SDK v1.13.5）
+- **`/help`** **渲染成图片（方案 F，主链路）**：命令列表由纯文本改为 HTML → PNG 图片（复用 `bot.html_renderer`），不再受 QQ/TG 单条消息字数硬上限（2000/4096）约束，命令再多也不被"腰斩"。按插件拆图：单图高度超预算自动拆多张，单插件命令过多时内部再拆子图；渲染产物为临时文件并延迟清理（300s）。渲染能力不可用/失败时回退纯文本，绝不开天窗
+
+- **`/help <插件名|分类|命令>`** **参数筛选（方案 A）**：按目标过滤后输出，既是缩小图片内容，也提供可复制的文字详情，弥补"图片内命令名不可复制"短板；未命中提示"未找到相关命令"
+
+- **`hidden_in_help`** **可见性标注（方案 E）**：`on_command(hidden_in_help=True)` 注册的内部/调试命令不再出现在 `/help` 列表（配套 SDK v1.13.5）
+
 - **命令别名展示（P3）**：`/help` 文本与图片均展示命令别名（`meta["aliases"]`，SDK v1.13.5 起记录）
 
 ### Changed
 
 - **文本兜底折叠（方案 C）**：渲染不可用时纯文本输出，命令行数超过阈值（40）折叠为仅命令名并提示用 `/help <插件名>` 查看单个插件
+
 - **删除"支持分类筛选"虚假注释**：`_cmd_help` 现实际支持按插件名/分类/命令名筛选；模块注释澄清 help `priority=1` 高优先级可能抢占同名命令的风险
+
 - **锁定插件 SDK 至 v1.13.5**：pyproject.toml / build.ps1 / uv.lock 三处同步（SDK 新增 `on_command.hidden_in_help` 参数与 `meta["aliases"]`）
+
 - 新增 11 项 help 单测（渲染段结构 / 文本兜底 / 筛选 / hidden 过滤 / 别名 / 折叠 / 拆图 / escape 防注入 / 临时文件清理）
 
-## [1.16.8] - 2026-08-22（插件卸载语义：仅卸载 / 彻底删除）
+## \[1.16.8] - 2026-08-22（插件卸载语义：仅卸载 / 彻底删除）
 
 ### Added
 
 - **插件「彻底删除（purge）」语义**：`DELETE /api/plugin/{name}?purge=true` 在卸载后一并删除插件数据目录（`data_root()/plugins/<name>/`）、第三方依赖（`data_root()/deps/<name>/`）、安装标记（`.installed/<name>.hash`），并从 `sys.path` 移除注入项（`bot/plugin/deps.py::cleanup_dependencies`，while 幂等）；默认（无参数）仍只删代码目录、保留数据与依赖
+
 - **前端「彻底删除」入口**：插件列表新增「彻底删除」按钮（红色、二次确认文案「操作不可恢复」）；「卸载」与市场卸载均增加确认对话框，明确「保留数据与依赖」
 
 ### Fixed
 
 - **实例模式下代码目录与数据目录重合时默认不删文件（P1）**：`PluginManager.remove` 现计算 `code_and_data_merge`（`plugins_dir()/name` 与 `data_root()/plugins/<name>` 解析后相等，如 `--data-dir` 指向实例目录时），重合时默认仅卸载不删文件，防止连带删除插件数据；需彻底删除必须显式 `purge=true`
+
 - **依赖目录与安装标记从不清理（P2）**：purge 前清理 `deps/<name>/`、`.installed/<name>.hash` 与 `sys.path` 注入条目，避免磁盘孤岛与进程内残留
 
 ### Changed
 
 - `remove(name)` 签名增加 `purge: bool = False` 关键字参数（默认行为不变：卸载 + 删代码目录）
+
 - 卸载 API 审计记录包含 `purge` 标记，响应新增 `"purged"` 字段
+
 - **文档同步**：`PLUGIN_DEV.md` 数据目录 / 依赖段落与插件管理 API 表、`README.md` 插件系统/Web UI 特性、Plugins-SDK `README.md` 与 `base.py::data_dir` docstring 统一为「默认保留、purge 才删」语义
 
-## [1.16.7] - 2026-08-22（系统级备份下载/恢复）
+## \[1.16.7] - 2026-08-22（系统级备份下载/恢复）
 
 ### Added
 
 - **数据库备份可下载**：新增 `GET /api/backup/db/download?filename=`，鉴权 + 文件名白名单（仅 `qingci-bot_*.db`）防路径穿越；设置页「数据管理」在备份成功后出现「下载备份」按钮
+
 - **数据库在线恢复**：新增 `POST /api/backup/restore`（multipart 上传 .db）——SQLite 完整性校验（`PRAGMA integrity_check`）→ 自动备份当前库 → `dispose_engine` 释放连接池 → 原子替换主库；设置页新增「从备份恢复数据库」上传区（恢复前确认 + 成功后提示刷新）
 
 ### Security
 
 - 备份下载/恢复均经 `require_auth` 鉴权，并记录审计（`db_backup_download` / `db_restore`）
 
-## [1.16.6] - 2026-08-22（锁定插件 SDK v1.13.4）
+## \[1.16.6] - 2026-08-22（锁定插件 SDK v1.13.4）
 
 ### Changed
 
 - **锁定插件 SDK 至 v1.13.4**：pyproject.toml / build.ps1 / uv.lock 三处由 `@v1.13.2` 同步升级到 `@v1.13.4`（SDK 跨协议一致性 + 代码审阅修复），构建与 CI 可复现
-- **测试适配 `on_startswith` 剥离前导 `/`**：SDK 前缀规则与 command 对齐（`/天气` 触发 `on_startswith("天气")`），`tests/test_rule.py::test_chained` 组合前缀改用 `!`/`#`
 
-## [1.16.5] - 2026-08-22（跨协议一致性修复）
+- **测试适配** **`on_startswith`** **剥离前导** **`/`**：SDK 前缀规则与 command 对齐（`/天气` 触发 `on_startswith("天气")`），`tests/test_rule.py::test_chained` 组合前缀改用 `!`/`#`
+
+## \[1.16.5] - 2026-08-22（跨协议一致性修复）
 
 ### Fixed
 
-- **`call_api` 动作命名空间三端不统一（P1）**：`onebot12.call_api` 此前裸 JSON-RPC 透传，`_api_action` 映射只对基类便捷方法生效——插件直接 `call_api("set_group_kick")` 在 OB12 上因动作名未映射而失败。现 `call_api` 先经 `_api_action` 映射（v11 便捷动作名 → v12 点分命名空间），OB11/OB12 以 v11 动作名调用行为一致
+- **`call_api`** **动作命名空间三端不统一（P1）**：`onebot12.call_api` 此前裸 JSON-RPC 透传，`_api_action` 映射只对基类便捷方法生效——插件直接 `call_api("set_group_kick")` 在 OB12 上因动作名未映射而失败。现 `call_api` 先经 `_api_action` 映射（v11 便捷动作名 → v12 点分命名空间），OB11/OB12 以 v11 动作名调用行为一致
+
 - **Telegram 群管/成员动作透传成小写方法名 404（P1）**：`set_group_*`、`get_group_member_*` 等此前被透传为 Telegram 小写方法名直接 404（晦涩错误）。现对无对应能力的前缀动作明确抛 `NotImplementedError("Telegram 不支持 OneBot 动作: X")`
-- **reply 段非数字 `message_id` 在 Telegram 引用错位/丢失（P2）**：OB12 字符串 id / `gen-` 派生 id 此前 `int()` 解析失败回落 `0`，可能误引用消息 0。现非数字 id 静默丢弃引用（不设置 `reply_to_message_id`）
-- **Telegram 私聊 `sub_type` 语义注释（P2）**：与 OB11（真实 friend/group/temp/other）/ OB12（无 sub_type）的差异以注释固化约定，插件统一用 `message_type == "private"` 判断私聊
-- **Telegram `mention` 段降级为可见文本（P2）**：与 OB11/12 真实 @ 的差异以注释固化约定（不触发真实通知）
-- **Telegram `is_at_bot` 死代码注释对齐（P3）**：说明该提示字段会被 SDK `from_v12_event` 按 `self_id in at_list` 覆盖，勿据此路由
+
+- **reply 段非数字** **`message_id`** **在 Telegram 引用错位/丢失（P2）**：OB12 字符串 id / `gen-` 派生 id 此前 `int()` 解析失败回落 `0`，可能误引用消息 0。现非数字 id 静默丢弃引用（不设置 `reply_to_message_id`）
+
+- **Telegram 私聊** **`sub_type`** **语义注释（P2）**：与 OB11（真实 friend/group/temp/other）/ OB12（无 sub\_type）的差异以注释固化约定，插件统一用 `message_type == "private"` 判断私聊
+
+- **Telegram** **`mention`** **段降级为可见文本（P2）**：与 OB11/12 真实 @ 的差异以注释固化约定（不触发真实通知）
+
+- **Telegram** **`is_at_bot`** **死代码注释对齐（P3）**：说明该提示字段会被 SDK `from_v12_event` 按 `self_id in at_list` 覆盖，勿据此路由
 
 ### Changed
 
-- **跨协议动作与能力约定文档化**：`PLUGIN_DEV.md` 新增「跨协议动作与能力约定」一节（发消息用 `send_msg`、`call_api` 经 `_api_action` 映射、Telegram 群管能力缺失、私聊 sub_type / mention / reply 跨端差异）
+- **跨协议动作与能力约定文档化**：`PLUGIN_DEV.md` 新增「跨协议动作与能力约定」一节（发消息用 `send_msg`、`call_api` 经 `_api_action` 映射、Telegram 群管能力缺失、私聊 sub\_type / mention / reply 跨端差异）
 
-## [1.16.4] - 2026-08-22（插件配置热生效 + 敏感字段脱敏）
+## \[1.16.4] - 2026-08-22（插件配置热生效 + 敏感字段脱敏）
 
 ### Added
 
-- **插件配置热生效钩子 `on_config_update`**：`_load_plugin_config` 写入新配置后调用插件同名钩子，WebUI 保存配置免重载即时生效（配合 shiguang 1.0.4 的 M18）。插件可选实现该钩子刷新自身运行期快照，未实现时行为不变
+- **插件配置热生效钩子** **`on_config_update`**：`_load_plugin_config` 写入新配置后调用插件同名钩子，WebUI 保存配置免重载即时生效（配合 shiguang 1.0.4 的 M18）。插件可选实现该钩子刷新自身运行期快照，未实现时行为不变
+
 - **插件配置敏感字段脱敏**：`get_config_values` 对 `token` / `secret` / `password` / `api_key` 等字段不回显明文（WebUI 表单显示为空），避免 `pixiv_refresh_token` 等密钥明文回显（M19）
 
 ### Fixed
 
 - **配置保存空串误清空密钥**：`update_config` 改为与现有配置合并后写回——敏感字段提交空值时保留已有值，避免「读取脱敏→保存空串」误清空 token/密码（M19）
 
-## [1.16.3] - 2026-08-21（llm_tool 单收集栈 + OneBot 便捷方法 + 扩展通知类型化）
+## \[1.16.3] - 2026-08-21（llm\_tool 单收集栈 + OneBot 便捷方法 + 扩展通知类型化）
 
 ### Fixed
 
-- **llm_tool 双实现致 SDK 路径导入的工具静默丢失**：`bot/plugin/llm_tool.py` 曾是 SDK 的逐字复制（双收集栈）——按官方示例 `from qingci_plugin_sdk import llm_tool` 声明的工具进 SDK 收集栈、CE 收集栈为空，LLM 无法调用。现改为转发 SDK 声明机制（`LlmToolSpec/llm_tool/begin/end`），仅保留 CE 特有 `register_tools`；两条导入路径走同一收集栈
-- **on_load 子指令旧 SDK 静默回归**：命令 matcher 缺 `sub_matchers` 元数据（SDK <1.13.1）时打告警提示升级，不再静默
+- **llm\_tool 双实现致 SDK 路径导入的工具静默丢失**：`bot/plugin/llm_tool.py` 曾是 SDK 的逐字复制（双收集栈）——按官方示例 `from qingci_plugin_sdk import llm_tool` 声明的工具进 SDK 收集栈、CE 收集栈为空，LLM 无法调用。现改为转发 SDK 声明机制（`LlmToolSpec/llm_tool/begin/end`），仅保留 CE 特有 `register_tools`；两条导入路径走同一收集栈
+
+- **on\_load 子指令旧 SDK 静默回归**：命令 matcher 缺 `sub_matchers` 元数据（SDK <1.13.1）时打告警提示升级，不再静默
 
 ### Added
 
@@ -132,42 +159,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **SDK 依赖锁定 v1.13.2**（扩展通知类型化：红包运气王/荣誉变更/名片/精华/签到/好友戳等 6 个类型化事件类；pyproject / build.ps1 / uv.lock 同步）
 
-## [1.16.2] - 2026-08-21（子命令修复 + 段数组回复 + SDK 1.13.1）
+## \[1.16.2] - 2026-08-21（子命令修复 + 段数组回复 + SDK 1.13.1）
 
 ### Fixed
 
-- **on_load 运行时注册的 on_command 子指令不触发**：插件在 `on_load` 内 `self.matchers.append(on_command(..., subcommands=...)(...))` 时，SDK 的子指令 matcher 只进模块级收集器（import 阶段已关闭）而被静默丢弃，父指令又已排除子指令——子命令完全不回复。配合 SDK 1.13.1（子指令 matcher 挂到 `parent.meta["sub_matchers"]`），`PluginManager` 在插件加载时经 `_expand_subcommand_matchers` 按对象 id 去重展开注册（模块级场景不双份），对 `签到管理/排行/我的/商店` 等所有 on_load 注册子命令的插件生效
-- **Matcher handler 返回 v12 段数组被 `str()` 化为字典文本**：`dispatcher._to_reply` 对消息事件强制 `str(result)`，handler 返回图片链（`list[dict]`）时用户收到 `[{'type': 'image', ...}]` 原文。现对「全部元素为含 `type` 字段的 dict」的列表原样透传；`bot._send_reply` 群聊前缀拼接支持段数组（reply/mention 后追加段）——`/签到帮助` 等返回段数组的插件恢复图片发送
+- **on\_load 运行时注册的 on\_command 子指令不触发**：插件在 `on_load` 内 `self.matchers.append(on_command(..., subcommands=...)(...))` 时，SDK 的子指令 matcher 只进模块级收集器（import 阶段已关闭）而被静默丢弃，父指令又已排除子指令——子命令完全不回复。配合 SDK 1.13.1（子指令 matcher 挂到 `parent.meta["sub_matchers"]`），`PluginManager` 在插件加载时经 `_expand_subcommand_matchers` 按对象 id 去重展开注册（模块级场景不双份），对 `签到管理/排行/我的/商店` 等所有 on\_load 注册子命令的插件生效
+
+- **Matcher handler 返回 v12 段数组被** **`str()`** **化为字典文本**：`dispatcher._to_reply` 对消息事件强制 `str(result)`，handler 返回图片链（`list[dict]`）时用户收到 `[{'type': 'image', ...}]` 原文。现对「全部元素为含 `type` 字段的 dict」的列表原样透传；`bot._send_reply` 群聊前缀拼接支持段数组（reply/mention 后追加段）——`/签到帮助` 等返回段数组的插件恢复图片发送
 
 ### Changed
 
 - **SDK 依赖锁定 v1.13.1**：`qingci-plugin-sdk @ git+...@v1.13.1`（含子指令 matcher 挂载修复；`uv.lock` 同步）
 
-## [1.16.1] - 2026-08-21（插件第三方依赖按插件隔离）
+## \[1.16.1] - 2026-08-21（插件第三方依赖按插件隔离）
 
 ### Changed
 
 - **插件依赖目录按插件隔离**：外部插件第三方依赖由共享的 `data_root()/deps/` 平铺目录改为每插件独立的 `data_root()/deps/<插件名>/` 子目录（`bot/plugin/deps.py`：新增 `deps_root()`、`deps_dir(name)`，`ensure_in_sys_path(name)` 只注入本插件依赖目录）。消除两类风险：① 不同插件声明同名包的不同版本在共享目录互相覆盖（以最后安装者为准）；② 某插件声明的包在 `sys.path` 最前遮蔽框架内置同名包，影响整个进程。无依赖声明的插件不再注入任何 deps 目录（移除隐式共享依赖）。`manager.py` 加载/安装链路同步传插件名；新增 `test_ensure_dependencies_per_plugin_isolation` 覆盖隔离行为
+
 - **文档同步**：`PLUGIN_DEV.md` / `ARCHITECTURE.md` / `docs/PROJECT_STRUCTURE.md` 与 Plugins-SDK README 的依赖路径统一为 `data_root()/deps/<name>/` 并说明隔离语义（卸载不自动清理依赖目录）
 
-## [1.16.0] - 2026-08-21（运行日志开关交互相馈与关闭计数清空修复）
+## \[1.16.0] - 2026-08-21（运行日志开关交互相馈与关闭计数清空修复）
 
 ### Fixed
 
 - **关闭采集后仍"实时推送中"**：前端运行日志页不感知开关、无条件连接 `/api/ws/runlog`；后端 WS 端点与采集开关脱钩，且关闭时环形缓冲中的旧日志不清理——与设置页"关闭后运行日志页无数据"文案矛盾。现关闭 `log.run_log_enabled` 后：`set_run_log_enabled(False)` 即时清空缓冲；运行日志页连接前校验开关，关闭时不建立 WS 连接，状态标签显示"采集已关闭"、空态给出"系统设置 → 日志 可重新开启"提示
+
 - **设置页开关回弹且无"未保存"提示**：`Settings.vue` 各开关为"保存后生效"模式，拨动后不写后端、无任何提示，切走再回来读回旧值（回弹）。新增"有未保存的更改，点击保存设置后生效"提示条，并在保存成功后同步回已保存配置、清除脏标记、提示"已保存并生效"
 
 ### Changed
 
 - **禁用 GET 浏览器缓存**：统一 API 请求层（`web/src/api/request.js`）对 GET 请求加 `cache: 'no-store'`，避免保存配置后再次拉取命中浏览器启发式缓存，导致页面回显旧值
 
-## [1.15.0] - 2026-08-21（运行日志采集入口修复）
+## \[1.15.0] - 2026-08-21（运行日志采集入口修复）
 
 ### Fixed
 
 - **运行日志页始终无记录**：`bot/logformat.py` 的 `apply_logging_from_config` 使用了错误的相对导入 `from ..config` / `from ..paths`（该模块位于 `bot.logformat`，应指向同级包的 `.config` / `.paths`），触发 `ModuleNotFoundError` 后又被函数外层 `except: pass` 静默吞掉，导致 `configure_logging` 从未执行、`RunLogHandler` 从未挂载——运行日志环形缓冲恒为空，WebUI「运行日志」页没有任何记录。现已改为正确的同级相对导入，启动即正常采集，并把累积历史经 `/api/ws/runlog` 快照推送到 WebUI
 
-## [1.14.0] - 2026-08-21（内置 uv 依赖安装链 + 打包依赖修复）
+## \[1.14.0] - 2026-08-21（内置 uv 依赖安装链 + 打包依赖修复）
 
 ### Added
 
@@ -177,96 +207,139 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **打包模式插件依赖无法自动安装**：uv 管理的构建 venv 默认不带 pip，导致 `collect_all('pip')` 收集为空、EXE 内无 pip；现在 build.ps1 构建前用 `uv pip install` 注入 pip 或内置 uv，确保打包产物具备依赖安装能力
 
-## [1.13.0] - 2026-08-21（问题诊断报告 CE-1~CE-7 + shiguang-1 修复落地）
+## \[1.13.0] - 2026-08-21（问题诊断报告 CE-1\~CE-7 + shiguang-1 修复落地）
 
 ### Added
 
 - **运行日志功能（CE-2）**：新增 `/api/ws/runlog` 端点（复用 WS 鉴权 + 连接池扇出，连接即回发环形缓冲快照）与 `RunLogHandler` 环形缓冲采集器；WebUI 新增「运行日志」页（`RuntimeLog.vue`，实时查看 + 级别过滤 + 自动滚动）；设置页新增 `log.run_log_enabled` 开关（默认开，关闭后运行日志页无数据），配置变更即时生效无需重启
+
 - **框架级消息记录/广播（CE-1）**：`Dispatcher` 新增 `_record_incoming_message`，对所有进入分发链的用户消息统一写库 + WS 实时广播；新增 `log.record_all_messages` 开关（默认开）。内置 chat 插件只记录 LLM 助手回复——消息日志页由"仅 LLM 对话"变为"全量消息"
+
 - **群组配置删除（CE-5）**：补 `Database.delete_group_config` + `DELETE /api/group/{group_id}` 端点（含审计埋点 + chat 群配置缓存失效）+ `GroupConfig.vue` 删除按钮（带确认弹窗）
 
 ### Fixed
 
 - **市场版本更新死循环（CE-4）**：`_collect_installed` 对已加载插件优先读目录 `plugin.json` 的 `version`（市场更新判定的权威来源），代码属性 `plugin.version` 仅作兜底——插件发布版本漂移（如 shiguang 代码 1.0.0 / 元数据 1.0.1）不再导致永久"可更新"
+
 - **插件卸载后列表不更新（CE-3）**：卸载 / reload / disable / enable 成功后刷新 `pluginDetails`，并收紧合并逻辑——不再从旧缓存"复活"已卸载插件
+
 - **build.ps1 Chromium 下载失败（CE-7）**：优先 `--only-shell`（体积小）；npmmirror 的 `chromium-headless-shell` 产物长期滞后导致 404 时自动回退完整 `chromium --no-shell`（镜像有完整 chromium），仍失败再回退官方源重试
+
 - **EXE 启动动画风格对齐（CE-6）**：splash 纯 ctypes 配色对齐 Web UI 原神风暗色主题（背景 `#0b0f1a`、标题/强调琥珀金 `#fbbf24`、副标题天蓝 `#38bdf8`），并添加顶部/底部琥珀金强调装饰线
 
 ### Changed
 
 - **SDK 锁定升级到 v1.13.0（shiguang-1）**：`qingci-plugin-sdk @ v1.13.0`（pyproject/build.ps1/uv.lock 同步），含 `to_v11_segment` 媒体段 `file_id`/`file`/`url` 字段回退修复——OneBot 11 发送链路不再因插件仅填 `file`/`url` 而丢失图片段
 
-## [1.12.0] - 2026-08-20（架构审阅阶段二 + 阶段三落地）
+## \[1.12.0] - 2026-08-20（架构审阅阶段二 + 阶段三落地）
 
 ### Added
 
 - **数据保留清理**：`config.log.retention_days` 配置保留天数，Bot 每日自动清理 `messages`/`sessions`/`usage_logs`/`audit_logs` 中超过保留期的记录（默认 0 不清理），防止长期运行单表无限膨胀
+
 - **前端 API 封装层**：新增 `web/src/api/request.js`（X-API-Key 自动注入 / JSON 解析 / 401 统一跳转），`app.js` 与登录/向导视图统一接入；WS 连接抽取为 `useWebSocket` composable（token 子协议注入 + 断线重连），消息日志与对话调试视图复用
+
 - **v11 翻译收敛 SDK**：`bot/core/v11_compat.py` 改为 `qingci_plugin_sdk.events.translate_v11_event` 薄转发（仅补 OneBot 11 平台字段），v11 <-> v12 协议映射单一来源，消除双实现漂移风险
+
 - **插件执行阶段指标**：Matcher 指标细分为 permission / rule / handler 三阶段耗时（`avg_permission_ms` / `avg_rule_ms` / `avg_handler_ms`），插件管理面板可定位慢环节
 
 ### Changed
 
 - **SDK 锁定升级到 v1.11.0**：`qingci-plugin-sdk @ v1.11.0`（pyproject/build.ps1/uv.lock 同步），含 `translate_v11_event` 与 `parse_cq_string` FACE 修复
+
 - **SQLite→PG 迁移脚本加固**：日期解析 fail-fast（打印表名/行号，不再回退当前时间篡改数据）；INSERT 改 `ON CONFLICT DO NOTHING` 幂等追加，中断后 `--force` 重跑可安全跳过已迁移行
+
 - **内核/外壳边界文档化**：ARCHITECTURE.md 记录单进程单实例约束、三外壳复用同一内核装配、`api.auth` 唯一反向依赖的边界与库化路径
 
-## [1.11.0] - 2026-08-20（架构审阅阶段一落地）
+## \[1.11.0] - 2026-08-20（架构审阅阶段一落地）
 
 ### Added
 
 - **平台能力面契约化**：`PlatformAdapter` 新增 `supports_request_approval` / `supports_media_upload` / `supports_at_trigger` 能力字段与 `approve_request` 抽象方法；请求审批按能力面路由（OneBot 11 → `set_*_add_request`、OneBot 12 → `friend_request.handle` / `group_request.handle`），不再按平台名硬编码 action，新增平台无需改核心代码
+
 - **市场归档完整性校验**：市场索引条目支持可选 `source_sha256`，HTTP 归档安装下载后校验（防传输篡改/投毒）；git 来源自带完整性跳过。Plugin-Market 的 `bump_index.py`/`validate_index.py` 同步支持该字段（64 位十六进制 + 仅限归档来源）
+
 - **事件链路追踪**：`event_id` 经 contextvar 贯穿单条事件处理链路（分发/匹配/插件/LLM），结构化 JSON 日志自动携带 `event_id` 字段，跨模块串查"这条消息为什么没回复"
+
 - **CI SDK 版本一致性校验**：安装后核对 `qingci_plugin_sdk.__version__` 与 `pyproject.toml` 锁定的 tag 一致（防锁错/上游漂移）
+
 - **EXE SHA256 校验清单**：`build.ps1` 构建产物生成 `qingci-bot-ce.sha256`（exe + web index），供最终用户校验分发完整性
 
 ### Changed
 
-- **配置 `update()` 深合并**：仅覆盖传入的节/字段，未提供的配置保持不变——杜绝"传部分配置静默重置其它节（如 api_key / llm.api_key）"的陷阱；列表整值替换、嵌套 dict 递归合并
+- **配置** **`update()`** **深合并**：仅覆盖传入的节/字段，未提供的配置保持不变——杜绝"传部分配置静默重置其它节（如 api\_key / llm.api\_key）"的陷阱；列表整值替换、嵌套 dict 递归合并
+
 - **热重载读写屏障**：新增 `_ReloadRWLock`——事件分发共享读、重载独占写，重载窗口内不再读到半新半旧的 Matcher 注册表/模块状态；同任务重入（handler 内触发 reload）安全跳过
 
 ### Fixed
 
 - **HTTP 归档安装扩展名缺失修复**：下载暂存文件无扩展名时按文件头嗅探 zip/tar 格式，HTTP 归档来源安装不再报"不支持的归档格式"
-- **`set_bot` 重复注册防护**：单进程单实例约束显式化，重复注册记录告警便于排查
+
+- **`set_bot`** **重复注册防护**：单进程单实例约束显式化，重复注册记录告警便于排查
 
 ### Security
 
 - **git 安装分支 SSRF 补齐**：`_fetch_plugin` 的 git 克隆前置 `is_allowed_git_url` + 私网地址校验（与归档下载同基线），`git+file://` / 内网 SSH 来源不再可绕过防护
+
 - **SSRF 增强**：IP 字面量识别兼容十进制/十六进制/八进制混淆形式；域名连接前解析全部 A/AAAA 记录校验（缓解 DNS rebinding）；scp 风格 `git@host:path` 正确提取 host
+
 - **tar/zip symlink 逃逸修复**：Python 3.10/3.11 手动预检拒绝 symlink/hardlink 成员（防解压越界覆写）；zip 同步拒绝符号链接条目
+
 - **归档大小上限**：下载 200MB / 解压总量 1GB 限制（防 zip 炸弹撑爆磁盘）
-- **免鉴权收紧 + CORS 收敛**：未配 api_key 的环回豁免增加 Origin 校验（防任意网页 CSRF 驱动本地 API）；CORS 由 `*` 收敛为环回来源；WebSocket 鉴权与 HTTP 侧对齐（含 Origin 校验）
+
+- **免鉴权收紧 + CORS 收敛**：未配 api\_key 的环回豁免增加 Origin 校验（防任意网页 CSRF 驱动本地 API）；CORS 由 `*` 收敛为环回来源；WebSocket 鉴权与 HTTP 侧对齐（含 Origin 校验）
+
 - **插件静态页面鉴权**：`/api/plugin-data/*` 静态页面向 `/api/plugin` 鉴权对齐（X-API-Key 头或 query token；未配 key 仅环回+Origin）；卸载时摘除已挂载路由
+
 - **插件删除路径兜底校验**：`resolve() + is_relative_to` 防恶意插件名越界删除
+
 - **依赖安装选项注入过滤**：插件 `requirements.txt` 中 `-` 开头项（pip 选项）被拒绝
+
 - **MCP stdio 环境变量过滤**：剔除 `LD_PRELOAD` 等注入型变量；文档化高权限信任边界
+
 - **日志密钥脱敏**：LLM 异常文本统一 `redact_secrets`（`?key=`/`Bearer`/`sk-` 等）后再落日志
+
 - **登录限流指数退避**：连续失败冷却随次数指数增长（上限 10 分钟）
+
 - **Docker 加固**：非 root 用户运行 + HEALTHCHECK；compose 的 OneBot 端口仅环回映射
+
 - **基础安全响应头**：`X-Content-Type-Options` / `X-Frame-Options` / `Referrer-Policy`
+
 - **配置脱敏后缀扩充**：`secret_key`/`access_key`/`credential`/`auth`（`aws_secret_access_key` 不再逃逸）
 
 ### Fixed
 
 - **request Matcher 字符串回复不再静默吞掉**：字符串作为审批回复消息发送
-- **审批 action 按平台路由**：OneBot 12 使用 `friend_request.handle` / `group_request.handle`
-- **插件重名覆盖正常卸载旧实例**（清理调度任务/工具/页面，防幽灵资源）
-- **热重载互斥锁**：`_reload_lock` 串行化并发 reload/install
-- **会话阶梯惰性过期清理**：注册新阶梯时顺带回收过期驻留条目
-- **RAG reload 原子替换**：临时表 + rename，建表中途失败不再丢旧索引
-- **`init_db` 迁移漂移检测**：建表后只读 `alembic check`，漂移时告警提示
-- **LLM 工具收尾轮不再多余调用**：收尾轮仍返回 tool_calls 时直接取内容/占位回复
-- **实例切换先响应后退出**：`os._exit` 移入 BackgroundTask，前端可收到切换结果
-- **桌面托盘退出优雅关停**：窗口关闭后请求 `/api/bot/stop` 并等待后端线程退出
-- **v11 CQ 码解析**：字符串消息含 `[CQ:at,...]` 时解析为 v12 段数组（`@bot` 触发恢复）
-- **SDK 依赖锁定**：`qingci-plugin-sdk @ v1.10.0`（pyproject/build.ps1/uv.lock 同步）
-- **`install.sh` sudo 模式传递 `WITH_GUI`**；迁移脚本时间戳解析失败告警
-- **限流器定期清理**：每小时 `RateLimiter.cleanup()` 防内存缓慢增长
-- **EventBus `subscribe_sync` 加线程锁**；`self_id` 安全转换防状态接口 500；备份文件 chmod 0600
 
-## [1.10.0] - 2026-08-20（安全加固与稳定性修复）
+- **审批 action 按平台路由**：OneBot 12 使用 `friend_request.handle` / `group_request.handle`
+
+- **插件重名覆盖正常卸载旧实例**（清理调度任务/工具/页面，防幽灵资源）
+
+- **热重载互斥锁**：`_reload_lock` 串行化并发 reload/install
+
+- **会话阶梯惰性过期清理**：注册新阶梯时顺带回收过期驻留条目
+
+- **RAG reload 原子替换**：临时表 + rename，建表中途失败不再丢旧索引
+
+- **`init_db`** **迁移漂移检测**：建表后只读 `alembic check`，漂移时告警提示
+
+- **LLM 工具收尾轮不再多余调用**：收尾轮仍返回 tool\_calls 时直接取内容/占位回复
+
+- **实例切换先响应后退出**：`os._exit` 移入 BackgroundTask，前端可收到切换结果
+
+- **桌面托盘退出优雅关停**：窗口关闭后请求 `/api/bot/stop` 并等待后端线程退出
+
+- **v11 CQ 码解析**：字符串消息含 `[CQ:at,...]` 时解析为 v12 段数组（`@bot` 触发恢复）
+
+- **SDK 依赖锁定**：`qingci-plugin-sdk @ v1.10.0`（pyproject/build.ps1/uv.lock 同步）
+
+- **`install.sh`** **sudo 模式传递** **`WITH_GUI`**；迁移脚本时间戳解析失败告警
+
+- **限流器定期清理**：每小时 `RateLimiter.cleanup()` 防内存缓慢增长
+
+- **EventBus** **`subscribe_sync`** **加线程锁**；`self_id` 安全转换防状态接口 500；备份文件 chmod 0600
+
+## \[1.10.0] - 2026-08-20（安全加固与稳定性修复）
 
 ### Added
 
@@ -275,360 +348,578 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **插件归档 Zip Slip 修复**：zip 解压补成员路径预检（此前仅 tar 有防护），拒绝绝对路径（含盘符）与 `..` 穿越条目，恶意插件包不再可越出目录覆盖主机任意文件
+
 - **SSRF 防护**：新增 `bot/plugin/ssrf.py`——市场索引 HTTP 拉取与插件归档下载禁用重定向（防 302 跳内网）、拒绝私网/环回/链路本地 IP 字面量；git 克隆 URL 增加传输协议白名单（拒绝 `ext::` 命令执行与 `file:` 协议）
+
 - **市场安装禁止本地路径**：`PluginManager.install` 默认 `allow_local=False`，远端市场索引无法再让服务端复制任意本地目录/执行插件；本地安装需显式 `allow_local=True`
+
 - **登录限流防伪造**：`X-Forwarded-For` 默认不再信任（可伪造换头绕过限流），需配置 `api.trust_proxy_headers=true`（部署于可信反向代理后）才启用
-- **未配置 api_key 免鉴权收紧**：留空仅本机（环回）豁免；监听暴露到局域网/公网时非本机请求拒绝访问，避免管理面无认证裸奔
+
+- **未配置 api\_key 免鉴权收紧**：留空仅本机（环回）豁免；监听暴露到局域网/公网时非本机请求拒绝访问，避免管理面无认证裸奔
 
 ### Fixed
 
-- **LLM 会话摘要重复写 DB**：摘要压缩已把本条用户消息随 recent_msgs 重写落库，`chat()` 跳过重复写入，模型上下文不再出现重复用户消息
-- **`max_tool_rounds=1` 时 Function Calling 失效**：工具轮次至少保留 1 轮（总轮数 = 工具轮 + 收尾轮），配置 1 也能正常调用工具
+- **LLM 会话摘要重复写 DB**：摘要压缩已把本条用户消息随 recent\_msgs 重写落库，`chat()` 跳过重复写入，模型上下文不再出现重复用户消息
+
+- **`max_tool_rounds=1`** **时 Function Calling 失效**：工具轮次至少保留 1 轮（总轮数 = 工具轮 + 收尾轮），配置 1 也能正常调用工具
+
 - **LLM reload 不再清空全部内存会话**：仅调参数不会重置所有用户的对话上下文（未落库轮次保留，历史无缝延续）
+
 - **插件重载中途失败不再丢失插件**：新插件注册失败时恢复旧插件（含 matcher/页面/LLM 工具注册），避免插件从管理器静默消失
+
 - **请求审批兼容 v11 形态**：`detail_type` 为空时回退 `request_type`，未翻译的 v11 请求事件不再静默失效；缺类型时输出告警日志
+
 - **消息批量保存回退健壮化**：唯一冲突回退逐条保存时补全缺失字段默认值，单条缺字段不再导致整批不落库
-- **`_send_reply` 失败可感知**：三次重试后返回 False 并记录明确 error（供"必须送达"的审批等语义消息调用方判断）
+
+- **`_send_reply`** **失败可感知**：三次重试后返回 False 并记录明确 error（供"必须送达"的审批等语义消息调用方判断）
+
 - **EventBuffer 数值安全转换**：非数值 `user_id/group_id`（字符串/浮点串）不再抛 ValueError 导致事件整条丢失
+
 - **DI 懒加载 singleton 解析**：`resolve` 经接口绑定查找时触发未初始化的 lazy singleton 工厂，不再误判"服务未注册"
 
-## [1.9.4] - 2026-08-19（安全与稳定性修复）
+## \[1.9.4] - 2026-08-19（安全与稳定性修复）
 
 ### Security
 
 - **插件安装路径穿越修复**：市场安装强制插件名合法性校验（仅字母/数字/下划线/连字符），恶意索引 `name=".."` 不再可越出插件目录删除文件；复制改为 staging 原子替换，安装失败保留旧版本
+
 - **删除实例路径穿越修复**：`delete_instance` 与 `DELETE /api/instances/{name}` 增加实例名合法性校验，拒绝 `..` / 隐藏目录等非法名
+
 - **OneBot 12 加好友/加群审批修复**：审批按事件 `detail_type` 判别请求类型（此前迁移后恒为空、审批静默失效）
+
 - **API Key 泄漏收敛**：LLM 模型列表查询 / 连接测试错误不再回显上游完整 URL（Gemini Key 随 query 入 URL）；全局异常处理器不再返回内部异常类名；HTTP 异常响应保留 `WWW-Authenticate` 头
+
 - **配置向导跨源防护**：`/api/config/wizard` 与 `/wizard/skip` 校验浏览器 Origin 仅允许回环来源；`/wizard/skip` 增加"配置已完成则拒绝"守卫
 
 ### Fixed
 
 - **插件子系统**：多页面插件每个页面独立挂载（`/api/plugin-data/<name>/<idx>`，`pages` 附带 `url`）；市场安装/更新双源全部失败时尽力回滚重载旧版本而非静默消失；git clone / pip 子进程 `communicate` 增加 300s 超时；同步 urllib 网络 IO 改线程池（索引拉取/归档下载不再阻塞事件循环）；tar 归档解压补成员路径预检（Zip Slip）；`discover_metadata` 修正为目录型插件扫描；`_semver_key` 兼容 `v` 前缀版本号（不再恒判可更新）；运行期动态增删 matcher 自动失效调度缓存；reload 失败写入加载错误并在插件列表展示；卸载清理 `_load_errors` 幽灵条目
+
 - **核心运行时**：会话阶梯续接补普通异常兜底（不再中断整个事件分发）；Playwright 渲染生命周期加并发锁（防双启动/句柄互踩）；会话数超限改驱逐最旧会话（状态不再静默丢失）；`expire(ttl<=0)` 语义与 `set` 统一；OneBot 12 协议端接入触发 `notify_connected/reconnected`；OneBot 11 状态上报补 `self_id`；WS 实时消息携带 `id` 字段
+
 - **API 层**：实例切换/改名透传 `--data-dir`/`--config`；端口分配加锁 + 显式端口冲突拒绝；删除实例失败返回真实结果；`update_command` 防 `meta=None`；`clear_all_sessions` 防 LLM 未初始化；登录限流支持反向代理 `X-Forwarded-For`；`set_plugin_config` 先校验后落盘；插件热重载 watcher 对修复后的失败插件自动重试
+
 - **前端**：MCP 测试连接 args 类型修正、实时消息 v-for key、插件指标面板轮询不丢失、卡片 author/加载错误展示、401 全局提示、启用/禁用开关失败还原、市场刷新竞态、命令错误态、实例刷新 loading 与重复拉取、端口非法输入提示、群 ID 数字校验、向导测试连接携带鉴权头等 15 项
 
-## [1.9.3] - 2026-08-19（插件卸载修复）
+## \[1.9.3] - 2026-08-19（插件卸载修复）
 
 ### Fixed
+
 - **插件卸载不再残留文件**：`DELETE /api/plugin/{name}` 由「仅卸载模块」升级为「卸载并删除插件目录」（新增 `PluginManager.remove`），修复插件市场/插件管理卸载后文件仍留在 `plugins/{name}`、市场仍显示已安装、卸载按钮反复存在的问题——删除目录后市场 `installed` 状态与按钮同步清除；内置插件仍拒绝删除，目录删除失败（文件占用）明确报错不静默残留
 
-## [1.9.2] - 2026-08-19（插件市场增强）
+## \[1.9.2] - 2026-08-19（插件市场增强）
 
 ### Added
-- **市场索引 `python_requires` 兼容声明**：市场条目可声明 Python 版本约束（PEP 440 specifier，如 `>=3.10`），市场列表每条返回 `compatible` 状态（当前 Python 是否满足）；WebUI 市场卡片对不兼容插件显示红色「不兼容当前 Python」徽标并禁用安装按钮，未声明视为兼容
-- **市场索引备用源 `market.mirror_url`**：索引拉取按 主源 → 备用源 → 磁盘缓存 → 报错 顺序回退（此前仅插件安装支持 mirror 回退）；`MarketClient.get_index` 对每个源逐次尝试并记录日志
-- **插件安装 `mirror` 回退**：市场条目可声明主地址 `source` + 备用地址 `mirror`，安装时按 `source` → `mirror` 顺序尝试，全部失败才报错（配合索引仓库模型：插件代码留在作者仓库，市场只登记地址）。`MarketIndex` 解析新增 `mirror` 字段（缺省为空），`MarketManager.install` 增加回退逻辑
+
+- **市场索引** **`python_requires`** **兼容声明**：市场条目可声明 Python 版本约束（PEP 440 specifier，如 `>=3.10`），市场列表每条返回 `compatible` 状态（当前 Python 是否满足）；WebUI 市场卡片对不兼容插件显示红色「不兼容当前 Python」徽标并禁用安装按钮，未声明视为兼容
+
+- **市场索引备用源** **`market.mirror_url`**：索引拉取按 主源 → 备用源 → 磁盘缓存 → 报错 顺序回退（此前仅插件安装支持 mirror 回退）；`MarketClient.get_index` 对每个源逐次尝试并记录日志
+
+- **插件安装** **`mirror`** **回退**：市场条目可声明主地址 `source` + 备用地址 `mirror`，安装时按 `source` → `mirror` 顺序尝试，全部失败才报错（配合索引仓库模型：插件代码留在作者仓库，市场只登记地址）。`MarketIndex` 解析新增 `mirror` 字段（缺省为空），`MarketManager.install` 增加回退逻辑
 
 ### Changed
+
 - **文档**：最小示例插件引用改为独立仓库 [Qingci-Bot/hello](https://github.com/Qingci-Bot/hello)（README / CHANGELOG 等）
 
-## [1.9.1] - 2026-08-19（项目结构收敛 + 命名/组件化）
+## \[1.9.1] - 2026-08-19（项目结构收敛 + 命名/组件化）
 
 ### Changed
-- **项目结构重构**：`bot/core/` 收敛为纯框架层——`alerter`/`filter`/`broadcast`/`logformat`/`html_renderer` 五功能组件平铺至 `bot/` 根级；OneBot 11 适配器归入 `bot/core/platforms/onebot11.py`（`bot/core/connection.py` 保留兼容再导出）；插件协议层薄转发收拢到 `bot/plugin/protocol/` 子包（base/context/matcher/rule/permission/ratelimit/session/events），`bot/plugin/` 顶层同名文件改为兼容再导出，框架内部直接引用 protocol；`dispatcher.py` 不再 re-export `MessageContext`（改引 `protocol.context`）；打包排除 `bot.testing*`（测试沙箱不进 exe）；文档（ARCHITECTURE / PROJECT_STRUCTURE / CODING_STANDARDS）同步
+
+- **项目结构重构**：`bot/core/` 收敛为纯框架层——`alerter`/`filter`/`broadcast`/`logformat`/`html_renderer` 五功能组件平铺至 `bot/` 根级；OneBot 11 适配器归入 `bot/core/platforms/onebot11.py`（`bot/core/connection.py` 保留兼容再导出）；插件协议层薄转发收拢到 `bot/plugin/protocol/` 子包（base/context/matcher/rule/permission/ratelimit/session/events），`bot/plugin/` 顶层同名文件改为兼容再导出，框架内部直接引用 protocol；`dispatcher.py` 不再 re-export `MessageContext`（改引 `protocol.context`）；打包排除 `bot.testing*`（测试沙箱不进 exe）；文档（ARCHITECTURE / PROJECT\_STRUCTURE / CODING\_STANDARDS）同步
+
 - **命名收敛（C 类）**：登录路由 `api/routes/auth.py` → `api/routes/login.py`（消除与鉴权依赖 `api/auth.py` 的同根名混淆，`router` 更名 `login_router`）；桌面入口 `desktop/main.py` → `desktop/app.py`（消除与根入口 `main.py` 同名）；`bot/instances.py`（数据级多实例）与 `desktop/single_instance.py`（进程级单例）补充概念区分说明；`bot/i18n.py`（框架侧）与 SDK `i18n.py`（插件侧）边界说明
+
 - **前端组件化**：新增 `web/src/components/Drawer.vue` 通用抽屉组件（Teleport + 过渡动画 + 配置/页面双抽屉复用），`PluginManager.vue` 改用它并移除内联抽屉样式；前端目录约定新增 `components/`
 
-## [1.9.0] - 2026-08-19（框架能力补全：HTML 渲染 + 插件 Web API）
+## \[1.9.0] - 2026-08-19（框架能力补全：HTML 渲染 + 插件 Web API）
 
 ### Added
+
 - **插件级 Web API 注册机制（`register_api`）**：插件在 `on_load` 中经 SDK `PluginBase.register_api` 注册 HTTP 接口，框架统一挂载到 `/api/plugin-web/{plugin_name}/{path}`，鉴权对齐现有 API 体系（`X-API-Key`）——handler 契约支持 `Response` 原样返回 / `(data, status)` 二元组 / dict 自动 JSON 序列化；路由在插件加载后动态挂载（无需重启），端点按请求时动态解析插件实例与 handler（插件热重载后自动指向新实现、卸载后返回 404）；新增 `bot/plugin/webapi.py` 适配器与 10 个用例（含返回类型归一化、鉴权、卸载/热重载动态解析、幂等挂载）
+
 - **HTML → 图片渲染服务（`bot/core/html_renderer.py`）**：基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG，供签到卡等「HTML 模板 → 图片消息」插件复用——浏览器惰性启动并复用（进程内单例）、渲染超时控制、失败自动重建浏览器；playwright 为可选依赖（`[render]` 分组），未安装/浏览器缺失时渲染能力自动降级不可用（`render_html()` 抛 `HtmlRenderUnavailableError`，调用方回退），框架启动不受影响；`GET /api/bot/status` 新增 `render` 字段暴露能力状态（`enabled`/`supported`/`available`/`reason`），插件侧经 `bot.html_renderer` 访问；新增 `render` 配置节（`enabled`/`timeout`/`format`/`quality`/`default_width`/`default_height`/`device_scale_factor`）
 
-## [1.8.0] - 2026-08-18（OneBot 12 迁移）
+## \[1.8.0] - 2026-08-18（OneBot 12 迁移）
 
 ### Added
+
 - **OneBot 12 内核**：内部事件模型全面迁移为 OneBot 12——事件以 `type` / `detail_type` 标识（`message`/`notice`/`request`/`meta`），消息以标准 `{type, data}` 段数组表达（媒体统一 `file_id` 引用），为后续跨平台开发奠定统一基础
+
 - **SDK 消息段抽象（`segments.py`）**：新增 `SegmentType` 常量、`MessageSegment` 工厂（`text`/`mention`/`mention_all`/`image`/`voice`/`audio`/`video`/`file`/`reply`/`location`）、`Message` 容器（纯文本提取/双模嗅探），以及 v11↔v12 段双向转换（`normalize_v11_segment`/`to_v11_segment`/`segments_to_v11`/`segments_to_v12`）
+
 - **SDK 双模事件上下文（`context.py`）**：新增 `MessageContext.from_v12_event`，以 v12 事件构造上下文并派生 v11 兼容字段；`segments` 统一存 v12 标准段，`as_v11_segments()` 提供兼容视图
+
 - **SDK 双模类型化事件（`events.py`）**：notice/request 解析同时接受 v11（`notice_type`）与 v12（`detail_type`）事件 dict，v12 `detail_type` 自动映射回 v11 命名空间，插件侧事件类（`GroupIncreaseNotice` 等）保持不变
+
 - **v11 事件翻译层（`bot/core/v11_compat.py`）**：纯函数将 OneBot 11 事件翻译为 OneBot 12（`message_type`→`detail_type`、`raw_message`→`alt_message`、ID 字符串化；notice 按 `notice_type`+`sub_type` 细分），无法识别类型原样返回（防御性不丢事件）
+
 - **v11 适配器翻译接入**：`OneBotConnection`（aiocqhttp 反向 WS）收到 v11 事件先经 `v11_event_to_v12()` 归一化为 v12 再上报，核心只消费 v12 事件模型；对存量插件保留 `post_type`/`message_type`/`raw_message` 兼容字段
+
 - **Telegram 适配器 v12 化**：`telegram.py` 归一化为 OneBot 12 事件（`mention` 段而非 `at`、`voice` 段而非 `record`），发送直接消费 v12 段数组（`image`/`voice`/`video` 段映射 `sendPhoto`/`sendVoice`/`sendVideo`）；成员变动归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_set`/`group_admin_unset`
+
 - **测试事件构造器双模**：`bot/testing/events.py` 新增 `make_v12_message_event`/`make_v12_notice_event`/`make_v12_request_event`，与 v11 构造器并存，供迁移后核心路径测试使用
+
 - **OneBot 12 回复段判别修复**：`Message.from_raw` 对 reply 段按字段判别（`message_id`/`id`），避免 v12 reply 段被误归一化（修复方案 A 迁移中发现的关键兼容问题）
+
 - **实例绑定主平台**：创建实例时可选择绑定主平台（`onebot` / `telegram`，`POST /api/instances` 新增 `platform` 字段，WebUI 实例创建表单新增平台下拉）——实例元数据记录 `platform`，创建时自动渲染对应适配器启用配置：OneBot 主平台启动反向 WS 服务端（`onebot.enabled: true`）、Telegram 主平台关闭反向 WS 并启用 Telegram 适配器，实现针对平台的系统设置落位
-- **`onebot.enabled` 开关**：`OneBotConfig` 新增 `enabled` 字段控制反向 WS 服务端启停（默认 `true`），`assemble_bot()` 按配置条件启动 OneBot 适配器，避免 Telegram 主平台实例空跑无用服务
+
+- **`onebot.enabled`** **开关**：`OneBotConfig` 新增 `enabled` 字段控制反向 WS 服务端启停（默认 `true`），`assemble_bot()` 按配置条件启动 OneBot 适配器，避免 Telegram 主平台实例空跑无用服务
+
 - **权限/黑名单标识字符串化**：`bot.super_admin` / `bot.admin_users` / `group_blacklist` / `user_blacklist` 由数字 ID 升级为平台无关字符串（支持 QQ 号、Telegram 用户 ID 等任意平台 ID）；`before-validator` 自动将存量数字配置转为字符串，旧 config.yaml 无需手动迁移；`/blacklist` 命令、首次向导、WebUI 系统设置同步改为字符串输入
+
 - **SDK 权限函数支持字符串 ID**：`USER` / `GROUP_MEMBER` 接受 `int` / `str` / 混合序列，内部归一化为字符串比较，与 OneBot 12 字符串 ID 语义对齐（见 Plugins-SDK 变更记录）
 
 ### Changed
-- **消息发送兼容**：`send_msg`/`send_group_msg`/`send_private_msg`/`call_api` 的 `message` 参数统一接受纯文本 / v11 段数组 / v12 段数组；发往 OneBot-11 协议端时由 `segments_to_cq` 将 v12 段自动转 CQ 码（`mention`→`at`、`voice`→`record` 等）
-- **平台状态按实例隔离**：`GET /api/bot/status` 的 `platforms` 列表仅上报已启用的适配器（`enabled=False` 跳过）——Telegram 主平台实例不再混入已停用的 OneBot 状态；WebUI 侧边栏平台状态按当前激活实例主平台过滤展示
-- **系统设置按实例平台渲染**：WebUI 系统设置按当前实例主平台条件渲染连接配置——OneBot 实例仅显示「OneBot 连接」卡片，Telegram 实例仅显示「Telegram 连接」卡片（原同时展示两套平台配置）
-- **实例管理独立页面**：侧边栏实例列表移至独立「实例管理」页面（`/instances`），侧边栏导航新增该入口；侧边栏仅保留平台连接状态指示
-- **OneBot 12 原生对接（`onebot12.py`）**：新增 OneBot 12 平台适配器——aiohttp 反向 WebSocket 服务端（`platforms.onebot12.enabled/host/port/access_token` 配置，默认端口 3002），OneBot 12 实现端（NapCat / Lagrange.OneBot 等）原生接入；事件以 v12 标准格式直通 Dispatcher（无需 v11 翻译），动作以 JSON-RPC（`{action, params, echo}`）请求并通过 echo 匹配响应，`send_message` 原生消费 v12 段数组；`SUPPORTED_PLATFORMS` 新增 `onebot12` 主平台选项（创建实例可选，自动渲染对应配置），WebUI 实例管理/系统设置/仪表盘同步支持
-- **实例管理页增强**：`GET /api/instances` 每实例补充 `port`/`disk_usage`（data 目录字节数）/`adapters`（config.yaml 启用的适配器摘要）；WebUI 实例表格新增端口、启用的适配器标签、数据大小列与描述小字，当前实例卡片展示端口/数据/描述元信息，创建表单新增描述与端口输入（后端 `description`/`port` 字段此前已支持但前端未暴露）
-- **Telegram 特有事件补全**：`edited_message` / `callback_query` / `message_reaction` 归一化为 OneBot 12 扩展 notice 事件（`detail_type`：`message_edited` / `callback_query` / `message_reaction`），插件用 `on_notice()` 即可消费——编辑事件复用消息归一化（携带新文本 `alt_message` 与 v12 段数组，不触发消息回复避免重复响应）；按钮回调携带 `data` / `callback_query_id`（可经 `call_api("answer_callback_query")` 应答），纯 inline 按钮（无 message）不丢失数据；表情回应携带新/旧表情列表，`sub_type` 区分 add/remove/change；新增 8 个用例
-- **SDK 支持 `MessageEditedEvent`**：`parse_notice_event` 将 `detail_type=message_edited` 解析为 `MessageEditedEvent`（`message_id`/`alt_message`/`message` 段/`is_at_bot`），编辑事件在插件侧获得类型化对象（见 Plugins-SDK 变更记录）
-- **修复：插件安装/拉取不再弹出 cmd 窗口**：Windows 桌面模式下 `asyncio.create_subprocess_exec` 启动 git/uv/pip 时未指定 `creationflags`，每个子进程都会弹出独立的控制台窗口；新增 `bot/plugin/_proc.py` 统一导出 `NO_WINDOW_FLAG`（`CREATE_NO_WINDOW`），插件市场索引拉取（`market.py`）、插件安装（`manager.py`）、依赖安装（`deps.py`）三处子进程调用全部传入该标志，非 Windows 平台自动退化为 0 无影响
-- **前端工程质量修复**：修复 `PluginManager.vue` 的 `v-if`/`v-for` 同元素冲突与 `App.vue` 未使用变量（lint 存量 2 error 清零）；eslint 关闭与 Prettier 冲突的格式规则（`vue/html-indent` / `vue/html-self-closing` / `vue/html-closing-bracket-newline`），`web/src` 全量统一 Prettier 格式；CI 新增 `frontend` job（eslint lint + prettier check + vite build）
-- **文档同步**：README / ARCHITECTURE / PLUGIN_DEV 全面更新——产品定位改为 OneBot 12 内核 + 多平台，架构图补充 v11_compat 翻译层与事件模型章节，插件开发指南推荐 SDK v12 消息段（v11/CQ 路径标注为平台专用）
 
-## [1.7.0] - 2026-08-17
+- **消息发送兼容**：`send_msg`/`send_group_msg`/`send_private_msg`/`call_api` 的 `message` 参数统一接受纯文本 / v11 段数组 / v12 段数组；发往 OneBot-11 协议端时由 `segments_to_cq` 将 v12 段自动转 CQ 码（`mention`→`at`、`voice`→`record` 等）
+
+- **平台状态按实例隔离**：`GET /api/bot/status` 的 `platforms` 列表仅上报已启用的适配器（`enabled=False` 跳过）——Telegram 主平台实例不再混入已停用的 OneBot 状态；WebUI 侧边栏平台状态按当前激活实例主平台过滤展示
+
+- **系统设置按实例平台渲染**：WebUI 系统设置按当前实例主平台条件渲染连接配置——OneBot 实例仅显示「OneBot 连接」卡片，Telegram 实例仅显示「Telegram 连接」卡片（原同时展示两套平台配置）
+
+- **实例管理独立页面**：侧边栏实例列表移至独立「实例管理」页面（`/instances`），侧边栏导航新增该入口；侧边栏仅保留平台连接状态指示
+
+- **OneBot 12 原生对接（`onebot12.py`）**：新增 OneBot 12 平台适配器——aiohttp 反向 WebSocket 服务端（`platforms.onebot12.enabled/host/port/access_token` 配置，默认端口 3002），OneBot 12 实现端（NapCat / Lagrange.OneBot 等）原生接入；事件以 v12 标准格式直通 Dispatcher（无需 v11 翻译），动作以 JSON-RPC（`{action, params, echo}`）请求并通过 echo 匹配响应，`send_message` 原生消费 v12 段数组；`SUPPORTED_PLATFORMS` 新增 `onebot12` 主平台选项（创建实例可选，自动渲染对应配置），WebUI 实例管理/系统设置/仪表盘同步支持
+
+- **实例管理页增强**：`GET /api/instances` 每实例补充 `port`/`disk_usage`（data 目录字节数）/`adapters`（config.yaml 启用的适配器摘要）；WebUI 实例表格新增端口、启用的适配器标签、数据大小列与描述小字，当前实例卡片展示端口/数据/描述元信息，创建表单新增描述与端口输入（后端 `description`/`port` 字段此前已支持但前端未暴露）
+
+- **Telegram 特有事件补全**：`edited_message` / `callback_query` / `message_reaction` 归一化为 OneBot 12 扩展 notice 事件（`detail_type`：`message_edited` / `callback_query` / `message_reaction`），插件用 `on_notice()` 即可消费——编辑事件复用消息归一化（携带新文本 `alt_message` 与 v12 段数组，不触发消息回复避免重复响应）；按钮回调携带 `data` / `callback_query_id`（可经 `call_api("answer_callback_query")` 应答），纯 inline 按钮（无 message）不丢失数据；表情回应携带新/旧表情列表，`sub_type` 区分 add/remove/change；新增 8 个用例
+
+- **SDK 支持** **`MessageEditedEvent`**：`parse_notice_event` 将 `detail_type=message_edited` 解析为 `MessageEditedEvent`（`message_id`/`alt_message`/`message` 段/`is_at_bot`），编辑事件在插件侧获得类型化对象（见 Plugins-SDK 变更记录）
+
+- **修复：插件安装/拉取不再弹出 cmd 窗口**：Windows 桌面模式下 `asyncio.create_subprocess_exec` 启动 git/uv/pip 时未指定 `creationflags`，每个子进程都会弹出独立的控制台窗口；新增 `bot/plugin/_proc.py` 统一导出 `NO_WINDOW_FLAG`（`CREATE_NO_WINDOW`），插件市场索引拉取（`market.py`）、插件安装（`manager.py`）、依赖安装（`deps.py`）三处子进程调用全部传入该标志，非 Windows 平台自动退化为 0 无影响
+
+- **前端工程质量修复**：修复 `PluginManager.vue` 的 `v-if`/`v-for` 同元素冲突与 `App.vue` 未使用变量（lint 存量 2 error 清零）；eslint 关闭与 Prettier 冲突的格式规则（`vue/html-indent` / `vue/html-self-closing` / `vue/html-closing-bracket-newline`），`web/src` 全量统一 Prettier 格式；CI 新增 `frontend` job（eslint lint + prettier check + vite build）
+
+- **文档同步**：README / ARCHITECTURE / PLUGIN\_DEV 全面更新——产品定位改为 OneBot 12 内核 + 多平台，架构图补充 v11\_compat 翻译层与事件模型章节，插件开发指南推荐 SDK v12 消息段（v11/CQ 路径标注为平台专用）
+
+## [1.7.0](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.7.0) - 2026-08-17
 
 ### Added
+
 - **插件市场切换源 / 自定义源**：后端新增 `GET/PUT /api/plugins/market/source`——切换市场源时先持久化 `market.url`，清空旧源的内存与磁盘索引缓存（`MarketClient.clear_disk_cache()`），立即拉取新源校验，源不可用时自动回滚到原源并提示；WebUI 插件市场新增「切换源」面板，可查看当前源、输入自定义 git / HTTP 索引地址，并一键恢复官方默认（`DEFAULT_MARKET_URL`）
+
 - **Web 关于页版本号动态化**：关于页版本号由硬编码改为从后端状态接口动态读取——`bot/__init__.py` 的 `__version__` 为唯一版本来源，`api/server.py`、`bot/core/bot.py`、`web/package.json` 与关于页统一引用，消除多处置 1.5.1/1.6.0 漂移
+
 - **Web 关于页鸣谢清单补全**：对照 `pyproject.toml` 依赖逐项核对，补齐 `pywebview` / `pystray`（桌面端运行依赖）鸣谢
-- **Telegram 增强：@提及触发与图片收发**：群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 `at` 段（`qq=self_id`）并置 `is_at_bot`，at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；`photo` / `image/*` document 归一化为 `image` 段 + `images`（file_id）；发送侧 `send_msg` / `call_api` 识别 `[CQ:image]` → `sendPhoto`（支持 Telegram file_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，首图带 caption），其余不可渲染的 CQ 段降级为纯文本并合并连续空白；新增 14 个用例，`telegram.py` 覆盖升至 64%
+
+- **Telegram 增强：@提及触发与图片收发**：群聊解析 `entities`（`mention` / `text_mention`）识别 `@Bot`，命中时写入 `at` 段（`qq=self_id`）并置 `is_at_bot`，at 触发模式在 Telegram 群聊生效（私聊由 SDK 规则天然放行）；`photo` / `image/*` document 归一化为 `image` 段 + `images`（file\_id）；发送侧 `send_msg` / `call_api` 识别 `[CQ:image]` → `sendPhoto`（支持 Telegram file\_id / http(s) URL / `base64://` / `data:` / 本地路径，本地与 base64 走 multipart 上传，首图带 caption），其余不可渲染的 CQ 段降级为纯文本并合并连续空白；新增 14 个用例，`telegram.py` 覆盖升至 64%
+
 - **Telegram 增强：成员变动通知与轮询可靠性**：`chat_member` / `my_chat_member` 成员变动归一化为 OneBot `notice` 事件（`group_increase` / `group_decrease` / `group_admin`，被邀请 `sub_type=invite`），由原有事件 Matcher 消费；轮询 offset 推进策略优化（最终采用整批确认，见下方 Changed 条目），失败更新自动确认跳过避免重放；补充 5 个用例
-- **Telegram 增强：语音/视频媒体与 CQ 回复**：接收侧 `voice` → `record`、`video` / `video_note` → `video` 段；发送侧识别 `[CQ:record]` → `sendVoice`、`[CQ:video]` → `sendVideo`（与图片共用 file_id / http(s) URL / `base64://` / 本地路径解析），`[CQ:reply,id=N]` → `reply_to_message_id` 回复指定消息；消息事件 `sub_type` 语义修正（私聊 `friend`）；新增 8 个用例
+
+- **Telegram 增强：语音/视频媒体与 CQ 回复**：接收侧 `voice` → `record`、`video` / `video_note` → `video` 段；发送侧识别 `[CQ:record]` → `sendVoice`、`[CQ:video]` → `sendVideo`（与图片共用 file\_id / http(s) URL / `base64://` / 本地路径解析），`[CQ:reply,id=N]` → `reply_to_message_id` 回复指定消息；消息事件 `sub_type` 语义修正（私聊 `friend`）；新增 8 个用例
 
 ### Changed
+
 - **Telegram 轮询改为有限并发消费**：引入 `asyncio.Semaphore`（`_MAX_CONCURRENT_UPDATES=8`）控制单批更新内的并发度，慢更新不再阻塞同批其他更新，同时避免无限并发；offset 改为整批确认（`max(update_id)+1`）后再消费，单条处理失败仅记日志且仍被确认，杜绝同一 `update_id` 失败后无限重放
+
 - **Telegram API 调用错误分类**：新增 `TelegramAPIError` 及其子类（`TelegramUnauthorizedError`=401 / `TelegramForbiddenError`=403 / `TelegramNotFoundError`=404），`_api` 按 Telegram `error_code` 归类抛出，网络/超时等 HTTP 异常统一包装为 `TelegramAPIError`，便于上层区分 Token 失效、被禁言、目标不可达等场景
+
 - **Telegram Bot Token 热更新**：新增 `TelegramAdapter.set_token(token)`，运行时更新 `self.token` 无需重启适配器，下次 API 调用即生效（空值拒绝并抛 `ValueError`）；适配器的随附测试新增 7 个用例
+
 - **Telegram 轮询自适应退避与恢复探测**：连续失败按指数退避（`_BACKOFF_MIN=1.5s` 起步、封顶 `_BACKOFF_MAX=60s`），恢复后自动回到轮询间隔；判定离线（连续 ≥5 次失败触发 `notify_disconnected`）后一旦成功即广播 `notify_reconnected` 并从断连恢复，减少空闲期无效轮询开销
+
 - **Telegram 长轮询可观测性增强**：新增 `status_info()`（合并进 `GET /api/bot/status` 的 platforms 项）暴露 `connection_state`（connected/connecting/stopped）、`consecutive_errors`、`error_count`、`last_error_time`、`last_disconnect_time`、`identity_dirty`、`backoff`；`get_status` 统一追加 `**p.status_info()`（base 默认 `{}`）
+
 - **Telegram HTTP 超时/重试可配置化**：`TelegramAdapter` 新增 `request_timeout`（默认 `POLL_TIMEOUT+10=40s`，须大于长轮询 timeout）与 `max_retries`（默认 0，仅对 `httpx.TransportError` 网络层错误有限重试，业务错误绝无重试避免发送类重复），经 `platforms.telegram` 配置节透传入 `make_platform`
+
 - **Telegram Token 热更新后自动重验身份**：`set_token()` 更新后置 `_identity_dirty`，轮询下一轮自动调用 `getMe` 刷新 `self_id`/`username`（新增 `refresh_identity()`，`start()` 亦复用）；重验失败仅记日志下轮再试，不中断轮询
+
 - **版本号统一用脚本管理**：新增 `scripts/bump_version.py`——`python scripts/bump_version.py 1.7.0` 从单一输入同步升级 `pyproject.toml` / `bot/__init__.py` / `web/package.json` 三处，任一文件缺失或版本格式非法即报错；`--check` 模式可在提交前校验三处是否一致，防止漏改（用法见 `CONTRIBUTING.md`）
+
 - **LLM 子系统测试补强（消除覆盖黑洞）**：新增 `tests/test_llm_adapter.py`（26 个用例）、`tests/test_llm_manager.py`（25 个用例）、`tests/test_llm_mcp.py`（12 个用例）——`litellm_adapter.py` 覆盖 17%→93%、`llm/manager.py` 9%→69%、`llm/mcp.py` 0%→76%（mock `_get_litellm` / 假适配器与假 DB 隔离网络）；完整套件 358 passed，整体覆盖率 45.6%→51.9%
+
 - **行尾规范化根治 CRLF 噪音**：新增 `.gitattributes`（源码/文档统一 `eol=lf`，`*.ps1`/`*.bat` 保留 `crlf`），`git add --renormalize` 后工作树 14 个 CRLF 假 `M` 全部消失，跨平台 diff 从此干净
-- **Alembic 迁移修复与 CI 冒烟**：`alembic check` 检出 `messages.message_id` 索引与模型声明漂移（迁移建表时为非唯一，模型声明 `unique=True`），新增迁移 `eebc4752a3af` 改为唯一索引（旧库若存在重复 message_id 会在此步报错暴露）；新增 `scripts/verify_migrations.py`——隔离临时库上执行 `upgrade head` + 表完整性断言 + `alembic check`，已接入 CI quality job，防止模型改动后迁移脚本失效
+
+- **Alembic 迁移修复与 CI 冒烟**：`alembic check` 检出 `messages.message_id` 索引与模型声明漂移（迁移建表时为非唯一，模型声明 `unique=True`），新增迁移 `eebc4752a3af` 改为唯一索引（旧库若存在重复 message\_id 会在此步报错暴露）；新增 `scripts/verify_migrations.py`——隔离临时库上执行 `upgrade head` + 表完整性断言 + `alembic check`，已接入 CI quality job，防止模型改动后迁移脚本失效
+
 - **覆盖率门槛上调**：全局 `--cov-fail-under` 40%→50%（当前 51.9%）；CI 新增 `bot/llm` 目录级门槛 70%（当前 76%），LLM 子系统覆盖率回退会被拦截
 
 ### Fixed
+
 - **群配置「添加群」无反应**：`type=number` 输入框的 `v-model` 会把值转为数字类型，直接调用 `.trim()` 抛 `TypeError` 中断新增逻辑；改为先将输入 `String()` 转换为字符串再校验纯数字，现可正常添加群
 
-## [1.6.0] - 2026-08-17
+## [1.6.0](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.6.0) - 2026-08-17
 
 ### Added
+
 - **SDK git 依赖切换为 Gitee 镜像**：`pyproject.toml` 的 `qingci-plugin-sdk` git 依赖从 GitHub 主仓库切到 Gitee 镜像（`git+https://gitee.com/qingci-bot/Plugins-SDK.git@main`），国内源码安装 / Docker 构建克隆 SDK 更快更稳；本地 `build.ps1` 仍优先安装本地 SDK 源码
+
 - **插件市场默认源改为 Gitee 镜像**：运行时拉取插件市场默认指向国内可及的 Gitee 镜像（`DEFAULT_MARKET_URL` / `MarketConfig.url` = `https://gitee.com/qingci-bot/Plugin-Market.git`），其为 GitHub 主仓库的自动同步只读镜像，国内拉取更快更稳；`market.url` 可切换至 GitHub 主仓库
-- **代码托管迁移至 GitHub**：项目仓库自 AtomGit/GitCode 迁移至 GitHub 并统一文档与链接——`pyproject.toml` 的 SDK git 依赖、About 页托管信息与作者链接、README/CONTRIBUTING/CHANGELOG/ARCHITECTURE/PLUGIN_DEV 中所有 `atomgit.com` 链接统一改为 `github.com`；Plugin-Market 的 `index.json`（homepage/source）与 raw 索引地址分支同步（`master`→`main`）
+
+- **代码托管迁移至 GitHub**：项目仓库自 AtomGit/GitCode 迁移至 GitHub 并统一文档与链接——`pyproject.toml` 的 SDK git 依赖、About 页托管信息与作者链接、README/CONTRIBUTING/CHANGELOG/ARCHITECTURE/PLUGIN\_DEV 中所有 `atomgit.com` 链接统一改为 `github.com`；Plugin-Market 的 `index.json`（homepage/source）与 raw 索引地址分支同步（`master`→`main`）
+
 - **CI 恢复为 GitHub Actions**：项目迁移托管至 GitHub 后，CI 重新落在 `.github/workflows/ci.yml`（GitHub Actions 原生），三个 job：`quality`（ruff lint + format + mypy + pytest + 覆盖率门槛）；`docker`（`docker compose config` 校验 + 镜像构建 + 容器运行冒烟，`/api/bot/health` 30s 就绪判定）；`install-script`（`bash -n` + `SKIP_SYS_DEPS=1 ./install.sh --dev` + `main.py` 启动冒烟，60s 超时）；`docker`/`install-script` job 使用预装 Docker 的 runner 提供运行时验证，替代此前 GitCode 平台 Kaniko 无 daemon 构建的限制
+
 - **Linux/容器部署支持**：新增 `Dockerfile`（多阶段构建，`python:3.12-slim`，Headless 后端）与 `docker-compose.yml`（端口 8080/3001 映射 + `./instances` 卷持久化），`docker compose up -d` 一键拉起；新增 `install.sh`（Linux 一键安装脚本——自动检测 Python>=3.10、优先 uv 否则 pip、可选 `--vector`/`--with-gui`/`--dev`、系统依赖 autodetect apt/dnf/apk）；`.dockerignore` 排除 venv/产物/缓存，实例目录（可能含密钥）不进镜像；README 新增「2.1 Docker 容器部署」「2.2 Linux 源码部署」指南并说明 GUI 系统依赖与单实例降级
+
 - **Web UI 视觉一致性大修**：全站消除 115 处内联样式乱象——① 卡片间距收敛为全局 `.page-body > .card + .card` 邻接规则，删除 16 处内联 `margin-top: 22px`；② toast 通知收敛为单一系统（useToast 改模块级单例，App.vue 统一渲染顶部悬浮通知，删除 6 处页面内 toast 渲染与 5 份重复过渡动画），页内常驻提示改用新 `.status-bar` 类；③ 开关控件全局化（`.switch`/`.slider` 收敛到 main.css，删除 Settings/PluginManager scoped 重复约 80 行，GroupConfig 原生 checkbox 统一为 switch）；④ 修复悬空类——全局新增 `.btn-accent`/`.btn-warning`/`.text-muted`/`.text-secondary`/`.tag-perm` 语义修正（PluginManager 禁用按钮改警告黄、更新按钮改 primary）；⑤ 清理旧主题残留（`--primary-color`/`--text-color`/`#6f8ffc` 统一为全局变量别名，MessageLog/ChatConfig 焦点色归位 `--blue`）；⑥ grid-4 断点统一（1100px→2 列、640px→1 列，删除 Dashboard scoped 覆盖）；⑦ Dashboard 卡中卡消除、统计字号统一、启停按钮统一 btn-sm；⑧ `/setup` 首次向导路由全屏化（App.vue 豁免侧边栏）；⑨ App.vue 侧边栏/面包屑内联样式类化；⑩ tab 控件视觉统一（PluginManager 分类/主 Tab、MessageLog 下划线式）；日志容器横向滚动修复
+
 - **WebUI 平台配置表单**：系统设置页新增「平台适配器」卡片——Telegram 启用开关（switch）、Bot Token 输入（password + 显示/隐藏，保存时 `***` 占位符自动过滤保留原值）、轮询间隔数字输入；前端 `defaultConfig` 与表单模型加入 `platforms.telegram` 节，保存时随完整配置写回；后端 `token` 后缀命中既有敏感字段遮蔽/过滤逻辑，GET/PUT 零改动
-- **WebUI 平台状态展示**：`GET /api/bot/status` 新增 `platforms` 数组（各适配器名称/展示名/连接状态/心跳时间/self_id，未启动时返回空列表）；WebUI 侧边栏状态区下方新增平台列表（状态点 + 展示名 + 在线/离线 + 心跳相对时间 tooltip）；store 新增 `platforms` 状态；TestBot `get_status` 与真实 Bot 对齐，`FakeConnection` 补全 PlatformAdapter 契约属性；测试 `test_platforms.py` 增 1 用例 + `test_api.py` 平台字段断言
-- **多平台适配器**：新增 `bot/core/platforms/`（`base.py` PlatformAdapter 契约 + `telegram.py` Telegram Bot API 长轮询适配器）；事件归一化为 OneBot-11 兼容 dict（含 `platform` 字段），发送按 `MessageContext.platform` 路由到对应适配器；`OneBotConnection` 升级为实现契约的「onebot」平台（完全兼容）；配置 `platforms.telegram`（enabled/token/poll_interval），附加平台启动失败仅记日志不阻断主平台；SDK `MessageContext` 新增 `platform` 字段（v1.6.0）；测试 `test_platforms.py` 13 用例（归一化/发送映射/API 透传/配置解析/回复路由/dispatcher 透传）
+
+- **WebUI 平台状态展示**：`GET /api/bot/status` 新增 `platforms` 数组（各适配器名称/展示名/连接状态/心跳时间/self\_id，未启动时返回空列表）；WebUI 侧边栏状态区下方新增平台列表（状态点 + 展示名 + 在线/离线 + 心跳相对时间 tooltip）；store 新增 `platforms` 状态；TestBot `get_status` 与真实 Bot 对齐，`FakeConnection` 补全 PlatformAdapter 契约属性；测试 `test_platforms.py` 增 1 用例 + `test_api.py` 平台字段断言
+
+- **多平台适配器**：新增 `bot/core/platforms/`（`base.py` PlatformAdapter 契约 + `telegram.py` Telegram Bot API 长轮询适配器）；事件归一化为 OneBot-11 兼容 dict（含 `platform` 字段），发送按 `MessageContext.platform` 路由到对应适配器；`OneBotConnection` 升级为实现契约的「onebot」平台（完全兼容）；配置 `platforms.telegram`（enabled/token/poll\_interval），附加平台启动失败仅记日志不阻断主平台；SDK `MessageContext` 新增 `platform` 字段（v1.6.0）；测试 `test_platforms.py` 13 用例（归一化/发送映射/API 透传/配置解析/回复路由/dispatcher 透传）
+
 - **插件市场体验打磨**：索引条目新增 `icon`（emoji 卡片图标）/`homepage`（主页链接）/`requirements`（依赖展示）/`tags`（标签筛选）字段；新增 `GET /api/plugins/market/info` 返回市场名称/插件数/索引更新时间（墙钟）；WebUI 市场 Tab 增强——市场名 + 索引更新时间、标签筛选栏、卡片图标、依赖标签、主页链接、加载失败重试按钮、已安装插件「卸载」入口；测试 `test_market.py` 增至 10 用例
-- **类型化事件的 LLM 工具化**：新增 `bot/llm/events_tools.py`——`EventBuffer` 内存环形缓冲（默认 200 条）记录 notice/request 类型化事件，Dispatcher/TestBot 分发时自动入缓冲；`register_event_tools` 幂等注册两个只读 Function Calling 工具：`get_group_events`（按群查最近入群/退群/禁言/撤回/上传等事件）与 `get_member_events`（按成员查）；事件摘要按类型化字段提取（operator_id/duration/comment 等），结果格式化为 LLM 可读文本；仅记录仅查询，Bot 重启即清空；测试 `test_event_tools.py` 13 用例
+
+- **类型化事件的 LLM 工具化**：新增 `bot/llm/events_tools.py`——`EventBuffer` 内存环形缓冲（默认 200 条）记录 notice/request 类型化事件，Dispatcher/TestBot 分发时自动入缓冲；`register_event_tools` 幂等注册两个只读 Function Calling 工具：`get_group_events`（按群查最近入群/退群/禁言/撤回/上传等事件）与 `get_member_events`（按成员查）；事件摘要按类型化字段提取（operator\_id/duration/comment 等），结果格式化为 LLM 可读文本；仅记录仅查询，Bot 重启即清空；测试 `test_event_tools.py` 13 用例
+
 - **插件市场（WebUI）**：新增 `bot/plugin/market.py`（MarketIndex/MarketClient/MarketManager）——集中索引（Gitee `qingci-bot/Plugin-Market`）拉取 + TTL 缓存 + 磁盘回退；列表合并已安装/可更新状态；安装/更新复用 `PluginManager.install`（卸载→覆盖重装）；WebUI 插件管理新增「插件市场」Tab（搜索/一键安装/更新/刷新）；配置 `market.url`/`market.refresh_interval`；`install()` 增强识别 `.git` 结尾 URL 为 git 仓库、`_locate_plugin_dir` 支持 `plugins/<name>/` 嵌套布局；测试 `test_market.py` 9 用例
+
 - **类型化事件（notice/request）**：Dispatcher 在事件分发时将 notice/request 原始 dict 解析为类型化事件对象（SDK `events.py`，`bot/plugin/events.py` 转发），`MatcherContext.event` 持有，handler 按参数注解注入（如 `event: GroupIncreaseNotice`）；`resolve_handler_args` 新增事件类型注解注入规则；覆盖 9 种 notice 子类 + 2 种 request 子类，未知类型回退基类，数值安全转换，零依赖 dataclass 实现；测试 `test_typed_events.py` 10 用例
+
 - **会话阶梯（多轮交互）**：Dispatcher 支持会话阶梯续接——handler 通过 `ctx.session`（SDK `Session`，`bot/plugin/session.py` 转发）调用 `pause()` 挂起等待同会话下一条消息续接同一 handler（跳过命令前缀规则）、`finish()` 结束、`reject()` 拒绝继续等；Session 实例跨轮复用保留自定义状态；阶梯默认 300s 超时自动失效，插件卸载/禁用时自动清理；测试 `test_session_steps.py` 7 用例覆盖 pause/reject/finish/隔离/超时/清理
+
 - 支持基于独立插件 SDK（`qingci_plugin_sdk`）编写的外部插件：`PluginManager` 现可识别并注册 SDK 式 `PluginBase` 子类（此前仅识别 `bot.plugin.base.PluginBase`），加载时自动将 SDK 插件数据目录重定向到当前实例可写数据根（`data_root()/plugins/<name>/`），保持实例隔离
+
 - 打包：`qingci-bot-ce.spec` 通过 `collect_all('qingci_plugin_sdk')` 将独立插件 SDK 整体打入 exe，外部插件运行时 `import qingci_plugin_sdk` 不再 `ModuleNotFoundError`；`build.ps1` 在打包前显式安装 `Plugins-SDK`（相对路径依赖在 `pyproject.toml` 中无法解析，故在构建脚本中安装源码包）
+
 - 测试：新增 `sdk_plugin` 用例，验证 SDK 式插件可被管理器加载、`data_dir` 重定向到 bot 数据根
+
 - 插件依赖管理：目录型外部插件加载前自动把 `requirements.txt` 声明的第三方依赖安装到实例隔离目录（`data_root()/deps/`）并注入 `sys.path`，插件可 `import` 其专属依赖且不污染主程序环境；`bot.auto_install_plugin_deps` 可关闭以满足供给链安全（默认开启）
+
 - 打包：`qingci-bot-ce.spec` 内置 `uv`（`shutil.which('uv')` → datas，运行时 `sys._MEIPASS` 定位）并内嵌 `pip`（`collect_all('pip')`），打包模式下自动安装插件依赖到实例 `deps` 目录；源码与打包均优先 `uv pip install --target`，缺失时回退内嵌 pip
+
 - 性能优化：`BotConfig.admin_set` 预编译集合（`super_admin` + `admin_users` 并集，O(1) 成员判断），权限判定由 O(n) 列表遍历降为 O(1)；`rule` 限流豁免与敏感词豁免同步受益
+
 - 性能优化：`PluginManager.all_matchers(post_type)` 事件类型倒排索引，事件分发按类型直接取 Matcher，不再对全部 Matcher 线性扫描过滤
+
 - 测试：新增 39 个用例（告警、限流、API 实例路由、登录路由、`session_scope`、RAG 增量索引等），全套件 193 个全部通过
+
 - 引入 GitHub Actions CI（`.github/workflows/ci.yml`）：ruff lint + format + mypy + pytest + 覆盖率门槛
 
 ### Changed
+
 - 架构：协议层（`PluginBase`/`Matcher`/`Permission`/`Rule`/`MessageContext`）统一由独立插件 SDK 维护，`bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `bot/core/dispatcher.py` 的 `MessageContext` 改为薄转发（`from qingci_plugin_sdk.* import *`），消除两处定义漂移（净删约 500 行重复代码）；SDK 由可选升级为主项目正式依赖（git 依赖声明于 `pyproject.toml`，构建/本地开发仍走 `build.ps1` 的 `-e` 安装）
+
 - 架构：`QingciBot.__init__` 的组件装配（核心服务创建 + DI 注册）抽离到组合根 `bot/core/composition.py` 的 `assemble_bot()`，`__init__` 只保留配置加载与状态字段；新增 `build_bot()` 便捷入口
+
 - 架构：全局单例 `get_bot()` 不再持有 bot 实例，改为持有 DI 容器引用、从容器解析（`resolve_sync(QingciBot)`），消除模块级 bot 状态与多实例的潜在冲突
+
 - API：`DIContainer` 新增公开 `resolve_sync()`（同步解析，供非异步上下文）
+
 - 弃用：`PluginBase` 旧式回调 `on_message`/`on_notice`/`on_request` 标注 deprecated，新插件请改用 Matcher（内置插件均已迁移）
+
 - 打包：`litellm` 的 `proxy/_experimental/out`（Next.js Web 前端静态产物，约 22MB）从 datas 中过滤，exe 体积下降
+
 - 依赖：`lancedb` 由主依赖移至 optional 的 `vector` 分组；`KnowledgeStore` 在 `lancedb` 缺失时（vector 模式）自动回退 keyword 后端并告警
+
 - 性能优化：`bot/db` 新增 `session_scope()` 上下文管理器统一 commit/rollback/close，Database 仓储全部方法改用，减少重复样板
+
 - 性能优化：RAG 关键词库 `add_document`/`remove_document` 改为增量索引，仅更新受影响文档，不再全量重建
+
 - 覆盖率防回退门槛：pytest 新增 `--cov-fail-under=40`，低于 40% 直接失败
+
 - WebSocket 鉴权：API Key 由 URL 查询参数改为子协议（`sec-websocket-protocol: api-key.<token>`）传递，避免敏感信息落入访问/代理日志；query 参数保留为兼容回退
+
 - 前端启停 Bot 失败时通过 toast 给出明确错误提示（此前 Promise rejection 被静默吞掉）
 
 ### Fixed
+
 - 修复 18 个既有 mypy 类型错误（内建插件 `self.bot`/`self.config`/`self.llm` 为 Optional 的 union-attr），方法入口加 `assert` 类型收缩，全量 mypy 通过
+
 - 配置模板 `config.example.yaml` 补充 `bot.wizard_skipped` 与 `log` 节（`level`/`log_file_enabled`/`log_file_max_bytes`/`log_file_backup_count`/`log_dir`）说明
 
 ### Docs
+
 - 全面重构文档以匹配新架构：`ARCHITECTURE.md` 新增「协议层归属」「组合根」「DI 解析单例」章节与依赖说明；`docs/PROJECT_STRUCTURE.md` 标注薄转发目录与协议层依赖方向；`docs/CODING_STANDARDS.md` 新增「协议层归属」「装配与单例」约束；`README.md` 补充 SDK 正式依赖与 `[vector]` 分组说明；`PLUGIN_DEV.md` 更新两种插件形态（基类同一来源）、示例五改为 Matcher 优先并标注旧式回调 deprecated、PEP 604 示例；`CONTRIBUTING.md` 补充 SDK 安装与协议层修改指引；插件模板同步标注旧式回调 deprecated
+
 - `PLUGIN_DEV.md` 修正实例目录功能版本描述（「自 v1.6 起」→「自 v1.5.1 起」），补充子命令/类型化参数等示例
 
-## [1.5.1] - 2026-08-16
+## [1.5.1](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.5.1) - 2026-08-16
 
 ### Added
+
 - 实例管理：侧边栏新增实例列表，支持新建/删除/切换/重命名实例
-- 实例=完全自包含目录（`instances/<name>/`，含 `config.yaml` + `plugins/` + `data/`），新增 `--instance <name>` 一次性决定 config/data_root/plugins/port 四个维度，可整体复制/迁移/备份
+
+- 实例=完全自包含目录（`instances/<name>/`，含 `config.yaml` + `plugins/` + `data/`），新增 `--instance <name>` 一次性决定 config/data\_root/plugins/port 四个维度，可整体复制/迁移/备份
+
 - 新增实例管理 API：`GET/POST/DELETE /api/instances`、`PUT /api/instances/{name}`（重命名目录 + 更新元数据）、`POST /api/instances/{name}/start`（重启进程到目标实例）
+
 - 运行中实例也支持重命名：改名后自动重启到新名称（复用切换实例的 relaunch 机制），避免 Windows 文件锁阻止目录改名
+
 - `bot.paths` 新增 `plugins_dir()`/`set_plugins_dir()`：外部插件代码目录默认 `app_root()/plugins`，实例模式下指向实例内 `plugins/`
+
 - 命令权限等级显示：`Permission` 新增 `label` 属性，内置权限标注可读标签，组合（`&`/`|`/`~`）自动生成组合标签；`describe_permission()` 返回可读标签；命令管理接口追加 `permission` 字段，Web「命令管理」表格新增权限列并映射为中文（超级管理员/管理员/所有人等）
+
 - `on_message` 新增 `description` 参数（与 `on_command`/`on_startswith`/`on_keyword` 对齐），存入 `meta.description` 供 `/help` 与命令管理展示
 
 ### Changed
+
 - 移除全局模式：启动必须绑定一个实例（无实例时自动创建 `default`，未指定 `--instance` 时自动启动到默认实例）
+
 - 外部插件目录、在线安装、热重载、插件元数据发现统一改用 `plugins_dir()`，不再硬编码 `app_root()/plugins`
+
 - 端口自动分配从 8080 起：首个实例占用 8080，后续实例依次递增
+
 - 构建脚本 `build.ps1` 不再生成根级 `config.yaml`/`data\`：配置/插件/数据均在实例自包含目录内，产物随实例目录分发
+
 - 优化实例管理区块样式：改用全局 CSS 变量统一配色，增强「新建/重命名/删除/切换」按钮对比度与交互（hover 高亮、当前实例琥珀高亮）
 
 ### Fixed
+
 - 修复"切换实例/重启"实际从未生效：旧实现用 `os._exit` 终止进程，会一并杀死等待重启的后台线程，导致新进程从未被拉起。改为派发独立分离的助手进程（`desktop/relaunch.py`）等待旧进程退出后再拉起目标实例
+
 - 修复根级 `config.yaml` 残留/兜底生成：API 鉴权与配置接口在未显式指定 `--config` 时改用 `bot.instances.default_config_path()`（默认实例的 `config.yaml`），不再回退到 `app_root()/config.yaml`，保证配置始终落在实例自包含目录内
 
-## [1.5.0] - 2026-08-16
+## [1.5.0](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.5.0) - 2026-08-16
 
 ### Added
+
 - 管理员细分为**超级管理员**（唯一，`bot.super_admin`）与**普通管理员**（多个，`bot.admin_users`）：`SUPERUSER` 权限仅超级可命；`ADMIN` 权限普通管理员可命，超级管理员自动继承
+
 - 多实例支持：新增 `--data-dir` 参数指定可写数据根目录（DB/日志/插件数据等），在同一台机器上可运行多个相互隔离的实例
+
 - 单实例保护升级：互斥名由数据根目录派生，同一实例（同数据目录）重复双击聚焦已有窗口，不同实例（不同 `--data-dir`）互不阻塞可多开
 
 ### Changed
+
 - 内置命令权限映射：`/status`、`/clear` 降级为普通管理员（`ADMIN`）；`/blacklist`、`/filter`、`/group`、`/kb` 保持超级管理员（`SUPERUSER`）
+
 - 限流豁免、聊天敏感词 `exempt_admins` 豁免、错误告警通知目标均同时纳入超级管理员
+
 - 数据库、日志、备份、插件数据等所有可写路径统一改为基于 `data_root()` 解析，尊重 `--data-dir` 设置
 
 ### Fixed
+
 - 修复双击 exe / 重复启动会新建多个界面与进程：在入口加入单实例保护（Windows 命名互斥量），重复启动时聚焦已有窗口并退出，避免多窗口与端口冲突
 
-## [1.4.1] - 2026-08-14
+## [1.4.1](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.4.1) - 2026-08-14
 
 ### Fixed
+
 - 修复内置插件（`bot/plugin/builtin/*`）从单文件迁移到目录结构后相对导入层级错误（`from ..base` → `from ...base` 等），导致内置插件在源码与打包产物中均无法加载
+
 - `load_builtin` 增加显式内置插件清单回退：PyInstaller 打包后 `pkgutil.iter_modules` 无法扫描 PYZ 归档内模块，扫描落空时按 `_BUILTIN_PLUGINS` 清单加载（与 `qingci-bot-ce.spec` 的 hiddenimports 保持一致）
 
 ### Docs
+
 - 同步 `ARCHITECTURE.md`、`docs/PROJECT_STRUCTURE.md` 的目录树与当前实现：修正 PyInstaller spec 文件名（`qingci-bot-ce.spec`）、`bot/core/` 补 `event_bus.py`、`bot/plugin/` 补 `ratelimit.py`/`llm_tool.py`/`watcher.py`、`builtin/` 与 `plugins/` 由单文件改为目录结构；`PLUGIN_DEV.md` 修正 spec 文件名引用
 
-## [1.4.0] - 2026-08-14
+## [1.4.0](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.4.0) - 2026-08-14
 
 ### Added
+
 - 参数级依赖注入：Matcher handler 参数按签名自动解析注入（`MatcherContext`、`Bot`、DI 服务），支持 `Depends(...)` 显式声明与类型注解自动注入
+
 - 全局生命周期钩子：插件可覆写 `on_startup` / `on_shutdown` / `on_bot_connect` / `on_metaevent`，在 Bot 启动/停止、LLBot 连接建立、元事件到达时获得通知（异常隔离）
+
 - 插件数据目录：`PluginBase.data_dir` 属性，提供插件专属数据目录 `data/plugins/<name>/`（自动创建，卸载不删除）
+
 - 在线插件安装：`PluginManager.install(bot, source)` 支持从 git 仓库、HTTP 归档 URL、本地目录/归档安装插件到 `plugins/` 并自动安装 `requirements.txt`（或 `plugin.json` 的 `requirements` 字段）声明的依赖
+
 - 国际化（i18n）：`I18n` 翻译器 + 插件 `i18n/<locale>.json` 翻译资源自动加载，`self.i18n` / `self._` 使用；新增 `config.yaml` 的 `lang` 字段控制全局语言（默认 `zh-CN`）
+
 - 事件总线：`EventBus` 跨插件发布-订阅事件广播，插件无需显式依赖即可协作；支持 `subscribe`/`publish`、通配订阅 `"*"`、sync/async handler、线程安全；注入到 `PluginBase.event_bus` 与 DI 容器
+
 - 插件级 LLM 工具声明：`@llm_tool` 装饰器让插件注册 Function Calling 工具，参与 LLM 推理；工具名自动加插件名前缀（`<plugin>_<name>`），卸载时自动注销
+
 - 指令系统增强：`on_command` 新增 `aliases`（命令别名）、`subcommands`（子指令路由）、`args_schema`（类型化参数解析并按名注入 handler 形参）
+
 - 配置 schema 自动生成：插件定义 `Config` 内嵌类（pydantic）自动导出 JSON Schema，Web 插件管理页据此渲染配置表单，无需手写 UI；新增 `GET/PUT /api/plugin/{name}/config` 接口
+
 - 自动热重载：`PluginWatcher` 监听外部插件目录文件变更并自动重载插件（开发期提效）；由 `config.yaml` 的 `hot_reload.enabled` / `hot_reload.interval` 控制，默认关闭
+
 - 细粒度事件处理钩子：新增 Matcher 运行前全局钩子（`run_preprocessor`，`bot.add_matcher_preprocessor`，在 Matcher 匹配成功后、handler 前触发，返回非 None 即拦截该 Matcher）与平台接口调用钩子（`on_calling_api`，`bot.register_api_hook` / `connection.on_api_call`，每次 OneBot API 调用前触发，可改写参数或抛异常阻止调用）
 
 ### Fixed
+
 - 修复 `DELETE /api/log/sessions/one` 接口（`delete_session`）使用 `Request | None` 参数导致 FastAPI 启动时路由注册失败、API 无法启动的问题
 
 ### Changed
+
 - mypy 配置 `python_version` 由 3.10 提升至 3.12，与推荐运行版本保持一致
+
 - 代码质量维护：修复 ruff 检查 318 处、mypy 类型检查 82 处错误，并对 58 个文件统一格式化；`bot/db/database.py` 针对 SQLModel 列访问按文件禁用相关 mypy 错误码
 
-## [1.3.0] - 2026-08-13
+## [1.3.0](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.3.0) - 2026-08-13
 
 ### Added
+
 - 插件 Web 管理页面：`register_page(title, icon, static_dir)` 方法，插件可在 `on_load` 中注册管理页面入口；框架自动挂载插件静态文件到 `/api/plugin-data/{name}/`；前端插件管理页展示「管理」按钮，点击后右侧抽屉 iframe 加载
+
 - 插件目录结构：`load_external_dir()` 支持目录型插件（`plugins/<name>/__init__.py`），可含 `web/` 子目录和 `plugin.json`；同名时目录型优先于文件型
+
 - 命令管理：`Matcher.disabled` 字段支持禁用单个命令；`GET /api/command/conflicts` 列出所有命令并标记冲突；`PUT /api/command/{owner}/{command}` 支持禁用/启用/调整优先级；前端插件管理页新增「命令管理」Tab，冲突行红色高亮
 
 ### Changed
+
 - 内置插件全部转为目录结构：`admin/`、`chat/`、`help/`、`imagegen/`、`knowledge/`
+
 - 外部插件示例和模板转为目录结构：`hello/`、`_template/`
+
 - 插件 API 列表接口追加 `pages` 字段
 
 ### Fixed
+
 - 修复 `check_availability` 在 litellm 导入失败时引用未绑定局部变量导致 `NameError` 二次崩溃
+
 - 修复中间件拦截 Matcher 时指标重复计数
 
-## [1.2.1] - 2026-08-11
+## [1.2.1](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.1) - 2026-08-11
 
 ### Fixed
+
 - 修复 `request` Matcher 审批结果（True/False）被丢弃，导致加好友/加群审批永不执行
+
 - 修复 `chat()` 被取消时用户消息不回滚，导致内存与数据库残留孤立消息
+
 - 修复连接监控回调 `awaitable` 判断使用 `asyncio.iscoroutine()` 无法识别 Future/Task，改用 `inspect.isawaitable()`
 
-## [1.2.0] - 2026-08-10
+## [1.2.0](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.0) - 2026-08-10
 
 ### Added
+
 - 插件临时禁用/启用：`enabled` 字段 + `on_disable`/`on_enable` 钩子 + API 端点 + 前端开关
+
 - 插件状态管理：`PluginStatus` 枚举（LOADING/LOADED/DISABLED/ERROR/UNLOADING）替代原布尔值
+
 - 插件级配置：`config.yaml` 中 `plugins.<name>` 节，插件可定义 `Config` 内嵌类自动校验
+
 - 插件导出/导入机制：`export()` / `require()` 方法，支持插件间服务接口暴露
+
 - 插件级中间件：`register_before()` / `register_after()` 钩子，可拦截/修改 handler 返回值
+
 - 插件分类：`category` 字段 + 前端分类标签页筛选
+
 - 执行指标监控：Matcher 调用次数、平均耗时、错误率 + API `/api/plugin/{name}/metrics` + 前端指标面板
+
 - 插件元数据发现：`plugin.json` 文件 + API `/api/plugin/discover/metadata`，无需导入模块即可发现插件信息
+
 - 帮助命令输出增强：按插件分类分组展示，支持权限过滤
+
 - 依赖版本约束：`require` 支持 PEP 440 版本规范（如 `"chat>=1.0,<2.0"`）
+
 - Plugins-Dev SDK 同步：新增 `PluginStatus`、`category`、`export`/`require`、中间件、`plugin_config` 等字段
+
 - 会话状态管理：`SessionState` + `SessionStateManager`，TTL 键值存储，`ctx.session_state` 便捷访问
+
 - 会话状态优化：`asyncio.Lock` 并发安全、`pop`/`expire`/`ttl`/`items` 便捷方法、`remove_session` 显式删除、`stats` 统计、`serialize`/`deserialize` 持久化、会话数上限保护
+
 - 依赖注入容器：`DIContainer` 按类型自动注入，支持 SINGLETON/TRANSIENT/SCOPED 生命周期
+
 - DI 容器优化：`asyncio.Lock` 并发安全、`register_as` 接口绑定、`Optional[X]` 类型提取、`inject` 不覆盖已赋值属性、`register_sync`/`inject_sync` 同步兼容方法
+
 - 插件测试工具：`bot.testing` 包（TestBot 轻量测试环境 + 事件构造器），插件作者可用 pytest 模拟消息事件、断言回复与主动发送
 
 ### Fixed
+
 - 修复 `PluginBase.require` 属性与同名方法冲突：方法改为 `get_exports()`
+
 - 修复 `SessionStateManager.get_session` 清理时误删刚创建的会话导致 `KeyError`
+
 - 修复 `Matcher` 不可哈希导致指标记录 `TypeError`：改为身份比较 dataclass
+
 - 修复 `MatcherContext` 缺 `Any` 导入
+
 - 修复首次启动向导（Setup Wizard）无鉴权可篡改配置：已配置 `api_key`/`admin_users` 后禁止重复引导
+
 - 修复插件元数据发现接口导入路径错误导致 500
+
 - 敏感字段脱敏增强：改为后缀匹配，覆盖 `embedding_api_key` 等字段
+
 - 修复启动画面（splash）关闭后窗口无法销毁
+
 - 修复 RAG 向量库同步方法阻塞事件循环：新增 `*_async` 异步方法并更新调用方
+
 - 修复配置损坏时静默覆盖原文件：损坏文件先备份为 `.bak` 再重建默认配置
+
 - 修复一次性（temp）Matcher 在 handler 异常后残留：移除操作移入 `finally`
+
 - `Message.append` 支持展开列表/元组参数，非法类型抛 `TypeError`
+
 - 修复 `LLMManager.clear_session` 内存与 DB 清除竞态：DB 清除移入会话锁内
+
 - 修复 MCP 工具注册失败时桥接器资源泄漏：未注册 bridge 在 `finally` 中关闭
+
 - 修复 `LLMManager.reload` 锁快照竞态：新增全局重载锁，防新建会话逃过清空
+
 - 修复 API 删除会话绕过 LLMManager 导致内存历史"复活"：新增 `clear_session_by_key` 统一清理
+
 - 修复会话历史查询无 id 兜底排序导致的乱序
+
 - 修复 `GROUP_MEMBER` 权限语义：仅群聊消息生效，私聊一律不匹配
+
 - 修复 `is_connected` 仅检测 API 通道：事件通道连接也视为已连接
+
 - 修复对话调试 WebSocket 收到非法 `user_id` 导致连接异常断开
 
-## [1.1.0] - 2026-08-10
+## [1.1.0](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.1.0) - 2026-08-10
 
 ### Added
+
 - 依赖分组：`[test]` / `[build]` / `[dev]` 三级拆分，按需安装
+
 - 代码质量工具：ruff（代码风格）、mypy（类型检查）、pre-commit hooks
+
 - 测试用例：API 端点、配置管理、数据库操作（pytest + pytest-cov）
+
 - 文档：CHANGELOG.md、CONTRIBUTING.md、SECURITY.md
+
 - 前端工程化：ESLint + Prettier 配置
+
 - 全局 API 异常处理器（统一错误响应格式）
+
 - 日志轮转：按文件大小轮转，保留最近 N 个备份（`log.log_file_enabled` 等配置）
+
 - 模块级 Logger（`logging.getLogger("qingci-bot.xxx")`）
 
 ### Changed
+
 - README 大幅更新：依赖表格、测试/代码质量章节、文档链接集中管理
+
 - 开发依赖安装命令从 `pip` 改为 `uv pip`，虚拟环境创建统一用 `uv venv`
 
 ### Fixed
+
 - 启动窗口期事件丢失：`_running` 标志提前到 `connection.start()` 后立即设置
+
 - `stop()` 部分清理遗漏：新增 `_started` 标志，部分启动失败时仍正常清理资源
+
 - `LLMManager.reload()` 锁获取中断风险：用 `acquired` 列表追踪已获取锁
+
 - `chat_with_tools()` 空指针防御：`registry` 为 None 时跳过工具执行
 
-## [1.0.0] - 2026-08-10
+## [1.0.0](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.0.0) - 2026-08-10
 
 ### Added
+
 - 完整的 QQ Bot 框架，对接 LLBot（OneBot 11 协议）
+
 - 多 LLM 提供商支持：OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义
+
 - 插件系统：借鉴 NoneBot2 的 Matcher / Rule / Permission 设计，支持热加载
+
 - Web 管理端：Vue 3 + 原神风格暗色主题
+
 - 桌面应用：PyWebView 套壳 + 系统托盘 + 启动加载画面
+
 - 轻量知识库：关键词 + LanceDB 向量检索双模式
+
 - 会话摘要：历史超长时自动压缩，保留最近 N 轮原文
+
 - Function Calling：支持多轮工具调用（含 MCP 服务器接入）
+
 - 定时任务调度器（基于 APScheduler）
+
 - 错误告警：ERROR 日志达到阈值时私聊通知管理员
+
 - 敏感词过滤
+
 - 群粒度配置（启用/禁用 + 触发模式）
+
 - 人格切换（/persona 命令）
+
 - LLM 用量统计
+
 - 审计日志
+
 - 数据备份与恢复
+
 - 流式对话（WebSocket + SSE）
+
 - 完全离线运行（无 CDN 依赖）
+
 - 一键打包为 Windows EXE（PyInstaller）
 
-[1.7.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.7.0
-[1.6.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.6.0
-[1.5.1]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.5.1
-[1.5.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.5.0
-[1.4.1]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.4.1
-[1.4.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.4.0
-[1.3.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.3.0
-[1.2.1]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.1
-[1.2.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.2.0
-[1.1.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.1.0
-[1.0.0]: https://github.com/Qingci-Bot/Qingci-Bot-CE/releases/tag/v1.0.0

@@ -63,7 +63,7 @@ source .venv/bin/activate  # Linux/macOS
 # 安装开发依赖（含插件协议层 SDK，git 依赖自动安装）
 uv pip install -e ".[dev]"
 
-# 本地开发 Plugins-SDK 时，用 -e 安装覆盖 git 依赖版本（与 build.ps1 一致）
+# 本地开发 Plugins-SDK 时，用 -e 安装覆盖 git 依赖版本（与 build.bat 一致）
 uv pip install -e ..\Plugins-SDK
 
 # 运行测试
@@ -96,17 +96,17 @@ npm run format    # 代码格式化
 ```bash
 # 第一步：Python 后端 onedir（含 Web UI 构建、SDK -e 安装、Playwright 浏览器下载）
 uv pip install -e ".[build]"
-.\build.ps1       # Windows
+.\build.bat       # Windows
 ./build-linux.sh  # Linux（等价脚本；国内跑 SDK 走 Gitee 默认源）
 
 # 第二步：Electron 桌面壳（需 Node.js 18+/npm；内嵌上一步产出的后端）
-.\build-electron.ps1                          # Windows 安装版 Setup.exe + 绿色解压 zip
+.\build-electron.bat                          # Windows 安装版 Setup.exe + 绿色解压 zip
 cd desktop/electron && npm run build:linux     # Linux AppImage
 ```
 
 **发布流水线（推荐，自动）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 Release、推 Docker 镜像到 `ghcr.io`，无需手动上传/构建，见 [`.github/workflows/release.yml`](.github/workflows/release.yml)。
 
-> 构建详见 [PLUGIN_DEV.md](PLUGIN_DEV.md)「打包为 exe」与 `build.ps1` / `build-linux.sh` / `build-electron.ps1`。onedir（`dist\qingci-bot-ce\`）只含后端不含桌面壳；桌面壳由 electron-builder 承担，Windows 安装版/绿色解压版与 Linux AppImage 的实例与数据均随可执行目录 `instances\` 自包含分发。直接执行 `pyinstaller qingci-bot-ce.spec` 也能出 onedir 后端，但缺少 Web UI 产物复制与浏览器下载步骤。
+> 构建详见 [PLUGIN_DEV.md](PLUGIN_DEV.md)「打包为 exe」与 `build.bat` / `build-linux.sh` / `build-electron.bat`。onedir（`dist\qingci-bot-ce\`）只含后端不含桌面壳；桌面壳由 electron-builder 承担，Windows 安装版/绿色解压版与 Linux AppImage 的实例与数据均随可执行目录 `instances\` 自包含分发。直接执行 `pyinstaller qingci-bot-ce.spec` 也能出 onedir 后端，但缺少 Web UI 产物复制与浏览器下载步骤。
 
 ## 项目结构
 

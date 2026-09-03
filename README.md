@@ -36,7 +36,7 @@
 
 - **Web UI**：原神风格暗色主题，登录页 / 仪表盘（用量图表）/ LLM 配置（提供商联动 + 模型列表 + 人格 + MCP 管理）/ 对话调试台（流式聊天测试）/ 群配置 / 插件管理（分类筛选 + 状态管理 + 指标面板 + 卸载/彻底删除 + 插件市场一键安装/更新/搜索）/ 命令管理（冲突标记 + 禁用/优先级调整 + 权限等级显示）/ 消息日志（消息流 + 会话记录）/ 运行日志（实时日志流 + 级别过滤，受 `log.run_log_enabled` 开关控制）/ 登录审计 / 系统设置。独立「实例管理」页面支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）
 
-- **桌面应用**：Electron + Python 混合架构 — Electron 桌面壳 spawn Python 后端（`main.py --backend`）并加载其 Web UI；系统托盘（关闭窗口自动驻留后台）、启动画面、单实例（按 data-dir 退化的控制端口）均由壳承担；`build-electron.ps1` 产出安装版 Setup.exe + 绿色解压 zip 一键分发
+- **桌面应用**：Electron + Python 混合架构 — Electron 桌面壳 spawn Python 后端（`main.py --backend`）并加载其 Web UI；系统托盘（关闭窗口自动驻留后台）、启动画面、单实例（按 data-dir 退化的控制端口）均由壳承担；`build-electron.bat` 产出安装版 Setup.exe + 绿色解压 zip 一键分发
 
 - **离线可用**：前端资源本地打包，无外部 CDN 依赖；litellm 延迟导入，启动不加载重型依赖
 
@@ -52,7 +52,7 @@
 
 - Node.js 18+（仅构建 Web UI 时需要，`web/dist` 已存在可跳过）
 
-- 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 18+（`desktop/electron`）；最终用户运行 `build-electron.ps1` 产出的安装版 / 绿色解压版 EXE 无需额外运行时
+- 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 18+（`desktop/electron`）；最终用户运行 `build-electron.bat` 产出的安装版 / 绿色解压版 EXE 无需额外运行时
 
 ## 1. 安装
 
@@ -75,26 +75,26 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > | `[vector]` | `uv pip install -e ".[vector]"` | 向量知识库（lancedb，可选；缺失时 RAG 自动回退关键词检索）                                            |
 > | `[render]` | `uv pip install -e ".[render]"` | HTML → 图片渲染（playwright，可选；安装与 Chromium 下载见下方「启用 HTML 渲染」；缺失时渲染能力自动降级不可用，调用方回退） |
 > | `[test]`   | `uv pip install -e ".[test]"`   | pytest / pytest-asyncio / pytest-cov / httpx                                   |
-> | `[build]`  | `uv pip install -e ".[build]"`  | pyinstaller + playwright（`.\build.ps1` 依赖；playwright 用于打包时内置无头浏览器）             |
+> | `[build]`  | `uv pip install -e ".[build]"`  | pyinstaller + playwright（`.\build.bat` 依赖；playwright 用于打包时内置无头浏览器）             |
 > | `[dev]`    | `uv pip install -e ".[dev]"`    | 以上全部 + ruff / mypy（代码质量工具）                                                     |
 >
 > **启用 HTML 渲染**：源码运行时安装 `[render]` 分组后还需下载 Chromium（国内网络建议走 npm 镜像，否则容易卡住/超时）：
 >
-> ```bash
-> $env:PLAYWRIGHT_DOWNLOAD_HOST = "https://npmmirror.com/mirrors/playwright"
+> ```bat
+> set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
 > uv run playwright install chromium
 > ```
 >
-> **打包版（EXE）已全内置**：`build.ps1` 构建时自动下载无头 Chromium 到产物目录 `ms-playwright\`，运行时经 `PLAYWRIGHT_BROWSERS_PATH` 定位，EXE 开箱即可渲染签到卡，无需最终用户再执行安装。构建期同样可用上述 `PLAYWRIGHT_DOWNLOAD_HOST` 走国内镜像。
+> **打包版（EXE）已全内置**：`build.bat` 构建时自动下载无头 Chromium 到产物目录 `ms-playwright\`，运行时经 `PLAYWRIGHT_BROWSERS_PATH` 定位，EXE 开箱即可渲染签到卡，无需最终用户再执行安装。构建期同样可用上述 `PLAYWRIGHT_DOWNLOAD_HOST` 走国内镜像。
 >
-> **桌面壳打包另见**：`build.ps1` 产出的 onedir（`dist\qingci-bot-ce\`）与 `build-electron.ps1`（electron-builder，产出 NSIS 安装版 Setup.exe + 绿色解压 zip）实例与数据均随可执行目录 `instances\<name>\` 自包含分发（DB/日志/插件数据），便于整体拷贝迁移；桌面壳需 Node.js 18+，用户运行安装版/绿色解压版无需额外运行时。
+> **桌面壳打包另见**：`build.bat` 产出的 onedir（`dist\qingci-bot-ce\`）与 `build-electron.bat`（electron-builder，产出 NSIS 安装版 Setup.exe + 绿色解压 zip）实例与数据均随可执行目录 `instances\<name>\` 自包含分发（DB/日志/插件数据），便于整体拷贝迁移；桌面壳需 Node.js 18+，用户运行安装版/绿色解压版无需额外运行时。
 >
-> **Linux 桌面（AppImage）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.ps1` 的对应脚）产出 onedir，再经 `electron-builder --linux` 打成 AppImage；数据目录同样随可执行目录 `instances\` 自包含分发。
+> **Linux 桌面（AppImage）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.bat` 的对应脚）产出 onedir，再经 `electron-builder --linux` 打成 AppImage；数据目录同样随可执行目录 `instances\` 自包含分发。
 >
-> **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.ps1`/`build-linux.sh` 分别出后端、`build-electron.ps1`/`electron-builder --linux` 出 EXE / AppImage，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](.github/workflows/release.yml)。
+> **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.bat`/`build-linux.sh` 分别出后端、`build-electron.bat`/`electron-builder --linux` 出 EXE / AppImage，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](.github/workflows/release.yml)。
 >
 > 浏览器缺失或下载失败时渲染能力自动降级不可用（`/api/bot/status` 的 `render` 字段可查状态），不影响框架启动。
-> 插件协议层 SDK（`qingci-plugin-sdk`）作为 git 依赖（默认指 [Gitee 镜像](https://gitee.com/qingci-bot/Plugins-SDK)，国内拉取更快）随核心依赖安装；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.ps1` 一致），覆盖 git 依赖版本。
+> 插件协议层 SDK（`qingci-plugin-sdk`）作为 git 依赖（默认指 [Gitee 镜像](https://gitee.com/qingci-bot/Plugins-SDK)，国内拉取更快）随核心依赖安装；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.bat` 一致），覆盖 git 依赖版本。
 >
 > 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install git+https://gitee.com/qingci-bot/Plugins-SDK.git` 安装 SDK）：
 >
@@ -121,7 +121,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 .venv\Scripts\python main.py --instance <name>
 ```
 
-> 桌面 GUI 通过 **Electron 壳**（`desktop/electron`，打包见 `build-electron.ps1`）运行：壳 spawn Python 后端（`main.py --backend`）并加载其 Web UI，系统托盘/单实例/启动画面均由 Electron 承担，不再使用 `--desktop`/pywebview。
+> 桌面 GUI 通过 **Electron 壳**（`desktop/electron`，打包见 `build-electron.bat`）运行：壳 spawn Python 后端（`main.py --backend`）并加载其 Web UI，系统托盘/单实例/启动画面均由 Electron 承担，不再使用 `--desktop`/pywebview。
 
 启动必须绑定一个实例（无全局模式）：未指定 `--instance` 时自动选择默认实例（`default` 优先，其次名称排序第一个）；若实例数为 0 则自动创建 `default` 实例。每个实例是 `instances/<name>/` 下的自包含目录，独立「实例管理」页（`/instances`）支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）；切换会以目标实例重启进程。**创建实例时可绑定主平台**（OneBot / OneBot 12 / Telegram）：创建后系统设置即针对该平台语义落位——OneBot 主平台实例启动反向 WS 服务端（`onebot.enabled`），Telegram 主平台实例自动关闭反向 WS 并启用 Telegram 适配器，`super_admin` / 管理员 / 黑白名单均以平台无关字符串 ID 配置。
 

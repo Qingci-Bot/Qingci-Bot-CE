@@ -123,8 +123,8 @@ Qingci-Bot-CE/
 │   └── plugin_pkg/         # 测试用插件包（dep/di/p1/p2/sdk_llm_tool/subcmd_runtime 等）
 ├── scripts/                # 一次性/运维脚本（如 SQLite→PostgreSQL 迁移）
 ├── docs/                   # 规范文档（本文档 + CODING_STANDARDS.md）
-├── build.ps1               # Windows 构建脚本（打包前 -e 安装 Plugins-SDK）
-├── build-electron.ps1      # Electron 打包脚本（先 build.ps1 出后端 onedir，再 electron-builder 出安装版 Setup.exe + 绿色解压 zip）
+├── build.bat               # Windows 构建脚本（打包前 -e 安装 Plugins-SDK）
+├── build-electron.bat      # Electron 打包脚本（先 build.bat 出后端 onedir，再 electron-builder 出安装版 Setup.exe + 绿色解压 zip）
 ├── qingci-bot-ce.spec      # PyInstaller 打包配置（collect_all 打包 SDK）
 ├── pyproject.toml          # 依赖（含 git 依赖 qingci-plugin-sdk）、ruff/mypy/pytest 配置
 ├── alembic.ini             # 迁移配置
@@ -166,7 +166,7 @@ Plugins-SDK（qingci_plugin_sdk）  ──(正式依赖)──▶  bot/plugin/pr
 
 - **内核（`bot/core/*`）可直接引用 SDK**（`qingci_plugin_sdk` 为正式依赖）；**插件必须经 `bot/plugin/protocol/` 薄转发**，禁止插件直引 SDK——若未来 protocol/ 对某符号做兼容适配，内核直引与插件层走两条路径，code review 需把关。
 - **声明机制归属 SDK、注册逻辑归属 CE**：`llm_tool` / `LlmToolSpec` / `begin_tool_collection` 等声明与收集机制的唯一实现在 SDK（`qingci_plugin_sdk.llm_tool`）；CE `bot/plugin/llm_tool.py` 仅转发并保留 CE 特有的 `register_tools`（注册进 ToolRegistry）。插件从 `qingci_plugin_sdk` 或 `bot.plugin.llm_tool` 导入装饰器走同一收集栈，两条路径等价。
-- **SDK/CE 版本独立演进**：SDK 从"与 CE 版本同步"改为独立版本（CE 通过 git tag 锁定，pyproject / build.ps1 / uv.lock 三处一致）。CE 发版前需确认 SDK 依赖已锁定到目标版本（SDK 破坏性变更不被旧 CE 拉到）。
+- **SDK/CE 版本独立演进**：SDK 从"与 CE 版本同步"改为独立版本（CE 通过 git tag 锁定，pyproject / build.bat / uv.lock 三处一致）。CE 发版前需确认 SDK 依赖已锁定到目标版本（SDK 破坏性变更不被旧 CE 拉到）。
 
 ## 4. 命名约定（结构层面）
 

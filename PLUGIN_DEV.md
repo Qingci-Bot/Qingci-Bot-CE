@@ -1617,7 +1617,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 cd web; npm install; npm run build; cd ..
 
 # 一键打包
-.\build.ps1
+.\build.bat
 ```
 
 > `instances/` 目录已被 `.gitignore` 忽略（其中的 `config.yaml` 可能含密钥）。新克隆的仓库中没有该目录，首次启动会自动创建 `default` 实例并生成其 `config.yaml`；如需预先配置，可参考 `config.example.yaml` 在 `instances/default/config.yaml` 中填写。
@@ -1628,14 +1628,14 @@ cd web; npm install; npm run build; cd ..
 dist\qingci-bot-ce\
 ├── qingci-bot-ce.exe       # 主程序（windowed 无控制台窗口；日志请开启文件日志）
 ├── _internal\              # Python 运行时与依赖（勿动）
-├── ms-playwright\          # 内置 Playwright 无头浏览器（build.ps1 下载，HTML 渲染用）
-├── web\dist\               # Web UI 静态资源（build.ps1 复制）
+├── ms-playwright\          # 内置 Playwright 无头浏览器（build.bat 下载，HTML 渲染用）
+├── web\dist\               # Web UI 静态资源（build.bat 复制）
 └── instances\              # 实例目录（首次启动自动创建 default 实例，含 config.yaml/plugins/data）
 ```
 
 > 自 v1.5.1 起配置/插件/数据已收敛到 `instances\<name>\` 自包含目录，构建产物不再生成根级 `config.yaml` 或 `data\`。用户数据（配置、插件、数据库、日志）均按实例隔离，随实例目录一起分发。
 
-> **HTML 渲染全内置**：`build.ps1` 会下载 Playwright 无头 Chromium 到产物目录 `ms-playwright\`，运行时 `main.py` 通过 `PLAYWRIGHT_BROWSERS_PATH` 指向它，EXE 开箱即可渲染签到卡等 HTML → 图片，无需最终用户另行 `playwright install chromium`。若构建环境网络不佳导致下载失败，产物仍可运行，仅渲染能力降级（签到卡回退纯文本）。构建期可设 `$env:PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright"` 走国内镜像加速。
+> **HTML 渲染全内置**：`build.bat` 会下载 Playwright 无头 Chromium 到产物目录 `ms-playwright\`，运行时 `main.py` 通过 `PLAYWRIGHT_BROWSERS_PATH` 指向它，EXE 开箱即可渲染签到卡等 HTML → 图片，无需最终用户另行 `playwright install chromium`。若构建环境网络不佳导致下载失败，产物仍可运行，仅渲染能力降级（签到卡回退纯文本）。构建期可设 `set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright` 走国内镜像加速。
 
 ### 运行
 
@@ -1655,21 +1655,21 @@ dist\qingci-bot-ce\
 
 - 首次运行自动创建 `instances\default\` 实例并生成默认 `config.yaml`；数据库自动建表（SQLModel create\_all）。
 
-- 重新执行 `build.ps1` 不会覆盖 `instances\` 中已有的实例配置与数据（用户数据始终保留在实例目录内）。
+- 重新执行 `build.bat` 不会覆盖 `instances\` 中已有的实例配置与数据（用户数据始终保留在实例目录内）。
 
 - 当前产物为 **windowed 无控制台** 模式（`qingci-bot-ce.spec` 中 `console=False`），日志不直接可见，建议开启文件日志（`log.log_file_enabled: true`）；如需控制台窗口排障，将 `console` 改为 `True` 后重新构建。
 
-- 桌面 GUI 由 Electron 壳（`desktop\electron\`）承担：分发用 `build-electron.ps1` 生成桌面壳 EXE（安装版 + 绿色解压 zip），其内嵌 Python 后端（`--backend`）就绪时通过标准输出上报端口供壳加载 Web UI；不依赖系统 WebView2 / pywebview。
+- 桌面 GUI 由 Electron 壳（`desktop\electron\`）承担：分发用 `build-electron.bat` 生成桌面壳 EXE（安装版 + 绿色解压 zip），其内嵌 Python 后端（`--backend`）就绪时通过标准输出上报端口供壳加载 Web UI；不依赖系统 WebView2 / pywebview。
 
 ### 桌面壳（Electron）打包
 
-`build.ps1` 产出的 onedir 是"后端形态"（可加 `--backend` 由壳拉起，也可直接命令行运行 Bot/API）。要给最终用户一个免配置的桌面应用，再跑第二步 `build-electron.ps1` 出安装版 / 绿色解压版 EXE。
+`build.bat` 产出的 onedir 是"后端形态"（可加 `--backend` 由壳拉起，也可直接命令行运行 Bot/API）。要给最终用户一个免配置的桌面应用，再跑第二步 `build-electron.bat` 出安装版 / 绿色解压版 EXE。
 
 ```powershell
 # 先决条件
-#  1) 已执行 .\build.ps1，产物位于 dist\qingci-bot-ce\（后端 onedir）
+#  1) 已执行 .\build.bat，产物位于 dist\qingci-bot-ce\（后端 onedir）
 #  2) Node.js 18+ 与 npm 可用
-.\build-electron.ps1
+.\build-electron.bat
 ```
 
 - 产物：`dist\electron\Qingci-Bot-CE-<version>-win-x64.exe`（electron-builder portable，内嵌后端为 `resources\backend`，Playwright Chromium 随其一并内置）。
@@ -1686,7 +1686,7 @@ dist\qingci-bot-ce\
 
 ### 桌面壳（Linux AppImage）打包
 
-Linux 与 Windows 同源：先用 `build-linux.sh` 产出后端 onedir（`build.ps1` 的对应脚本，产出 `dist/qingci-bot-ce/`），再经 electron-builder 打 AppImage。
+Linux 与 Windows 同源：先用 `build-linux.sh` 产出后端 onedir（`build.bat` 的对应脚本，产出 `dist/qingci-bot-ce/`），再经 electron-builder 打 AppImage。
 
 ```bash
 # 先决条件：.venv + [build] 依赖、Node.js 18+ 与 npm
@@ -1702,7 +1702,7 @@ cd desktop/electron && npm ci && npx electron-builder --linux --publish never
 ### 自动发布（GitHub Actions）
 
 打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](.github/workflows/release.yml)，各平台自动联编：
-- Windows 桌面 EXE（安装版 Setup.exe + 绿色解压 zip，`build.ps1` + `build-electron.ps1`）
+- Windows 桌面 EXE（安装版 Setup.exe + 绿色解压 zip，`build.bat` + `build-electron.bat`）
 - Linux AppImage（`build-linux.sh` + `electron-builder --linux`）
 - Docker 镜像（tag：`vX.Y.Z` / `X.Y` / `X` / `latest`）
 

@@ -42,7 +42,7 @@
 
 - 修改权限语义、匹配规则等协议时只改 SDK 一处，主项目无需同步
 
-- SDK 是主项目的**正式依赖**（`pyproject.toml` 声明 git 依赖；构建/本地开发由 `build.ps1` 以 `-e` 安装优先）
+- SDK 是主项目的**正式依赖**（`pyproject.toml` 声明 git 依赖；构建/本地开发由 `build.bat` 以 `-e` 安装优先）
 
 ## 进程模型与外壳边界（无头内核库化方向）
 
@@ -72,8 +72,8 @@ Qingci-Bot-CE/
 ├── pyproject.toml
 ├── alembic.ini                # Alembic 迁移配置
 ├── config.example.yaml        # 配置模板（脱敏；实例配置在 instances/<name>/config.yaml）
-├── build.ps1                  # PyInstaller 打包脚本（第一步：后端 onedir）
-├── build-electron.ps1         # Electron 打包脚本（第二步：先 build.ps1 出后端 onedir，再 electron-builder 出安装版 Setup.exe + 绿色解压 zip）
+├── build.bat                  # PyInstaller 打包脚本（第一步：后端 onedir）
+├── build-electron.bat         # Electron 打包脚本（第二步：先 build.bat 出后端 onedir，再 electron-builder 出安装版 Setup.exe + 绿色解压 zip）
 ├── qingci-bot-ce.spec         # PyInstaller 打包配置
 ├── bot/
 │   ├── config.py              # 配置管理（Pydantic 模型）
@@ -97,6 +97,8 @@ Qingci-Bot-CE/
 │   │   ├── scheduler.py       # 定时任务调度器
 │   │   ├── tasks.py           # 后台任务管理（防 GC + 停机等待）
 │   │   ├── session_state.py   # 会话状态管理（TTL 键值存储）
+│   │   ├── session_persistence.py # 会话状态快照持久化（原子写 + 容错恢复）
+│   │   ├── cpu_pool.py        # CPU 执行器（asyncio.to_thread 卸载同步计算，防阻塞事件循环）
 │   │   ├── event_bus.py       # 跨插件事件总线（发布-订阅）
 │   │   └── di.py              # 依赖注入容器（SINGLETON/TRANSIENT/SCOPED）
 │   ├── llm/
@@ -110,7 +112,8 @@ Qingci-Bot-CE/
 │   │   └── knowledge.py       # 知识库（keyword 关键词检索 + vector 向量检索，后者需 lancedb）
 │   ├── db/
 │   │   ├── database.py        # 数据库仓储（基于 SQLModel）
-│   │   ├── engine.py          # 异步引擎 + 会话工厂（WAL 模式）
+│   │   ├── engine.py          # 异步引擎 + 会话工厂（WAL 模式；连接池参数可经环境变量覆盖）
+│   │   │                       #  QINGCI_DB_POOL_SIZE / QINGCI_DB_MAX_OVERFLOW
 │   │   └── models.py          # SQLModel 模型定义
 │   ├── testing/               # 插件测试工具（TestBot + 事件构造器，无需启动真实 Bot）
 │   │   ├── bot.py             # TestBot 轻量测试环境
@@ -226,6 +229,8 @@ Qingci-Bot-CE/
 
 - `MessageContext` 由 SDK 提供（字段与主项目历史版本完全一致，另含 `sender_name` 属性与 `platform` 来源平台字段）
 
+- 慢 handler 预警：单次 Matcher 调度（Rule + Permission + handler）耗时超过 `log.slow_handler_threshold_ms` 时记 WARN 日志，并计入该 Matcher 指标的 `slow_count`（阈值 0/负 = 关闭）
+
 ### 多平台适配器（`bot/core/platforms/`）
 
 平台协议统一收敛为 `PlatformAdapter` 契约，插件对来源平台无感知；事件归一化为 **OneBot 12 内部模型**（`type`/`detail_type` + 标准消息段，注入 `platform` 字段），回复按 `MessageContext.platform` 路由回对应适配器：
@@ -296,7 +301,29 @@ Qingci-Bot-CE/
 
 - 批量写入优化（`save_messages_batch`）
 
+- 可配置连接池：文件型 SQLite 默认 `AsyncAdaptedQueuePool(pool_size=5, max_overflow=10)`；读写争用可经环境变量覆盖——`QINGCI_DB_POOL_SIZE` / `QINGCI_DB_MAX_OVERFLOW`（未设保持默认）
+
 - 在线备份（sqlite backup API）
+
+### 会话状态持久化（`bot/core/session_persistence.py`）
+
+`SessionStateManager` 默认纯内存易失（进程重启即丢）。配置节 `session_state` 开启后，把 ttl=0（永不过期）的会话键经序列化在**关闭时**与**周期快照**落盘，跨重启保留：
+
+- `restore_snapshot()`：启动时在首个事件前从 `data_root/<session_state.file>` 恢复，失败仅告警、继续空启动
+
+- `save_snapshot()`：先写临时文件再 `os.replace` 原子替换，避免崩溃损坏快照；写失败不阻断主流程
+
+- 周期快照由 `_session_snapshot_loop` 按 `snapshot_interval`（下限 10s）后台执行，随 `stop()` 退出
+
+### CPU 执行器（`bot/core/cpu_pool.py`）
+
+把会阻塞事件循环的同步 CPU 密集/重 IO 计算卸载到线程池，避免拖累全网事件吞吐：
+
+- `run_cpu(fn, *args)`：等价 `asyncio.to_thread`，返回结果或向上抛异常
+
+- `run_cpu_timed(fn, *args)`：额外返回执行耗时毫秒，便于慢任务观测
+
+- 约定：**必须**为真正阻塞的同步代码使用；库自带 async 能力优先用 async 版本
 
 ## 生产环境部署
 
