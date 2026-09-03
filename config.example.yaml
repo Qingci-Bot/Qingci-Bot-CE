@@ -63,6 +63,10 @@ filter:
   enabled: false
   words_file: data/sensitive_words.txt
   exempt_admins: true
+session_state:                # 会话状态持久化（跨重启保留，默认关闭）
+  enabled: false              # 开启后在关闭/周期快照时把 ttl=0 的会话键落盘
+  snapshot_interval: 300.0    # 周期快照间隔（秒），防中途崩溃丢太多
+  file: session_state.json    # 快照文件名，落于数据根目录（data_root）
 scheduler:
   enabled: true
 hot_reload:
@@ -115,6 +119,8 @@ log:
   record_all_messages: true    # 框架级消息记录/广播：全量收发消息写库 + WS 实时推送
                                # （关闭后仅内置 chat 的 LLM 对话记录）
   run_log_enabled: true        # 运行日志采集：WebUI"运行日志"页实时查看（关闭后无数据）
+  slow_handler_threshold_ms: 2000.0  # 慢 handler 阈值（毫秒）：单次执行超过即记 WARN +
+                               # 计入插件指标 slow_count；0 或负数 = 关闭慢日志
 api_key: ''                   # WebUI/API 鉴权密钥；留空仅本机(127.0.0.1)免鉴权，
                               # 局域网/公网访问必须配置（0.0.0.0 监听时非本机请求会被拒绝）
 api:

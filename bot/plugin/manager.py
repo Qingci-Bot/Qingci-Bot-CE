@@ -223,6 +223,8 @@ class MatcherMetrics:
     permission_time_ms: float = 0.0
     rule_time_ms: float = 0.0
     handler_time_ms: float = 0.0
+    # 慢调用计数：执行耗时超过 slow_threshold_ms 的次数（未设阈值时恒为 0）
+    slow_count: int = 0
 
     @property
     def avg_time_ms(self) -> float:
@@ -418,8 +420,12 @@ class PluginManager:
         handler_ms: float | None = None,
         permission_ms: float | None = None,
         rule_ms: float | None = None,
+        slow_threshold_ms: float | None = None,
     ) -> None:
-        """记录一次 Matcher 执行指标（elapsed_ms 为总耗时，阶段耗时可选细分）"""
+        """记录一次 Matcher 执行指标（elapsed_ms 为总耗时，阶段耗时可选细分）
+
+        slow_threshold_ms 非 None 且 elapsed_ms 超过该值（毫秒）时累计 slow_count。
+        """
         owner = getattr(matcher, "owner", "__unknown__")
         if owner not in self._metrics:
             self._metrics[owner] = {}
@@ -434,6 +440,12 @@ class PluginManager:
             m.rule_time_ms += rule_ms
         if handler_ms is not None:
             m.handler_time_ms += handler_ms
+        if (
+            slow_threshold_ms is not None
+            and slow_threshold_ms > 0
+            and elapsed_ms > slow_threshold_ms
+        ):
+            m.slow_count += 1
         if is_error:
             m.error_count += 1
         m.last_call_time = time.time()
@@ -467,6 +479,7 @@ class PluginManager:
                     ),
                     "avg_rule_ms": round(m.rule_time_ms / m.call_count if m.call_count else 0.0, 2),
                     "avg_handler_ms": round(m.avg_handler_time_ms, 2),
+                    "slow_count": m.slow_count,
                 }
             )
         return result

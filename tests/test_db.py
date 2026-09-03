@@ -237,3 +237,36 @@ class TestDataRetention:
         assert sess_count == 0
         assert usage_count == 0
         assert audit_count == 0
+
+
+@pytest.mark.asyncio
+class TestEnginePool:
+    """引擎连接池测试"""
+
+    async def test_uses_queue_pool_by_default(self, db):
+        """默认连接池类型为 AsyncAdaptedQueuePool（文件型 SQLite）"""
+        from sqlalchemy.pool import AsyncAdaptedQueuePool
+
+        import bot.db.engine as _engine
+
+        engine = _engine.get_engine()
+        assert isinstance(engine.pool, AsyncAdaptedQueuePool)
+
+    async def test_env_pool_params(self, monkeypatch):
+        """环境变量可覆盖 pool_size / max_overflow"""
+        monkeypatch.setenv("QINGCI_DB_POOL_SIZE", "3")
+        monkeypatch.setenv("QINGCI_DB_MAX_OVERFLOW", "7")
+        import bot.db.engine as _engine
+
+        assert _engine._db_pool_params() == {"pool_size": 3, "max_overflow": 7}
+
+        monkeypatch.delenv("QINGCI_DB_POOL_SIZE")
+        monkeypatch.delenv("QINGCI_DB_MAX_OVERFLOW")
+        assert _engine._db_pool_params() == {}
+
+    async def test_env_pool_params_ignores_invalid(self, monkeypatch):
+        """非数字环境变量应被忽略"""
+        monkeypatch.setenv("QINGCI_DB_POOL_SIZE", "abc")
+        import bot.db.engine as _engine
+
+        assert "pool_size" not in _engine._db_pool_params()

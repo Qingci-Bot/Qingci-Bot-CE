@@ -304,6 +304,21 @@ class SessionSummaryConfig(BaseModel):
     summary_max_tokens: int = 512  # 摘要生成单次回复最大 token
 
 
+class SessionStateConfig(BaseModel):
+    """会话状态持久化配置（默认关闭）
+
+    关闭时 SessionStateManager 保持纯内存易失语义（进程重启即丢）；
+    开启后经 serialize/deserialize 在关闭/周期快照时落盘，跨重启保留
+    永不过期（ttl=0）的会话键。
+    """
+
+    model_config = {"extra": "ignore"}
+
+    enabled: bool = False
+    snapshot_interval: float = 300.0  # 周期快照间隔（秒），防中途崩溃丢太多
+    file: str = "session_state.json"  # 快照文件名，落于 data_root()
+
+
 class LogConfig(BaseModel):
     """日志与遥测配置"""
 
@@ -341,6 +356,11 @@ class LogConfig(BaseModel):
     # 并经 /api/ws/runlog 实时推送到 WebUI"运行日志"页（默认开，方便排障）。
     # 关闭后运行日志页无数据。
     run_log_enabled: bool = True
+
+    # 慢 handler 耗时阈值（毫秒）：单次 handler 执行超过该值记为"慢 handler"
+    # 并记 WARN 日志 + 计入插件指标 slow_count。0 或负数 = 关闭慢日志（默认关闭不设阈值，
+    # 值为 2000ms 表示超 2 秒告警）。
+    slow_handler_threshold_ms: float = 2000.0
 
 
 class RAGConfig(BaseModel):
@@ -432,6 +452,7 @@ class AppConfig(BaseModel):
     render: RenderConfig = RenderConfig()
     rag: RAGConfig = RAGConfig()
     session_summary: SessionSummaryConfig = SessionSummaryConfig()
+    session_state: SessionStateConfig = SessionStateConfig()
     log: LogConfig = LogConfig()
     market: MarketConfig = MarketConfig()
     platforms: PlatformsConfig = PlatformsConfig()
@@ -504,6 +525,10 @@ class ConfigManager:
     @property
     def session_summary(self) -> SessionSummaryConfig:
         return self._config.session_summary
+
+    @property
+    def session_state(self) -> SessionStateConfig:
+        return self._config.session_state
 
     @property
     def log(self) -> LogConfig:

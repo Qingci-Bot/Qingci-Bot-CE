@@ -114,6 +114,15 @@ class QingciBot:
         self._started = True
         logger.info("Qingci-Bot CE 启动中...")
         await self.db.connect()
+        # 会话状态持久化：开启时在首个事件到达前从快照恢复（幂等，缺失即空启动）
+        if self.session_state is not None and self.config.session_state.enabled:
+            try:
+                from ..core.session_persistence import restore_snapshot
+
+                await restore_snapshot(self.session_state)
+                logger.info("会话状态快照已恢复")
+            except Exception:
+                logger.exception("恢复会话状态快照失败（继续空启动）")
         await self.plugin_manager.load_builtin(self)
         # 加载外部插件目录（plugins_dir()：默认 app_root/plugins/，实例模式下为该实例 plugins/）
         await self.plugin_manager.load_external_dir(self)
@@ -160,6 +169,12 @@ class QingciBot:
         if self.rate_limiter is not None:
             self._spawn_background_task(
                 self._rate_limiter_cleanup_loop(), name="rate-limiter-cleanup"
+            )
+
+        # 会话状态周期快照（防中途崩溃丢太多；随 stop() 置 _running=False 退出）
+        if self.config.session_state.enabled:
+            self._spawn_background_task(
+                self._session_snapshot_loop(), name="session-state-snapshot"
             )
 
         # 定期清理过期数据（messages/usage_logs/audit_logs/sessions 保留期，
@@ -257,6 +272,16 @@ class QingciBot:
             if pending:
                 await asyncio.gather(*pending, return_exceptions=True)
             self._pending_tasks.clear()
+
+        # 会话状态持久化：最终落盘（_running=False 已使周期快照循环退出，此处唯一最终保存点）
+        if self.session_state is not None and self.config.session_state.enabled:
+            try:
+                from ..core.session_persistence import save_snapshot
+
+                await save_snapshot(self.session_state)
+                logger.info("会话状态快照已保存")
+            except Exception:
+                logger.exception("保存会话状态快照失败")
 
         try:
             await self.plugin_manager.shutdown()
@@ -606,6 +631,18 @@ class QingciBot:
                     self.rate_limiter.cleanup()
             except Exception:
                 logger.exception("清理限流器过期条目失败")
+
+    async def _session_snapshot_loop(self) -> None:
+        """周期保存会话状态快照（按 session_state.snapshot_interval；随 stop() 退出）"""
+        interval = max(float(self.config.session_state.snapshot_interval), 10.0)
+        while self._running:
+            await asyncio.sleep(interval)
+            try:
+                from ..core.session_persistence import save_snapshot
+
+                await save_snapshot(self.session_state)
+            except Exception:
+                logger.exception("周期保存会话状态快照失败")
 
     async def _data_retention_loop(self) -> None:
         """定期清理超过保留期的历史数据（每天；随 stop() 置 _running=False 退出）

@@ -523,6 +523,18 @@ class MessageDispatcher:
             raise
         finally:
             elapsed = (time.perf_counter() - start) * 1000
+            # 慢 handler 预警：超过阈值记 WARN 日志 + 累计 slow_count（阈值 0 关闭）
+            # config 可能是测试桩/缺 log 节，用逐层 getattr 兜底，绝不因统计而抛错
+            threshold = getattr(getattr(bot, "config", None), "log", None)
+            threshold = getattr(threshold, "slow_handler_threshold_ms", 0.0) or 0.0
+            if threshold > 0 and elapsed > threshold:
+                logger.warning(
+                    "慢 handler: plugin=%s handler=%s elapsed=%.0fms threshold=%.0fms",
+                    getattr(plugin, "name", "?"),
+                    getattr(matcher.handler, "__name__", "?"),
+                    elapsed,
+                    threshold,
+                )
             bot.plugin_manager.record_metric(
                 matcher,
                 elapsed,
@@ -530,6 +542,7 @@ class MessageDispatcher:
                 handler_ms=elapsed,
                 permission_ms=permission_ms,
                 rule_ms=rule_ms,
+                slow_threshold_ms=threshold,
             )
 
     def _parse_message(self, event: dict) -> MessageContext:

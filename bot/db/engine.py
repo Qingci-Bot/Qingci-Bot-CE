@@ -6,6 +6,7 @@
 """
 
 import logging
+import os
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -44,6 +45,23 @@ def _set_sqlite_pragma(dbapi_conn, _connection_record):
         cursor.close()
 
 
+def _db_pool_params() -> dict:
+    """可选的连接池覆盖参数（环境变量），未设置时返回空 dict 保持默认行为
+
+    aiosqlite 文件型 SQLite 默认即 AsyncAdaptedQueuePool(pool_size=5,
+    max_overflow=10)，通常无需改动；仅在 profile 出读写争用时按需调整。
+    """
+    params: dict = {}
+    for env, key in (
+        ("QINGCI_DB_POOL_SIZE", "pool_size"),
+        ("QINGCI_DB_MAX_OVERFLOW", "max_overflow"),
+    ):
+        raw = os.environ.get(env)
+        if raw and raw.strip().isdigit():
+            params[key] = int(raw)
+    return params
+
+
 def get_engine():
     """获取全局异步引擎（懒加载，线程安全）"""
     global _engine
@@ -56,6 +74,7 @@ def get_engine():
                     f"sqlite+aiosqlite:///{db}",
                     echo=False,
                     connect_args={"check_same_thread": False},
+                    **_db_pool_params(),
                 )
                 # 在底层同步引擎上注册 connect 事件，设置 WAL 模式
                 event.listen(engine.sync_engine, "connect", _set_sqlite_pragma)
