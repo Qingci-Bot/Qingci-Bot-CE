@@ -3380,7 +3380,7 @@ requires-dist = [
     { name = "pywebview", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qingci-bot-ce", extras = ["test", "build", "vector", "render"], marker = "extra == 'dev'" },
-    { name = "qingci-plugin-sdk", git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.6" },
+    { name = "qingci-plugin-sdk", git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
