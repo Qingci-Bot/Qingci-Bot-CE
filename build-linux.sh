@@ -42,8 +42,8 @@ echo "Python:   $PY"
 #（HTTP 429），故支持 QINGCI_SDK_GIT_URL 覆盖为 GitHub 主仓库。SDK 发新版后同步
 # 更新这里与 pyproject.toml 的 tag。
 SDK_GIT_URL="${QINGCI_SDK_GIT_URL:-https://gitee.com/qingci-bot/Plugins-SDK.git}"
-echo "==> [0/3] installing qingci-plugin-sdk (v1.13.6) from $SDK_GIT_URL ..."
-uv pip install --python "$PY" "qingci-plugin-sdk @ git+${SDK_GIT_URL}@v1.13.6"
+echo "==> [0/3] installing qingci-plugin-sdk (v1.13.7) from $SDK_GIT_URL ..."
+uv pip install --python "$PY" "qingci-plugin-sdk @ git+${SDK_GIT_URL}@v1.13.7"
 
 # ---------- 确保 pip 在 venv（供打包后插件依赖安装器使用） ----------
 # 打包（frozen）模式下插件依赖安装器（bot/plugin/deps.py）调用 pip._internal，

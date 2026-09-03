@@ -41,8 +41,8 @@ if defined QINGCI_SDK_GIT_URL (
 ) else (
     set "SdkGitUrl=https://gitee.com/qingci-bot/Plugins-SDK.git"
 )
-echo ==^> [0/3] installing qingci-plugin-sdk ^(v1.13.6^) from !SdkGitUrl! ...
-uv pip install --python "%Python%" "qingci-plugin-sdk @ git+!SdkGitUrl!@v1.13.6"
+echo ==^> [0/3] installing qingci-plugin-sdk ^(v1.13.7^) from !SdkGitUrl! ...
+uv pip install --python "%Python%" "qingci-plugin-sdk @ git+!SdkGitUrl!@v1.13.7"
 if errorlevel 1 (
     echo [ERROR] qingci-plugin-sdk install failed
     exit /b 1
