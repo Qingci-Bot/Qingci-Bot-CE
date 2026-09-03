@@ -3391,8 +3391,8 @@ provides-extras = ["vector", "render", "test", "build", "dev"]
 
 [[package]]
 name = "qingci-plugin-sdk"
-version = "1.13.6"
-source = { git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.6#aea7d6c61c522b71f7161ab4501f14a0c5bc0c5e" }
+version = "1.13.7"
+source = { git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.7#1e038586c5b23743d24dbc628b413be257f6f0d8" }
 
 [[package]]
 name = "qtpy"
