@@ -116,19 +116,20 @@ jobs:
           npm ci
           npm run build
 
-      - name: Build backend onedir (build.ps1)
-        shell: powershell
+      - name: Build backend onedir (build.bat)
+        shell: cmd
         env:
           PLAYWRIGHT_DOWNLOAD_HOST: https://npmmirror.com/mirrors/playwright
           CI: "1"
-        run: .\build.ps1
+        run: .\build.bat
 
-      - name: Package Windows desktop (build-electron.ps1)
-        shell: powershell
+      - name: Package Windows desktop (build-electron.bat)
+        shell: cmd
         working-directory: desktop/electron
         run: |
           npm ci
-          & "$env:GITHUB_WORKSPACE\build-electron.ps1"
+          call "%GITHUB_WORKSPACE%\build-electron.bat"
+          exit /b %errorlevel%
 
       - name: Upload release assets
         env:

@@ -90,7 +90,7 @@ jobs:
         run: node -e "const b=require('./package.json').build; if(!b||!b.win||!b.extraResources) throw new Error('build config missing'); console.log('build config OK')"
 
       # 注意：Windows 便携版完整打包（Python 后端 onedir + electron-builder portable）
-      # 走 build.ps1 + build-electron.ps1（需 Windows + PyInstaller），不在本 job 复现。
+      # 走 build.bat + build-electron.bat（需 Windows + PyInstaller），不在本 job 复现。
 
   frontend:
     name: Frontend lint / format / build

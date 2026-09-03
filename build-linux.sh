@@ -3,7 +3,7 @@
 # Usage: ./build-linux.sh
 # Output: dist/qingci-bot-ce/qingci-bot-ce
 #
-# 与 build.ps1（Windows）对应的 Linux 版本。产出 Python 后端 onedir，
+# 与 build.bat（Windows）对应的 Linux 版本。产出 Python 后端 onedir，
 # 供 release 流水线（.github/workflows/ci.yml 的 release job）随后用
 # electron-builder 打 Linux AppImage。
 #
@@ -37,8 +37,8 @@ echo "Root:     $Root"
 echo "Python:   $PY"
 
 # ---------- [0/3] 独立插件 SDK ----------
-# 与 build.ps1 一致，锁定到已发布 tag，保证构建可复现。SDK 源默认走 Gitee 镜像
-#（国内拉取更快，对齐 build.ps1）；但 GitHub Actions（海外 IP）访问 Gitee 常被限流
+# 与 build.bat 一致，锁定到已发布 tag，保证构建可复现。SDK 源默认走 Gitee 镜像
+#（国内拉取更快，对齐 build.bat）；但 GitHub Actions（海外 IP）访问 Gitee 常被限流
 #（HTTP 429），故支持 QINGCI_SDK_GIT_URL 覆盖为 GitHub 主仓库。SDK 发新版后同步
 # 更新这里与 pyproject.toml 的 tag。
 SDK_GIT_URL="${QINGCI_SDK_GIT_URL:-https://gitee.com/qingci-bot/Plugins-SDK.git}"

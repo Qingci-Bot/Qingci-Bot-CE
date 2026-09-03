@@ -5,12 +5,12 @@
     dist/qingci-bot-ce/
         qingci-bot-ce.exe        # 主程序（windowed，无控制台窗口）
         _internal/               # Python 运行时与依赖
-        ms-playwright/           # 内置 Playwright 无头浏览器（build.ps1 下载）
+        ms-playwright/           # 内置 Playwright 无头浏览器（build.bat 下载）
         web/dist/                # Web UI（构建脚本复制，不打包进 exe）
         instances/               # 实例目录（首次启动自动创建，含 config.yaml/plugins/data）
 
 可写资源与静态资源均按"exe 所在目录"相对路径读取（见 bot/paths.py），
-因此不通过 datas 打进包内，由 build.ps1 复制到产物目录分发。
+因此不通过 datas 打进包内，由 build.bat 复制到产物目录分发。
 自 v1.6 起配置/插件/数据已收敛到 instances/<name>/ 自包含目录，
 构建产物不再生成根级 config.yaml 或 data\。
 
@@ -50,7 +50,7 @@ tiktoken_datas, tiktoken_binaries, tiktoken_hiddenimports = collect_all('tiktoke
 sdk_datas, sdk_binaries, sdk_hiddenimports = collect_all('qingci_plugin_sdk')
 
 # HTML 渲染（可选能力）：playwright Python 包随 EXE 收集，保证渲染代码可导入；
-# 浏览器二进制不进 EXE（体积大），由 build.ps1 下载到产物目录 ms-playwright/，
+# 浏览器二进制不进 EXE（体积大），由 build.bat 下载到产物目录 ms-playwright/，
 # 运行时经 PLAYWRIGHT_BROWSERS_PATH（见 main.py）定位
 pw_datas, pw_binaries, pw_hiddenimports = collect_all('playwright')
 
