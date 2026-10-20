@@ -19,5 +19,12 @@ export default defineConfig({
     assetsDir: 'assets',
     emptyOutDir: true,
     sourcemap: false
+  },
+  // Vitest 复用同一份配置（vite build 会忽略 test 键）
+  test: {
+    // jsdom：request.js 依赖 localStorage / window.location，router 依赖 DOM
+    environment: 'jsdom',
+    include: ['src/**/*.test.js'],
+    restoreMocks: true
   }
 })

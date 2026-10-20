@@ -1,0 +1,64 @@
+# Dependabot 依赖更新
+#
+# 与 CI 的 uv.lock 锁定策略配合：锁文件保证「构建可复现」，
+# Dependabot 保证「依赖不会长期停滞在带漏洞的旧版本」。
+# 两者缺一不可——只有锁文件会让依赖永久冻结，只有自动升级会让构建不可复现。
+version: 2
+
+updates:
+  # Python 依赖（pyproject.toml + uv.lock）
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    # 补丁/次版本合并为一个 PR，避免每周被十几个 PR 淹没；
+    # 主版本单独成 PR——按 pyproject 的上界策略需人工放宽并回归测试
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Web UI 前端依赖
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "frontend"
+    groups:
+      web-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Electron 桌面壳依赖
+  - package-ecosystem: "npm"
+    directory: "/desktop/electron"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "desktop"
+    groups:
+      electron-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions 版本（防止 checkout/setup-python 等长期停留在废弃版本）
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"

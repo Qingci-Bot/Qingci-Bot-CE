@@ -248,3 +248,34 @@ class TestRootRedirect:
         resp = client.get("/", follow_redirects=False)
         # 可能 307 重定向到 /ui 或 200（无 Web UI 构建产物时）
         assert resp.status_code in (200, 307)
+
+
+class TestMetricsEndpoint:
+    """Prometheus 指标导出端点"""
+
+    def test_requires_auth(self, client):
+        resp = client.get("/api/metrics")
+        assert resp.status_code == 401
+
+    def test_returns_prometheus_text(self, client):
+        resp = client.get("/api/metrics", headers=_auth_headers())
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/plain")
+        body = resp.text
+        # 未装配 Bot 的测试进程仍应输出 up=0，而不是 500
+        assert "qingci_bot_up" in body
+        assert "# TYPE" in body
+
+
+class TestGzipCompression:
+    """响应压缩：WebUI 静态资源与较大 JSON 应被 gzip 压缩"""
+
+    def test_large_response_is_compressed(self, client):
+        resp = client.get(
+            "/api/config",
+            headers={**_auth_headers(), "Accept-Encoding": "gzip"},
+        )
+        assert resp.status_code == 200
+        # 配置 JSON 超过 minimum_size(1KB)，应命中压缩
+        assert len(resp.content) > 1024
+        assert resp.headers.get("content-encoding") == "gzip"

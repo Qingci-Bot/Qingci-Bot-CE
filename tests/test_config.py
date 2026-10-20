@@ -215,3 +215,38 @@ class TestConfigDeepMerge:
         cm.update({"bot": {"admin_users": []}})
         assert cm.config.bot.admin_users == []
         assert cm.config.bot.super_admin == "12345"
+
+
+class TestEventConcurrencyConfig:
+    """事件并发上限可配置（原为模块常量，无法按硬件/负载调优）"""
+
+    def test_defaults(self):
+        from bot.config import BotConfig
+
+        cfg = BotConfig()
+        assert cfg.event_concurrency == 16
+        assert cfg.max_pending_events == 128
+
+    def test_custom_values_accepted(self):
+        from bot.config import BotConfig
+
+        cfg = BotConfig(event_concurrency=64, max_pending_events=1024)
+        assert cfg.event_concurrency == 64
+        assert cfg.max_pending_events == 1024
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("event_concurrency", 0),
+            ("event_concurrency", -1),
+            ("max_pending_events", 0),
+        ],
+    )
+    def test_out_of_range_rejected(self, field, value):
+        """非法值必须校验失败，避免出现「信号量 0 永久阻塞」之类的致命配置"""
+        from pydantic import ValidationError
+
+        from bot.config import BotConfig
+
+        with pytest.raises(ValidationError):
+            BotConfig(**{field: value})

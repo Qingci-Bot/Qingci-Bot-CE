@@ -5,6 +5,52 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[1.18.0] - 2026-10-20（性能、可观测性与工程化收口）
+
+### Changed
+
+- **插件安装职责拆分为独立模块**：`bot/plugin/installer.py`（`PluginInstaller`）承接来源拉取、归档安全解压、目录原子落位与卸载清理，`bot/plugin/manager.py` 从 1746 行降至 1334 行，`PluginManager.install/remove` 改为薄委托（对外 API 与行为不变）。安全约束（SSRF 白名单、归档炸弹上限、Zip Slip 预检、插件名穿越校验）集中在该模块
+
+- **CI 依赖安装改用 `uv sync --locked`**：此前用 `pip install -e ".[dev]"`，`uv.lock` 在 CI 完全未生效——CI 实际解析结果可与开发者锁定版本不同，并随上游发版静默漂移。同时重新生成锁文件（仅清理 PyWebView 时代遗留的 `pywebview`/`pystray`/`pythonnet`/`pyobjc*` 等 15 个无用条目，无依赖版本变动）
+
+- **新增 Python 3.10 / 3.11 兼容矩阵**：`requires-python` 声明 `>=3.10` 但此前只在 3.12 验证，一旦引入高版本专属语法会 CI 全绿而低版本用户崩溃。已在 3.10 实测全量测试通过
+
+- **前端引入 Vitest 单元测试**：覆盖 API 请求层（鉴权头注入 / 401 跳转 / 错误消息优先级）、全局 store（派生状态 / 日志环形上限 / 轮询失败保留状态）与 toast composable，共 26 项，接入 CI `frontend` job
+
+- **核心依赖补齐主版本上界**：`litellm<2`、`fastapi<1`、`sqlmodel<1`、`sqlalchemy<3` 等，保护「用户按 pyproject 直接 pip install」场景不被上游跨主版本破坏；CI/开发仍由 `uv.lock` 精确锁定
+
+- **消息落库改为 write-behind 批量提交**：`Database.record_message` 入队即返回，后台任务按「50 条阈值 / 200ms 窗口」合并为一次批量事务（`bot/db/write_buffer.py`）。此前分发主链路对每条入站消息 `await save_messages_batch([单条])`，等价每条消息一次 SQLite 提交，写锁串行化的延迟直接叠加到消息处理延迟上。队列超上限丢弃并计数告警、批量写失败仅记录异常不重试、`Database.close()` 停机前 flush 残留
+
+- **事件并发上限下沉为配置**：`bot.event_concurrency`（默认 16）与 `bot.max_pending_events`（默认 128）替代原 `bot/core/bot.py` 模块常量，便于按 CPU / LLM 并发能力与群规模调优；非法值（0 / 负数）由 Pydantic 校验拒绝，避免信号量 0 永久阻塞
+
+- **HTTP 响应启用 GZip 压缩**：`GZipMiddleware`（`minimum_size=1024`）。WebUI 的 `index` 产物约 123KB、视图 chunk 8~25KB，此前未压缩传输，局域网/远程访问首屏明显偏慢
+
+- **启动期迁移漂移检测可跳过**：`_alembic_check` 支持 `QINGCI_SKIP_MIGRATION_CHECK=1` 跳过；缺少 `alembic.ini`（PyInstaller 打包形态）时降为 debug 日志，不再每次启动刷一条误导性 WARN
+
+- **Docker 构建上下文收敛**：`.dockerignore` 排除 `tests` / `docs` / `.github` / `scripts` / `desktop/electron` / 前端源码等运行期不读取的路径；builder 阶段改用 uv 安装依赖（`--prefix` 布局与 pip 一致，镜像结构不变）
+
+### Added
+
+- **Prometheus 指标端点 `GET /api/metrics`**：导出运行状态、事件积压与丢弃计数、消息写入缓冲积压、插件数、按 `plugin`/`matcher` 细分的调用量/错误量/慢调用/平均耗时。零依赖手写文本格式，**不查数据库**，可安全按 15s 抓取；与其他管理接口同样受 `api_key` 保护
+
+- **Dependabot 配置**：Python（pyproject + uv.lock）、Web 前端、Electron 壳、GitHub Actions 四类依赖的周期性更新；次版本/补丁合并为单个 PR，主版本单独成 PR 以便人工放宽上界并回归
+
+- **CI 依赖安全扫描**：新增 `audit` job 运行 `pip-audit`。初始为只报告不阻断（`continue-on-error`），待存量 CVE 人工 triage 后再提升为阻断
+
+### Fixed
+
+- **`.dockerignore` 的 `dist` 规则误排除 `web/dist`**：Docker 忽略规则未锚定根目录时会匹配任意层级，导致 WebUI 构建产物从不进入镜像（容器内始终显示"Web UI 未构建"）。改为 `/dist`、`/build` 锚定根目录
+
+- **静默吞异常留痕**：插件配置 Schema 导出失败、向量库文档列表读取失败两处降级路径补 `logger.debug(exc_info=True)`；`CONTRIBUTING.md` 明确"降级路径必须留痕"的约定（日志系统与资源清理路径除外）
+
+### Performance
+
+- **RAG 关键词检索改 top-k 选取**：`KeywordKnowledgeStore.search` 用 `heapq.nlargest` 替代「全量打分 + 全排序」（O(n log n) → O(n log k)）；`KnowledgeStore.search_async` / `reload_async` 的 keyword 分支走 `run_cpu` 线程池卸载，知识库规模增长时不再阻塞事件循环
+
+### Removed
+
+- **`messages` 表冗余 `group_id` 单列索引**：复合索引 `ix_messages_group_id_created_at` 的最左前缀已完整覆盖按群查询，单列索引纯属高频写表的写放大。迁移 `b7c1d9e4f2a8` 负责 drop（含 downgrade 回滚）
+
 ## \[1.17.3] - 2026-09-01（数据目录跟随可执行目录）
 
 ### Changed

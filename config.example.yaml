@@ -16,6 +16,8 @@ bot:
   wizard_skipped: false        # 是否跳过了首次配置引导
   auto_install_plugin_deps: true  # 自动安装插件声明的第三方依赖到实例隔离 deps 目录
                                   # （关闭可降低供给链风险，但依赖缺失时插件会加载失败）
+  event_concurrency: 16         # 同时处理的事件数上限（洪峰时超出部分排队；按 CPU/LLM 并发能力调优）
+  max_pending_events: 128       # 排队+执行中的事件总数上限（超过即丢弃新事件，防止内存无界增长）
 onebot:
   enabled: true                # 是否启动 OneBot 反向 WS 服务端（Telegram 主平台实例可设为 false）
   host: 127.0.0.1

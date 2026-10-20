@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -144,6 +145,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # 响应压缩：WebUI 的 JS/CSS 产物（index 约 123KB、视图 chunk 8~25KB）
+    # 未压缩传输在局域网/远程访问时明显拖慢首屏。minimum_size 取 1KB，
+    # 避免为小的 JSON 响应增加压缩开销（小响应压缩收益低于 CPU 成本）。
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+
     # 基础安全响应头（X-Frame-Options 兼容 WebUI 在桌面窗口内嵌与插件 iframe）
     @app.middleware("http")
     async def _security_headers(request, call_next):
@@ -209,6 +215,7 @@ def create_app() -> FastAPI:
         log_router,
         login_router,
         market_router,
+        metrics_router,
         plugin_router,
     )
 
@@ -223,6 +230,7 @@ def create_app() -> FastAPI:
     app.include_router(backup_router, prefix="/api/backup", tags=["Backup"])
     app.include_router(command_router, prefix="/api/command", tags=["Command"])
     app.include_router(instances_router, prefix="/api/instances", tags=["Instance"])
+    app.include_router(metrics_router, prefix="/api/metrics", tags=["Metrics"])
 
     # 注册 WebSocket 广播 broker（register_broker 内部已去重，create_app 多次调用安全）
     register_broker(_broadcast_message_to_ws)

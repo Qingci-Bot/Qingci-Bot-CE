@@ -18,10 +18,11 @@ __pycache__
 .pytest_cache
 .coverage
 
-# 构建产物
-build
-dist
-*.spec
+# 构建产物（锚定到根目录：不加前导 / 会同时匹配 web/dist，
+# 导致 WebUI 构建产物被排除、镜像里永远没有界面）
+/build
+/dist
+qingci-bot-ce.spec
 
 # 实例数据（含密钥）：通过 docker-compose 以卷挂载，不进镜像
 instances
@@ -29,3 +30,32 @@ instances
 # 前端构建中间件（仅排除 node_modules；web/dist 为已构建产物，需随镜像分发供 WebUI 使用）
 web/node_modules
 web/*.log
+
+# ── 运行镜像不需要的开发/测试资产 ──
+# 运行阶段 COPY . . 会把这些一并带入，只增加镜像体积与攻击面。
+# 判定依据：运行时实际读取的路径只有 main.py / bot / api / desktop/py /
+# plugins / migrations / web/dist / alembic.ini / config.example.yaml。
+tests
+docs
+.github
+scripts
+desktop/electron
+.workbuddy-ai
+
+# 构建脚本与依赖锁（镜像内不重新解析依赖）
+build.bat
+build-electron.bat
+build-linux.sh
+uv.lock
+
+# 前端源码（镜像只消费 web/dist，不在镜像内重建 UI）
+web/src
+web/index.html
+web/package.json
+web/package-lock.json
+web/vite.config.js
+web/.eslintrc.cjs
+web/.prettierrc
+
+# 文档类（镜像内无读取方）
+*.md

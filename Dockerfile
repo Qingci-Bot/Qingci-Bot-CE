@@ -19,6 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# uv：依赖解析与安装明显快于 pip（本项目 16 个直接依赖 + git 依赖）。
+# 只装进 builder 阶段，运行镜像不含 uv。--prefix 布局与 pip 完全一致，
+# 因此运行阶段仍整体拷贝 /install，镜像结构不变。
+RUN pip install --no-cache-dir uv==0.12.3
+
 WORKDIR /build
 
 # 先拷贝清单与源码，再统一安装；pip 依赖层可被后续 `docker build` 复用
@@ -31,7 +36,7 @@ COPY . .
 # 故构建阶段临时把 SDK 源切到 GitHub 主仓库。仅影响本镜像构建，
 # 不改变源码安装（pip/uv）时对国内用户的 Gitee 默认源。
 RUN sed -i 's#git+https://gitee.com/qingci-bot/Plugins-SDK.git#git+https://github.com/Qingci-Bot/Plugins-SDK.git#g' pyproject.toml \
-    && pip install --no-cache-dir --prefix=/install .
+    && uv pip install --python /usr/local/bin/python --prefix /install .
 
 # ── 运行阶段 ──
 FROM python:3.12-slim AS runtime

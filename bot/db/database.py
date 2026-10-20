@@ -17,6 +17,7 @@ from sqlmodel import delete, func, select
 
 from .engine import dispose_engine, init_db, session_scope
 from .models import AuditLog, GroupConfig, Message, PluginConfig, SessionHistory, UsageLog
+from .write_buffer import MessageWriteBuffer
 
 logger = logging.getLogger("qingci-bot.db")
 
@@ -26,7 +27,8 @@ class Database:
 
     def __init__(self, path: str | None = None):
         # path 参数保留为兼容签名，实际路径由 engine.py 统一管理
-        pass
+        # 消息写入缓冲：高频单条落库合并为批量提交，避免每条消息一次事务提交
+        self._message_buffer = MessageWriteBuffer(self)
 
     async def connect(self) -> None:
         """初始化数据库连接并建表"""
@@ -34,10 +36,39 @@ class Database:
         logger.info("数据库已连接")
 
     async def close(self) -> None:
-        """关闭数据库连接，释放连接池"""
+        """关闭数据库连接，释放连接池
+
+        先落库缓冲中的残留消息（缓冲可能仍持有未提交记录），再释放引擎。
+        """
+        try:
+            await self._message_buffer.close()
+        except Exception:
+            logger.exception("关闭消息写入缓冲失败")
         await dispose_engine()
 
     # ============ 消息记录 ============
+
+    def record_message(self, record: dict) -> bool:
+        """消息入库（write-behind：入队即返回，不阻塞分发主链路）
+
+        record 字段与 save_messages_batch 的单条格式一致。返回 False 表示
+        未入队（队列溢出或事件循环不可用），调用方可选择降级直写。
+        """
+        return self._message_buffer.put(record)
+
+    async def flush_messages(self) -> None:
+        """强制写出缓冲中的消息（测试/停机/一致性校验用）"""
+        await self._message_buffer.flush()
+
+    @property
+    def pending_messages(self) -> int:
+        """当前排队待写入的消息条数（观测用）"""
+        return self._message_buffer.pending
+
+    @property
+    def dropped_messages(self) -> int:
+        """因缓冲溢出被丢弃的消息条数（观测用）"""
+        return self._message_buffer.dropped
 
     async def save_message(
         self,

@@ -31,6 +31,10 @@
    - Python: 遵循 `ruff` 规则（配置见 `pyproject.toml`）
    - 前端: 遵循 ESLint + Prettier 规则
    - 提交信息: 使用 [Conventional Commits](https://www.conventionalcommits.org/) 格式
+   - **异常处理**：降级路径允许 `except Exception`，但必须留痕——要么 `logger.debug(..., exc_info=True)`，
+     要么有明确的回退分支。禁止裸 `except: pass`（会让线上排障失去唯一线索）。
+     例外：日志系统自身（`logformat.py` / `alerter.py`，避免递归与告警风暴）与资源清理路径
+     （`close()` / `cleanup()`）可静默。
 4. 确保测试通过：`pytest`
 5. 提交 Pull Request
 
@@ -61,20 +65,21 @@ uv venv
 source .venv/bin/activate  # Linux/macOS
 
 # 安装开发依赖（含插件协议层 SDK，git 依赖自动安装）
-uv pip install -e ".[dev]"
+# 推荐用 uv sync：严格按 uv.lock 安装，与 CI 解析结果完全一致
+uv sync --locked --extra dev
 
 # 本地开发 Plugins-SDK 时，用 -e 安装覆盖 git 依赖版本（与 build.bat 一致）
 uv pip install -e ..\Plugins-SDK
 
 # 运行测试
-pytest
+uv run pytest
 
 # 代码检查
-ruff check .
-ruff format --check .
+uv run ruff check .
+uv run ruff format --check .
 
 # 类型检查
-mypy api bot desktop
+uv run mypy api bot desktop
 ```
 
 > **协议层说明**：`bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `dispatcher.MessageContext` 为 `qingci_plugin_sdk` 薄转发。修改权限语义、匹配规则、基类等协议行为时，请前往 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 仓库修改并在主项目提升 git 依赖版本；主项目内只改运行时逻辑（如 `bot/plugin/manager.py`、`bot/plugin/llm_tool.py`）。
@@ -85,6 +90,7 @@ mypy api bot desktop
 cd web
 npm install
 npm run dev       # 开发服务器
+npm test          # 单元测试（vitest，覆盖请求层/store/composable）
 npm run lint      # 代码检查
 npm run format    # 代码格式化
 ```

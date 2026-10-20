@@ -32,7 +32,10 @@ class Message(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     message_id: str = Field(index=True)  # 平台消息 ID（不再唯一）
     user_id: int = Field(index=True)
-    group_id: int | None = Field(default=None, index=True)
+    # group_id 不单独建索引：复合索引 ix_messages_group_id_created_at 的最左
+    # 前缀即 group_id，可完整支撑「按群查询 / 按群+时间范围查询」。单列索引
+    # 在此纯属写放大（messages 为高频写入表，每多一个索引就多一次 B-Tree 维护）。
+    group_id: int | None = Field(default=None)
     platform: str = Field(default="onebot")  # 消息来源平台（onebot / telegram / ...）
     content: str
     message_type: str = Field(default="group")

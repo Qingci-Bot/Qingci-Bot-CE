@@ -7,6 +7,7 @@ from .instances import router as instances_router  # noqa: F401
 from .log import router as log_router  # noqa: F401
 from .login import router as login_router  # noqa: F401
 from .market import router as market_router  # noqa: F401
+from .metrics import router as metrics_router  # noqa: F401
 from .plugin import router as plugin_router  # noqa: F401
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "command_router",
     "instances_router",
     "market_router",
+    "metrics_router",
 ]

@@ -140,18 +140,31 @@ async def init_db():
 
 
 def _alembic_check() -> None:
-    """检测模型与迁移脚本是否漂移（只读，不修改数据库）"""
-    import os
+    """检测模型与迁移脚本是否漂移（只读，不修改数据库）
 
+    每次启动都会执行，是启动耗时的固定成本之一。以下场景跳过：
+    - 测试环境（QINGCI_TEST=1）：高频 init_db，无意义
+    - 显式关闭（QINGCI_SKIP_MIGRATION_CHECK=1）：打包分发/容器冷启动优化
+    - 缺少 alembic.ini（PyInstaller 打包形态未携带迁移脚本）：降为 debug，
+      避免每次启动刷一条"疑似漂移"的误导性 WARN
+    """
     if os.environ.get("QINGCI_TEST") == "1":
-        # 测试环境使用内存/临时库且高频 init_db，跳过漂移检测
         return
+    if os.environ.get("QINGCI_SKIP_MIGRATION_CHECK") == "1":
+        logger.debug("已通过 QINGCI_SKIP_MIGRATION_CHECK 跳过迁移漂移检测")
+        return
+
+    root = Path(__file__).resolve().parents[2]
+    alembic_ini = root / "alembic.ini"
+    if not alembic_ini.is_file():
+        logger.debug(f"未找到 {alembic_ini}，跳过迁移漂移检测（打包形态正常现象）")
+        return
+
     try:
         from alembic import command
         from alembic.config import Config as AlembicConfig
 
-        root = Path(__file__).resolve().parents[2]
-        cfg = AlembicConfig(str(root / "alembic.ini"))
+        cfg = AlembicConfig(str(alembic_ini))
         command.check(cfg)
         logger.info("数据库 schema 与迁移脚本一致")
     except Exception as e:

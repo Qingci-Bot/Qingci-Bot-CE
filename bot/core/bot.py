@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -36,11 +37,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("qingci-bot")
 
-# 事件处理并发上限：防止消息洪峰时并发任务无界堆积（超限任务排队等待）
-_EVENT_CONCURRENCY = 16
-# 事件排队上限：_handle_event 中待处理（排队+执行）任务超过该值时丢弃新事件，
-# 防止洪峰时任务无界堆积导致内存耗尽（此时丢弃比拖垮整个进程更可接受）
-_MAX_PENDING_EVENTS = 128
+# 事件并发上限的默认值（配置缺失/旧配置回退用；实际取值见 bot.event_concurrency）
+_DEFAULT_EVENT_CONCURRENCY = 16
+# 事件排队上限的默认值（实际取值见 bot.max_pending_events）
+_DEFAULT_MAX_PENDING_EVENTS = 128
 
 
 def _safe_int(value, default: int = 0) -> int:
@@ -92,8 +92,13 @@ class QingciBot:
         self._running = False
         self._started = False  # 是否已调用过 start()（含部分失败场景）
         self._pending_tasks: set[asyncio.Task[Any]] = set()
+        # 事件丢弃计数：积压超限时累加，供 /metrics 观测（长期运行可发现容量不足）
+        self._dropped_events = 0
+        # 启动时刻（monotonic）：供 /metrics 计算运行时长；0 表示从未启动
+        self._started_at = 0.0
         # 事件处理并发信号量：限制同时执行的事件数，洪峰时超出部分排队等待
-        self._event_sem = asyncio.Semaphore(_EVENT_CONCURRENCY)
+        # 上限来自 bot.event_concurrency（可配置），缺省回退模块默认值
+        self._event_sem = asyncio.Semaphore(self._event_concurrency())
         # 错误告警处理器（alert.enabled 时 start 中 attach，stop 中 detach）
         self._alert_handler: AlertHandler | None = None
         # 全局事件钩子（消息中间件）：横切统计/审计/预处理，
@@ -112,6 +117,8 @@ class QingciBot:
     async def start(self) -> None:
         """启动 Bot"""
         self._started = True
+        # 运行时长起点（monotonic，不受系统时间调整影响）
+        self._started_at = time.monotonic()
         logger.info("Qingci-Bot CE 启动中...")
         await self.db.connect()
         # 会话状态持久化：开启时在首个事件到达前从快照恢复（幂等，缺失即空启动）
@@ -356,6 +363,44 @@ class QingciBot:
 
     # ============ 事件处理 ============
 
+    # ---- 运行指标（供 bot/metrics.py 读取，避免外部直接访问私有字段）----
+
+    @property
+    def pending_event_count(self) -> int:
+        """排队 + 执行中的事件数"""
+        return len(self._pending_tasks)
+
+    @property
+    def dropped_events_total(self) -> int:
+        """因积压超限被丢弃的事件总数"""
+        return self._dropped_events
+
+    @property
+    def uptime_seconds(self) -> float:
+        """运行时长（秒）；从未启动时返回 0"""
+        return time.monotonic() - self._started_at if self._started_at else 0.0
+
+    @property
+    def event_concurrency_limit(self) -> int:
+        """事件并发上限（配置值，含回退）"""
+        return self._event_concurrency()
+
+    def _event_concurrency(self) -> int:
+        """事件处理并发上限（读配置，异常/缺省回退默认值）"""
+        try:
+            value = int(getattr(self.config.bot, "event_concurrency", 0) or 0)
+        except (TypeError, ValueError, AttributeError):
+            value = 0
+        return value if value >= 1 else _DEFAULT_EVENT_CONCURRENCY
+
+    def _max_pending_events(self) -> int:
+        """待处理事件上限（读配置，异常/缺省回退默认值）"""
+        try:
+            value = int(getattr(self.config.bot, "max_pending_events", 0) or 0)
+        except (TypeError, ValueError, AttributeError):
+            value = 0
+        return value if value >= 1 else _DEFAULT_MAX_PENDING_EVENTS
+
     def _spawn_background_task(self, coro, name: str = "") -> asyncio.Task:
         """创建后台任务并保存引用，防止任务被 GC 与异常静默丢失
 
@@ -426,8 +471,12 @@ class QingciBot:
         """
         if not self._running:
             return
-        if len(self._pending_tasks) >= _MAX_PENDING_EVENTS:
-            logger.warning(f"事件积压过多（{len(self._pending_tasks)} pending），丢弃新事件")
+        limit = self._max_pending_events()
+        if len(self._pending_tasks) >= limit:
+            self._dropped_events += 1
+            logger.warning(
+                f"事件积压过多（{len(self._pending_tasks)}/{limit} pending），丢弃新事件"
+            )
             return
         task = self._spawn_background_task(self._process_event(event), "event-process")
         self._pending_tasks.add(task)

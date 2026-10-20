@@ -288,7 +288,14 @@ class MessageDispatcher:
         db = getattr(bot, "db", None)
         if db is not None:
             try:
-                await db.save_messages_batch([record])
+                # write-behind：入队即返回，由 Database 内部缓冲按批提交，
+                # 避免每条消息在分发主链路上等待一次 SQLite 事务提交
+                enqueue = getattr(db, "record_message", None)
+                if enqueue is not None:
+                    enqueue(record)
+                else:
+                    # 兼容未实现缓冲的替身/旧实现（测试 fake）
+                    await db.save_messages_batch([record])
             except Exception:
                 logger.exception("框架消息记录失败")
         try:
@@ -296,8 +303,11 @@ class MessageDispatcher:
 
             from ..broadcast import broadcast_message
 
-            record["created_at"] = datetime.now(timezone.utc).isoformat()
-            await broadcast_message(record)
+            # 广播载荷用副本：record 已进入写入缓冲队列（可能被后台任务持有），
+            # 直接改原对象会让「入库记录」与「广播记录」共享可变状态
+            await broadcast_message(
+                {**record, "created_at": datetime.now(timezone.utc).isoformat()}
+            )
         except Exception:
             logger.exception("框架消息广播失败")
 

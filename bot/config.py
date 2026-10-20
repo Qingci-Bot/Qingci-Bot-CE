@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ValidationError, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from .paths import app_root
 
@@ -161,6 +161,14 @@ class BotConfig(BaseModel):
     # 关闭可避免插件 requirements.txt 触发任意包安装（供给链风险），
     # 但依赖缺失时插件会加载失败。
     auto_install_plugin_deps: bool = True
+
+    # ── 事件处理并发（不同硬件/群规模需可调，故下沉为配置而非模块常量）──
+    # 同时执行的事件处理上限：洪峰时超出部分排队等待。
+    # 调大提升吞吐（受 CPU/LLM 并发能力约束），调小降低瞬时资源占用。
+    event_concurrency: int = Field(default=16, ge=1, le=512)
+    # 待处理（排队 + 执行）事件上限：超过即丢弃新事件，防止内存无界增长。
+    # 应显著大于 event_concurrency，留出突发排队空间。
+    max_pending_events: int = Field(default=128, ge=1, le=65536)
 
     # admin_set 缓存：super_admin + admin_users 的并集集合（权限检查 O(1) 成员判断）
     _admin_set_cache: frozenset[str] | None = None

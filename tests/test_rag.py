@@ -98,3 +98,44 @@ def test_vector_mode_falls_back_to_keyword_when_lancedb_missing(tmp_path, monkey
     # 回退后 keyword 检索仍可用
     store.add_document("doc_a", "北京 上海 广州")
     assert store.search("北京")
+
+
+def test_search_returns_top_k_by_score(tmp_path):
+    """检索按得分取 top-k：高分分块优先，且数量不超过 top_k"""
+    store = _store(tmp_path)
+    store.add_document("weak", "北京")
+    store.add_document("strong", "北京 北京 北京")
+
+    hits = store.search("北京", top_k=1)
+    assert len(hits) == 1
+    # 词频更高的分块排在前
+    assert hits[0].source == "strong"
+
+    assert len(store.search("北京", top_k=2)) == 2
+
+
+def test_search_no_hit_returns_empty(tmp_path):
+    store = _store(tmp_path)
+    store.add_document("doc_a", "北京 上海")
+    assert store.search("不存在的词") == []
+
+
+async def test_keyword_search_async_matches_sync_result(tmp_path):
+    """异步检索（线程池卸载）结果与同步检索一致，不改变语义"""
+    store = KnowledgeStore(root=tmp_path / "knowledge")
+    store.add_document("doc_a", "北京 上海 广州")
+
+    sync_hits = store.search("上海")
+    async_hits = await store.search_async("上海")
+
+    assert [c.text for c in async_hits] == [c.text for c in sync_hits]
+
+
+async def test_keyword_reload_async_keeps_index(tmp_path):
+    """异步重建索引（线程池卸载）后索引仍可用"""
+    store = KnowledgeStore(root=tmp_path / "knowledge")
+    store.add_document("doc_a", "北京 上海")
+    count_before = store.chunk_count
+
+    assert await store.reload_async() == count_before
+    assert store.search("北京")

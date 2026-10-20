@@ -375,7 +375,7 @@ async def test_copy_plugin_dir_rejects_invalid_name(bot, tmp_path):
     plugins_dir = tmp_path / "plugins"
     plugins_dir.mkdir()
 
-    name, target = await pm._copy_plugin_dir(src, "..", plugins_dir)
+    name, target = await pm._installer._copy_plugin_dir(src, "..", plugins_dir)
     assert name == ""
     assert target is None
     # 未发生路径穿越：plugins 目录未写入任何内容
@@ -392,7 +392,9 @@ async def test_copy_plugin_dir_keeps_old_on_failure(bot, tmp_path):
     (target / "old.txt").write_text("old", encoding="utf-8")
 
     # 源目录不存在 → copytree 抛 OSError，旧目录必须保留
-    name, result = await pm._copy_plugin_dir(tmp_path / "missing-src", "demo", plugins_dir)
+    name, result = await pm._installer._copy_plugin_dir(
+        tmp_path / "missing-src", "demo", plugins_dir
+    )
     assert result is None
     assert (target / "old.txt").read_text(encoding="utf-8") == "old"
 
@@ -578,7 +580,7 @@ async def test_install_archive_sha256_mismatch_rejected(bot, tmp_path, monkeypat
     import shutil
     import zipfile
 
-    from bot.plugin.manager import _sha256_file
+    from bot.plugin.installer import sha256_file as _sha256_file
 
     manager = bot.plugin_manager
     # 构造真实 zip 归档
@@ -592,12 +594,12 @@ async def test_install_archive_sha256_mismatch_rejected(bot, tmp_path, monkeypat
         shutil.copyfile(archive, dest)
         return True
 
-    monkeypatch.setattr(manager, "_download_archive", fake_download)
+    monkeypatch.setattr(manager._installer, "_download_archive", fake_download)
 
     target_dir = tmp_path / "installed"
 
     # 错误的 sha256 → 拒绝安装
-    _, result = await manager._fetch_plugin(
+    _, result = await manager._installer._fetch_plugin(
         "https://example.com/plugin.zip",
         "shaplug",
         target_dir,
@@ -606,7 +608,7 @@ async def test_install_archive_sha256_mismatch_rejected(bot, tmp_path, monkeypat
     assert result is None
 
     # 正确的 sha256 → 安装成功
-    name, result = await manager._fetch_plugin(
+    name, result = await manager._installer._fetch_plugin(
         "https://example.com/plugin.zip",
         "shaplug",
         target_dir,

@@ -360,6 +360,34 @@ api_key: your-secret-key
 
 - WebSocket（`/api/ws/log`、`/api/ws/chat`、`/api/ws/runlog`）通过 `token` 查询参数或 `sec-websocket-protocol: api-key.<key>` 子协议鉴权，方式同上
 
+## 监控指标（Prometheus）
+
+`GET /api/metrics` 以 Prometheus 文本格式（`text/plain; version=0.0.4`）导出进程内指标，**不查数据库**，可安全按 15s 间隔抓取。
+
+指标为运营数据（含调用量、错误量、插件列表），与其他管理接口一样受 `api_key` 保护。抓取端需携带请求头：
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: qingci-bot
+    metrics_path: /api/metrics
+    authorization:            # 或直接用 http_headers 传 X-API-Key
+      credentials: your-secret-key
+    static_configs:
+      - targets: ["127.0.0.1:8080"]
+```
+
+| 指标 | 类型 | 说明 |
+| --- | --- | --- |
+| `qingci_bot_up` / `_info` | gauge | 进程存活 / 版本标签 |
+| `qingci_bot_running` / `_connected` | gauge | Bot 运行状态 / 协议端连接状态 |
+| `qingci_bot_uptime_seconds` | gauge | 运行时长 |
+| `qingci_bot_events_pending` | gauge | 排队 + 执行中的事件数 |
+| `qingci_bot_events_dropped_total` | counter | 因积压超限丢弃的事件（持续增长说明 `bot.max_pending_events` 偏小） |
+| `qingci_bot_message_buffer_pending` / `_dropped_total` | gauge / counter | 消息写入缓冲积压与丢弃 |
+| `qingci_bot_plugins_loaded` | gauge | 已加载插件数 |
+| `qingci_bot_matcher_calls_total` / `_errors_total` / `_slow_total` / `_avg_duration_ms` | counter / gauge | 按 `plugin`、`matcher` 标签细分 |
+
 ## 配置文件说明
 
 > 配置模板见 `config.example.yaml`（敏感字段已脱敏，复制为 `config.yaml` 后按需修改）。
@@ -376,6 +404,8 @@ bot:
   user_blacklist: []               # 用户黑名单
   log_json: false                  # 结构化 JSON 日志（false 使用普通文本日志）
   auto_install_plugin_deps: true   # 自动安装插件声明的第三方依赖（关闭以降低供给链风险）
+  event_concurrency: 16            # 同时处理的事件数上限（洪峰超出部分排队；按 CPU/LLM 并发能力调优）
+  max_pending_events: 128          # 排队+执行中的事件总数上限（超过丢弃新事件，防内存无界增长）
 onebot:
   enabled: true                    # 是否启动 OneBot 反向 WS 服务端（Telegram/OneBot 12 主平台实例可设为 false）
   host: 127.0.0.1

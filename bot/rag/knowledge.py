@@ -6,11 +6,15 @@
 - 两种模式共享同一套文档管理 API（add/remove/list/reload）
 """
 
+import heapq
 import logging
 import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
+
+from ..core.cpu_pool import run_cpu
 
 logger = logging.getLogger("qingci-bot.rag")
 
@@ -125,18 +129,23 @@ class KeywordKnowledgeStore:
     # ============ 检索 ============
 
     def search(self, query: str, top_k: int | None = None) -> list[KnowledgeChunk]:
-        """关键词检索：返回得分最高的 top_k 个分块（无命中返回空列表）"""
+        """关键词检索：返回得分最高的 top_k 个分块（无命中返回空列表）
+
+        用 heapq.nlargest 取 top-k，避免对全部命中项做全量排序（O(n log n)
+        → O(n log k)）；知识库分块数增长时收益明显。
+        """
         q_tokens = tokenize(query)
         if not q_tokens or not self._chunks:
             return []
-        scored: list[tuple[int, KnowledgeChunk]] = []
-        for chunk in self._chunks:
-            score = sum(chunk.tf.get(t, 0) for t in q_tokens)
-            if score > 0:
-                scored.append((score, chunk))
-        scored.sort(key=lambda x: x[0], reverse=True)
         limit = top_k or self._top_k
-        return [chunk for _, chunk in scored[:limit]]
+        # 单趟计算得分并过滤零分分块（海象表达式避免重复求和）
+        scored = (
+            (score, chunk)
+            for chunk in self._chunks
+            if (score := sum(chunk.tf.get(t, 0) for t in q_tokens)) > 0
+        )
+        # key 指定按得分排序：KnowledgeChunk 不可比较，且得分相同时不应比较对象
+        return [chunk for _, chunk in heapq.nlargest(limit, scored, key=lambda x: x[0])]
 
     def build_reference(self, query: str, max_chars: int) -> str:
         """构造注入 system_prompt 的参考资料文本（无命中返回 ""）"""
@@ -591,7 +600,8 @@ class VectorKnowledgeStore:
                 for source in rows["source"].unique():
                     docs[source] = int((rows["source"] == source).sum())
             except Exception:
-                pass
+                # 向量表读取失败时仍回退到目录扫描，但留痕便于定位索引损坏
+                logger.debug("读取向量表文档列表失败，回退目录扫描", exc_info=True)
         # 也列出目录中的文件（含空文档）
         if self._root.exists():
             for path in self._root.iterdir():
@@ -680,20 +690,26 @@ class KnowledgeStore:
         return backend.reload()
 
     async def reload_async(self) -> int:
+        """异步重建索引（keyword 后端全量读文件+分词是同步 CPU/IO 操作，
+        卸载到线程池，避免大知识库重建期间卡住事件循环）"""
         backend = self._backend
         if isinstance(backend, VectorKnowledgeStore):
             return await backend.reload()
-        return backend.reload()
+        return cast(int, await run_cpu(backend.reload))
 
     def search(self, query: str, top_k: int | None = None) -> list[KnowledgeChunk]:
         return self._backend.search(query, top_k)
 
     async def search_async(self, query: str, top_k: int | None = None) -> list[KnowledgeChunk]:
-        """异步检索（vector 后端在事件循环内直接 await，避免同步包装死锁）"""
+        """异步检索（vector 后端在事件循环内直接 await，避免同步包装死锁）
+
+        keyword 后端为纯 Python 打分计算，走 run_cpu 卸载到线程池：
+        分块数较大时避免同步扫描阻塞整个事件循环（消息收发/API 一并卡住）。
+        """
         backend = self._backend
         if isinstance(backend, VectorKnowledgeStore):
             return await backend._search_async(query, top_k)
-        return backend.search(query, top_k)
+        return cast(list[KnowledgeChunk], await run_cpu(backend.search, query, top_k))
 
     def build_reference(self, query: str, max_chars: int) -> str:
         return self._backend.build_reference(query, max_chars)

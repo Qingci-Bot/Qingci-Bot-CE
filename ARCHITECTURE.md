@@ -83,6 +83,7 @@ Qingci-Bot-CE/
 │   ├── alerter.py             # 错误告警器（ERROR 日志阈值 → 私聊通知管理员）
 │   ├── filter.py              # 敏感词过滤器（词库 + 打码）
 │   ├── broadcast.py           # 消息广播（WS 实时推送 broker）
+│   ├── metrics.py             # 运行指标导出（Prometheus 文本格式，零依赖，不查库）
 │   ├── logformat.py           # 结构化 JSON 日志 + 文件轮转 + 运行日志采集（RunLogHandler 环形缓冲）
 │   ├── logredact.py           # 日志脱敏（API Key / token 打码）
 │   ├── html_renderer.py       # HTML → 图片渲染服务（Playwright 无头 Chromium，可选依赖）
@@ -112,6 +113,7 @@ Qingci-Bot-CE/
 │   │   └── knowledge.py       # 知识库（keyword 关键词检索 + vector 向量检索，后者需 lancedb）
 │   ├── db/
 │   │   ├── database.py        # 数据库仓储（基于 SQLModel）
+│   │   ├── write_buffer.py    # 消息写入缓冲（write-behind 批量提交，避免每条消息一次事务）
 │   │   ├── engine.py          # 异步引擎 + 会话工厂（WAL 模式；连接池参数可经环境变量覆盖）
 │   │   │                       #  QINGCI_DB_POOL_SIZE / QINGCI_DB_MAX_OVERFLOW
 │   │   └── models.py          # SQLModel 模型定义
@@ -130,6 +132,7 @@ Qingci-Bot-CE/
 │       │   └── events.py       # 类型化事件（notice/request）
 │       ├── base.py             # 兼容再导出（指向 protocol/base.py）
 │       ├── manager.py          # 插件管理器（热加载 + 模块级收集 + SDK data_root 重定向）
+│       ├── installer.py        # 插件安装/卸载（来源拉取 + 归档安全解压 + 目录原子落位）
 │       ├── market.py           # 插件市场：索引拉取/缓存 + 安装/更新编排
 │       ├── deps.py             # 插件第三方依赖自动安装（data_root()/deps/<name>/ 按插件隔离 + sys.path 注入）
 │       ├── _proc.py            # 子进程公共标志（Windows 隐藏控制台窗口）
@@ -164,8 +167,8 @@ Qingci-Bot-CE/
 ├── api/
 │   ├── auth.py                # API 鉴权
 │   ├── audit.py               # 审计日志（埋点 + 查询）
-│   ├── server.py              # FastAPI 应用
-│   └── routes/                # API 路由（bot/config/plugin/market/log/group/login/backup/command/instances）
+│   ├── server.py              # FastAPI 应用（CORS / 安全响应头 / GZip 压缩 / WS）
+│   └── routes/                # API 路由（bot/config/plugin/market/log/group/login/backup/command/instances/metrics）
 ├── web/                       # Vue 3 前端
 │   └── src/
 │       ├── views/             # 页面组件
@@ -271,6 +274,8 @@ Qingci-Bot-CE/
 
 - 加载 SDK 式插件时调用 `qingci_plugin_sdk.paths.set_data_root()` 将插件数据目录重定向到当前实例（协议层转发后，内置插件同样经此路径，实例隔离一致）
 
+- 职责边界：安装/卸载链路（来源拉取、归档安全解压、目录落位、依赖清理）独立在 `bot/plugin/installer.py`（`PluginInstaller`），`PluginManager.install/remove` 为薄委托。安全约束（SSRF 白名单、归档炸弹上限、Zip Slip 预检、插件名穿越校验）集中在该模块，改动时不应绕开
+
 ### LLMManager（`bot/llm/manager.py`）
 
 - 会话管理：按群聊/用户独立维护对话历史，内存 + 数据库双写
@@ -299,11 +304,15 @@ Qingci-Bot-CE/
 
 - aiosqlite 异步引擎（WAL 模式，提升并发读性能）
 
+- **消息写入缓冲（write-behind）**：`bot/db/write_buffer.py` — 分发主链路对入站消息只做入队（`Database.record_message`，零等待），后台任务按「50 条阈值 / 200ms 窗口」合并为一次批量事务提交，把「每条消息一次 commit」降为「一批一次 commit」，避免 SQLite 写锁串行化直接叠加到消息处理延迟；队列超上限丢弃并计数告警，批量写失败仅记录异常不重试，停机时 `Database.close()` 先 flush 残留再释放引擎
+
 - 批量写入优化（`save_messages_batch`）
 
 - 可配置连接池：文件型 SQLite 默认 `AsyncAdaptedQueuePool(pool_size=5, max_overflow=10)`；读写争用可经环境变量覆盖——`QINGCI_DB_POOL_SIZE` / `QINGCI_DB_MAX_OVERFLOW`（未设保持默认）
 
 - 在线备份（sqlite backup API）
+
+- 索引策略：`messages` 仅保留必要索引——`(group_id, created_at)` 复合（同时覆盖按群查询）、`(platform, message_id, created_at)`、`message_id`、`user_id`、`created_at`；不单独建 `group_id` 索引（复合索引最左前缀已覆盖），减少高频写表的 B-Tree 维护开销
 
 ### 会话状态持久化（`bot/core/session_persistence.py`）
 
