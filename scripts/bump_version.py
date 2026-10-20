@@ -9,6 +9,10 @@
     - web/package.json       version（前端构建元数据）
     - web/package-lock.json  version（顶层 + packages[""] 两处根项目版本，
                              依赖包自身版本不属项目版本、保持不变）
+    - desktop/electron/package.json + package-lock.json
+                             electron-builder 据此命名安装包
+                             （Qingci-Bot-CE-<ver>-Setup-x64.exe 等），
+                             漏改会让 Release 产物版本号落后一版
 
 用法：
     python scripts/bump_version.py 1.7.0     # 同步升级各文件版本号
@@ -28,6 +32,11 @@ PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 PACKAGE_INIT = PROJECT_ROOT / "bot" / "__init__.py"
 WEB_PACKAGE_JSON = PROJECT_ROOT / "web" / "package.json"
 WEB_PACKAGE_LOCK = PROJECT_ROOT / "web" / "package-lock.json"
+# Electron 壳：electron-builder 用这里的 version 命名产物
+# （Qingci-Bot-CE-<ver>-Setup-x64.exe / -win.zip / .AppImage），
+# 漏改会让整个 Release 的安装包版本号落后一版
+ELECTRON_PACKAGE_JSON = PROJECT_ROOT / "desktop" / "electron" / "package.json"
+ELECTRON_PACKAGE_LOCK = PROJECT_ROOT / "desktop" / "electron" / "package-lock.json"
 
 # 语义化版本：主.次.补丁，可带 -预发布 或 +构建元数据 后缀（符合 PEP 440 常见形态）
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+_-]+)?$")
@@ -109,6 +118,7 @@ def write_pyproject_version(content: str, new_version: str) -> str | None:
 
 def read_versions() -> dict[str, str | None]:
     lock_content = WEB_PACKAGE_LOCK.read_text(encoding="utf-8")
+    electron_lock_content = ELECTRON_PACKAGE_LOCK.read_text(encoding="utf-8")
     return {
         "pyproject.toml": read_pyproject_version(PYPROJECT.read_text(encoding="utf-8")),
         "bot/__init__.py": _read_value(PACKAGE_INIT.read_text(encoding="utf-8"), _INIT_VERSION_RE),
@@ -117,6 +127,15 @@ def read_versions() -> dict[str, str | None]:
         ),
         "web/package-lock.json": _read_value(lock_content, _LOCK_TOP_VERSION_RE),
         "web/package-lock.json[packages]": _read_value(lock_content, _LOCK_PACKAGE_VERSION_RE),
+        "desktop/electron/package.json": _read_value(
+            ELECTRON_PACKAGE_JSON.read_text(encoding="utf-8"), _PACKAGE_JSON_VERSION_RE
+        ),
+        "desktop/electron/package-lock.json": _read_value(
+            electron_lock_content, _LOCK_TOP_VERSION_RE
+        ),
+        "desktop/electron/package-lock.json[packages]": _read_value(
+            electron_lock_content, _LOCK_PACKAGE_VERSION_RE
+        ),
     }
 
 
@@ -132,6 +151,7 @@ def apply_version(new_version: str) -> bool:
     for path, pattern in (
         (PACKAGE_INIT, _INIT_VERSION_RE),
         (WEB_PACKAGE_JSON, _PACKAGE_JSON_VERSION_RE),
+        (ELECTRON_PACKAGE_JSON, _PACKAGE_JSON_VERSION_RE),
     ):
         content = path.read_text(encoding="utf-8")
         updated = _replace_value(content, pattern, new_version)
@@ -149,6 +169,15 @@ def apply_version(new_version: str) -> bool:
         ok = False
     else:
         WEB_PACKAGE_LOCK.write_text(lock_updated, encoding="utf-8")
+
+    electron_lock_updated = update_package_lock_version(
+        ELECTRON_PACKAGE_LOCK.read_text(encoding="utf-8"), new_version
+    )
+    if electron_lock_updated is None:
+        print(f"[错误] {_display(ELECTRON_PACKAGE_LOCK)} 中未找到根项目版本号字段")
+        ok = False
+    else:
+        ELECTRON_PACKAGE_LOCK.write_text(electron_lock_updated, encoding="utf-8")
     return ok
 
 
@@ -183,7 +212,12 @@ def main() -> int:
         print("[不一致] 版本号不统一：")
         for name, ver in versions.items():
             print(f"  {name}: {ver or '(未找到)'}")
-        return 1
+        # --check 用不一致退出码报错；指定新版本号时继续执行——
+        # 版本漂移（如漏改某一处）恰恰需要靠一次升级来纠正，
+        # 此时中止会让工具无法自愈。
+        if args.check:
+            return 1
+        print("[继续] 将把所有位置统一升级到指定版本")
 
     if args.check:
         print(f"[一致] 全部版本号均为: {next(iter(distinct), '(未找到)')}")
@@ -199,6 +233,9 @@ def main() -> int:
         "web/package.json",
         "web/package-lock.json",
         "web/package-lock.json[packages]",
+        "desktop/electron/package.json",
+        "desktop/electron/package-lock.json",
+        "desktop/electron/package-lock.json[packages]",
     ):
         print(f"  {name} ✓")
     return 0

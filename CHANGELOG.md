@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **版本脚本漏覆盖 Electron 壳，导致安装包版本号落后一版**：`scripts/bump_version.py` 只同步 pyproject / bot / web 四处，`desktop/electron/package.json` 未纳入——electron-builder 据此命名产物，v1.18.0 的 `Setup-x64.exe`、`win.zip`、`.AppImage` 全部被命名成 1.17.3。现已纳入该文件与其 package-lock，且脚本在检测到版本漂移时不再直接中止（否则无法靠一次升级自愈）
+
 - **CI 触发范围收窄，消除依赖升级刷屏**：`push` 事件从 `branches: ["**"]` 收为 `["main"]`——此前 Dependabot 分支既跑 push 又跑 pull_request，同一提交触发两遍完整流水线（首次启用 Dependabot 时 12 个 PR → 24 次运行）。同时按路径拆分为 `ci.yml`（Python）/ `ci-web.yml`（前端）/ `ci-desktop.yml`（桌面壳），Web 依赖升级不再连带跑 docker build、install.sh 冒烟与 3.10/3.11 矩阵
 
 - **Dependabot 分组降噪**：每个生态按「minor+patch」与「major」各合并为一个 PR，PR 上限压到 2；Python 主版本更新完全交给人工（pyproject 上界策略要求人工放宽并回归），避免自动提「把 `<2` 改成 `<3`」这类不可直接合并的 PR
