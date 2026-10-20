@@ -28,7 +28,7 @@ dependencies = [
     "httpx>=0.28.0,<1",
     "litellm>=1.50.0,<2",
     "apscheduler>=3.10,<4",
-    "mcp>=1.6,<2",
+    "mcp>=1.6,<3",
 ]
 
 [project.scripts]
