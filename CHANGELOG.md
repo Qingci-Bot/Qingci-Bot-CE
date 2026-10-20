@@ -5,6 +5,15 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Changed
+
+- **Electron 33 → 44 / electron-builder 25 → 26**：桌面壳升级到当前版本线。连带处理三处 Dependabot 无法自动完成的适配——
+  ① Electron 44 要求 Node ≥22.12，CI 的 `ci-desktop.yml` 与发布流水线的 Windows/Linux 作业 Node 由 20 抬到 22（README / CONTRIBUTING 的环境要求同步）；
+  ② Electron 44 取消了包内 postinstall，二进制改为首次 `require('electron')` 时惰性下载，`allowScripts` 由钉死 `electron@33.4.11` 改为不钉版本的 `"electron": true`，避免每次升级都要手改；
+  ③ 逐项核对主进程 API 面（`loadFile` / `loadURL` / `contextBridge` / `ipcRenderer` / `Tray` / `Menu` / `nativeImage` / `app.*`），无 Electron 34~44 期间移除的接口
+
 ## \[1.18.0] - 2026-10-20（性能、可观测性与工程化收口）
 
 ### Changed

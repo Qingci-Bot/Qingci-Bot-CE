@@ -105,7 +105,7 @@ uv pip install -e ".[build]"
 .\build.bat       # Windows
 ./build-linux.sh  # Linux（等价脚本；国内跑 SDK 走 Gitee 默认源）
 
-# 第二步：Electron 桌面壳（需 Node.js 18+/npm；内嵌上一步产出的后端）
+# 第二步：Electron 桌面壳（需 Node.js 22+/npm；Electron 44 要求 Node ≥22.12；内嵌上一步产出的后端）
 .\build-electron.bat                          # Windows 安装版 Setup.exe + 绿色解压 zip
 cd desktop/electron && npm run build:linux     # Linux AppImage
 ```

@@ -52,7 +52,7 @@
 
 - Node.js 18+（仅构建 Web UI 时需要，`web/dist` 已存在可跳过）
 
-- 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 18+（`desktop/electron`）；最终用户运行 `build-electron.bat` 产出的安装版 / 绿色解压版 EXE 无需额外运行时
+- 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 22+（`desktop/electron`，Electron 44 要求 Node ≥22.12）；最终用户运行 `build-electron.bat` 产出的安装版 / 绿色解压版 EXE 无需额外运行时
 
 ## 1. 安装
 
@@ -87,7 +87,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 >
 > **打包版（EXE）已全内置**：`build.bat` 构建时自动下载无头 Chromium 到产物目录 `ms-playwright\`，运行时经 `PLAYWRIGHT_BROWSERS_PATH` 定位，EXE 开箱即可渲染签到卡，无需最终用户再执行安装。构建期同样可用上述 `PLAYWRIGHT_DOWNLOAD_HOST` 走国内镜像。
 >
-> **桌面壳打包另见**：`build.bat` 产出的 onedir（`dist\qingci-bot-ce\`）与 `build-electron.bat`（electron-builder，产出 NSIS 安装版 Setup.exe + 绿色解压 zip）实例与数据均随可执行目录 `instances\<name>\` 自包含分发（DB/日志/插件数据），便于整体拷贝迁移；桌面壳需 Node.js 18+，用户运行安装版/绿色解压版无需额外运行时。
+> **桌面壳打包另见**：`build.bat` 产出的 onedir（`dist\qingci-bot-ce\`）与 `build-electron.bat`（electron-builder，产出 NSIS 安装版 Setup.exe + 绿色解压 zip）实例与数据均随可执行目录 `instances\<name>\` 自包含分发（DB/日志/插件数据），便于整体拷贝迁移；桌面壳需 Node.js 22+（Electron 44 要求），用户运行安装版/绿色解压版无需额外运行时。
 >
 > **Linux 桌面（AppImage）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.bat` 的对应脚）产出 onedir，再经 `electron-builder --linux` 打成 AppImage；数据目录同样随可执行目录 `instances\` 自包含分发。
 >
