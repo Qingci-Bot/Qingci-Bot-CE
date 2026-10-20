@@ -660,6 +660,48 @@ self.session_state.set("banned_keywords", ["广告"], group_id=456)
 | `await serialize()`                 | 序列化所有会话状态      |
 | `await deserialize(data)`           | 从序列化数据恢复       |
 
+### 会话阶梯（多轮交互）
+
+`ctx.session_state` 是「按会话存键值」，适合表单式的零散状态；需要**一个 handler 跨多轮续接**时用
+`ctx.session`（会话阶梯）：handler 调 `pause` 挂起，用户下一条消息会再次进入同一 handler，
+直到 `finish` 或 `reject`。
+
+```python
+from bot.plugin.matcher import MatcherContext, on_command
+
+
+@on_command("wizard")
+async def wizard(ctx: MatcherContext) -> None:
+    # ctx.session 为 Session | None（仅调度注入时非空），先判空
+    if ctx.session is None:
+        return
+
+    step = getattr(ctx.session, "step", "ask_name")
+    if step == "ask_name":
+        ctx.session.step = "ask_age"  # 跨轮状态：挂在 session 上即可保留
+        await ctx.session.pause("请输入你的名字：")
+    if step == "ask_age":
+        ctx.session.name = ctx.plain_text
+        ctx.session.step = "done"
+        await ctx.session.pause(f"你好 {ctx.session.name}，请输入你的年龄：")
+
+    ctx.session.age = ctx.plain_text
+    await ctx.session.finish(f"向导完成：{ctx.session.name}，{ctx.session.age}岁")
+```
+
+| 方法 | 行为 |
+|------|------|
+| `await ctx.session.send(text)` | 发送文本但不结束，handler 继续执行 |
+| `await ctx.session.pause(text)` | 发送文本并挂起，下一条同会话消息续接同一 handler（跳过命令前缀规则） |
+| `await ctx.session.finish(text)` | 发送文本并结束阶梯，不再续接 |
+| `await ctx.session.reject(text)` | 发送文本，拒绝当前输入并继续等待（可用于输入校验） |
+
+- 阶梯按会话隔离（私聊按用户、群聊按「群号 + 用户」），默认 300 秒超时；插件卸载/禁用时自动清理
+- 跨轮状态直接挂在 `ctx.session` 上（`ctx.session.任意属性 = 值`），SDK 已声明 `__getattr__`/`__setattr__`，类型检查不会报错
+- 提示文本走**主动发送**通道，handler 正常 `return` 的文本走**回复**通道
+
+> 完整说明与更多示例见 SDK 文档 `Plugins-SDK/README.md` 的「会话阶梯（多轮交互）」章节。
+
 ### 插件依赖（require）
 
 插件可声明依赖的其他插件，加载前 `PluginManager` 会自动先加载依赖：
@@ -916,7 +958,7 @@ self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 | `ctx.match`         | `re.Match`            | 正则匹配结果（`regex` 规则写入）                           |
 | `ctx.subcommand`    | `str`                 | 子指令名（`subcommand` 规则写入，如 `admin ban` 中的 `ban`） |
 | `ctx.parsed_args`   | `dict`                | `args_schema` 类型化解析后的命令参数字典                    |
-| `ctx.session`       | `Session`             | 会话阶梯句柄（多轮交互，`pause`/`finish`/`reject`）         |
+| `ctx.session`       | `Session \| None`     | 会话阶梯句柄（多轮交互，`pause`/`finish`/`reject`）；仅调度注入时非空，**使用前需判空** |
 | `ctx.session_state` | `SessionStateManager` | TTL 会话状态（`get`/`set` 等）                        |
 | `ctx.event`         | `NoticeEvent`         | 类型化事件对象（notice/request 事件注入，消息事件为 None）        |
 
@@ -1251,11 +1293,14 @@ await self.connection.send_msg("group", ctx.group_id, msg.as_dicts())
 
 > **兼容说明**：发送接口（`send_msg` / `send_group_msg` / `send_private_msg` / `call_api` 的 `message` 参数）同时接受**纯文本字符串** / **v11 段数组** / **v12 段数组**。发往 OneBot-11 协议端时由 `bot/core/message.py` 的 `segments_to_cq` 将 v12 段自动转为 CQ 码（`mention`→`[CQ:at]`、`voice`→`[CQ:record]`、`reply`→`[CQ:reply]` 等）。`bot/core/message.py` 的旧 `Message`/`MessageSegment` 仅保留给 OneBot-11 平台路径，新插件请统一使用 SDK 段：
 >
-> ```python
-> # 兼容：sdk 段也可取 v11 视图（供旧平台/旧 API 使用）
-> from qingci_plugin_sdk.segments import segments_to_v11
-> v11_segments = segments_to_v11(ctx.message.segments)
-> ```
+兼容用法（把收到的 v12 段转成 v11 视图）：
+
+```python
+from qingci_plugin_sdk.segments import segments_to_v11
+
+# ctx.segments 是收到的完整 v12 段数组
+v11_segments = segments_to_v11(ctx.segments)
+```
 
 ### 多平台插件开发（QQ / Telegram）
 

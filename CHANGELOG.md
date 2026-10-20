@@ -5,6 +5,18 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Changed
+
+- **`PLUGIN_DEV.md` 补「会话阶梯（多轮交互）」小节**：此前 1700 行文档里只有字段表一行提到 `ctx.session`，`pause` / `finish` / `reject` 的用法没有任何示例。同时把该字段的类型标注修正为 `Session | None`（原标 `Session`，照抄会漏判空而在类型检查下报错）
+
+- **`ARCHITECTURE.md` 修正协议层转发路径**：原文写「`bot/core/dispatcher.py` 中的 `MessageContext` 为薄转发」，实际早已迁到 `bot/plugin/protocol/context.py`；一并补全 `protocol/` 下的转发清单
+
+### Added
+
+- **`tests/test_docs.py`（45 例）**：校验 `README` / `PLUGIN_DEV` / `ARCHITECTURE` / `CONTRIBUTING` / `SECURITY` / `docs/*` 中全部 python 代码块的语法与导入符号。首次运行即抓出 `PLUGIN_DEV.md` 中一处被误写进引用块的代码块（每行带 `>` 前缀，无法解析）
+
 ## \[1.18.2] - 2026-10-20（插件 SDK 升级）
 
 ### Changed

@@ -36,7 +36,7 @@
 
 ### 协议层归属
 
-插件系统的协议层（`PluginBase` / `Matcher` / `MatcherContext` / `Permission` / `Rule` / `MessageContext` / `RateLimiter`）**统一由独立插件 SDK 维护**（[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 的 `qingci_plugin_sdk` 包）。主项目的 `bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `bot/core/dispatcher.py` 中的 `MessageContext` 均为薄转发（`from qingci_plugin_sdk.* import *`），不保存任何协议层实现，从根本上消除两处定义漂移：
+插件系统的协议层（`PluginBase` / `Matcher` / `MatcherContext` / `Permission` / `Rule` / `MessageContext` / `RateLimiter`）**统一由独立插件 SDK 维护**（[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 的 `qingci_plugin_sdk` 包）。主项目的 `bot/plugin/protocol/{base,context,matcher,permission,rule,ratelimit,session,events}.py` 均为薄转发（`from qingci_plugin_sdk.* import *`），`bot/plugin/` 顶层同名模块为兼容再导出，不保存任何协议层实现，从根本上消除两处定义漂移：
 
 - 内置插件与外部插件使用**同一个**基类与匹配器体系，行为完全一致
 
