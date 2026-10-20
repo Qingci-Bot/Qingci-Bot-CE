@@ -1,9 +1,45 @@
 name: CI
 
+# 触发范围刻意收窄，避免一次依赖升级把整个作业队列排满：
+# 1) push 只跑 main —— 此前 branches: ["**"] 会让 Dependabot 分支既跑 push
+#    又跑 pull_request，同一提交触发两遍完整流水线（12 个 PR → 24 次运行）
+# 2) paths 只覆盖 Python 侧 —— Web / 桌面壳改动由 ci-web.yml / ci-desktop.yml
+#    负责，不再连带跑 docker build、install.sh 冒烟与 3.10/3.11 矩阵
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
+    paths:
+      - "bot/**"
+      - "api/**"
+      - "tests/**"
+      - "scripts/**"
+      - "migrations/**"
+      - "main.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "alembic.ini"
+      - "config.example.yaml"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "install.sh"
+      - ".github/workflows/ci.yml"
   pull_request:
+    # 不使用 YAML 锚点复用上面的列表：GitHub Actions 对 anchors/aliases 支持不可靠
+    paths:
+      - "bot/**"
+      - "api/**"
+      - "tests/**"
+      - "scripts/**"
+      - "migrations/**"
+      - "main.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "alembic.ini"
+      - "config.example.yaml"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "install.sh"
+      - ".github/workflows/ci.yml"
 
 jobs:
   quality:
@@ -125,68 +161,6 @@ jobs:
         run: |
           uv pip install --python .venv pip-audit
           uv run --no-sync pip-audit --skip-editable
-
-  electron:
-    name: Electron shell validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install Electron toolchain
-        working-directory: desktop/electron
-        run: npm ci
-
-      - name: Syntax check (main / preload)
-        working-directory: desktop/electron
-        run: |
-          node --check src/main.js
-          node --check src/preload.js
-
-      - name: Validate package.json build config
-        working-directory: desktop/electron
-        run: node -e "const b=require('./package.json').build; if(!b||!b.win||!b.extraResources) throw new Error('build config missing'); console.log('build config OK')"
-
-      # 注意：Windows 便携版完整打包（Python 后端 onedir + electron-builder portable）
-      # 走 build.bat + build-electron.bat（需 Windows + PyInstaller），不在本 job 复现。
-
-  frontend:
-    name: Frontend lint / format / build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install dependencies
-        working-directory: web
-        run: npm ci
-
-      - name: Lint (eslint)
-        working-directory: web
-        run: npm run lint
-
-      - name: Format check (prettier)
-        working-directory: web
-        run: npm run check
-
-      - name: Test (vitest)
-        # 单元测试覆盖请求层/全局 store/composable 等纯逻辑模块
-        working-directory: web
-        run: npm test
-
-      - name: Build
-        working-directory: web
-        run: npm run build
 
   docker:
     name: Docker build & smoke run

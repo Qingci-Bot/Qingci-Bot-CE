@@ -39,9 +39,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **CI 触发范围收窄，消除依赖升级刷屏**：`push` 事件从 `branches: ["**"]` 收为 `["main"]`——此前 Dependabot 分支既跑 push 又跑 pull_request，同一提交触发两遍完整流水线（首次启用 Dependabot 时 12 个 PR → 24 次运行）。同时按路径拆分为 `ci.yml`（Python）/ `ci-web.yml`（前端）/ `ci-desktop.yml`（桌面壳），Web 依赖升级不再连带跑 docker build、install.sh 冒烟与 3.10/3.11 矩阵
+
+- **Dependabot 分组降噪**：每个生态按「minor+patch」与「major」各合并为一个 PR，PR 上限压到 2；Python 主版本更新完全交给人工（pyproject 上界策略要求人工放宽并回归），避免自动提「把 `<2` 改成 `<3`」这类不可直接合并的 PR
+
+- **Release 的 Windows 打包步骤未真正执行脚本**：`working-directory` + 绝对路径 `call` 的组合下 `build-electron.bat` 未被调用却以 exit 0 结束，直到「Upload release assets」才因 `dist\electron` 缺失报错。改为从仓库根执行并显式校验产物存在
+
 - **`.dockerignore` 的 `dist` 规则误排除 `web/dist`**：Docker 忽略规则未锚定根目录时会匹配任意层级，导致 WebUI 构建产物从不进入镜像（容器内始终显示"Web UI 未构建"）。改为 `/dist`、`/build` 锚定根目录
 
 - **静默吞异常留痕**：插件配置 Schema 导出失败、向量库文档列表读取失败两处降级路径补 `logger.debug(exc_info=True)`；`CONTRIBUTING.md` 明确"降级路径必须留痕"的约定（日志系统与资源清理路径除外）
+
+### Security
+
+- **依赖漏洞清零**：`pip-audit` 首次扫描报告 24 个漏洞（7 个包），已升级 `aiohttp` 3.14.5、`litellm` 1.96.2、`mcp` 1.30.0、`multidict` 7.1.0、`pyjwt` 2.15.1、`urllib3` 2.8.0、`werkzeug` 3.1.9，复扫为 0。litellm 精确锁定到该公告的修复版本（不跨到 1.106，避免引入 botocore 等 AWS 依赖）
+
+- **`jsdom` 固定为 26.x**：jsdom 30 要求 Node ≥22，会让 Node 18/20 的开发者在 `npm test` 时撞上 undici 的 zstd 解压错误；26.x 支持 Node ≥18，与 README 的环境要求一致
 
 ### Performance
 

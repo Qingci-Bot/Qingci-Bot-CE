@@ -125,11 +125,16 @@ jobs:
 
       - name: Package Windows desktop (build-electron.bat)
         shell: cmd
-        working-directory: desktop/electron
+        # 不在 desktop/electron 下执行：build-electron.bat 自身会 cd 到该目录。
+        # 此前「working-directory + 绝对路径 call」组合下脚本未被真正执行，
+        # 却以 exit 0 结束，直到上传步骤才因 dist\electron 缺失而失败，
+        # 错误定位被推迟了整整一个步骤。
         run: |
-          npm ci
-          call "%GITHUB_WORKSPACE%\build-electron.bat"
-          exit /b %errorlevel%
+          cd /d "%GITHUB_WORKSPACE%"
+          if not exist build-electron.bat exit /b 1
+          call build-electron.bat
+          if errorlevel 1 exit /b 1
+          if not exist "dist\electron\*.exe" exit /b 1
 
       - name: Upload release assets
         env:

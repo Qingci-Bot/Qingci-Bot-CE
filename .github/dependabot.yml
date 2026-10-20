@@ -2,7 +2,12 @@
 #
 # 与 CI 的 uv.lock 锁定策略配合：锁文件保证「构建可复现」，
 # Dependabot 保证「依赖不会长期停滞在带漏洞的旧版本」。
-# 两者缺一不可——只有锁文件会让依赖永久冻结，只有自动升级会让构建不可复现。
+#
+# 降噪策略（v1.18.0 首次启用时一次开出 12 个 PR，触发 24 次流水线）：
+# - 每个生态把同级别更新合并成一个 PR，而不是每个包一个 PR
+# - Python 主版本更新完全交给人工：pyproject 的上界策略要求人工放宽并回归，
+#   自动 PR 只会提「把 <2 改成 <3」这类不可直接合并的改动
+# - open-pull-requests-limit 压到 2，避免长期堆积
 version: 2
 
 updates:
@@ -12,16 +17,18 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "python"
-    # 补丁/次版本合并为一个 PR，避免每周被十几个 PR 淹没；
-    # 主版本单独成 PR——按 pyproject 的上界策略需人工放宽并回归测试
     groups:
       python-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # 主版本需人工放宽 pyproject 上界并跑完整回归（见 pyproject 依赖注释）
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # Web UI 前端依赖
   - package-ecosystem: "npm"
@@ -29,7 +36,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "frontend"
@@ -37,6 +44,9 @@ updates:
       web-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+      web-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
   # Electron 桌面壳依赖
   - package-ecosystem: "npm"
@@ -44,7 +54,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "desktop"
@@ -52,13 +62,19 @@ updates:
       electron-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+      electron-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
   # GitHub Actions 版本（防止 checkout/setup-python 等长期停留在废弃版本）
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
     labels:
       - "dependencies"
       - "ci"
+    groups:
+      actions:
+        patterns: ["*"]

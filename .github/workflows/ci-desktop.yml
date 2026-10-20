@@ -1,0 +1,42 @@
+name: Desktop Shell CI
+
+# 与 Python 侧 CI 分离：只改 Electron 壳时不再跑 Python 测试与镜像构建。
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "desktop/electron/**"
+      - ".github/workflows/ci-desktop.yml"
+  pull_request:
+    paths:
+      - "desktop/electron/**"
+      - ".github/workflows/ci-desktop.yml"
+
+jobs:
+  electron:
+    name: Electron shell validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Electron toolchain
+        working-directory: desktop/electron
+        run: npm ci
+
+      - name: Syntax check (main / preload)
+        working-directory: desktop/electron
+        run: |
+          node --check src/main.js
+          node --check src/preload.js
+
+      - name: Validate package.json build config
+        working-directory: desktop/electron
+        run: node -e "const b=require('./package.json').build; if(!b||!b.win||!b.extraResources) throw new Error('build config missing'); console.log('build config OK')"
+
+      # 注意：Windows 便携版完整打包（Python 后端 onedir + electron-builder portable）
+      # 走 build.bat + build-electron.bat（需 Windows + PyInstaller），不在本 job 复现。

@@ -1,0 +1,49 @@
+name: Web UI CI
+
+# 与 Python 侧 CI 分离：只改前端时不再触发 docker build、install.sh 冒烟
+# 与 3.10/3.11 兼容矩阵，避免依赖升级把作业队列排满。
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "web/**"
+      - ".github/workflows/ci-web.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - ".github/workflows/ci-web.yml"
+
+jobs:
+  frontend:
+    name: Frontend lint / format / test / build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Lint (eslint)
+        working-directory: web
+        run: npm run lint
+
+      - name: Format check (prettier)
+        working-directory: web
+        run: npm run check
+
+      - name: Test (vitest)
+        # 单元测试覆盖请求层/全局 store/composable 等纯逻辑模块
+        working-directory: web
+        run: npm test
+
+      - name: Build
+        working-directory: web
+        run: npm run build
