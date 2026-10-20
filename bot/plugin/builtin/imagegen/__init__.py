@@ -11,14 +11,14 @@ import logging
 from typing import cast
 
 from ....core.tasks import spawn_background_task
-from ...base import PluginBase
 from ...matcher import MatcherContext, on_command
 from ...rule import rate_limit
+from .._base import BuiltinPlugin
 
 logger = logging.getLogger("qingci-bot.plugin.imagegen")
 
 
-class ImageGenPlugin(PluginBase):
+class ImageGenPlugin(BuiltinPlugin):
     """AI 绘图插件（Matcher 新式 API）"""
 
     name = "imagegen"

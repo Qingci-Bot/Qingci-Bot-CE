@@ -5,6 +5,20 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Changed
+
+- **插件 SDK 升级 v1.13.7 → v1.13.8**：三处同步（`pyproject.toml` 的 git tag、`build.bat` 的 echo 与安装命令、`uv.lock`）。SDK 侧含 4 个 P0 修复（限流表误淘汰他人、v12 `sub_type` 丢失、`PluginBase.require` 跨插件共享、模块级收集器嵌套覆盖）与 `py.typed` 类型标记
+
+- **`bot/plugin/protocol/events.py` 导出面补齐到 26 项**：此前 `__all__` 是手工维护的 16 项子集，`FriendPokeNotice` / `GroupLuckyKingNotice` / `GroupHonorChangeNotice` / `GroupCardNotice` / `GroupEssenceNotice` / `GroupSignInNotice` 六个扩展通知与 `parse_v12_event` / `translate_v11_event` / `detail_type_to_notice_type` / `notice_type_to_detail_type` 虽能经星号导入取到，但 `from ...events import *` 的调用方拿不到。已在文件头写明「必须与 SDK `__all__` 保持一致」的维护约定
+
+- **新增 `bot/plugin/builtin/_base.py`（`BuiltinPlugin`）**：SDK 把注入的 `bot` / `db` / `config` / `connection` / `llm` 标为 `object | None`（其余注入项是 `Any | None`），SDK 补齐 `py.typed` 后 mypy 开始真正检查，内置插件里 `self.llm.chat()` 这类访问会被判为 `object` 无属性。宿主侧统一收窄为 `Any`，避免 5 个插件各自重复标注
+
+### Fixed
+
+- **v12 事件以字符串下发 ID 时会话键分裂**：SDK 将 `MessageContext.user_id` / `group_id` 标为 `str | int`（部分 OneBot 12 实现端以字符串下发），而 v11 解析路径已用 `_safe_int` 归一化。若 v12 路径不归一化，同一用户经不同协议端进入时会形成 `123` 与 `"123"` 两个会话键，且字符串 ID 会传给形参为 `int` 的发送接口。现于会话预取与回复目标处统一归一化，并补 3 条回归测试（`tests/test_v12_id_normalization.py`）
+
 ## \[1.18.1] - 2026-10-20（桌面壳依赖升级）
 
 ### Changed

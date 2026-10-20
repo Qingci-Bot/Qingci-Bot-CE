@@ -179,8 +179,11 @@ class MessageDispatcher:
             session_state = None
             if bot.session_state is not None:
                 session_state = await bot.session_state.get_session(
-                    user_id=ctx.user_id,
-                    group_id=ctx.group_id,
+                    # 归一化为 int：SDK 将 ID 标为 str | int（部分实现端以字符串下发），
+                    # 会话键必须与 v11 路径（_parse_message 已归一化）保持一致，
+                    # 否则同一用户会在两种协议端下分裂成两个会话
+                    user_id=self._safe_int(ctx.user_id),
+                    group_id=self._safe_int(ctx.group_id),
                     message_type=ctx.message_type,
                 )
 
@@ -430,8 +433,8 @@ class MessageDispatcher:
         if bot.session_state is None:
             return None
         return await bot.session_state.get_session(
-            user_id=ctx.user_id,
-            group_id=ctx.group_id,
+            user_id=self._safe_int(ctx.user_id),
+            group_id=self._safe_int(ctx.group_id),
             message_type=ctx.message_type,
         )
 

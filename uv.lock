@@ -3135,7 +3135,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "qingci-bot-ce", extras = ["test", "build", "vector", "render"], marker = "extra == 'dev'" },
-    { name = "qingci-plugin-sdk", git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.7" },
+    { name = "qingci-plugin-sdk", git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.8" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
     { name = "sqlmodel", specifier = ">=0.0.22,<1" },
@@ -3146,8 +3146,8 @@ provides-extras = ["vector", "render", "test", "build", "dev"]
 
 [[package]]
 name = "qingci-plugin-sdk"
-version = "1.13.7"
-source = { git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.7#1e038586c5b23743d24dbc628b413be257f6f0d8" }
+version = "1.13.8"
+source = { git = "https://gitee.com/qingci-bot/Plugins-SDK.git?rev=v1.13.8#5eecefb2074e6aa6c2015eac1035d0b88d693ab8" }
 
 [[package]]
 name = "quart"

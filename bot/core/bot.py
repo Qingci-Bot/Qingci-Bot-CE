@@ -628,7 +628,7 @@ class QingciBot:
         Returns:
             是否发送成功（三次重试均失败返回 False，供调用方感知“必须送达”的语义消息）
         """
-        target_id = ctx.group_id if ctx.message_type == "group" else ctx.user_id
+        target_id = _safe_int(ctx.group_id if ctx.message_type == "group" else ctx.user_id)
         if not target_id:
             logger.warning(
                 f"无法发送回复：target_id 为空 (type={ctx.message_type}, "

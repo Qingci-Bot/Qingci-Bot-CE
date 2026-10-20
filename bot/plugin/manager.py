@@ -1087,9 +1087,13 @@ class PluginManager:
             self._metrics.pop(name, None)
             # 注销插件注册的 LLM 工具
             tool_names = self._plugin_tools.pop(name, [])
-            if tool_names and plugin.bot is not None and getattr(plugin.bot, "tool_registry", None):
+            # SDK 将注入的 bot 标为 object | None，用 getattr 取注册表（兼作存在性判断）
+            registry = (
+                getattr(plugin.bot, "tool_registry", None) if plugin.bot is not None else None
+            )
+            if tool_names and registry is not None:
                 for full_name in tool_names:
-                    plugin.bot.tool_registry.unregister(full_name)
+                    registry.unregister(full_name)
             # 清理 Web 管理页面注册
             self._remove_plugin_pages(name)
             # 清理插件级 Web API 注册（已挂载路由保留，请求时动态解析失效）

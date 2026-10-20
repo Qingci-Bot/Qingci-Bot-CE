@@ -12,14 +12,14 @@ rag.enabled 关闭时 knowledge_store 为 None，命令统一提示未启用。
 
 import logging
 
-from ...base import PluginBase
 from ...matcher import MatcherContext, on_command
 from ...permission import SUPERUSER
+from .._base import BuiltinPlugin
 
 logger = logging.getLogger("qingci-bot.plugin.knowledge")
 
 
-class KnowledgePlugin(PluginBase):
+class KnowledgePlugin(BuiltinPlugin):
     """知识库管理插件（Matcher 新式 API）"""
 
     name = "knowledge"
@@ -71,7 +71,7 @@ class KnowledgePlugin(PluginBase):
             return f"知识库已重新索引，共 {count} 个分块。"
         return "格式: /kb add|list|search|remove|reload ..."
 
-    async def _kb_add(self, store, rest: str, user_id: int) -> str:
+    async def _kb_add(self, store, rest: str, user_id: int | str) -> str:
         """/kb add <名称> <内容>"""
         parts = rest.split(maxsplit=1)
         if len(parts) < 2:
