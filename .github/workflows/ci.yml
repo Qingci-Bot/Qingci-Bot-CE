@@ -46,15 +46,15 @@ jobs:
     name: Lint / Type / Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           # 与本地开发对齐；uv 版本变化会改变锁文件格式与解析行为
           version: "0.12.3"
@@ -117,10 +117,10 @@ jobs:
         # 一旦引入 3.11/3.12 专属语法或 API，CI 全绿而低版本用户直接崩。
         python: ["3.10", "3.11"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.3"
           enable-cache: true
@@ -140,15 +140,15 @@ jobs:
     # 提升为阻断（去掉 continue-on-error）。否则一上线就是红的，无人处理。
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.3"
           enable-cache: true
@@ -166,7 +166,7 @@ jobs:
     name: Docker build & smoke run
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Validate compose config
         run: docker compose config --quiet
@@ -195,10 +195,10 @@ jobs:
     name: install.sh smoke test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
