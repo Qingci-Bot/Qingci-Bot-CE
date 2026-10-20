@@ -229,6 +229,8 @@ class TemplatePlugin(PluginBase):
 
     async def _cmd_wizard(self, ctx: MatcherContext) -> None:
         """多轮向导：演示会话阶梯（pause/finish + 跨轮状态）"""
+        if ctx.session is None:
+            return
         step = getattr(ctx.session, "step", "ask_name")
         if step == "ask_name":
             ctx.session.step = "ask_age"  # 跨轮保留状态
@@ -246,7 +248,7 @@ class TemplatePlugin(PluginBase):
 
     # ========== 通知/请求处理器 ==========
 
-    async def _on_group_notice(self, ctx: MatcherContext, event: GroupIncreaseNotice) -> str:
+    async def _on_group_notice(self, ctx: MatcherContext, event: GroupIncreaseNotice) -> str | None:
         """群通知事件处理（类型化事件注入）"""
         if event.notice_type == "group_increase":
             return f"欢迎新成员 {event.user_id} 加入群聊！"

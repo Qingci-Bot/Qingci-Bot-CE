@@ -11,7 +11,7 @@
 # 在 Qingci-Bot-CE/ 目录下运行（产物留在本目录内）
 ruff check .          # 静态检查
 ruff format --check . # 格式检查
-mypy api bot desktop  # 类型检查（覆盖 api/bot/desktop，与 CI 一致）
+mypy api bot desktop plugins  # 类型检查（覆盖 api/bot/desktop/plugins，与 CI 一致）
 pytest                # 测试（含覆盖率）
 ```
 

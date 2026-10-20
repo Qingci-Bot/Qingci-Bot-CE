@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **插件 SDK 升级 v1.13.8 → v1.13.9**：SDK 侧修复下游类型体验——注入项 `bot`/`db`/`config`/`connection`/`llm` 由 `object | None` 统一为 `Any | None`、`Session` 新增 `__getattr__`/`__setattr__` 支持跨轮动态属性、`MessageEditedEvent` 补入 `events.__all__`、模板返回值标注修正。主项目随之**移除 `BuiltinPlugin` 收窄层**（5 个内置插件回到与外部插件相同的 `PluginBase`，减少一层无谓间接），`protocol/events.py` 的 `__all__` 同步到 27 项
+
+- **mypy 覆盖范围补上 `plugins/`**：模板是用户复制的第一份代码，此前只检查 `api/bot/desktop`，导致 `plugins/_template` 在 `py.typed` 下有 2 处类型错误无人发现（`ctx.session` 未判空、`_on_group_notice` 标注 `-> str` 却返回 `None`）。两处已修，并把 `plugins` 纳入 CI 的类型检查
+
 - **插件 SDK 升级 v1.13.7 → v1.13.8**：三处同步（`pyproject.toml` 的 git tag、`build.bat` 的 echo 与安装命令、`uv.lock`）。SDK 侧含 4 个 P0 修复（限流表误淘汰他人、v12 `sub_type` 丢失、`PluginBase.require` 跨插件共享、模块级收集器嵌套覆盖）与 `py.typed` 类型标记
 
 - **`bot/plugin/protocol/events.py` 导出面补齐到 26 项**：此前 `__all__` 是手工维护的 16 项子集，`FriendPokeNotice` / `GroupLuckyKingNotice` / `GroupHonorChangeNotice` / `GroupCardNotice` / `GroupEssenceNotice` / `GroupSignInNotice` 六个扩展通知与 `parse_v12_event` / `translate_v11_event` / `detail_type_to_notice_type` / `notice_type_to_detail_type` 虽能经星号导入取到，但 `from ...events import *` 的调用方拿不到。已在文件头写明「必须与 SDK `__all__` 保持一致」的维护约定

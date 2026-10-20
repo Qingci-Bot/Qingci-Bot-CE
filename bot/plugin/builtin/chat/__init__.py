@@ -14,10 +14,10 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import cast
 
+from ...base import PluginBase
 from ...matcher import MatcherContext, on_command, on_message
 from ...permission import Permission
 from ...rule import Rule, rate_limit
-from .._base import BuiltinPlugin
 
 logger = logging.getLogger("qingci-bot.plugin.chat")
 
@@ -129,7 +129,7 @@ def chat_permission() -> Permission:
     return Permission(_check, label="EVERYONE")
 
 
-class ChatPlugin(BuiltinPlugin):
+class ChatPlugin(PluginBase):
     """LLM 对话插件（Matcher 新式 API）"""
 
     name = "chat"

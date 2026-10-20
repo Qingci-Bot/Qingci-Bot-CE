@@ -24,8 +24,8 @@ import logging
 from html import escape
 from typing import Any
 
+from ...base import PluginBase
 from ...matcher import MatcherContext, on_command
-from .._base import BuiltinPlugin
 
 logger = logging.getLogger("qingci-bot.plugin.help")
 
@@ -44,7 +44,7 @@ _GROUP_HEADER = 60
 _GROUP_FOOTER = 40
 
 
-class HelpPlugin(BuiltinPlugin):
+class HelpPlugin(PluginBase):
     """帮助命令插件（Matcher 新式 API）"""
 
     name = "help"

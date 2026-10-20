@@ -224,7 +224,7 @@ ruff format --check .
 ruff format .
 
 # 类型检查
-mypy api bot desktop
+mypy api bot desktop plugins
 ```
 
 > 推荐配置 [pre-commit](https://pre-commit.com/) hooks 在提交前自动检查：

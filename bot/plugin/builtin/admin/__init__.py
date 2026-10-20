@@ -10,14 +10,14 @@ import asyncio
 import logging
 import time
 
+from ...base import PluginBase
 from ...matcher import MatcherContext, on_command
 from ...permission import ADMIN, SUPERUSER
-from .._base import BuiltinPlugin
 
 logger = logging.getLogger("qingci-bot.plugin.admin")
 
 
-class AdminPlugin(BuiltinPlugin):
+class AdminPlugin(PluginBase):
     """管理命令插件（Matcher 新式 API）"""
 
     name = "admin"
