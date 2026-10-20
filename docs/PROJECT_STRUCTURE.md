@@ -33,7 +33,7 @@ Qingci-Bot-CE/
 │   ├── server.py           # 应用装配、路由挂载、中间件
 │   ├── auth.py             # 鉴权 / 审计横切逻辑
 │   ├── audit.py            # 登录/操作审计
-│   └── routes/             # REST 路由：login/backup/bot/command/config/group/instances/log/market/plugin
+│   └── routes/             # REST 路由：login/backup/bot/command/config/group/instances/log/market/metrics/plugin
 ├── bot/                    # Bot 核心逻辑（纯 Python 包）
 │   ├── core/               # 框架层（生命周期与调度）：bot/composition/dispatcher/event_bus/
 │   │                       #   di/scheduler/session_state/tasks/message(仅 v11 兼容)/
@@ -46,6 +46,7 @@ Qingci-Bot-CE/
 │   ├── alerter.py          # 错误告警器（ERROR 日志阈值 → 私聊通知管理员）
 │   ├── filter.py           # 敏感词过滤器（词库 + 打码）
 │   ├── broadcast.py        # 消息广播（WS 实时推送 broker）
+│   ├── metrics.py          # 运行指标导出（Prometheus 文本格式，零依赖、不查库）
 │   ├── logformat.py        # 结构化 JSON 日志 + 文件轮转 + 运行日志采集（RunLogHandler，经 /api/ws/runlog 推送）
 │   ├── logredact.py        # 日志脱敏（API Key / token 打码）
 │   ├── html_renderer.py    # HTML → 图片渲染服务（Playwright 无头 Chromium，可选依赖）
@@ -66,7 +67,8 @@ Qingci-Bot-CE/
 │   │   ├── ratelimit.py    # 兼容再导出（指向 protocol/ratelimit.py）
 │   │   ├── session.py      # 兼容再导出（指向 protocol/session.py）
 │   │   ├── events.py       # 兼容再导出（指向 protocol/events.py）
-│   │   ├── manager.py      # 插件加载/卸载/依赖/元数据 + SDK data_root 实例重定向
+│   │   ├── manager.py      # 插件生命周期：加载/热重载/卸载/依赖/元数据 + SDK data_root 实例重定向
+│   │   ├── installer.py    # 插件安装/卸载（来源拉取 + 归档安全解压 + 目录原子落位；manager 的薄委托实现）
 │   │   ├── market.py       # 插件市场：索引拉取/缓存 + 安装/更新编排
 │   │   ├── deps.py         # 插件第三方依赖自动安装（data_root()/deps/<name>/ 按插件隔离 + sys.path 注入）
 │   │   ├── _proc.py        # 子进程公共标志（Windows 隐藏控制台窗口 CREATE_NO_WINDOW）
@@ -83,7 +85,8 @@ Qingci-Bot-CE/
 │   │   ├── tools.py        # 工具注册（内置只读工具）
 │   │   └── events_tools.py # 类型化事件缓冲 + 事件查询 LLM 工具
 │   ├── db/                 # SQLModel ORM、仓储、会话管理
-│   │   ├── database.py     # Database 会话/仓储
+│   │   ├── database.py     # Database 会话/仓储（record_message 走写入缓冲）
+│   │   ├── write_buffer.py # 消息写入缓冲（write-behind 批量提交：50 条 / 200ms）
 │   │   ├── engine.py       # 数据库引擎
 │   │   └── models.py       # ORM 模型
 │   ├── rag/                # 知识库检索（关键词 + 向量；向量需可选依赖 lancedb）

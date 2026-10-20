@@ -31,10 +31,8 @@
    - Python: 遵循 `ruff` 规则（配置见 `pyproject.toml`）
    - 前端: 遵循 ESLint + Prettier 规则
    - 提交信息: 使用 [Conventional Commits](https://www.conventionalcommits.org/) 格式
-   - **异常处理**：降级路径允许 `except Exception`，但必须留痕——要么 `logger.debug(..., exc_info=True)`，
-     要么有明确的回退分支。禁止裸 `except: pass`（会让线上排障失去唯一线索）。
-     例外：日志系统自身（`logformat.py` / `alerter.py`，避免递归与告警风暴）与资源清理路径
-     （`close()` / `cleanup()`）可静默。
+   - **异常处理**：降级路径允许 `except Exception`，但必须留痕（debug 日志或明确回退分支），
+     禁止裸 `except: pass`。完整约定见 `docs/CODING_STANDARDS.md` 第 2 节
 4. 确保测试通过：`pytest`
 5. 提交 Pull Request
 

@@ -195,7 +195,7 @@ def main() -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="仅校验三处版本号是否一致，不修改文件",
+        help="仅校验各处版本号是否一致，不修改文件",
     )
     args = parser.parse_args()
 

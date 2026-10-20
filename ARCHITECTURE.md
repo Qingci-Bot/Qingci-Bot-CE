@@ -334,6 +334,15 @@ Qingci-Bot-CE/
 
 - 约定：**必须**为真正阻塞的同步代码使用；库自带 async 能力优先用 async 版本
 
+### 运行指标（`bot/metrics.py` + `api/routes/metrics.py`）
+
+- `GET /api/metrics` 输出 Prometheus 文本格式（`text/plain; version=0.0.4`），与其他管理接口一样受 `api_key` 保护
+- **不查数据库**：只读进程内状态（计数器 / 队列长度 / 插件 Matcher 指标），可安全按 15s 间隔高频抓取
+- **零依赖**：手写 counter/gauge + 标签子集，不为一个端点引入 `prometheus_client`
+- **采集失败不影响被采集进程**：单个插件指标异常只跳过该项，不中断整份导出
+- 暴露内容：进程存活/版本、运行与连接状态、运行时长、事件积压与丢弃、消息写入缓冲积压与丢弃、插件数、按 `plugin`/`matcher` 细分的调用量/错误量/慢调用/平均耗时
+- HTTP 响应统一经 `GZipMiddleware`（`minimum_size=1024`）压缩，WebUI 静态资源与较大 JSON 均受益
+
 ## 生产环境部署
 
 ### 向量检索（RAG）初始化

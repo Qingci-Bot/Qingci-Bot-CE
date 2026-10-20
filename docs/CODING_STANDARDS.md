@@ -27,6 +27,9 @@ pytest                # 测试（含覆盖率）
 - 不使用 `Mapped[...]` 注解（SQLModel 0.0.x 不兼容）；模型用标准类型注解 `int | None`。
 - 通用类型用内置泛型：`list[T]` / `dict[K, V]` / `set[T]`（`UP` 规则强制），不用 `typing.List`。
 - `except` 块抛出 `HTTPException` / `ValueError` 时用 `raise ... from None`，消除异常链噪音。
+- **降级路径必须留痕**：允许 `except Exception` 兜底，但要么有明确回退分支，要么 `logger.debug(..., exc_info=True)`；
+  禁止裸 `except: pass`（会让线上排障失去唯一线索）。例外仅限两类——日志系统自身
+  （`logformat.py` / `alerter.py`，避免递归与告警风暴）与资源清理路径（`close()` / `cleanup()`）。
 - FastAPI 路由参数：`Request` 用 `request: Request = None`，**不要**写成 `Optional[Request]`（后者会导致路由注册失败）。
 - 显式返回类型：公开函数/方法标注返回类型；`warn_return_any` 开启，避免静默返回 `Any`（必要时用 `cast` 或在文件头 `# mypy: disable-error-code=...` 局部豁免）。
 - forward-ref 联合（`"SomeType" | None`）在模块级必须配合 `from __future__ import annotations`，否则运行时 `TypeError`。

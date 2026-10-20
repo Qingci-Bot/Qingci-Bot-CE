@@ -26,7 +26,7 @@
 
 - **插件系统**：借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，支持命令/前缀/关键词/正则/通知/请求匹配，优先级调度、权限控制、插件间依赖声明（require + PEP 440 版本约束）、插件级配置（config.yaml 节）、插件间导出/导入（export/require）、插件级中间件（before/after handler）、handler 参数级依赖注入（Depends）、全局生命周期钩子（on\_startup/on\_shutdown/on\_bot\_connect/on\_metaevent）、跨插件事件总线（EventBus 发布-订阅）、插件级 LLM 工具声明（`@llm_tool` 参与 Function Calling）、指令系统增强（别名 / 子指令 / 类型化参数）、插件数据目录（data\_dir）、国际化（i18n）、在线插件安装与依赖自动安装、配置 schema 自动生成 Web 配置表单、开发期自动热重载、细粒度事件处理钩子（run\_preprocessor Matcher 运行前钩子 + on\_calling\_api 平台接口调用钩子）、插件状态管理（PluginStatus 枚举）、执行指标监控、元数据发现（plugin.json）；支持加载/卸载/重载/禁用/启用，禁用时保留实例并跳过事件分发；卸载默认仅删代码目录、保留数据与依赖（便于重装），插件管理页可「彻底删除（purge）」连数据目录与第三方依赖一并清除。协议层（PluginBase/Matcher/Rule/Permission/MessageContext）由独立插件 SDK 单一维护，内置插件与外部插件行为一致
 
-- **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）
+- **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）、Prometheus 指标导出（`/api/metrics`，含事件积压/丢弃、消息缓冲、插件与 Matcher 调用指标）
 
 - **增强能力**：AI 图片生成、轻量知识库（关键词检索零依赖；向量检索需可选依赖 lancedb）、会话摘要（历史裁剪）、Function Calling（内置时间/一言/群事件查询工具）、MCP 服务器接入、定时任务调度器、LLM 用量统计
 
@@ -55,6 +55,9 @@
 - 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 22+（`desktop/electron`，Electron 44 要求 Node ≥22.12）；最终用户运行 `build-electron.bat` 产出的安装版 / 绿色解压版 EXE 无需额外运行时
 
 ## 1. 安装
+
+> **推荐**：`uv sync --locked --extra dev` —— 一条命令按 `uv.lock` 精确安装全部开发依赖，与 CI 完全一致。
+> `uv pip install` 会重新解析版本，可能与锁文件不一致，仅在只想装部分可选依赖时使用。
 
 ```bash
 # 创建虚拟环境
@@ -184,7 +187,10 @@ chmod +x install.sh
 ## 3. 运行测试
 
 ```bash
-# 运行全部测试（含覆盖率报告）
+# 推荐：uv 会按 uv.lock 自动同步依赖后再执行（与 CI 完全一致）
+uv run pytest
+
+# 已激活虚拟环境时也可直接用
 pytest
 
 # 仅运行指定模块
@@ -194,6 +200,13 @@ pytest tests/test_db.py
 ```
 
 > 测试框架：pytest + pytest-asyncio + pytest-cov。覆盖率目标为 `bot` 和 `api` 模块，报告通过 `--cov-report=term-missing` 输出未覆盖行。
+
+前端单元测试（Vitest，覆盖请求层 / store / composable）：
+
+```bash
+cd web
+npm test
+```
 
 ## 4. 代码质量
 
@@ -211,7 +224,7 @@ ruff format --check .
 ruff format .
 
 # 类型检查
-mypy bot api
+mypy api bot desktop
 ```
 
 > 推荐配置 [pre-commit](https://pre-commit.com/) hooks 在提交前自动检查：
@@ -500,6 +513,19 @@ log:
 api_key: ''                        # API 鉴权密钥
 lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 ```
+
+## 环境变量
+
+以下变量影响运行时行为，均为可选（未设置时使用默认值）：
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `QINGCI_DB_POOL_SIZE` | `5` | SQLite 连接池大小；高并发读写争用时可调大 |
+| `QINGCI_DB_MAX_OVERFLOW` | `10` | 连接池溢出上限 |
+| `QINGCI_SKIP_MIGRATION_CHECK` | 未设置 | 设为 `1` 跳过启动期的迁移漂移检测（每次启动约省 1 秒）。打包分发 / 容器冷启动可开启，代价是模型与迁移脚本不一致时不再告警 |
+| `QINGCI_APP_DIR` | 自动推断 | 由 Electron 壳注入，指向桌面 EXE 所在目录；源码 / Docker 部署无需设置 |
+
+> 与 `config.yaml` 不同，环境变量在进程启动时读取，修改后需重启。
 
 ## 进阶功能说明（功能开关均默认关闭）
 
