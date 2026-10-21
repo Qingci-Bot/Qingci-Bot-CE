@@ -97,7 +97,7 @@ jobs:
         shell: powershell
         run: |
           uv venv .venv
-          uv pip install -e ".[build]"
+          uv pip install -e ".[build]" --extra-index-url https://pypi.luoqingciya.cn/simple
 
       - name: Set up Node.js (for Web UI build)
         uses: actions/setup-node@v7

@@ -38,8 +38,8 @@
 
 ### 版本号管理
 
-升级版本号时**不要手动逐文件修改**，使用统一脚本一次同步五处文件：
-`pyproject.toml`（打包/CI 读取）、`bot/__init__.py`（`__version__`，后端 `/api/bot/status` 及 Web 关于页据此动态显示）、`web/package.json`（前端构建）与 `web/package-lock.json`（含 `packages` 两处）。
+升级版本号时**不要手动逐文件修改**，使用统一脚本一次同步全部版本字段：
+`pyproject.toml`（打包/CI 读取）、`bot/__init__.py`（`__version__`，后端 `/api/bot/status` 及 Web 关于页据此动态显示）、`web/package.json` 与 `web/package-lock.json`（含 `packages` 两处）、`desktop/electron/package.json` 与 `desktop/electron/package-lock.json`（含 `packages` 两处，安装包版本号来源）。
 
 ```bash
 python scripts/bump_version.py 1.16.0     # 从单一输入同步升级全部版本字段
@@ -47,6 +47,11 @@ python scripts/bump_version.py --check    # 提交前自查各处是否一致（
 ```
 
 任一文件缺失版本字段、版本格式非法时脚本会明确报错，绝不静默漏改。升级版本后请同步更新 `CHANGELOG.md`（Keep a Changelog 风格）。
+
+> **`uv.lock` 生成约束**：若本机配置了 pip 镜像（`pip.conf` / `~/.config/uv/uv.toml`），
+> 直接 `uv lock` 会把镜像地址写进锁文件，CI（官方源）随即判定锁文件过期而失败。
+> 请始终用 `uv lock --default-index https://pypi.org/simple` 生成；CI 有一道检查会拦截
+> 含非官方索引的锁文件（允许 `pypi.org` 与私有索引 `pypi.luoqingciya.cn`）。
 
 ## 开发环境
 

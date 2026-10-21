@@ -37,13 +37,12 @@ echo "Root:     $Root"
 echo "Python:   $PY"
 
 # ---------- [0/3] 独立插件 SDK ----------
-# 与 build.bat 一致，锁定到已发布 tag，保证构建可复现。SDK 源默认走 Gitee 镜像
-#（国内拉取更快，对齐 build.bat）；但 GitHub Actions（海外 IP）访问 Gitee 常被限流
-#（HTTP 429），故支持 QINGCI_SDK_GIT_URL 覆盖为 GitHub 主仓库。SDK 发新版后同步
-# 更新这里与 pyproject.toml 的 tag。
-SDK_GIT_URL="${QINGCI_SDK_GIT_URL:-https://gitee.com/qingci-bot/Plugins-SDK.git}"
-echo "==> [0/3] installing qingci-plugin-sdk (v1.13.7) from $SDK_GIT_URL ..."
-uv pip install --python "$PY" "qingci-plugin-sdk @ git+${SDK_GIT_URL}@v1.13.7"
+# 与 build.bat 一致：从私有索引安装，版本精确锁定（与 pyproject.toml 同步）。
+# 该索引对未收录的包会重定向到 pypi.org，故 PyPI 挂为额外索引。
+# QINGCI_SDK_INDEX_URL 可覆盖索引地址（内网镜像 / 离线环境）。
+SDK_INDEX_URL="${QINGCI_SDK_INDEX_URL:-https://pypi.luoqingciya.cn/simple}"
+echo "==> [0/3] installing qingci-plugin-sdk (1.13.9) from $SDK_INDEX_URL ..."
+uv pip install --python "$PY" --index-url "$SDK_INDEX_URL" --extra-index-url https://pypi.org/simple "qingci-plugin-sdk==1.13.9"
 
 # ---------- 确保 pip 在 venv（供打包后插件依赖安装器使用） ----------
 # 打包（frozen）模式下插件依赖安装器（bot/plugin/deps.py）调用 pip._internal，

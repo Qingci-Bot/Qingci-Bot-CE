@@ -112,14 +112,20 @@ else
   PKG_SPEC="."
 fi
 
+# qingci-plugin-sdk 不在公共 PyPI 上，由私有索引分发。
+# pyproject 的 [tool.uv.sources] 只对 uv 的项目命令（uv sync / uv run）生效，
+# `uv pip install` 与 `pip install` 都不会读它，因此这里显式挂为额外索引。
+# 默认索引保持用户原有配置（pip.conf / 环境变量），不被覆盖。
+SDK_INDEX_URL="${QINGCI_SDK_INDEX_URL:-https://pypi.luoqingciya.cn/simple}"
+
 if command -v uv >/dev/null 2>&1; then
   echo ">> 使用 uv 安装依赖: uv pip install -e \"$PKG_SPEC\""
   UV=$(command -v uv)
-  "$UV" pip install -e "$PKG_SPEC" --python "$VENV_PY"
+  "$UV" pip install -e "$PKG_SPEC" --python "$VENV_PY" --extra-index-url "$SDK_INDEX_URL"
 else
   echo ">> 使用 pip 安装依赖: $VENV_PY -m pip install -e \"$PKG_SPEC\""
   "$VENV_PY" -m pip install --upgrade pip
-  "$VENV_PY" -m pip install -e "$PKG_SPEC"
+  "$VENV_PY" -m pip install -e "$PKG_SPEC" --extra-index-url "$SDK_INDEX_URL"
 fi
 
 # ── 提示下一步 ────────────────────────────────────────────

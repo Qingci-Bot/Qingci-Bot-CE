@@ -67,8 +67,8 @@ jobs:
         run: uv sync --locked --python 3.12 --extra dev
 
       - name: Verify SDK version matches lock
-        # SDK 以 git+@tag 形式锁定；构建可复现要求实际安装的 SDK 版本
-        # 与 pyproject.toml 锁定的 tag 完全一致，防止锁错/上游漂移
+        # SDK 由私有索引分发并精确锁定；构建可复现要求实际安装的版本
+        # 与 pyproject.toml 声明完全一致，防止锁错/上游漂移
         run: |
           uv run --no-sync python - <<'EOF'
           import re, tomllib
@@ -76,8 +76,8 @@ jobs:
 
           spec = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
           dep = next(d for d in spec if d.startswith("qingci-plugin-sdk"))
-          m = re.search(r"@v([\d.]+)", dep)
-          assert m, f"SDK 依赖未锁定到 tag: {dep!r}"
+          m = re.search(r"==\s*([\d.]+)", dep)
+          assert m, f"SDK 依赖未精确锁定版本: {dep!r}"
           locked = m.group(1)
           installed = qingci_plugin_sdk.__version__
           assert locked == installed, (
@@ -85,6 +85,19 @@ jobs:
           )
           print(f"SDK {installed} == 锁定 {locked} OK")
           EOF
+
+      - name: Verify lock sources are canonical
+        # uv.lock 若在配置了镜像（pip.conf / uv.toml）的机器上生成，会把镜像地址
+        # 写进锁文件；CI 用官方源解析时就会判定「锁文件需要更新」而失败。
+        # 只允许官方 PyPI 与私有索引两种来源。
+        run: |
+          bad=$(grep -oE 'registry = "https://[^"]+"' uv.lock | sort -u                 | grep -vE 'https://pypi\.org/simple|https://pypi\.luoqingciya\.cn/simple' || true)
+          if [ -n "$bad" ]; then
+            echo "uv.lock 含非官方索引，请用 --default-index https://pypi.org/simple 重新生成："
+            echo "$bad"
+            exit 1
+          fi
+          echo "uv.lock 索引来源检查通过"
 
       - name: Lint (ruff)
         run: uv run --no-sync ruff check .
