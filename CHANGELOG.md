@@ -5,7 +5,7 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## \[Unreleased]
+## \[1.18.3] - 2026-10-21（插件 SDK 改私有索引分发）
 
 ### Changed
 
@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`tests/test_docs.py`（45 例）**：校验 `README` / `PLUGIN_DEV` / `ARCHITECTURE` / `CONTRIBUTING` / `SECURITY` / `docs/*` 中全部 python 代码块的语法与导入符号。首次运行即抓出 `PLUGIN_DEV.md` 中一处被误写进引用块的代码块（每行带 `>` 前缀，无法解析）
+
+### Fixed
+
+- **`certifi` 2026.7.22 → 2026.10.19（PYSEC-2026-4320）**：依赖审计在修复审计流程后首次正常工作，查出 CA 证书包存在已知漏洞。`certifi` 是 httpx / requests 的传递依赖，仅升级该包
+
+- **`build-linux.sh` 的 SDK 版本漂移**：该文件仍钉在 v1.13.7（此前几次 SDK 升级均遗漏），Linux 构建会装到旧版协议层。已改为与 `build.bat` 一致的索引安装
+
+- **`uv.lock` 含第三方镜像源**：锁文件此前在配置了清华镜像的机器上生成，138 个包指向镜像地址，CI 用官方源解析时判定锁文件过期而全量失败。已用 `uv lock --default-index https://pypi.org/simple` 重新生成（版本未变，仅换来源），并新增 CI 检查拦截非官方索引
 
 ## \[1.18.2] - 2026-10-20（插件 SDK 升级）
 
