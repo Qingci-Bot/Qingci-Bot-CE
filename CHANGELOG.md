@@ -5,11 +5,11 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## \[Unreleased]
+## \[1.18.4] - 2026-10-21（修复升级丢配置）
 
 ### Fixed
 
-- **升级安装不再丢失配置与数据**：用户数据（`instances/<name>/{config.yaml,data,plugins}`）由桌面壳放在 EXE 旁，即 `$INSTDIR` 内部；而 electron-builder 的 NSIS 卸载器在升级时会把整个 `$INSTDIR` 改名后删除，导致升级即清空全部实例。现通过自定义 NSIS 脚本（`desktop/electron/build/installer.nsh`）在升级流程中把 `instances/` 暂存到 `%TEMP%\qingci-bot-ce-instances`，新文件装完后再还原。仅对升级生效，主动卸载仍按原行为清除数据
+- **升级安装不再丢失配置与数据**：用户数据（`instances/<name>/{config.yaml,data,plugins}`）由桌面壳放在 EXE 旁，即 `$INSTDIR` 内部；而 electron-builder 的 NSIS 卸载器在升级时会把整个 `$INSTDIR` 改名后递归删除，导致升级即清空全部实例。现通过自定义 NSIS 脚本（`desktop/electron/build/installer.nsh`）在升级流程中把 `instances/` 暂存到 `%TEMP%\qingci-bot-ce-instances`，新文件装完后再还原。仅对升级生效，主动卸载仍按原行为清除数据
 
 ## \[1.18.3] - 2026-10-21（插件 SDK 改私有索引分发）
 

@@ -3060,7 +3060,7 @@ wheels = [
 
 [[package]]
 name = "qingci-bot-ce"
-version = "1.18.3"
+version = "1.18.4"
 source = { editable = "." }
 dependencies = [
     { name = "aiocqhttp" },
