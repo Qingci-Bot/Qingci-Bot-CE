@@ -170,10 +170,13 @@ jobs:
         run: uv sync --locked --python 3.12
 
       - name: Audit
-        # pip-audit 不进锁文件（仅 CI 工具），临时装入 venv
+        # pip-audit 不进锁文件（仅 CI 工具），临时装入 venv。
+        # 以导出清单审计第三方依赖：qingci-plugin-sdk 由私有索引分发、公共漏洞库
+        # 无记录，pip-audit 会因「PyPI 上找不到该包」直接退出 1，故从清单中剔除。
         run: |
           uv pip install --python .venv pip-audit
-          uv run --no-sync pip-audit --skip-editable
+          uv export --no-emit-project --format requirements-txt --no-hashes             | grep -v '^qingci-plugin-sdk' > /tmp/audit-reqs.txt
+          uv run --no-sync pip-audit -r /tmp/audit-reqs.txt
 
   docker:
     name: Docker build & smoke run
