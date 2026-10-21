@@ -32,17 +32,18 @@ if errorlevel 1 (
 
 rem ---- [0/3] standalone plugin SDK ----
 rem External plugins import qingci_plugin_sdk at runtime, so it must be
-rem installed into the build env for PyInstaller collect_all. Pin to a
-rem released tag (kept in sync with pyproject.toml) for reproducible builds.
-rem Default source is the Gitee mirror (faster in CN); GitHub Actions hitting
-rem Gitee often gets HTTP 429, so QINGCI_SDK_GIT_URL can override to GitHub.
-if defined QINGCI_SDK_GIT_URL (
-    set "SdkGitUrl=%QINGCI_SDK_GIT_URL%"
+rem installed into the build env for PyInstaller collect_all. Pin the exact
+rem version (kept in sync with pyproject.toml) for reproducible builds.
+rem Source is the private index (pypiserver); it redirects unknown packages
+rem to pypi.org, so PyPI is passed as extra index for anything else.
+rem QINGCI_SDK_INDEX_URL can override the index (e.g. a mirror or LAN address).
+if defined QINGCI_SDK_INDEX_URL (
+    set "SdkIndexUrl=%QINGCI_SDK_INDEX_URL%"
 ) else (
-    set "SdkGitUrl=https://gitee.com/qingci-bot/Plugins-SDK.git"
+    set "SdkIndexUrl=https://pypi.luoqingciya.cn/simple"
 )
-echo ==^> [0/3] installing qingci-plugin-sdk ^(v1.13.9^) from !SdkGitUrl! ...
-uv pip install --python "%Python%" "qingci-plugin-sdk @ git+!SdkGitUrl!@v1.13.9"
+echo ==^> [0/3] installing qingci-plugin-sdk ^(1.13.9^) from !SdkIndexUrl! ...
+uv pip install --python "%Python%" --index-url "!SdkIndexUrl!" --extra-index-url https://pypi.org/simple "qingci-plugin-sdk==1.13.9"
 if errorlevel 1 (
     echo [ERROR] qingci-plugin-sdk install failed
     exit /b 1

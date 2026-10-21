@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **插件 SDK 改为私有索引分发**：`qingci-plugin-sdk` 由 `git+https://gitee.com/...@v1.13.9` 改为 `qingci-plugin-sdk==1.13.9`，源由 `[[tool.uv.index]]`（`https://pypi.luoqingciya.cn/simple`，pypiserver）配合 `[tool.uv.sources]` 显式绑定。收益：不再 clone + 本地构建，安装直接取 wheel；`uv.lock` 记录 wheel URL 与 SHA256，完整性可校验；同时消除了 Gitee 429 这一历史不稳定点
+
+- **移除两处 git 分发时代的兜底**：`build.bat` 的 `QINGCI_SDK_GIT_URL` 覆盖逻辑改为 `QINGCI_SDK_INDEX_URL`（索引地址可覆盖）；`Dockerfile` 里用 `sed` 把 Gitee 改写成 GitHub 的 hack 已删除，改为 `--index-url` + `--extra-index-url`，索引地址可用 `--build-arg SDK_INDEX_URL=...` 覆盖
+
 - **`PLUGIN_DEV.md` 补「会话阶梯（多轮交互）」小节**：此前 1700 行文档里只有字段表一行提到 `ctx.session`，`pause` / `finish` / `reject` 的用法没有任何示例。同时把该字段的类型标注修正为 `Session | None`（原标 `Session`，照抄会漏判空而在类型检查下报错）
 
 - **`ARCHITECTURE.md` 修正协议层转发路径**：原文写「`bot/core/dispatcher.py` 中的 `MessageContext` 为薄转发」，实际早已迁到 `bot/plugin/protocol/context.py`；一并补全 `protocol/` 下的转发清单

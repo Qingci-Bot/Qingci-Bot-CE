@@ -26,9 +26,6 @@ on:
         required: false
         default: ""
 
-env:
-  QINGCI_SDK_GIT_URL: https://github.com/Qingci-Bot/Plugins-SDK.git
-
 concurrency:
   group: release
   cancel-in-progress: true

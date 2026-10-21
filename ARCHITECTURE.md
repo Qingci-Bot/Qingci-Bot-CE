@@ -42,7 +42,7 @@
 
 - 修改权限语义、匹配规则等协议时只改 SDK 一处，主项目无需同步
 
-- SDK 是主项目的**正式依赖**（`pyproject.toml` 声明 git 依赖；构建/本地开发由 `build.bat` 以 `-e` 安装优先）
+- SDK 是主项目的**正式依赖**（`pyproject.toml` 精确锁定版本，经私有索引 `https://pypi.luoqingciya.cn/simple` 分发，见 `[[tool.uv.index]]`；本地开发需改 SDK 源码时由 `build.bat` 以 `-e` 安装覆盖）
 
 ## 进程模型与外壳边界（无头内核库化方向）
 

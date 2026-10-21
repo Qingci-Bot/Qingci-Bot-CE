@@ -31,12 +31,16 @@ COPY pyproject.toml ./
 COPY . .
 
 # 安装到 /install，运行阶段整体拷贝以保持最小运行镜像
-# qingci-plugin-sdk 为 git 依赖，pyproject 默认指 Gitee 镜像（国内拉取更快）；
-# 但 CI 构建环境（GitHub Actions 海外 IP）访问 Gitee 常被限流（HTTP 429），
-# 故构建阶段临时把 SDK 源切到 GitHub 主仓库。仅影响本镜像构建，
-# 不改变源码安装（pip/uv）时对国内用户的 Gitee 默认源。
-RUN sed -i 's#git+https://gitee.com/qingci-bot/Plugins-SDK.git#git+https://github.com/Qingci-Bot/Plugins-SDK.git#g' pyproject.toml \
-    && uv pip install --python /usr/local/bin/python --prefix /install .
+# qingci-plugin-sdk 由私有索引（pypiserver）分发。该索引对未收录的包会 303
+# 重定向到 pypi.org，因此其余依赖仍可解析；但为免逐个包多一跳重定向，
+# 显式把 PyPI 挂为 extra index。索引顺序为「私有在前」：uv 默认 first-match
+# 策略下，SDK 只可能来自私有索引，同名包无法被公网抢占。
+# 内网/离线构建可用 --build-arg SDK_INDEX_URL=... 覆盖索引地址。
+ARG SDK_INDEX_URL=https://pypi.luoqingciya.cn/simple
+RUN uv pip install --python /usr/local/bin/python --prefix /install \
+        --index-url "$SDK_INDEX_URL" \
+        --extra-index-url https://pypi.org/simple \
+        .
 
 # ── 运行阶段 ──
 FROM python:3.12-slim AS runtime

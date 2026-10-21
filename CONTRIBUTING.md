@@ -62,11 +62,11 @@ uv venv
 .venv\Scripts\activate  # Windows
 source .venv/bin/activate  # Linux/macOS
 
-# 安装开发依赖（含插件协议层 SDK，git 依赖自动安装）
+# 安装开发依赖（含插件协议层 SDK，经私有索引自动安装）
 # 推荐用 uv sync：严格按 uv.lock 安装，与 CI 解析结果完全一致
 uv sync --locked --extra dev
 
-# 本地开发 Plugins-SDK 时，用 -e 安装覆盖 git 依赖版本（与 build.bat 一致）
+# 本地开发 Plugins-SDK 时，用 -e 安装覆盖索引版本（与 build.bat 一致）
 uv pip install -e ..\Plugins-SDK
 
 # 运行测试
@@ -80,7 +80,7 @@ uv run ruff format --check .
 uv run mypy api bot desktop plugins
 ```
 
-> **协议层说明**：`bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 与 `dispatcher.MessageContext` 为 `qingci_plugin_sdk` 薄转发。修改权限语义、匹配规则、基类等协议行为时，请前往 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 仓库修改并在主项目提升 git 依赖版本；主项目内只改运行时逻辑（如 `bot/plugin/manager.py`、`bot/plugin/llm_tool.py`）。
+> **协议层说明**：`bot/plugin/protocol/{base,context,matcher,permission,rule,ratelimit,session,events}.py` 为 `qingci_plugin_sdk` 薄转发（`bot/plugin/` 顶层同名模块为兼容再导出）。修改权限语义、匹配规则、基类等协议行为时，请前往 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 仓库修改、发版并上传私有索引，再在主项目提升版本号；主项目内只改运行时逻辑（如 `bot/plugin/manager.py`、`bot/plugin/llm_tool.py`）。
 
 ### 前端
 

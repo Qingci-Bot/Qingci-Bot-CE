@@ -6,9 +6,9 @@ requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
 dependencies = [
     # 独立插件 SDK：协议层（PluginBase/Matcher/Permission/Rule/MessageContext）唯一来源，
-    # bot/plugin/ 下为薄转发。构建/本地开发用 build.bat 的 -e 安装优先；git 依赖供 CI 与干净环境。
-    # 锁定到已发布的 tag（@v1.13.7）保证构建可复现；SDK 发新版后手动更新此处并重新 uv lock。
-    "qingci-plugin-sdk @ git+https://gitee.com/qingci-bot/Plugins-SDK.git@v1.13.9",
+    # bot/plugin/ 下为薄转发。由私有索引分发（见文末 [[tool.uv.index]] 与 [tool.uv.sources]），
+    # 版本精确锁定保证可复现；SDK 发新版后更新此处版本号并重新 uv lock。
+    "qingci-plugin-sdk==1.13.9",
     # 依赖上界策略：核心依赖一律给「下一个主版本」上界。CI/开发由 uv.lock 精确锁定，
     # 上界主要保护「用户按 pyproject 直接 pip install」的场景——litellm / fastapi 等
     # 属于高频 breaking 的包，被动跨主版本升级会直接破坏运行时。
@@ -95,6 +95,20 @@ ignore = [
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
+
+# ── 依赖索引 ────────────────────────────────────────────────
+# qingci-plugin-sdk 由私有索引（pypiserver）分发；该索引对未收录的包会
+# 303 重定向到 pypi.org，因此其余依赖照常从 PyPI 解析。
+# explicit = true：此索引只服务下面 sources 显式绑定的包，不参与其他包的
+# 解析——避免为 130 个依赖逐个请求私有索引，也避免同名包被公网抢占。
+[[tool.uv.index]]
+name = "qingci"
+url = "https://pypi.luoqingciya.cn/simple"
+publish-url = "https://pypi.luoqingciya.cn/"
+explicit = true
+
+[tool.uv.sources]
+qingci-plugin-sdk = { index = "qingci" }
 
 [tool.mypy]
 # 有意按 3.12 检查（与推荐运行版本一致，见 CHANGELOG）：
