@@ -54,7 +54,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "Qingci-Bot-CE-${version}-Setup-${arch}.exe"
+      "artifactName": "Qingci-Bot-CE-${version}-Setup-${arch}.exe",
+      "include": "build/installer.nsh"
     },
     "linux": {
       "target": [
