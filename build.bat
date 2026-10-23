@@ -42,8 +42,8 @@ if defined QINGCI_SDK_INDEX_URL (
 ) else (
     set "SdkIndexUrl=https://pypi.luoqingciya.cn/simple"
 )
-echo ==^> [0/3] installing qingci-plugin-sdk ^(1.13.9^) from !SdkIndexUrl! ...
-uv pip install --python "%Python%" --index-url "!SdkIndexUrl!" --extra-index-url https://pypi.org/simple "qingci-plugin-sdk==1.13.9"
+echo ==^> [0/3] installing qingci-plugin-sdk ^(1.14.0^) from !SdkIndexUrl! ...
+uv pip install --python "%Python%" --index-url "!SdkIndexUrl!" --extra-index-url https://pypi.org/simple "qingci-plugin-sdk==1.14.0"
 if errorlevel 1 (
     echo [ERROR] qingci-plugin-sdk install failed
     exit /b 1

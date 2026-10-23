@@ -41,8 +41,8 @@ echo "Python:   $PY"
 # 该索引对私有项目只返回本地文件，未收录包经 /proxy/ 中转上游；PyPI 挂为额外索引作兜底。
 # QINGCI_SDK_INDEX_URL 可覆盖索引地址（内网镜像 / 离线环境）。
 SDK_INDEX_URL="${QINGCI_SDK_INDEX_URL:-https://pypi.luoqingciya.cn/simple}"
-echo "==> [0/3] installing qingci-plugin-sdk (1.13.9) from $SDK_INDEX_URL ..."
-uv pip install --python "$PY" --index-url "$SDK_INDEX_URL" --extra-index-url https://pypi.org/simple "qingci-plugin-sdk==1.13.9"
+echo "==> [0/3] installing qingci-plugin-sdk (1.14.0) from $SDK_INDEX_URL ..."
+uv pip install --python "$PY" --index-url "$SDK_INDEX_URL" --extra-index-url https://pypi.org/simple "qingci-plugin-sdk==1.14.0"
 
 # ---------- 确保 pip 在 venv（供打包后插件依赖安装器使用） ----------
 # 打包（frozen）模式下插件依赖安装器（bot/plugin/deps.py）调用 pip._internal，

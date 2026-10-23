@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Changed
+
+- **插件 SDK 升级 v1.13.9 → v1.14.0**：新增弃用钩子告警（插件覆写 `on_message` / `on_notice` / `on_request` 时加载期记录 WARNING，计划 2.0 移除）、Python 3.14 纳入支持范围、测试与文档补强（覆盖率 92% → 96.5%）。主项目同步 `pyproject.toml` / `build.bat` / `build-linux.sh` 与 `uv.lock`
+
 ### Fixed
 
 - **私有索引迁移后 `uv.lock` 的 wheel URL 失效**：索引侧改用内容寻址路径（`/packages/<hash 前两位>/<sha256>/<文件名>`），旧路径 `/packages/<文件名>` 直接 404，全新安装（`uv sync --locked`）会失败。已重新锁定到新 URL（sha256 未变，仍是同一份产物）
