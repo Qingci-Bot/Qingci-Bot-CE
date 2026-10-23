@@ -64,96 +64,95 @@
 ; 数据目录页只在安装器构建里需要。卸载器构建（BUILD_UNINSTALLER）不插入该页，
 ; 若把 Function 也编译进去会触发 warning 6010（未引用函数），而 electron-builder
 ; 以 -WX 调用 makensis，任何警告都会导致构建失败。
-!ifndef BUILD_UNINSTALLER
 
 !define QINGCI_DATADIR_REGKEY "Software\Qingci-Bot CE"
 !define QINGCI_DATADIR_DEFAULT "$LOCALAPPDATA\Qingci-Bot CE\data"
 
-var DataDirPage
-var DataDirInput
-var DataDirValue
-
 !macro customPageAfterChangeDir
+  ; 变量也放进宏：卸载器那一遍不展开本宏，若在宏外声明会触发
+  ; warning 6001（变量未使用），而 electron-builder 以 -WX 编译。
+  var DataDirPage
+  var DataDirInput
+  var DataDirValue
+
   Page custom DataDirPageCreate DataDirPageLeave
+
+  Function DataDirPageCreate
+    !insertmacro MUI_HEADER_TEXT "选择数据目录" "实例的配置、数据库与插件数据将保存在此目录；它与安装目录分离，升级和卸载都不会删除。"
+
+    nsDialogs::Create 1018
+    Pop $DataDirPage
+    ${If} $DataDirPage == error
+      Abort
+    ${EndIf}
+
+    ; 升级时沿用上次的选择
+    ReadRegStr $DataDirValue HKCU "${QINGCI_DATADIR_REGKEY}" "DataDir"
+    ${If} $DataDirValue == ""
+      StrCpy $DataDirValue "${QINGCI_DATADIR_DEFAULT}"
+    ${EndIf}
+
+    ${NSD_CreateLabel} 0 0 100% 24u "请选择存放实例数据的目录（可点右侧「浏览...」更改）："
+    Pop $0
+
+    ${NSD_CreateDirRequest} 0 28u 78% 12u "$DataDirValue"
+    Pop $DataDirInput
+    ${NSD_CreateBrowseButton} 80% 28u 20% 12u "浏览..."
+    Pop $0
+    ${NSD_OnClick} $0 DataDirBrowse
+
+    nsDialogs::Show
+  FunctionEnd
+
+  Function DataDirBrowse
+    ${NSD_GetText} $DataDirInput $DataDirValue
+    nsDialogs::SelectFolderDialog "选择数据目录" "$DataDirValue"
+    Pop $0
+    ${If} $0 != error
+      ${NSD_SetText} $DataDirInput "$0"
+    ${EndIf}
+  FunctionEnd
+
+  Function DataDirPageLeave
+    ${NSD_GetText} $DataDirInput $DataDirValue
+    ${If} $DataDirValue == ""
+      MessageBox MB_ICONEXCLAMATION|MB_OK "请选择数据目录。"
+      Abort
+    ${EndIf}
+
+    ; 不允许落在安装目录内：那样卸载时会被一并删除，等于白选
+    StrCpy $1 "$INSTDIR\"
+    StrLen $2 $1
+    StrCpy $3 $DataDirValue $2
+    ${If} $3 == $1
+      MessageBox MB_ICONEXCLAMATION|MB_OK "数据目录不能位于安装目录内部，请另选一个目录。"
+      Abort
+    ${EndIf}
+
+    ; 立刻创建并验证：选了一个不可写/不存在的盘符时当场报错，
+    ; 而不是等应用启动才失败（那样用户会以为选择没生效）。
+    CreateDirectory "$DataDirValue"
+    ${IfNot} ${FileExists} "$DataDirValue"
+      MessageBox MB_ICONEXCLAMATION|MB_OK "无法创建该目录，请换一个位置（检查盘符是否存在、是否有写权限）。"
+      Abort
+    ${EndIf}
+
+    ; 记住选择（下次升级沿用），并写给应用读取。
+    ; 写两处：安装目录旁（应用从 EXE 同目录读最可靠，不受用户配置文件差异影响）
+    ; 和 %APPDATA%（安装目录被清掉后仍可参考）。
+    WriteRegStr HKCU "${QINGCI_DATADIR_REGKEY}" "DataDir" "$DataDirValue"
+
+    FileOpen $0 "$INSTDIR\datadir.txt" w
+    ${If} $0 != ""
+      FileWrite $0 "$DataDirValue"
+      FileClose $0
+    ${EndIf}
+
+    CreateDirectory "$APPDATA\Qingci-Bot CE"
+    FileOpen $0 "$APPDATA\Qingci-Bot CE\datadir.txt" w
+    ${If} $0 != ""
+      FileWrite $0 "$DataDirValue"
+      FileClose $0
+    ${EndIf}
+  FunctionEnd
 !macroend
-
-Function DataDirPageCreate
-  !insertmacro MUI_HEADER_TEXT "选择数据目录" "实例的配置、数据库与插件数据将保存在此目录；它与安装目录分离，升级和卸载都不会删除。"
-
-  nsDialogs::Create 1018
-  Pop $DataDirPage
-  ${If} $DataDirPage == error
-    Abort
-  ${EndIf}
-
-  ; 升级时沿用上次的选择
-  ReadRegStr $DataDirValue HKCU "${QINGCI_DATADIR_REGKEY}" "DataDir"
-  ${If} $DataDirValue == ""
-    StrCpy $DataDirValue "${QINGCI_DATADIR_DEFAULT}"
-  ${EndIf}
-
-  ${NSD_CreateLabel} 0 0 100% 24u "请选择存放实例数据的目录（可点右侧「浏览...」更改）："
-  Pop $0
-
-  ${NSD_CreateDirRequest} 0 28u 78% 12u "$DataDirValue"
-  Pop $DataDirInput
-  ${NSD_CreateBrowseButton} 80% 28u 20% 12u "浏览..."
-  Pop $0
-  ${NSD_OnClick} $0 DataDirBrowse
-
-  nsDialogs::Show
-FunctionEnd
-
-Function DataDirBrowse
-  ${NSD_GetText} $DataDirInput $DataDirValue
-  nsDialogs::SelectFolderDialog "选择数据目录" "$DataDirValue"
-  Pop $0
-  ${If} $0 != error
-    ${NSD_SetText} $DataDirInput "$0"
-  ${EndIf}
-FunctionEnd
-
-Function DataDirPageLeave
-  ${NSD_GetText} $DataDirInput $DataDirValue
-  ${If} $DataDirValue == ""
-    MessageBox MB_ICONEXCLAMATION|MB_OK "请选择数据目录。"
-    Abort
-  ${EndIf}
-
-  ; 不允许落在安装目录内：那样卸载时会被一并删除，等于白选
-  StrCpy $1 "$INSTDIR\"
-  StrLen $2 $1
-  StrCpy $3 $DataDirValue $2
-  ${If} $3 == $1
-    MessageBox MB_ICONEXCLAMATION|MB_OK "数据目录不能位于安装目录内部，请另选一个目录。"
-    Abort
-  ${EndIf}
-
-  ; 立刻创建并验证：选了一个不可写/不存在的盘符时当场报错，
-  ; 而不是等应用启动才失败（那样用户会以为选择没生效）。
-  CreateDirectory "$DataDirValue"
-  ${IfNot} ${FileExists} "$DataDirValue"
-    MessageBox MB_ICONEXCLAMATION|MB_OK "无法创建该目录，请换一个位置（检查盘符是否存在、是否有写权限）。"
-    Abort
-  ${EndIf}
-
-  ; 记住选择（下次升级沿用），并写给应用读取。
-  ; 写两处：安装目录旁（应用从 EXE 同目录读最可靠，不受用户配置文件差异影响）
-  ; 和 %APPDATA%（安装目录被清掉后仍可参考）。
-  WriteRegStr HKCU "${QINGCI_DATADIR_REGKEY}" "DataDir" "$DataDirValue"
-
-  FileOpen $0 "$INSTDIR\datadir.txt" w
-  ${If} $0 != ""
-    FileWrite $0 "$DataDirValue"
-    FileClose $0
-  ${EndIf}
-
-  CreateDirectory "$APPDATA\Qingci-Bot CE"
-  FileOpen $0 "$APPDATA\Qingci-Bot CE\datadir.txt" w
-  ${If} $0 != ""
-    FileWrite $0 "$DataDirValue"
-    FileClose $0
-  ${EndIf}
-FunctionEnd
-
-!endif ; BUILD_UNINSTALLER
