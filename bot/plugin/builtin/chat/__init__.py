@@ -18,6 +18,7 @@ from ...base import PluginBase
 from ...matcher import MatcherContext, on_command, on_message
 from ...permission import Permission
 from ...rule import Rule, rate_limit
+from qingci_plugin_sdk import resolve_images
 
 logger = logging.getLogger("qingci-bot.plugin.chat")
 
@@ -282,13 +283,28 @@ class ChatPlugin(PluginBase):
                     base_prompt + "\n\n以下是知识库中的参考资料，仅在相关时参考作答：\n" + reference
                 )
 
+        # 多模态：ctx.images 里是平台下发的 file_id（不透明 ID），模型读不到，
+        # 需先解析成 URL / data URI。默认关闭（文本模型收到图片会报错）。
+        images: list[str] | None = None
+        mm = self.bot.config.llm.multimodal
+        if mm.enabled and ctx.images:
+            images = await resolve_images(
+                self.connection,
+                ctx.images,
+                max_count=mm.max_images,
+                max_bytes=mm.max_bytes,
+                timeout=mm.timeout,
+            )
+            if not images:
+                logger.info("图片解析失败，本次按纯文本回复（原始引用 %s）", ctx.images)
+
         # 调用 LLM
         reply = await self.llm.chat(
             message=message,
             message_type=ctx.message_type,
             group_id=ctx.group_id,
             user_id=ctx.user_id,
-            images=ctx.images or None,
+            images=images or None,
             system_prompt=system_prompt,
         )
         if not reply:

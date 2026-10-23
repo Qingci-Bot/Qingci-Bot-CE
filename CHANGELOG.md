@@ -5,6 +5,16 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Added
+
+- **多模态图片输入（可开关）**：聊天插件此前把 `ctx.images` 直接传给 LLM，但其中的值是不透明 `file_id`（OneBot 12 / Telegram 均如此），模型读不到。现改为先用 SDK 的 `resolve_images()` 解析成 `http(s)` URL 或 `data:` URI 再发送。新增 `llm.multimodal` 配置段（`enabled` 默认关闭、`max_images`、`max_bytes`、`timeout`），Web UI「LLM 配置」页提供开关。默认关闭是因为多数纯文本模型收到图片内容会直接报错；图片超限或无法解析时自动跳过，按纯文本回复
+
+### Changed
+
+- **插件 SDK 升级 v1.14.0 → v1.15.0**：新增 `media` 模块（`resolve_image` / `resolve_images`），把平台图片引用换成模型可读地址。零运行时依赖，只解析不下载；支持 URL / `data:` 直通、`base64://` 解码、本地文件编码、平台 `get_image` / `get_file` 换取
+
 ## \[1.18.5] - 2026-10-23（插件 SDK 升级与索引工程化）
 
 ### Changed

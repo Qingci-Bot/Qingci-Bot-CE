@@ -288,6 +288,11 @@ llm:
       description: 严谨的助手
       system_prompt: 你是严谨的技术助手，回答简洁准确。
   default_persona: ''             # 默认人格名（空 = 使用 system_prompt）
+  multimodal:                     # 图片输入（需模型支持视觉，否则会报错）
+    enabled: false                #   开启后把消息里的图片解析为地址一并发送
+    max_images: 4                 #   单条消息最多带几张
+    max_bytes: 4194304            #   单图字节上限（本地编码时生效）
+    timeout: 15                   #   解析图片（调平台 API）的超时秒数
 ```
 
 **提供商联动与模型列表**：切换 `provider` 时，Web UI 会自动带出推荐的 `api_url` 与 `model`（预设见「LLM 配置」页），用户仍可覆盖为自定义值。填入 `api_key` 后，点击「获取模型」即可调用 `/api/config/llm/models` 向提供商查询可用模型列表并回填到下拉框（Ollama / Claude / Gemini / OpenAI 兼容协议均支持）。
@@ -297,6 +302,8 @@ LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不�
 **人格切换**：聊天中发送 `/persona 列表` 查看全部，`/persona 猫娘` 切换（仅对当前会话生效），`/persona 重置` 恢复默认人格或 `system_prompt`。
 
 **MCP 工具**：开启 `enable_tools` 并配置 `mcp_servers` 后，启动时自动连接各服务器并将工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用。修改 MCP 配置后需重启 Bot 生效。
+
+**多模态（图片输入）**：开启 `llm.multimodal.enabled` 后，聊天插件会把消息里的图片解析成模型可读的地址（`http(s)` URL 或 `data:` URI）一并发送，Web UI 的「LLM 配置」页有对应开关。默认**关闭**——多数纯文本模型收到图片会直接报错，请确认所用模型支持视觉输入后再开启。图片超过 `max_bytes` 或无法解析时自动跳过，按纯文本回复。
 
 **provider 路由规则**（基于 litellm）：
 

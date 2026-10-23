@@ -84,6 +84,21 @@ class PersonaConfig(BaseModel):
     system_prompt: str = ""  # 该人格的系统提示词
 
 
+class MultimodalConfig(BaseModel):
+    """多模态（图片输入）配置
+
+    默认关闭：多数文本模型收到 image_url 内容会直接报错，
+    需用户确认所用模型支持视觉输入后再开启。
+    """
+
+    model_config = {"extra": "ignore"}
+
+    enabled: bool = False  # 是否把消息里的图片传给 LLM
+    max_images: int = 4  # 单条消息最多带几张（同时控制成本）
+    max_bytes: int = 4 * 1024 * 1024  # 单图字节上限（本地编码时生效）
+    timeout: float = 15.0  # 解析图片（调用平台 API）的超时秒数
+
+
 class LLMConfig(BaseModel):
     """LLM 大模型配置"""
 
@@ -111,6 +126,8 @@ class LLMConfig(BaseModel):
     enable_tools: bool = False  # Function Calling 工具调用（默认关闭）
     max_tool_rounds: int = 5  # 工具调用最大轮次
     mcp_servers: list[MCPConfig] = []  # MCP 服务器列表（enable_tools 开启后生效）
+    # 多模态：把收到的图片解析成模型可读地址后随消息发送
+    multimodal: MultimodalConfig = Field(default_factory=MultimodalConfig)
 
     @model_validator(mode="after")
     def apply_provider_preset(self):

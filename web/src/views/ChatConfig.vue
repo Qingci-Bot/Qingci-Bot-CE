@@ -11,6 +11,14 @@ const saving = ref(false);
 const fetchingModels = ref(false);
 const modelOptions = ref([]);
 
+// 单图上限在界面上用 MB 表示，存储仍是字节
+const maxImageMb = computed({
+  get: () => Math.round((form.multimodal?.max_bytes ?? 4 * 1024 * 1024) / 1048576),
+  set: (v) => {
+    if (form.multimodal) form.multimodal.max_bytes = Math.max(1, Number(v) || 1) * 1048576;
+  },
+});
+
 // 提供商列表，从后端 presets 动态生成
 const providerOptions = computed(() => {
   const presets = store.llmPresets;
@@ -56,6 +64,12 @@ function resetForm() {
     system_prompt: llm.system_prompt ?? '',
     personas: Array.isArray(llm.personas) ? llm.personas.map((p) => ({ ...p })) : [],
     default_persona: llm.default_persona ?? '',
+    multimodal: {
+      enabled: llm.multimodal?.enabled ?? false,
+      max_images: llm.multimodal?.max_images ?? 4,
+      max_bytes: llm.multimodal?.max_bytes ?? 4 * 1024 * 1024,
+      timeout: llm.multimodal?.timeout ?? 15,
+    },
     mcp_servers: Array.isArray(llm.mcp_servers)
       ? llm.mcp_servers.map((s) => ({
           name: s.name ?? '',
@@ -332,6 +346,33 @@ async function saveConfig() {
 
     <div class="card fade-in">
       <div class="card-header">
+        <div class="card-title">多模态（图片输入）</div>
+      </div>
+      <div class="hint-text">
+        开启后会把消息里的图片解析为模型可读的地址一并发送。
+        <strong>需模型支持视觉输入</strong>，否则请求会报错；图片过大或无法解析时自动跳过。
+      </div>
+      <label class="mm-row">
+        <input type="checkbox" v-model="form.multimodal.enabled" />
+        <span>启用图片输入</span>
+      </label>
+      <div v-if="form.multimodal.enabled" class="mm-row">
+        <span>单条最多</span>
+        <input
+          type="number"
+          min="1"
+          max="10"
+          class="mm-num"
+          v-model.number="form.multimodal.max_images"
+        />
+        <span>张，单图上限</span>
+        <input type="number" min="1" max="20" class="mm-num" v-model.number="maxImageMb" />
+        <span>MB</span>
+      </div>
+    </div>
+
+    <div class="card fade-in">
+      <div class="card-header">
         <div class="card-title">MCP 服务器</div>
         <div class="action-bar">
           <button class="btn btn-secondary" @click="addMcpServer">+ 添加服务器</button>
@@ -404,6 +445,28 @@ async function saveConfig() {
 }
 .mcp-cmd {
   flex: 2;
+}
+.mm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.mm-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--blue);
+}
+.mm-num {
+  width: 72px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 13px;
 }
 .model-actions {
   display: flex;

@@ -57,6 +57,11 @@ llm:
   enable_tools: false
   max_tool_rounds: 5
   mcp_servers: []             # MCP 服务器：[{name, command, args, url, env}]
+  multimodal:                 # 图片输入（需模型支持视觉，否则会报错）
+    enabled: false            # 开启后把消息里的图片解析为 URL/data URI 一并发送
+    max_images: 4             # 单条消息最多带几张
+    max_bytes: 4194304        # 单图字节上限（本地编码时生效）
+    timeout: 15               # 解析图片（调用平台 API）的超时秒数
 rate_limit:
   enabled: false
   daily_limit: 50
