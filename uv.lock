@@ -3149,7 +3149,7 @@ name = "qingci-plugin-sdk"
 version = "1.13.9"
 source = { registry = "https://pypi.luoqingciya.cn/simple" }
 wheels = [
-    { url = "https://pypi.luoqingciya.cn/packages/qingci_plugin_sdk-1.13.9-py3-none-any.whl", hash = "sha256:6a239909782077402937261e80c296786bca7227048b466aaa5f0e3db3b65bff" },
+    { url = "https://pypi.luoqingciya.cn/packages/6a/6a239909782077402937261e80c296786bca7227048b466aaa5f0e3db3b65bff/qingci_plugin_sdk-1.13.9-py3-none-any.whl", hash = "sha256:6a239909782077402937261e80c296786bca7227048b466aaa5f0e3db3b65bff", size = 74390, upload-time = "2026-10-22T14:16:49Z" },
 ]
 
 [[package]]

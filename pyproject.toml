@@ -97,14 +97,15 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 # ── 依赖索引 ────────────────────────────────────────────────
-# qingci-plugin-sdk 由私有索引（pypiserver）分发；该索引对未收录的包会
-# 303 重定向到 pypi.org，因此其余依赖照常从 PyPI 解析。
+# qingci-plugin-sdk 由私有索引分发（Twine 兼容，上传走 /legacy/）。
+# 该索引只收录本项目包，未收录的包返回 404、不代理 PyPI，因此其余依赖
+# 仍从默认源（PyPI）解析。
 # explicit = true：此索引只服务下面 sources 显式绑定的包，不参与其他包的
 # 解析——避免为 130 个依赖逐个请求私有索引，也避免同名包被公网抢占。
 [[tool.uv.index]]
 name = "qingci"
 url = "https://pypi.luoqingciya.cn/simple"
-publish-url = "https://pypi.luoqingciya.cn/"
+publish-url = "https://pypi.luoqingciya.cn/legacy/"
 explicit = true
 
 [tool.uv.sources]
