@@ -61,6 +61,11 @@
 
 !include "nsDialogs.nsh"
 
+; 数据目录页只在安装器构建里需要。卸载器构建（BUILD_UNINSTALLER）不插入该页，
+; 若把 Function 也编译进去会触发 warning 6010（未引用函数），而 electron-builder
+; 以 -WX 调用 makensis，任何警告都会导致构建失败。
+!ifndef BUILD_UNINSTALLER
+
 !define QINGCI_DATADIR_REGKEY "Software\Qingci-Bot CE"
 !define QINGCI_DATADIR_DEFAULT "$LOCALAPPDATA\Qingci-Bot CE\data"
 
@@ -131,3 +136,5 @@ Function DataDirPageLeave
   FileWrite $0 "$DataDirValue"
   FileClose $0
 FunctionEnd
+
+!endif ; BUILD_UNINSTALLER
