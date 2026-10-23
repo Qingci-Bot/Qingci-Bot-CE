@@ -30,8 +30,8 @@
     ],
     "extraResources": [
       {
-        "from": "../../dist/qingci-bot-ce",
-        "to": "backend"
+        "from": "../../dist/backend.zip",
+        "to": "backend.zip"
       }
     ],
     "win": {
@@ -77,5 +77,8 @@
   },
   "allowScripts": {
     "electron": true
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16"
   }
 }

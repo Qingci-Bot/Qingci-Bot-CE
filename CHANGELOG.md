@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **安装包改为后端单归档，显著缩短安装耗时**：此前后端 PyInstaller onedir 作为散文件随包分发（数千个文件），NSIS 逐个落盘 + 杀毒软件逐个扫描，安装需数分钟。现由 `scripts/pack_backend.py` 打成单个 `backend.zip`（ZIP_STORED，外层安装包仍会压缩），安装阶段只写 1 个大文件，解压推迟到首次启动（显示启动页，一次性），并按版本目录管理、升级后自动清理旧版本
 - **插件 SDK 升级 v1.14.0 → v1.15.0**：新增 `media` 模块（`resolve_image` / `resolve_images`），把平台图片引用换成模型可读地址。零运行时依赖，只解析不下载；支持 URL / `data:` 直通、`base64://` 解码、本地文件编码、平台 `get_image` / `get_file` 换取
 
 ## \[1.18.5] - 2026-10-23（插件 SDK 升级与索引工程化）

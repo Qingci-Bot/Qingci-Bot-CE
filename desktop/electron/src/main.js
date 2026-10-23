@@ -60,11 +60,58 @@ function resolvePython() {
     const winPy = path.join(APP_ROOT, ".venv", "Scripts", "python.exe");
     return { cmd: fs.existsSync(winPy) ? winPy : (process.platform === "win32" ? "python" : "python3"), script: path.join(APP_ROOT, "main.py") };
   }
-  // 打包：后端 onedir 经 electron-builder extraResources 复制到 resources/backend/，
-  // 与 exe 同目录的 _internal/ms-playwright/web/instances 随之整体保留。
-  // PyInstaller 产物名跨平台：Windows 为 qingci-bot-ce.exe，Linux/macOS 无扩展名。
-  const backendExe = path.join(process.resourcesPath, "backend", process.platform === "win32" ? "qingci-bot-ce.exe" : "qingci-bot-ce");
-  return { cmd: backendExe, script: null };
+  // 打包：后端以**单个 zip** 随包分发（resources/backend.zip），首次启动由
+  // prepareBackend() 解压到 userData 下再启动。这样安装阶段只写 1 个大文件，
+  // 避免 NSIS 逐个落盘数千个文件 + 杀毒软件逐个扫描导致的安装缓慢。
+  if (!backendRoot) {
+    throw new Error("后端尚未解压（prepareBackend 未执行）");
+  }
+  return { cmd: path.join(backendRoot, BACKEND_EXE), script: null };
+}
+
+// PyInstaller 产物名跨平台：Windows 为 qingci-bot-ce.exe，Linux/macOS 无扩展名
+const BACKEND_EXE = process.platform === "win32" ? "qingci-bot-ce.exe" : "qingci-bot-ce";
+
+/**
+ * 首次启动时把 resources/backend.zip 解压到 userData/backend/<version>/。
+ *
+ * 已解压过（存在 .ready 标记且可执行文件在）则直接复用；否则解压并清理旧版本目录。
+ * 解压是同步的——调用方需先显示启动页并让出一帧，避免用户看到白屏。
+ */
+function prepareBackend() {
+  const version = app.getVersion();
+  const base = path.join(app.getPath("userData"), "backend");
+  const dir = path.join(base, version);
+  const marker = path.join(dir, ".ready");
+
+  if (fs.existsSync(marker) && fs.existsSync(path.join(dir, BACKEND_EXE))) {
+    backendRoot = dir;
+    return dir;
+  }
+
+  const zipPath = path.join(process.resourcesPath, "backend.zip");
+  if (!fs.existsSync(zipPath)) {
+    throw new Error(`后端归档缺失：${zipPath}`);
+  }
+
+  elog("[electron] 首次启动，解压后端到", dir);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const AdmZip = require("adm-zip");
+  new AdmZip(zipPath).extractAllTo(dir, true);
+  fs.writeFileSync(marker, version);
+  backendRoot = dir;
+
+  // 升级后旧版本的解压目录不再需要，顺手清掉（失败不影响启动）
+  try {
+    for (const name of fs.readdirSync(base)) {
+      if (name === version) continue;
+      fs.rmSync(path.join(base, name), { recursive: true, force: true });
+    }
+  } catch (e) {
+    elog("[electron] 清理旧后端目录失败（忽略）:", String(e));
+  }
+  return dir;
 }
 
 // command-line args 传递给后端（排除 electron 自身 args 与由壳注入的 --backend）
@@ -170,6 +217,7 @@ function acquireSingleInstance() {
 let mainWindow = null;
 let tray = null;
 let backend = null; // spawned Python 子进程
+let backendRoot = null; // 打包形态下后端解压目录（prepareBackend 设置）
 let controlServer = null;
 let isQuitting = false;
 let instanceMeta = null;
@@ -481,6 +529,14 @@ app.whenReady().then(async () => {
   // 数据随可执行目录自包含分发：不重定向 userData/数据根，后端默认落于
   // EXE 旁 instances/ 下，便于整体拷贝迁移。
   try {
+    // 打包形态：首次启动要解压后端（数千个文件，十几秒）。先出启动页并让出
+    // 一帧，避免解压期间白屏；解压完成后才做实例探测（探测本身要调后端）。
+    if (!isDev()) {
+      showBootWindow();
+      await new Promise((r) => setTimeout(r, 120));
+      prepareBackend();
+    }
+
     const { isPrimary, meta, server } = await acquireSingleInstance();
     instanceMeta = meta;
     _logInit(instanceMeta.data_dir);
@@ -492,7 +548,8 @@ app.whenReady().then(async () => {
     }
     controlServer = server;
 
-    showBootWindow();
+    // 打包形态的启动页已在解压前创建，避免重复建窗
+    if (isDev()) showBootWindow();
     showTray();
     startBackend();
 

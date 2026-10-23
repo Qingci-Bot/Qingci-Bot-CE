@@ -9,6 +9,12 @@ set "ElectronOut=%Root%dist\electron"
 echo P2 be=[%BackendDist%]\qingci-bot-ce.exe
 if not exist "%BackendDist%\qingci-bot-ce.exe" goto fail
 echo P3 backend ok
+rem 后端打成单个 zip：安装阶段只写 1 个大文件，避免数千个小文件逐个落盘
+set "PyExe=%Root%.venv\Scripts\python.exe"
+if not exist "%PyExe%" set "PyExe=python"
+echo P3b pack backend
+"%PyExe%" "%Root%scripts\pack_backend.py"
+if errorlevel 1 goto fail
 cd /d "%ElectronDir%" >nul 2>&1
 echo P4 cd_err=%errorlevel% pwd=%cd%
 if errorlevel 1 goto fail
@@ -26,7 +32,7 @@ call npx electron-builder --win --dir
 echo P10 dir_err=%errorlevel%
 if errorlevel 1 goto fail
 echo P11 bundle check
-if not exist "%ElectronOut%\win-unpacked\resources\backend\qingci-bot-ce.exe" goto fail
+if not exist "%ElectronOut%\win-unpacked\resources\backend.zip" goto fail
 echo P12 win build
 call npx electron-builder --win
 echo P13 win_err=%errorlevel%

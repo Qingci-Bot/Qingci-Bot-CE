@@ -186,6 +186,10 @@ jobs:
       - name: Build backend onedir (build-linux.sh)
         run: bash build-linux.sh
 
+      - name: Pack backend into single archive
+        # 后端 onedir 数千个文件 → 单个 zip，安装/解压阶段只处理 1 个文件
+        run: python3 scripts/pack_backend.py
+
       - name: Package AppImage (electron-builder --linux)
         working-directory: desktop/electron
         run: |

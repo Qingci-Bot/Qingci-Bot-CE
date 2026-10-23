@@ -110,6 +110,12 @@ if [ ! -d "$AppDir" ]; then
   exit 1
 fi
 
+# ---------- [3.4/3] 后端打成单个归档 ----------
+# electron-builder 用 dist/backend.zip 作为 extraResources；安装阶段只写 1 个文件，
+# 解压推迟到首次启动（见 desktop/electron/src/main.js 的 prepareBackend）
+echo "==> [3.4/3] packing backend into single archive..."
+"$PY" scripts/pack_backend.py
+
 # ---------- [3.5/3] SHA256 校验清单 ----------
 echo "==> [3.5/3] generating SHA256 checksums..."
 ExeFile="$AppDir/qingci-bot-ce"
