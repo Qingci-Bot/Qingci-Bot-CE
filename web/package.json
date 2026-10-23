@@ -1,6 +1,6 @@
 {
   "name": "qingci-bot-web",
-  "version": "1.18.7",
+  "version": "1.18.8",
   "private": true,
   "license": "GPL-3.0-or-later",
   "type": "module",

@@ -5,6 +5,14 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[1.18.8] - 2026-10-23（修复数据目录读取路径不一致）
+
+### Fixed
+
+- **安装时选的数据目录没生效，数据落到隐藏位置**：安装器把选择写入 `%APPDATA%\Qingci-Bot CE\datadir.txt`，而应用却用 `app.getPath("userData")` 去找——该路径取的是 `package.json` 的 `name`（`qingci-bot-ce-desktop`），与产品目录名不同，因此**永远读不到**，回退到 `%APPDATA%\qingci-bot-ce-desktop\data`。现改为固定使用产品目录名 `%APPDATA%\Qingci-Bot CE\datadir.txt`，并在启动时**创建**数据目录（此前选了目录但从未创建，用户会以为选择无效）
+
+- **补齐第二个迁移来源**：1.18.7 把数据写到了 `%APPDATA%\qingci-bot-ce-desktop\data\instances`，现启动时会把它一并迁到选定的数据目录（rename 优先，跨卷复制且保留原目录）
+
 ## \[1.18.7] - 2026-10-23（数据目录可选，升级不再丢数据）
 
 ### Added

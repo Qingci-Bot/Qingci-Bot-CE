@@ -292,23 +292,45 @@ function makeWindow({ error = false } = {}) {
   return win;
 }
 
+// 产品目录名固定为安装器使用的名称。
+// 不能用 app.getPath("userData")：它取的是 package.json 的 name
+// （qingci-bot-ce-desktop），与安装器写入的 "Qingci-Bot CE" 不是同一个目录，
+// 会导致安装时选的数据目录读不到、数据落到另一个隐藏路径。
+const PRODUCT_DIR_NAME = "Qingci-Bot CE";
+
+/** 安装器写入选择结果的路径（%APPDATA%\Qingci-Bot CE\datadir.txt） */
+function dataDirRecordPath() {
+  return path.join(app.getPath("appData"), PRODUCT_DIR_NAME, "datadir.txt");
+}
+
+/** 未选择时的默认数据目录（与安装器默认值保持一致） */
+function defaultDataHome() {
+  const localAppData = process.env.LOCALAPPDATA || app.getPath("appData");
+  return path.join(localAppData, PRODUCT_DIR_NAME, "data");
+}
+
 /**
  * 解析实例数据根目录。
  *
- * 优先级：安装器写入的 datadir.txt（%APPDATA%\<app>\datadir.txt）> userData/data。
+ * 顺序：安装器写入的 datadir.txt > 默认 %LOCALAPPDATA%\Qingci-Bot CE\data。
  * 该目录独立于安装目录——NSIS 升级/卸载只清理 $INSTDIR，不会碰这里。
  */
 function resolveDataHome() {
+  const record = dataDirRecordPath();
   try {
-    const f = path.join(app.getPath("userData"), "datadir.txt");
-    if (fs.existsSync(f)) {
-      const v = fs.readFileSync(f, "utf8").trim();
-      if (v) return v;
+    if (fs.existsSync(record)) {
+      const v = fs.readFileSync(record, "utf8").trim();
+      if (v) {
+        elog("[electron] 数据目录来自", record, "->", v);
+        return v;
+      }
+    } else {
+      elog("[electron] 未找到数据目录记录（安装时可能未选择）：", record);
     }
   } catch (e) {
     elog("[electron] 读取 datadir.txt 失败（回退默认）:", String(e));
   }
-  return path.join(app.getPath("userData"), "data");
+  return defaultDataHome();
 }
 
 /**
@@ -340,19 +362,32 @@ function recoverStashIfNeeded(home) {
  */
 function migrateLegacyInstances(home) {
   try {
-    const legacy = path.join(path.dirname(app.getPath("exe")), "instances");
-    if (!fs.existsSync(legacy)) return;
-
     const target = path.join(home, "instances");
     if (fs.existsSync(target) && fs.readdirSync(target).length > 0) return;
 
-    fs.mkdirSync(home, { recursive: true });
-    try {
-      fs.renameSync(legacy, target);
-      elog("[electron] 已迁移旧实例目录到", target);
-    } catch (e) {
-      elog("[electron] 跨卷无法直接移动，改为复制（保留原目录）:", String(e));
-      fs.cpSync(legacy, target, { recursive: true, force: true });
+    // 候选来源（按新旧顺序）：
+    // 1) 旧版本放在 EXE 旁的 instances/
+    // 2) 1.18.7 早期版本误用 app.getPath("userData") 导致数据落在
+    //    %APPDATA%\qingci-bot-ce-desktop\data\instances
+    const candidates = [
+      path.join(path.dirname(app.getPath("exe")), "instances"),
+      path.join(app.getPath("userData"), "data", "instances"),
+    ];
+
+    for (const legacy of candidates) {
+      if (!fs.existsSync(legacy)) continue;
+      if (fs.readdirSync(legacy).length === 0) continue;
+
+      elog("[electron] 发现旧数据目录，迁移到", target, "来源:", legacy);
+      fs.mkdirSync(home, { recursive: true });
+      try {
+        fs.renameSync(legacy, target);
+        elog("[electron] 已迁移（rename）");
+      } catch (e) {
+        elog("[electron] 无法直接移动，改为复制（保留原目录）:", String(e));
+        fs.cpSync(legacy, target, { recursive: true, force: true });
+      }
+      return;
     }
   } catch (e) {
     elog("[electron] 旧实例目录迁移失败（忽略）:", String(e));
@@ -609,6 +644,12 @@ app.whenReady().then(async () => {
       showBootWindow();
       await new Promise((r) => setTimeout(r, 120));
       dataHome = resolveDataHome();
+      // 明确创建出来：安装时选了目录但从未创建，用户会以为选择没生效
+      try {
+        fs.mkdirSync(path.join(dataHome, "instances"), { recursive: true });
+      } catch (e) {
+        elog("[electron] 创建数据目录失败:", String(e));
+      }
       elog("[electron] 数据目录:", dataHome);
       recoverStashIfNeeded(dataHome); // 先救暂存，再迁移旧位置
       migrateLegacyInstances(dataHome);
