@@ -25,21 +25,8 @@ on:
       - ".github/workflows/ci.yml"
   pull_request:
     # 不使用 YAML 锚点复用上面的列表：GitHub Actions 对 anchors/aliases 支持不可靠
-    paths:
-      - "bot/**"
-      - "api/**"
-      - "tests/**"
-      - "scripts/**"
-      - "migrations/**"
-      - "main.py"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "alembic.ini"
-      - "config.example.yaml"
-      - "Dockerfile"
-      - "docker-compose.yml"
-      - "install.sh"
-      - ".github/workflows/ci.yml"
+    # 不使用 paths 过滤：分支保护要求 8 项检查全部上报，
+    # 若 PR 只改文档或工作流文件、又不命中过滤条件，将永远等不到检查而无法合并。
 
 jobs:
   quality:

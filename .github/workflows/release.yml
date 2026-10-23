@@ -63,11 +63,28 @@ jobs:
         run: |
           ver="${{ steps.resolve.outputs.ver }}"
           if ! gh release view "$ver" >/dev/null 2>&1; then
+            # 发布说明取自 CHANGELOG.md 中该版本的段落——Release 页要能直接读到
+            # 「这个版本改了什么」，而不是一句「自动产物」。CHANGELOG 里的标题形如
+            # `## \[1.18.10] - 日期（摘要）`（方括号可能被转义），所以用 index() 匹配。
+            awk -v v="$ver" '
+              /^## / && index($0, "[" v "]") > 0 {flag=1; next}
+              flag && /^## / {exit}
+              flag {print}
+            ' CHANGELOG.md > /tmp/release-notes.md
+
+            notes_args=(--generate-notes)
+            if [ -s /tmp/release-notes.md ]; then
+              notes_args=(--notes-file /tmp/release-notes.md)
+              echo "Using release notes from CHANGELOG ($(wc -l < /tmp/release-notes.md) lines)"
+            else
+              echo "::warning::CHANGELOG 中未找到 $ver 的段落，回退为自动生成说明"
+            fi
+
             if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-              gh release create "$ver" --title "$ver" --notes "自动发布流水线产物，未提供手动说明。"
+              gh release create "$ver" --title "$ver" "${notes_args[@]}"
             else
               # 手动触发（dispatch）且 Git 内无该 tag 时，从当前 HEAD 建 tag 并发布
-              gh release create "$ver" --target "$GITHUB_SHA" --title "$ver" --notes "自动发布流水线产物，未提供手动说明。"
+              gh release create "$ver" --target "$GITHUB_SHA" --title "$ver" "${notes_args[@]}"
             fi
             echo "Created release $ver"
           else
