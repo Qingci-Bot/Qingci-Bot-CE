@@ -45,6 +45,14 @@ def pack(src: Path, out: Path) -> tuple[int, int]:
 
 
 def main() -> int:
+    # Windows 控制台默认代码页不一定是 UTF-8（CI 上是 cp1252），
+    # 直接 print 非 ASCII 会抛 UnicodeEncodeError 并中断打包
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     ap = argparse.ArgumentParser(description="把后端 onedir 打成单个 zip")
     ap.add_argument("--src", type=Path, default=DEFAULT_SRC)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
