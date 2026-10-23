@@ -34,8 +34,8 @@ rem ---- [0/3] standalone plugin SDK ----
 rem External plugins import qingci_plugin_sdk at runtime, so it must be
 rem installed into the build env for PyInstaller collect_all. Pin the exact
 rem version (kept in sync with pyproject.toml) for reproducible builds.
-rem Source is the private index; it hosts this package only (unknown projects
-rem return 404, no PyPI proxy), so PyPI is passed as extra index for the rest.
+rem Source is the private index; it serves private projects locally and relays
+rem unknown ones via /proxy/, so PyPI stays as extra index for fallback.
 rem QINGCI_SDK_INDEX_URL can override the index (e.g. a mirror or LAN address).
 if defined QINGCI_SDK_INDEX_URL (
     set "SdkIndexUrl=%QINGCI_SDK_INDEX_URL%"

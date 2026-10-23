@@ -31,10 +31,10 @@ COPY pyproject.toml ./
 COPY . .
 
 # 安装到 /install，运行阶段整体拷贝以保持最小运行镜像
-# qingci-plugin-sdk 由私有索引分发。该索引只收录本项目包，未收录的包返回
-# 404、不代理 PyPI，因此必须显式把 PyPI 挂为 extra index。索引顺序为
-# 「私有在前」：uv 默认 first-match 策略下，SDK 只可能来自私有索引，
-# 同名包无法被公网抢占。
+# qingci-plugin-sdk 由私有索引分发。该索引对私有项目只返回本地文件，未收录的
+# 包中转代理上游 PyPI（失败按 404 处理）。仍显式挂 PyPI 作为兜底，同时避免
+# 全部依赖都经中转。索引顺序为「私有在前」：uv 默认 first-match 策略下，
+# SDK 只可能来自私有索引，同名包无法被公网抢占。
 # 内网/离线构建可用 --build-arg SDK_INDEX_URL=... 覆盖索引地址。
 ARG SDK_INDEX_URL=https://pypi.luoqingciya.cn/simple
 RUN uv pip install --python /usr/local/bin/python --prefix /install \

@@ -38,7 +38,7 @@ echo "Python:   $PY"
 
 # ---------- [0/3] 独立插件 SDK ----------
 # 与 build.bat 一致：从私有索引安装，版本精确锁定（与 pyproject.toml 同步）。
-# 该索引只收录本项目包、不代理 PyPI（未收录包返回 404），故 PyPI 挂为额外索引。
+# 该索引对私有项目只返回本地文件，未收录包经 /proxy/ 中转上游；PyPI 挂为额外索引作兜底。
 # QINGCI_SDK_INDEX_URL 可覆盖索引地址（内网镜像 / 离线环境）。
 SDK_INDEX_URL="${QINGCI_SDK_INDEX_URL:-https://pypi.luoqingciya.cn/simple}"
 echo "==> [0/3] installing qingci-plugin-sdk (1.13.9) from $SDK_INDEX_URL ..."
