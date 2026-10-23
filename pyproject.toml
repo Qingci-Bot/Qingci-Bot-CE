@@ -105,7 +105,7 @@ skip-magic-trailing-comma = false
 [[tool.uv.index]]
 name = "qingci"
 url = "https://pypi.luoqingciya.cn/simple"
-publish-url = "https://pypi.luoqingciya.cn/legacy/"
+publish-url = "https://admin.pypi.luoqingciya.cn/legacy/"
 explicit = true
 
 [tool.uv.sources]
