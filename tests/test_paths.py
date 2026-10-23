@@ -42,3 +42,33 @@ def test_mutex_name_derivation_stable_and_distinct(tmp_path):
     assert mutex_name_for_data_dir(tmp_path / "botA") == a
     # 名称符合 Windows 命名互斥量长度限制
     assert len(a) <= 260
+
+
+# ---------- 实例目录优先级 ----------
+
+
+def test_instances_dir_prefers_data_home(monkeypatch, tmp_path):
+    """安装时选定的数据目录优先级最高（数据在安装目录外，卸载不会删）"""
+    from bot.paths import instances_dir
+
+    monkeypatch.setenv("QINGCI_DATA_HOME", str(tmp_path / "data-home"))
+    monkeypatch.setenv("QINGCI_APP_DIR", str(tmp_path / "install"))
+    assert instances_dir() == (tmp_path / "data-home" / "instances").resolve()
+
+
+def test_instances_dir_falls_back_to_app_dir(monkeypatch, tmp_path):
+    """未设置 QINGCI_DATA_HOME 时沿用旧行为（EXE 旁），保证老安装可读"""
+    from bot.paths import instances_dir
+
+    monkeypatch.delenv("QINGCI_DATA_HOME", raising=False)
+    monkeypatch.setenv("QINGCI_APP_DIR", str(tmp_path / "install"))
+    assert instances_dir() == (tmp_path / "install" / "instances").resolve()
+
+
+def test_instances_dir_falls_back_to_app_root(monkeypatch):
+    """源码/onedir 直跑：两者都没设，落在 app_root()/instances"""
+    from bot.paths import app_root, instances_dir
+
+    monkeypatch.delenv("QINGCI_DATA_HOME", raising=False)
+    monkeypatch.delenv("QINGCI_APP_DIR", raising=False)
+    assert instances_dir() == app_root() / "instances"

@@ -219,6 +219,7 @@ let mainWindow = null;
 let tray = null;
 let backend = null; // spawned Python 子进程
 let backendRoot = null; // 打包形态下后端解压目录（prepareBackend 设置）
+let dataHome = null; // 实例数据根（安装时选定；独立于安装目录，卸载不删）
 let controlServer = null;
 let isQuitting = false;
 let instanceMeta = null;
@@ -254,7 +255,11 @@ function sanitizeRelaunchArgs(arr) {
  */
 function backendEnv() {
   const env = Object.assign({}, process.env);
-  if (!isDev()) env.QINGCI_APP_DIR = path.dirname(app.getPath("exe"));
+  if (!isDev()) {
+    env.QINGCI_APP_DIR = path.dirname(app.getPath("exe"));
+    // 数据根独立于安装目录：升级/卸载都不会删
+    if (dataHome) env.QINGCI_DATA_HOME = dataHome;
+  }
   return env;
 }
 
@@ -288,30 +293,69 @@ function makeWindow({ error = false } = {}) {
 }
 
 /**
- * 兜底恢复用户数据。
+ * 解析实例数据根目录。
  *
- * 升级时安装器把 instances/ 暂存到 %TEMP%\qingci-bot-ce-instances，正常流程会在
- * 安装结束时还原；若还原失败或安装被中断，暂存会留在那里。这里启动时检查一次：
- * 安装目录下的 instances 缺失或为空、而暂存里有内容时，把它搬回去。
- *
- * 只在打包形态执行（开发模式没有安装器参与）。
+ * 优先级：安装器写入的 datadir.txt（%APPDATA%\<app>\datadir.txt）> userData/data。
+ * 该目录独立于安装目录——NSIS 升级/卸载只清理 $INSTDIR，不会碰这里。
  */
-function recoverStashIfNeeded() {
+function resolveDataHome() {
+  try {
+    const f = path.join(app.getPath("userData"), "datadir.txt");
+    if (fs.existsSync(f)) {
+      const v = fs.readFileSync(f, "utf8").trim();
+      if (v) return v;
+    }
+  } catch (e) {
+    elog("[electron] 读取 datadir.txt 失败（回退默认）:", String(e));
+  }
+  return path.join(app.getPath("userData"), "data");
+}
+
+/**
+ * 兜底恢复：安装器升级前会把旧 instances 暂存到 %TEMP%\qingci-bot-ce-instances。
+ * 正常流程安装结束时会还原；若还原失败或安装被中断，暂存会留下——这里搬到数据根。
+ */
+function recoverStashIfNeeded(home) {
   try {
     const stash = path.join(os.tmpdir(), "qingci-bot-ce-instances", "instances");
     if (!fs.existsSync(stash)) return;
 
-    const target = path.join(path.dirname(app.getPath("exe")), "instances");
-    const hasContent = fs.existsSync(target) && fs.readdirSync(target).length > 0;
-    if (hasContent) return;
+    const target = path.join(home, "instances");
+    if (fs.existsSync(target) && fs.readdirSync(target).length > 0) return;
 
     elog("[electron] 检测到未还原的数据暂存，恢复到", target);
-    fs.mkdirSync(target, { recursive: true });
+    fs.mkdirSync(home, { recursive: true });
     fs.cpSync(stash, target, { recursive: true, force: true });
-    // 故意不删暂存：万一复制不完整，下次启动还能再试一次
     elog("[electron] 数据恢复完成（暂存保留在", stash, "）");
   } catch (e) {
     elog("[electron] 数据暂存恢复失败（忽略）:", String(e));
+  }
+}
+
+/**
+ * 把旧版本留在安装目录旁的 instances/ 迁到数据根。
+ *
+ * 只读不删：同卷用 rename（瞬时），跨卷退回复制并**保留原目录**作为备份。
+ * 目标已有内容时不动，避免覆盖新数据。
+ */
+function migrateLegacyInstances(home) {
+  try {
+    const legacy = path.join(path.dirname(app.getPath("exe")), "instances");
+    if (!fs.existsSync(legacy)) return;
+
+    const target = path.join(home, "instances");
+    if (fs.existsSync(target) && fs.readdirSync(target).length > 0) return;
+
+    fs.mkdirSync(home, { recursive: true });
+    try {
+      fs.renameSync(legacy, target);
+      elog("[electron] 已迁移旧实例目录到", target);
+    } catch (e) {
+      elog("[electron] 跨卷无法直接移动，改为复制（保留原目录）:", String(e));
+      fs.cpSync(legacy, target, { recursive: true, force: true });
+    }
+  } catch (e) {
+    elog("[electron] 旧实例目录迁移失败（忽略）:", String(e));
   }
 }
 
@@ -555,15 +599,19 @@ ipcMain.on("quit", () => {
 });
 
 app.whenReady().then(async () => {
-  // 数据随可执行目录自包含分发：不重定向 userData/数据根，后端默认落于
-  // EXE 旁 instances/ 下，便于整体拷贝迁移。
+  // 实例数据放在「安装时选定的数据目录」（默认 %APPDATA%\<app>\data），
+  // 独立于安装目录——NSIS 升级/卸载只清理 $INSTDIR，不会碰到数据。
+  // 旧版本把数据放在 EXE 旁的 instances/，由 migrateLegacyInstances 迁走。
   try {
     // 打包形态：首次启动要解压后端（数千个文件，十几秒）。先出启动页并让出
     // 一帧，避免解压期间白屏；解压完成后才做实例探测（探测本身要调后端）。
     if (!isDev()) {
       showBootWindow();
       await new Promise((r) => setTimeout(r, 120));
-      recoverStashIfNeeded(); // 先救数据，再准备后端
+      dataHome = resolveDataHome();
+      elog("[electron] 数据目录:", dataHome);
+      recoverStashIfNeeded(dataHome); // 先救暂存，再迁移旧位置
+      migrateLegacyInstances(dataHome);
       prepareBackend();
     }
 

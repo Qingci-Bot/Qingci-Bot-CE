@@ -90,9 +90,9 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 >
 > **打包版（EXE）已全内置**：`build.bat` 构建时自动下载无头 Chromium 到产物目录 `ms-playwright\`，运行时经 `PLAYWRIGHT_BROWSERS_PATH` 定位，EXE 开箱即可渲染签到卡，无需最终用户再执行安装。构建期同样可用上述 `PLAYWRIGHT_DOWNLOAD_HOST` 走国内镜像。
 >
-> **桌面壳打包另见**：`build.bat` 产出的 onedir（`dist\qingci-bot-ce\`）与 `build-electron.bat`（electron-builder，产出 NSIS 安装版 Setup.exe + 绿色解压 zip）实例与数据均随可执行目录 `instances\<name>\` 自包含分发（DB/日志/插件数据），便于整体拷贝迁移。**升级安装会保留 `instances/`**：安装器在卸载旧版前把它暂存到 `%TEMP%\qingci-bot-ce-instances`，新文件装完后再还原（仅升级生效；主动卸载仍会清除数据）。桌面壳需 Node.js 22+（Electron 44 要求），用户运行安装版/绿色解压版无需额外运行时。后端本体以**单个归档**随包分发，安装阶段只写 1 个大文件（避免数千个小文件逐个落盘导致的安装缓慢），首次启动时解压到用户数据目录（一次性，视磁盘约十几秒，期间显示启动页）；升级到新版本会重新解压并清理旧目录。
+> **桌面壳打包另见**：`build.bat` 产出的 onedir（`dist\qingci-bot-ce\`）与 `build-electron.bat`（electron-builder，产出 NSIS 安装版 Setup.exe + 绿色解压 zip）。**实例数据放在安装时选定的数据目录**（安装向导有一步「选择数据目录」，默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`，选择记在注册表 `HKCU\Software\Qingci-Bot CE` 与 `%APPDATA%\Qingci-Bot CE\datadir.txt`），该目录**独立于安装目录**——升级与卸载只清理 `$INSTDIR`，不会碰到数据；旧版本把数据放在 EXE 旁的 `instances/`，首次启动会自动迁移过去（同卷 rename，跨卷复制并保留原目录）。桌面壳需 Node.js 22+（Electron 44 要求），用户运行安装版/绿色解压版无需额外运行时。后端本体以**单个归档**随包分发，安装阶段只写 1 个大文件（避免数千个小文件逐个落盘导致的安装缓慢），首次启动时解压到用户数据目录（一次性，视磁盘约十几秒，期间显示启动页）；升级到新版本会重新解压并清理旧目录。
 >
-> **Linux 桌面（AppImage）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.bat` 的对应脚）产出 onedir，再经 `electron-builder --linux` 打成 AppImage；数据目录同样随可执行目录 `instances\` 自包含分发。
+> **Linux 桌面（AppImage）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.bat` 的对应脚）产出 onedir，再经 `electron-builder --linux` 打成 AppImage。AppImage 无安装向导，数据目录回退为 EXE 旁的 `instances/`（可用环境变量 `QINGCI_DATA_HOME` 覆盖）。
 >
 > **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.bat`/`build-linux.sh` 分别出后端、`build-electron.bat`/`electron-builder --linux` 出 EXE / AppImage，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](.github/workflows/release.yml)。
 >

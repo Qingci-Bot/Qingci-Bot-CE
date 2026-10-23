@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Added
+
+- **安装时可选择数据目录**：安装向导新增一步「选择数据目录」（默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`，可浏览更改、下次升级沿用）。用户数据从此**独立于安装目录**——升级与卸载只清理 `$INSTDIR`，不会碰到数据，从机制上消除「升级丢配置」这一类问题。选择记录在注册表 `HKCU\Software\Qingci-Bot CE` 与 `%APPDATA%\Qingci-Bot CE\datadir.txt`；后端经 `QINGCI_DATA_HOME` 环境变量获知。旧版本留在 EXE 旁的 `instances/` 会在首次启动时自动迁移（同卷 rename，跨卷复制并保留原目录）
+
 ### Fixed
 
 - **升级后数据丢失的两层兜底**：① 安装器只有在确认 `instances/` 已恢复出内容后才删除暂存目录，恢复失败时保留 `%TEMP%\qingci-bot-ce-instances`；② 应用启动时若发现安装目录下 `instances` 缺失或为空、而暂存里仍有内容，自动搬回去（打包形态，在实例探测之前执行）

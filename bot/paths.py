@@ -57,14 +57,18 @@ def plugins_dir() -> Path:
 
 
 def instances_dir() -> Path:
-    """返回实例注册表根目录（默认 app_root()/instances，每个实例一个子目录）
+    """返回实例注册表根目录（每个实例一个子目录）
 
-    源码/onedir 直跑：实例随 app_root()/instances 自包含。
-    桌面壳（安装版/绿色解压版）形态：后端 onedir 被 electron-builder 复制进
-    resources/backend/（frozen 时 app_root() 指向后端目录），Electron 壳经环境
-    变量 QINGCI_APP_DIR 指向桌面 EXE 所在目录，实例统一落在桌面 EXE 旁的
-    instances/ 下，便于整体拷贝迁移。
+    优先级：
+    1. `QINGCI_DATA_HOME` —— 桌面壳按「安装时选定的数据目录」注入。
+       数据独立于安装目录，升级/卸载都不会被删（NSIS 只清理 $INSTDIR）。
+    2. `QINGCI_APP_DIR` —— 旧行为：EXE 旁的 instances/。
+       仅用于尚未迁移的老安装，壳在首次启动时会把数据搬到 QINGCI_DATA_HOME。
+    3. `app_root()/instances` —— 源码 / onedir 直跑，自包含。
     """
+    data_home = os.environ.get("QINGCI_DATA_HOME")
+    if data_home:
+        return Path(data_home).resolve() / "instances"
     app_dir = os.environ.get("QINGCI_APP_DIR")
     if app_dir:
         return Path(app_dir).resolve() / "instances"

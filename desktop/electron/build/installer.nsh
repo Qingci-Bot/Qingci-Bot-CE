@@ -49,3 +49,85 @@
     ${endif}
   ${endif}
 !macroend
+
+; ============================================================
+; 数据目录选择页
+;
+; 用户数据（实例的 config.yaml / 数据库 / 插件数据）默认放在安装目录外的
+; 独立目录。选在这里而不是 $INSTDIR，是为了让升级/卸载（NSIS 只清理
+; $INSTDIR）永远碰不到数据——此前把数据放在安装目录里，升级时被旧版本
+; 的卸载器删掉过。
+; ============================================================
+
+!define QINGCI_DATADIR_REGKEY "Software\Qingci-Bot CE"
+!define QINGCI_DATADIR_DEFAULT "$LOCALAPPDATA\Qingci-Bot CE\data"
+
+var DataDirPage
+var DataDirInput
+var DataDirValue
+
+!macro customPageAfterChangeDir
+  Page custom DataDirPageCreate DataDirPageLeave
+!macroend
+
+Function DataDirPageCreate
+  !insertmacro MUI_HEADER_TEXT "选择数据目录" "实例的配置、数据库与插件数据保存在此目录，升级和卸载都不会删除。"
+
+  nsDialogs::Create 1018
+  Pop $DataDirPage
+  ${If} $DataDirPage == error
+    Abort
+  ${EndIf}
+
+  ; 升级时沿用上次的选择
+  ReadRegStr $DataDirValue HKCU "${QINGCI_DATADIR_REGKEY}" "DataDir"
+  ${If} $DataDirValue == ""
+    StrCpy $DataDirValue "${QINGCI_DATADIR_DEFAULT}"
+  ${EndIf}
+
+  ${NSD_CreateLabel} 0 0 100% 12u "选择存放实例数据（配置 / 数据库 / 插件数据）的目录："
+  Pop $0
+  ${NSD_CreateLabel} 0 14u 100% 12u "该目录与安装目录分离，升级和卸载都不会删除其中的数据。"
+  Pop $0
+
+  ${NSD_CreateDirRequest} 0 34u 78% 12u "$DataDirValue"
+  Pop $DataDirInput
+  ${NSD_CreateBrowseButton} 80% 34u 20% 12u "浏览..."
+  Pop $0
+  ${NSD_OnClick} $0 DataDirBrowse
+
+  nsDialogs::Show
+FunctionEnd
+
+Function DataDirBrowse
+  ${NSD_GetText} $DataDirInput $DataDirValue
+  nsDialogs::SelectFolderDialog "选择数据目录" "$DataDirValue"
+  Pop $0
+  ${If} $0 != error
+    ${NSD_SetText} $DataDirInput "$0"
+  ${EndIf}
+FunctionEnd
+
+Function DataDirPageLeave
+  ${NSD_GetText} $DataDirInput $DataDirValue
+  ${If} $DataDirValue == ""
+    MessageBox MB_ICONEXCLAMATION|MB_OK "请选择数据目录。"
+    Abort
+  ${EndIf}
+
+  ; 不允许落在安装目录内：那样卸载时会被一并删除，等于白选
+  StrCpy $1 "$INSTDIR\"
+  StrLen $2 $1
+  StrCpy $3 $DataDirValue $2
+  ${If} $3 == $1
+    MessageBox MB_ICONEXCLAMATION|MB_OK "数据目录不能位于安装目录内部，请另选一个目录。"
+    Abort
+  ${EndIf}
+
+  ; 记住选择（下次升级沿用），并写给应用读取
+  WriteRegStr HKCU "${QINGCI_DATADIR_REGKEY}" "DataDir" "$DataDirValue"
+  CreateDirectory "$APPDATA\Qingci-Bot CE"
+  FileOpen $0 "$APPDATA\Qingci-Bot CE\datadir.txt" w
+  FileWrite $0 "$DataDirValue"
+  FileClose $0
+FunctionEnd
