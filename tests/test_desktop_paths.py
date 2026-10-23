@@ -69,3 +69,20 @@ def test_app_reads_datadir_from_appdata_not_userdata():
     assert 'app.getPath("appData")' in js
     # 数据目录记录路径不应再依赖 userData
     assert 'path.join(app.getPath("userData"), "datadir.txt")' not in js
+
+
+def test_installer_avoids_relative_jumps():
+    """NSIS 脚本里禁止用相对跳转（IfFileExists ... +N）
+
+    曾踩坑：`IfFileExists "$dir" +2 0` 本意是「存在则继续」，
+    但 +2 从 IfFileExists 起算正好落到后面的 Abort —— 目录明明存在，
+    点「安装」却静默中止（表现为按钮无反应）。改用 LogicLib 的
+    ${If} / ${IfNot} 后语义明确，不再依赖数行数。
+    """
+    text = _installer()
+    offenders = [
+        line.strip()
+        for line in text.splitlines()
+        if re.search(r"\bIfFileExists\b[^\n]*\s\+\d", line)
+    ]
+    assert not offenders, "发现相对跳转，请改用 LogicLib 条件块：\n" + "\n".join(offenders)

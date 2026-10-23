@@ -5,6 +5,14 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[1.18.10] - 2026-10-23（修复安装向导「安装」按钮无反应）
+
+### Fixed
+
+- **数据目录页点「安装」没有反应**：`IfFileExists "$DataDirValue" +2 0` 的相对跳转算错了——`+2` 从 `IfFileExists` 起算正好落在后面的 `Abort`，于是「目录已存在」这一正常情况反而静默中止了页面，表现为按钮点了没反应。改用 LogicLib 的 `${IfNot} ${FileExists}`，语义明确且不再依赖数行数
+
+- **页面标题显示成上一页的「选定安装位置」**：自定义页没有设置 MUI 标题，界面上标题与内容矛盾。已补 `MUI_HEADER_TEXT`（该段代码只在安装器构建编译，卸载器构建不受影响）
+
 ## \[1.18.9] - 2026-10-23（数据目录：安装时创建并校验）
 
 ### Fixed
