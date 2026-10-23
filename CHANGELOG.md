@@ -5,6 +5,12 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Fixed
+
+- **内置 provider 预设的模型名已过期，部分已停用**：`deepseek` 预设指向 `deepseek-chat`，该名称已于 2026-07-22 被官方停用（现行为 V4.1 Flash，模型名 `deepseek-flash`），选该预设会直接调用失败；`claude` 预设仍是 2024 年的 `claude-3-5-sonnet-20241022`（现为 `claude-sonnet-5`），`gemini` 预设仍是 `gemini-1.5-flash`（现为 `gemini-3.8-flash`）。均已按官方文档更新，`config.example.yaml` 同步
+
 ## \[1.18.6] - 2026-10-23（多模态图片输入与安装包提速）
 
 ### Added

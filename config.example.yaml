@@ -43,7 +43,7 @@ llm:
   provider: deepseek          # openai / deepseek / ollama / siliconflow / claude / gemini / custom
   api_url: https://api.deepseek.com/v1
   api_key: ''                 # 必填（ollama 除外）
-  model: deepseek-chat
+  model: deepseek-flash
   max_tokens: 2048
   temperature: 0.7
   system_prompt: 你是一个友好、乐于助人的机器人助手。请用简洁、自然的中文回复。

@@ -42,13 +42,13 @@ class OneBotConfig(BaseModel):
 # 提供商预设：切换 provider 时自动带出推荐的 api_url 和 model
 LLM_PROVIDER_PRESETS: dict[str, dict[str, str]] = {
     "openai": {"api_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
-    "deepseek": {"api_url": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
+    "deepseek": {"api_url": "https://api.deepseek.com/v1", "model": "deepseek-flash"},
     "ollama": {"api_url": "http://localhost:11434", "model": "llama3.1"},
     "siliconflow": {"api_url": "https://api.siliconflow.cn/v1", "model": "deepseek-ai/DeepSeek-V3"},
-    "claude": {"api_url": "https://api.anthropic.com/v1", "model": "claude-3-5-sonnet-20241022"},
+    "claude": {"api_url": "https://api.anthropic.com/v1", "model": "claude-sonnet-5"},
     "gemini": {
         "api_url": "https://generativelanguage.googleapis.com/v1",
-        "model": "gemini-1.5-flash",
+        "model": "gemini-3.8-flash",
     },
     "custom": {"api_url": "", "model": "gpt-4o-mini"},
 }

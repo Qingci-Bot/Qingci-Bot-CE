@@ -303,7 +303,7 @@ LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不�
 
 **MCP 工具**：开启 `enable_tools` 并配置 `mcp_servers` 后，启动时自动连接各服务器并将工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用。修改 MCP 配置后需重启 Bot 生效。
 
-**多模态（图片输入）**：开启 `llm.multimodal.enabled` 后，聊天插件会把消息里的图片解析成模型可读的地址（`http(s)` URL 或 `data:` URI）一并发送，Web UI 的「LLM 配置」页有对应开关。默认**关闭**——多数纯文本模型收到图片会直接报错，请确认所用模型支持视觉输入后再开启。图片超过 `max_bytes` 或无法解析时自动跳过，按纯文本回复。
+**多模态（图片输入）**：开启 `llm.multimodal.enabled` 后，聊天插件会把消息里的图片解析成模型可读的地址（`http(s)` URL 或 `data:` URI）一并发送，Web UI 的「LLM 配置」页有对应开关。默认**关闭**——纯文本模型收到图片内容会直接报错，请确认所用模型支持视觉输入后再开启（DeepSeek V4.1 Flash、GPT-4o、Claude Sonnet 5、Gemini 3.8 Flash 等均支持；具体以各家官方文档为准）。图片超过 `max_bytes` 或无法解析时自动跳过，按纯文本回复。
 
 **provider 路由规则**（基于 litellm）：
 
