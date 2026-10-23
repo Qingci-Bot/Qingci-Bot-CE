@@ -8,9 +8,8 @@ on:
       - "desktop/electron/**"
       - ".github/workflows/ci-desktop.yml"
   pull_request:
-    paths:
-      - "desktop/electron/**"
-      - ".github/workflows/ci-desktop.yml"
+    # 不使用 paths 过滤：分支保护要求 8 项检查全部上报，
+    # 若 PR 只改文档或工作流文件、又不命中过滤条件，将永远等不到检查而无法合并。
 
 jobs:
   electron:
