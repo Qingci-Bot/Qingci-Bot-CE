@@ -20,6 +20,7 @@ const { spawn, spawnSync } = require("child_process");
 const net = require("net");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const crypto = require("crypto");
 
 const RS = "\u001E"; // Record Separator，与 main.py --backend 的 READY 信号分隔符一致
@@ -286,6 +287,34 @@ function makeWindow({ error = false } = {}) {
   return win;
 }
 
+/**
+ * 兜底恢复用户数据。
+ *
+ * 升级时安装器把 instances/ 暂存到 %TEMP%\qingci-bot-ce-instances，正常流程会在
+ * 安装结束时还原；若还原失败或安装被中断，暂存会留在那里。这里启动时检查一次：
+ * 安装目录下的 instances 缺失或为空、而暂存里有内容时，把它搬回去。
+ *
+ * 只在打包形态执行（开发模式没有安装器参与）。
+ */
+function recoverStashIfNeeded() {
+  try {
+    const stash = path.join(os.tmpdir(), "qingci-bot-ce-instances", "instances");
+    if (!fs.existsSync(stash)) return;
+
+    const target = path.join(path.dirname(app.getPath("exe")), "instances");
+    const hasContent = fs.existsSync(target) && fs.readdirSync(target).length > 0;
+    if (hasContent) return;
+
+    elog("[electron] 检测到未还原的数据暂存，恢复到", target);
+    fs.mkdirSync(target, { recursive: true });
+    fs.cpSync(stash, target, { recursive: true, force: true });
+    // 故意不删暂存：万一复制不完整，下次启动还能再试一次
+    elog("[electron] 数据恢复完成（暂存保留在", stash, "）");
+  } catch (e) {
+    elog("[electron] 数据暂存恢复失败（忽略）:", String(e));
+  }
+}
+
 function showBootWindow() {
   const win = makeWindow();
   mainWindow = win;
@@ -534,6 +563,7 @@ app.whenReady().then(async () => {
     if (!isDev()) {
       showBootWindow();
       await new Promise((r) => setTimeout(r, 120));
+      recoverStashIfNeeded(); // 先救数据，再准备后端
       prepareBackend();
     }
 

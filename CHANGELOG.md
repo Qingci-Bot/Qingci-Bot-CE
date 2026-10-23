@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Fixed
+
+- **升级后数据丢失的两层兜底**：① 安装器只有在确认 `instances/` 已恢复出内容后才删除暂存目录，恢复失败时保留 `%TEMP%\qingci-bot-ce-instances`；② 应用启动时若发现安装目录下 `instances` 缺失或为空、而暂存里仍有内容，自动搬回去（打包形态，在实例探测之前执行）
+
 ### Changed
 
 - **升级时的实例数据暂存改用 rename**：`instances/` 里可能有几百 MB（DB/插件数据/日志），此前用 `CopyFiles` 逐文件复制，在「卸载旧版本」这一步要复制两遍（暂存 + 还原）。现优先 `Rename`（同卷是 O(1) 操作），跨卷或目录被占用时才退回复制

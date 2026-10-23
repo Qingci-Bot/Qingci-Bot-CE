@@ -41,6 +41,11 @@
       CreateDirectory "$INSTDIR\instances"
       CopyFiles /SILENT "${QINGCI_DATA_STASH}\instances\*.*" "$INSTDIR\instances"
     ${endif}
-    RMDir /r "${QINGCI_DATA_STASH}"
+    ; 只有确认目标已有内容才删暂存：万一恢复失败，暂存还能被启动时的兜底逻辑救回来
+    ${if} ${FileExists} "$INSTDIR\instances\*.*"
+      RMDir /r "${QINGCI_DATA_STASH}"
+    ${else}
+      DetailPrint "恢复失败，保留暂存目录：${QINGCI_DATA_STASH}"
+    ${endif}
   ${endif}
 !macroend
