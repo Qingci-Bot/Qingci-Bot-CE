@@ -298,9 +298,16 @@ function makeWindow({ error = false } = {}) {
 // 会导致安装时选的数据目录读不到、数据落到另一个隐藏路径。
 const PRODUCT_DIR_NAME = "Qingci-Bot CE";
 
-/** 安装器写入选择结果的路径（%APPDATA%\Qingci-Bot CE\datadir.txt） */
-function dataDirRecordPath() {
-  return path.join(app.getPath("appData"), PRODUCT_DIR_NAME, "datadir.txt");
+/**
+ * 安装器写入选择结果的位置，按可靠性排序：
+ * 1) EXE 同目录 —— 与正在运行的程序必定同处一地，不受用户配置文件差异影响
+ * 2) %APPDATA%\<产品目录> —— 安装目录被清理后仍可参考
+ */
+function dataDirRecordPaths() {
+  return [
+    path.join(path.dirname(app.getPath("exe")), "datadir.txt"),
+    path.join(app.getPath("appData"), PRODUCT_DIR_NAME, "datadir.txt"),
+  ];
 }
 
 /** 未选择时的默认数据目录（与安装器默认值保持一致） */
@@ -316,20 +323,19 @@ function defaultDataHome() {
  * 该目录独立于安装目录——NSIS 升级/卸载只清理 $INSTDIR，不会碰这里。
  */
 function resolveDataHome() {
-  const record = dataDirRecordPath();
-  try {
-    if (fs.existsSync(record)) {
+  for (const record of dataDirRecordPaths()) {
+    try {
+      if (!fs.existsSync(record)) continue;
       const v = fs.readFileSync(record, "utf8").trim();
       if (v) {
         elog("[electron] 数据目录来自", record, "->", v);
         return v;
       }
-    } else {
-      elog("[electron] 未找到数据目录记录（安装时可能未选择）：", record);
+    } catch (e) {
+      elog("[electron] 读取失败（跳过）:", record, String(e));
     }
-  } catch (e) {
-    elog("[electron] 读取 datadir.txt 失败（回退默认）:", String(e));
   }
+  elog("[electron] 未找到数据目录记录，使用默认值");
   return defaultDataHome();
 }
 
@@ -644,11 +650,15 @@ app.whenReady().then(async () => {
       showBootWindow();
       await new Promise((r) => setTimeout(r, 120));
       dataHome = resolveDataHome();
-      // 明确创建出来：安装时选了目录但从未创建，用户会以为选择没生效
+      // 明确创建出来：安装时选了目录但从未创建，用户会以为选择没生效。
+      // 创建失败（盘符不存在 / 无权限）时回退默认目录，并大声记日志——
+      // 静默失败会让用户以为选择无效。
       try {
         fs.mkdirSync(path.join(dataHome, "instances"), { recursive: true });
       } catch (e) {
-        elog("[electron] 创建数据目录失败:", String(e));
+        elog("[electron] ERROR 无法创建数据目录，回退默认:", dataHome, String(e));
+        dataHome = defaultDataHome();
+        fs.mkdirSync(path.join(dataHome, "instances"), { recursive: true });
       }
       elog("[electron] 数据目录:", dataHome);
       recoverStashIfNeeded(dataHome); // 先救暂存，再迁移旧位置

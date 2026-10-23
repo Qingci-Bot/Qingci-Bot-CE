@@ -129,12 +129,30 @@ Function DataDirPageLeave
     Abort
   ${EndIf}
 
-  ; 记住选择（下次升级沿用），并写给应用读取
+  ; 立刻创建并验证：选了一个不可写/不存在的盘符时当场报错，
+  ; 而不是等应用启动才失败（那样用户会以为选择没生效）。
+  CreateDirectory "$DataDirValue"
+  IfFileExists "$DataDirValue" +2 0
+    MessageBox MB_ICONEXCLAMATION|MB_OK "无法创建该目录，请换一个位置（检查盘符是否存在、是否有写权限）。"
+    Abort
+
+  ; 记住选择（下次升级沿用），并写给应用读取。
+  ; 写两处：安装目录旁（应用从 EXE 同目录读最可靠，不受用户配置文件差异影响）
+  ; 和 %APPDATA%（安装目录被清掉后仍可参考）。
   WriteRegStr HKCU "${QINGCI_DATADIR_REGKEY}" "DataDir" "$DataDirValue"
+
+  FileOpen $0 "$INSTDIR\datadir.txt" w
+  ${If} $0 != ""
+    FileWrite $0 "$DataDirValue"
+    FileClose $0
+  ${EndIf}
+
   CreateDirectory "$APPDATA\Qingci-Bot CE"
   FileOpen $0 "$APPDATA\Qingci-Bot CE\datadir.txt" w
-  FileWrite $0 "$DataDirValue"
-  FileClose $0
+  ${If} $0 != ""
+    FileWrite $0 "$DataDirValue"
+    FileClose $0
+  ${EndIf}
 FunctionEnd
 
 !endif ; BUILD_UNINSTALLER

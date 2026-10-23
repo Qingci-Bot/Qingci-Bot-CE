@@ -5,6 +5,16 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[1.18.9] - 2026-10-23（数据目录：安装时创建并校验）
+
+### Fixed
+
+- **数据目录在安装阶段就创建并校验**：此前只在应用启动时才 `mkdir`，用户装完去看目录是空的，会以为选择没生效。现安装向导在离开该页时立即 `CreateDirectory` 并检查结果——盘符不存在或无写权限时当场报错要求重选，而不是等到运行才失败
+
+- **`datadir.txt` 同时写入安装目录**：应用改为**优先读 EXE 同目录**的 `datadir.txt`，其次才是 `%APPDATA%\Qingci-Bot CE\`。EXE 同目录与正在运行的程序必定同处一地，不受用户配置文件差异（如安装器与应用以不同身份运行）影响
+
+- **创建数据目录失败时回退默认目录并告警**：此前失败只记一行日志，用户看到的现象是「选了但没生效」；现在会明确记录 ERROR 并落到默认目录
+
 ## \[1.18.8] - 2026-10-23（修复数据目录读取路径不一致）
 
 ### Fixed
