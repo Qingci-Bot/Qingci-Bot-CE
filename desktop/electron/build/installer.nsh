@@ -78,6 +78,8 @@ var DataDirValue
 !macroend
 
 Function DataDirPageCreate
+  !insertmacro MUI_HEADER_TEXT "选择数据目录" "实例的配置、数据库与插件数据将保存在此目录；它与安装目录分离，升级和卸载都不会删除。"
+
   nsDialogs::Create 1018
   Pop $DataDirPage
   ${If} $DataDirPage == error
@@ -90,14 +92,12 @@ Function DataDirPageCreate
     StrCpy $DataDirValue "${QINGCI_DATADIR_DEFAULT}"
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 12u "选择数据目录"
-  Pop $0
-  ${NSD_CreateLabel} 0 18u 100% 24u "实例的配置、数据库与插件数据将保存在此目录；它与安装目录分离，升级和卸载都不会删除。"
+  ${NSD_CreateLabel} 0 0 100% 24u "请选择存放实例数据的目录（可点右侧「浏览...」更改）："
   Pop $0
 
-  ${NSD_CreateDirRequest} 0 46u 78% 12u "$DataDirValue"
+  ${NSD_CreateDirRequest} 0 28u 78% 12u "$DataDirValue"
   Pop $DataDirInput
-  ${NSD_CreateBrowseButton} 80% 46u 20% 12u "浏览..."
+  ${NSD_CreateBrowseButton} 80% 28u 20% 12u "浏览..."
   Pop $0
   ${NSD_OnClick} $0 DataDirBrowse
 
@@ -132,9 +132,10 @@ Function DataDirPageLeave
   ; 立刻创建并验证：选了一个不可写/不存在的盘符时当场报错，
   ; 而不是等应用启动才失败（那样用户会以为选择没生效）。
   CreateDirectory "$DataDirValue"
-  IfFileExists "$DataDirValue" +2 0
+  ${IfNot} ${FileExists} "$DataDirValue"
     MessageBox MB_ICONEXCLAMATION|MB_OK "无法创建该目录，请换一个位置（检查盘符是否存在、是否有写权限）。"
     Abort
+  ${EndIf}
 
   ; 记住选择（下次升级沿用），并写给应用读取。
   ; 写两处：安装目录旁（应用从 EXE 同目录读最可靠，不受用户配置文件差异影响）
