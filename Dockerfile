@@ -31,15 +31,17 @@ COPY pyproject.toml ./
 COPY . .
 
 # 安装到 /install，运行阶段整体拷贝以保持最小运行镜像
-# qingci-plugin-sdk 由私有索引分发。该索引对私有项目只返回本地文件，未收录的
-# 包中转代理上游 PyPI（失败按 404 处理）。仍显式挂 PyPI 作为兜底，同时避免
-# 全部依赖都经中转。索引顺序为「私有在前」：uv 默认 first-match 策略下，
-# SDK 只可能来自私有索引，同名包无法被公网抢占。
+# qingci-plugin-sdk 由私有索引分发。分两步装：先把 SDK 单独从私有索引装好，
+# 再用 PyPI 装其余依赖——已满足的固定版本不会再被查询。
+# 不能给整棵依赖树加 --index-url 私有：uv 的 first-match 会把 100+ 个包逐个
+# 先问私有索引，该索引回源上游时很慢，构建会从数十秒拖到十几分钟。
 # 内网/离线构建可用 --build-arg SDK_INDEX_URL=... 覆盖索引地址。
 ARG SDK_INDEX_URL=https://pypi.luoqingciya.cn/simple
-RUN uv pip install --python /usr/local/bin/python --prefix /install \
-        --index-url "$SDK_INDEX_URL" \
-        --extra-index-url https://pypi.org/simple \
+RUN SDK_SPEC=$(grep -oE '"qingci-plugin-sdk[=<>!~][^"]*"' pyproject.toml | head -1 | tr -d '"') \
+    && uv pip install --python /usr/local/bin/python --prefix /install \
+        --index-url "$SDK_INDEX_URL" "$SDK_SPEC" \
+    && uv pip install --python /usr/local/bin/python --prefix /install \
+        --index-url https://pypi.org/simple \
         .
 
 # ── 运行阶段 ──

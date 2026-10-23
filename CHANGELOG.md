@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **私有索引迁移后 `uv.lock` 的 wheel URL 失效**：索引侧改用内容寻址路径（`/packages/<hash 前两位>/<sha256>/<文件名>`），旧路径 `/packages/<文件名>` 直接 404，会导致全新安装（`uv sync --locked`）失败。已重新锁定到新 URL（sha256 未变，仍是同一份产物）。同时修正配置中的上传端点（`publish-url` → `/legacy/`，Twine 兼容）与各处「未收录包会 303 重定向到 PyPI」的过时注释——新索引不再代理 PyPI，未收录包返回 404，故 PyPI 必须显式挂为额外索引
 
+## \[Unreleased]
+
+### Fixed
+
+- **安装脚本在私有索引开启回源代理后耗时暴增**：`install.sh` 给整棵依赖树加了 `--extra-index-url 私有索引`，而 pip 会为**每个包**向所有索引各查一次；索引改为中转代理后每次查询都要回源上游，海外环境（CI）逐个超时重试，一次安装从 1 分钟变成 22 分钟（49 次 `ReadTimeoutError`）。现改为两步安装——先从私有索引单独装 SDK，再用默认索引装项目（已满足的固定版本不再被查询），`Dockerfile` 与发布流水线同步改造。实测 pip 与 uv 都会跳过已满足的固定版本
+
 ## \[1.18.4] - 2026-10-21（修复升级丢配置）
 
 ### Fixed
