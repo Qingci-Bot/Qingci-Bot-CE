@@ -5,21 +5,19 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## \[Unreleased]
+## \[1.18.7] - 2026-10-23（数据目录可选，升级不再丢数据）
 
 ### Added
 
 - **安装时可选择数据目录**：安装向导新增一步「选择数据目录」（默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`，可浏览更改、下次升级沿用）。用户数据从此**独立于安装目录**——升级与卸载只清理 `$INSTDIR`，不会碰到数据，从机制上消除「升级丢配置」这一类问题。选择记录在注册表 `HKCU\Software\Qingci-Bot CE` 与 `%APPDATA%\Qingci-Bot CE\datadir.txt`；后端经 `QINGCI_DATA_HOME` 环境变量获知。旧版本留在 EXE 旁的 `instances/` 会在首次启动时自动迁移（同卷 rename，跨卷复制并保留原目录）
 
-### Fixed
-
-- **升级后数据丢失的两层兜底**：① 安装器只有在确认 `instances/` 已恢复出内容后才删除暂存目录，恢复失败时保留 `%TEMP%\qingci-bot-ce-instances`；② 应用启动时若发现安装目录下 `instances` 缺失或为空、而暂存里仍有内容，自动搬回去（打包形态，在实例探测之前执行）
-
 ### Changed
 
-- **升级时的实例数据暂存改用 rename**：`instances/` 里可能有几百 MB（DB/插件数据/日志），此前用 `CopyFiles` 逐文件复制，在「卸载旧版本」这一步要复制两遍（暂存 + 还原）。现优先 `Rename`（同卷是 O(1) 操作），跨卷或目录被占用时才退回复制
+- **升级时的实例数据暂存改用 rename**：`instances/` 里可能有几百 MB，此前用 `CopyFiles` 逐文件复制，升级时要复制两遍（暂存 + 还原）。现优先 `Rename`（同卷 O(1)），跨卷或目录被占用时才退回复制
 
 ### Fixed
+
+- **升级后数据丢失的两层兜底**：① 安装器只有在确认 `instances/` 已恢复出内容后才删除暂存目录，恢复失败时保留 `%TEMP%\qingci-bot-ce-instances`；② 应用启动时若发现数据目录下 `instances` 缺失或为空、而暂存里仍有内容，自动搬回去（在实例探测之前执行）
 
 - **内置 provider 预设的模型名已过期，部分已停用**：`deepseek` 预设指向 `deepseek-chat`，该名称已于 2026-07-22 被官方停用（现行为 V4.1 Flash，模型名 `deepseek-flash`），选该预设会直接调用失败；`claude` 预设仍是 2024 年的 `claude-3-5-sonnet-20241022`（现为 `claude-sonnet-5`），`gemini` 预设仍是 `gemini-1.5-flash`（现为 `gemini-3.8-flash`）。均已按官方文档更新，`config.example.yaml` 同步
 
