@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Changed
+
+- **升级时的实例数据暂存改用 rename**：`instances/` 里可能有几百 MB（DB/插件数据/日志），此前用 `CopyFiles` 逐文件复制，在「卸载旧版本」这一步要复制两遍（暂存 + 还原）。现优先 `Rename`（同卷是 O(1) 操作），跨卷或目录被占用时才退回复制
+
 ### Fixed
 
 - **内置 provider 预设的模型名已过期，部分已停用**：`deepseek` 预设指向 `deepseek-chat`，该名称已于 2026-07-22 被官方停用（现行为 V4.1 Flash，模型名 `deepseek-flash`），选该预设会直接调用失败；`claude` 预设仍是 2024 年的 `claude-3-5-sonnet-20241022`（现为 `claude-sonnet-5`），`gemini` 预设仍是 `gemini-1.5-flash`（现为 `gemini-3.8-flash`）。均已按官方文档更新，`config.example.yaml` 同步

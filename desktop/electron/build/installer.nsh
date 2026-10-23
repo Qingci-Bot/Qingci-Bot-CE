@@ -19,17 +19,28 @@
       DetailPrint "保留用户数据：$INSTDIR\instances"
       RMDir /r "${QINGCI_DATA_STASH}"
       CreateDirectory "${QINGCI_DATA_STASH}"
-      CopyFiles /SILENT "$INSTDIR\instances\*.*" "${QINGCI_DATA_STASH}"
+      ; 同卷 rename 是 O(1)，实例数据（DB/插件/日志）可能有几百 MB，
+      ; 逐个复制会在「卸载旧版本」这一步明显拖时间。跨卷或目录被占用时才退回复制。
+      ClearErrors
+      Rename "$INSTDIR\instances" "${QINGCI_DATA_STASH}\instances"
+      ${if} ${Errors}
+        DetailPrint "rename 不可用，改用逐文件复制"
+        CopyFiles /SILENT "$INSTDIR\instances\*.*" "${QINGCI_DATA_STASH}\instances"
+      ${endif}
     ${endif}
   ${endif}
 !macroend
 
 !macro customInstall
-  ; 安装完文件后把暂存的用户数据放回
-  ${if} ${FileExists} "${QINGCI_DATA_STASH}\*.*"
+  ; 安装完文件后把暂存的用户数据放回（同样优先 rename）
+  ${if} ${FileExists} "${QINGCI_DATA_STASH}\instances\*.*"
     DetailPrint "恢复用户数据到 $INSTDIR\instances"
-    CreateDirectory "$INSTDIR\instances"
-    CopyFiles /SILENT "${QINGCI_DATA_STASH}\*.*" "$INSTDIR\instances"
+    ClearErrors
+    Rename "${QINGCI_DATA_STASH}\instances" "$INSTDIR\instances"
+    ${if} ${Errors}
+      CreateDirectory "$INSTDIR\instances"
+      CopyFiles /SILENT "${QINGCI_DATA_STASH}\instances\*.*" "$INSTDIR\instances"
+    ${endif}
     RMDir /r "${QINGCI_DATA_STASH}"
   ${endif}
 !macroend
