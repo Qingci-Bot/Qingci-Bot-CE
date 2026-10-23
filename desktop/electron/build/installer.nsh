@@ -59,6 +59,8 @@
 ; 的卸载器删掉过。
 ; ============================================================
 
+!include "nsDialogs.nsh"
+
 !define QINGCI_DATADIR_REGKEY "Software\Qingci-Bot CE"
 !define QINGCI_DATADIR_DEFAULT "$LOCALAPPDATA\Qingci-Bot CE\data"
 
@@ -71,8 +73,6 @@ var DataDirValue
 !macroend
 
 Function DataDirPageCreate
-  !insertmacro MUI_HEADER_TEXT "选择数据目录" "实例的配置、数据库与插件数据保存在此目录，升级和卸载都不会删除。"
-
   nsDialogs::Create 1018
   Pop $DataDirPage
   ${If} $DataDirPage == error
@@ -85,14 +85,14 @@ Function DataDirPageCreate
     StrCpy $DataDirValue "${QINGCI_DATADIR_DEFAULT}"
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 12u "选择存放实例数据（配置 / 数据库 / 插件数据）的目录："
+  ${NSD_CreateLabel} 0 0 100% 12u "选择数据目录"
   Pop $0
-  ${NSD_CreateLabel} 0 14u 100% 12u "该目录与安装目录分离，升级和卸载都不会删除其中的数据。"
+  ${NSD_CreateLabel} 0 18u 100% 24u "实例的配置、数据库与插件数据将保存在此目录；它与安装目录分离，升级和卸载都不会删除。"
   Pop $0
 
-  ${NSD_CreateDirRequest} 0 34u 78% 12u "$DataDirValue"
+  ${NSD_CreateDirRequest} 0 46u 78% 12u "$DataDirValue"
   Pop $DataDirInput
-  ${NSD_CreateBrowseButton} 80% 34u 20% 12u "浏览..."
+  ${NSD_CreateBrowseButton} 80% 46u 20% 12u "浏览..."
   Pop $0
   ${NSD_OnClick} $0 DataDirBrowse
 
