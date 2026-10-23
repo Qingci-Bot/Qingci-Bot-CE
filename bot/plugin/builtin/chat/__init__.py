@@ -14,11 +14,12 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import cast
 
+from qingci_plugin_sdk import resolve_images
+
 from ...base import PluginBase
 from ...matcher import MatcherContext, on_command, on_message
 from ...permission import Permission
 from ...rule import Rule, rate_limit
-from qingci_plugin_sdk import resolve_images
 
 logger = logging.getLogger("qingci-bot.plugin.chat")
 
