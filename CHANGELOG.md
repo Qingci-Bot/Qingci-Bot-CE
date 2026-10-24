@@ -5,6 +5,16 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[1.19.0] - 2026-10-24（停止支持 Python 3.10）
+
+### Breaking
+
+- **不再支持 Python 3.10**：`requires-python` 改为 `>=3.11`，`install.sh` 的解释器发现列表不再尝试 `python3.10`，CI 兼容矩阵去掉 3.10。**仍在使用 3.10 的用户升级后会无法启动**，请先升级解释器到 3.11+。原因：`filelock` 的修复版 4.2.1（修 3 个 CVE）要求 Python ≥3.11，3.10 上没有任何可用修复，只能带着已知漏洞运行
+
+### Changed
+
+- **移除审计中的 CVE 豁免**：3.10 分支取消后，`filelock` 在全部 Python 版本上都解析到 4.2.4，此前为 3.10 加的 3 条 `--ignore-vuln` 已删除，审计恢复为「零豁免」
+
 ## \[1.18.12] - 2026-10-24（数据目录收口：不再散落在 AppData）
 
 ### Fixed

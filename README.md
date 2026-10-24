@@ -46,7 +46,7 @@
 
 ## 环境要求
 
-- Python 3.10+（推荐 3.12）
+- Python 3.11+（推荐 3.12）
 
 - 任意 OneBot 11 协议端（如 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot) / NapCat / go-cqhttp）
 
