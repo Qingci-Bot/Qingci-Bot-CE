@@ -36,7 +36,7 @@ self.knowledge_store - 知识库（可能为 None）
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from bot.plugin.base import PluginBase
 from bot.plugin.events import FriendRequestEvent, GroupIncreaseNotice
@@ -264,7 +264,7 @@ class TemplatePlugin(PluginBase):
 
     async def _hourly_task(self):
         """每小时执行的任务"""
-        now = datetime.now(timezone.utc).astimezone()
+        now = datetime.now(UTC).astimezone()
         logger.info(f"[{self.name}] 每小时任务执行: {now.strftime('%H:%M')}")
 
     async def _daily_task(self):

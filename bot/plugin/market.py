@@ -280,7 +280,7 @@ class MarketClient:
             )
             try:
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 try:
                     await proc.wait()

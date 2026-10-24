@@ -722,9 +722,7 @@ class QingciBot:
         from ..db.engine import session_scope
         from ..db.models import AuditLog, Message, SessionHistory, UsageLog
 
-        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
-            days=retention_days
-        )
+        cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=retention_days)
         tables = (Message, SessionHistory, UsageLog, AuditLog)
         total = 0
         async with session_scope() as session:

@@ -16,6 +16,7 @@
 """
 
 import logging
+from datetime import UTC, datetime
 
 from qingci_plugin_sdk import (
     MatcherContext,
@@ -98,9 +99,7 @@ class HelloPlugin(PluginBase):
 
     @llm_tool(name="get_time", description="获取当前北京时间")
     async def get_time(self) -> str:
-        from datetime import datetime, timezone
-
-        return datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        return datetime.now(UTC).astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
 
 # 模块级 LLM 工具示例：独立函数也可用 @llm_tool 声明

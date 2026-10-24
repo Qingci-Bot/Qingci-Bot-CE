@@ -270,7 +270,7 @@ class OneBot12Adapter(PlatformAdapter):
             raise RuntimeError(f"OneBot 12 动作请求发送失败 ({action}): {exc}") from exc
         try:
             resp = await asyncio.wait_for(fut, timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending.pop(echo, None)
             raise TimeoutError(f"OneBot 12 动作 {action} 响应超时（>{timeout}s）") from None
         if resp.get("status") != "ok" or resp.get("retcode") != 0:

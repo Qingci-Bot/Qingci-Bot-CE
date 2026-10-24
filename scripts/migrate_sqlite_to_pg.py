@@ -21,7 +21,7 @@ import argparse
 import asyncio
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # 添加项目根目录到 sys.path
@@ -220,7 +220,7 @@ def _parse_iso_datetime(value: str, table_name: str = "", row_index: int = 0) ->
             value = value[:-1] + "+00:00"
         dt = datetime.fromisoformat(value)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
     except (ValueError, TypeError) as e:
         ctx = f"{table_name}[第 {row_index} 行]" if table_name else ""

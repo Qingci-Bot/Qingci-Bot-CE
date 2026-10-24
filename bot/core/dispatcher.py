@@ -12,6 +12,7 @@ block=True 的 Matcher 匹配后（无论 handler 返回什么）停止后续 Ma
 import asyncio
 import logging
 import time
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 # 消息上下文统一由独立插件 SDK 定义（qingci_plugin_sdk.context.MessageContext），
@@ -302,15 +303,11 @@ class MessageDispatcher:
             except Exception:
                 logger.exception("框架消息记录失败")
         try:
-            from datetime import datetime, timezone
-
             from ..broadcast import broadcast_message
 
             # 广播载荷用副本：record 已进入写入缓冲队列（可能被后台任务持有），
             # 直接改原对象会让「入库记录」与「广播记录」共享可变状态
-            await broadcast_message(
-                {**record, "created_at": datetime.now(timezone.utc).isoformat()}
-            )
+            await broadcast_message({**record, "created_at": datetime.now(UTC).isoformat()})
         except Exception:
             logger.exception("框架消息广播失败")
 

@@ -11,7 +11,7 @@ block=False（即使匹配也不阻止后续 Matcher，但返回回复会停止�
 
 import logging
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import cast
 
 from qingci_plugin_sdk import resolve_images
@@ -341,7 +341,7 @@ class ChatPlugin(PluginBase):
         try:
             from ....broadcast import broadcast_message
 
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             await broadcast_message(
                 {
                     "id": f"{ctx.message_id}_reply",

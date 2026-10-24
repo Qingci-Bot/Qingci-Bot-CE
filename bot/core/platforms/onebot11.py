@@ -312,7 +312,7 @@ class OneBotConnection(PlatformAdapter):
                 self._server_task.cancel()
                 try:
                     await asyncio.wait_for(self._server_task, timeout=2)
-                except (asyncio.TimeoutError, asyncio.CancelledError):
+                except (TimeoutError, asyncio.CancelledError):
                     # 取消信号发出但任务仍在退出（如正在处理关闭回调）：
                     # 继续等待其真正结束，避免遗留 task 触发
                     # "Task destroyed while pending" 警告
@@ -342,7 +342,7 @@ class OneBotConnection(PlatformAdapter):
                 timeout=timeout,
             )
             return result if isinstance(result, dict) else {"data": result}
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise TimeoutError(f"API 调用超时: {action}") from None
         except Exception as e:
             logger.error(f"API 调用失败 {action}: {e}")
