@@ -86,3 +86,19 @@ def test_installer_avoids_relative_jumps():
         if re.search(r"\bIfFileExists\b[^\n]*\s\+\d", line)
     ]
     assert not offenders, "发现相对跳转，请改用 LogicLib 条件块：\n" + "\n".join(offenders)
+
+
+def test_userdata_dir_is_product_named():
+    """Electron 的 userData 必须显式指向产品目录
+
+    默认取 package.json 的 name（qingci-bot-ce-desktop），与产品名不同，
+    用户会在 AppData 下看到两个目录。
+    """
+    js = _main_js()
+    assert 'app.setPath("userData", path.join(appDataRoot(), PRODUCT_DIR_NAME))' in js
+
+
+def test_backend_extracts_into_data_home():
+    """后端解压产物（数百 MB）应落在数据目录，而不是 userData"""
+    js = _main_js()
+    assert 'path.join(dataHome || app.getPath("userData"), "backend")' in js
