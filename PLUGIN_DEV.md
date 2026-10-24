@@ -1717,7 +1717,7 @@ dist\qingci-bot-ce\
 .\build-electron.bat
 ```
 
-- 产物（`dist\electron\`）：`Qingci-Bot-CE-<version>-Setup-x64.exe`（NSIS 安装向导，可选安装目录与数据目录）与 `Qingci-Bot CE-<version>-win-x64.zip`（绿色解压版，无向导）；后端以单个 `backend.zip` 放在 `resources\`，Playwright Chromium 随其一并内置。
+- 产物（`dist\electron\`）：`Qingci-Bot-CE-<version>-Setup-x64.exe`（NSIS 安装向导，可选安装目录与数据目录）与 `Qingci-Bot.CE-<version>-win.zip`（绿色解压版，无向导；electron-builder 把产品名的空格转成了点）；后端以单个 `backend.zip` 放在 `resources\`，Playwright Chromium 随其一并内置。
 
 ```powershell
 .\dist\electron\Qingci-Bot-CE-<version>-Setup-x64.exe   # 安装版
