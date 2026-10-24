@@ -26,3 +26,5 @@ web/.env*
 *.bak-*
 config.yaml
 .DS_Store
+# AI 助手在本仓库留下的本地工作目录（会话记忆/临时产物），不入库
+.workbuddy-ai/
