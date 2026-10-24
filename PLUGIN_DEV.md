@@ -1740,8 +1740,8 @@ Linux 与 Windows 同源：先用 `build-linux.sh` 产出后端 onedir（`build.
 cd desktop/electron && npm ci && npx electron-builder --linux --publish never
 ```
 
-- 产物：`dist/electron/Qingci-Bot-CE-<version>-linux-x64.AppImage`（内嵌后端为 `resources/backend.zip`）。
-- 运行：双击/`./Qingci-Bot-CE-<version>-linux-x64.AppImage` 即由 Electron 壳启动（需系统具备 FUSE/libfuse2）。
+- 产物：`dist/electron/Qingci-Bot-CE-<version>-linux-x86_64.AppImage`（内嵌后端为 `resources/backend.zip`）。
+- 运行：双击/`./Qingci-Bot-CE-<version>-linux-x86_64.AppImage` 即由 Electron 壳启动（需系统具备 FUSE/libfuse2）。
 - 数据位置：AppImage 没有安装向导，数据回退到可执行目录旁（`instances/`），可用环境变量 `QINGCI_DATA_HOME` 指到可写卷。
 - 注意：SDK 经私有索引安装，`build-linux.sh` 支持用环境变量 `QINGCI_SDK_INDEX_URL` 覆盖索引地址（内网镜像 / 离线环境）。
 
