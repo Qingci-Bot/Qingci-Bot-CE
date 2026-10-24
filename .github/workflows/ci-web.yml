@@ -1,7 +1,7 @@
 name: Web UI CI
 
 # 与 Python 侧 CI 分离：只改前端时不再触发 docker build、install.sh 冒烟
-# 与 3.10/3.11 兼容矩阵，避免依赖升级把作业队列排满。
+# 与 3.11 兼容矩阵，避免依赖升级把作业队列排满。
 on:
   push:
     branches: ["main"]
