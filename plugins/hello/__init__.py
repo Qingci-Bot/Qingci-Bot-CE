@@ -5,7 +5,8 @@
     uv pip install -e .
     python -c "from qingci_plugin_sdk import PluginBase; print('SDK OK')"
 
-开发完成后，将 hello/ 目录复制到 Qingci-Bot/plugins/ 即可加载。
+开发完成后，将 hello/ 目录复制到 Qingci-Bot 的实例插件目录
+（instances/<name>/plugins/；源码运行时为 plugins/）即可加载。
 
 本示例演示 SDK 新增能力：
 - i18n 国际化（self._ = self.i18n.t）
@@ -95,14 +96,18 @@ class HelloPlugin(PluginBase):
     async def on_metaevent(self, event: dict):
         return None
 
-    # ---- 模块级 LLM 工具（装饰器注册，PluginManager 自动收集） ----
 
-    @llm_tool(name="get_time", description="获取当前北京时间")
-    async def get_time(self) -> str:
-        return datetime.now(UTC).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+# ---- LLM 工具（@llm_tool 只能用于模块级自由函数） ----
+# SDK 会拒绝收集类内定义的方法（宿主按零参调用会缺 self），装饰在实例方法上
+# 只会在日志里留一条 WARNING，工具实际不注册。插件方法要用工具时改为
+# self.tool_registry.register(name=..., handler=self.method)。
 
 
-# 模块级 LLM 工具示例：独立函数也可用 @llm_tool 声明
+@llm_tool(name="get_time", description="获取当前北京时间")
+async def get_time() -> str:
+    return datetime.now(UTC).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+
+
 @llm_tool(name="echo", description="原样返回输入")
 async def echo(text: str) -> str:
     return text
