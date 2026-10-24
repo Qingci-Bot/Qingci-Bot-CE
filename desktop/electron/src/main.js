@@ -25,6 +25,28 @@ const crypto = require("crypto");
 
 const RS = "\u001E"; // Record Separator，与 main.py --backend 的 READY 信号分隔符一致
 
+// ── 目录名统一 ───────────────────────────────────────────────
+// Electron 默认拿 package.json 的 name（qingci-bot-ce-desktop）当 userData 目录名，
+// 与产品名不一致，用户会在 AppData 下看到两个目录。这里统一成产品名。
+// 必须在任何 userData 访问之前设置。
+const PRODUCT_DIR_NAME = "Qingci-Bot CE";
+// 旧版本（≤1.18.11）用的 userData 目录名，仅用于迁移与清理
+const LEGACY_USER_DATA_NAME = "qingci-bot-ce-desktop";
+
+function appDataRoot() {
+  return app.getPath("appData");
+}
+
+function legacyUserDataDir() {
+  return path.join(appDataRoot(), LEGACY_USER_DATA_NAME);
+}
+
+try {
+  app.setPath("userData", path.join(appDataRoot(), PRODUCT_DIR_NAME));
+} catch (e) {
+  // 极端情况下设置失败就沿用默认目录，不影响启动
+}
+
 // ── 主进程日志（落盘到后端 data 目录 logs/electron.log，排障用） ──
 let _logStream = null;
 let _logRoot = null;
@@ -81,7 +103,9 @@ const BACKEND_EXE = process.platform === "win32" ? "qingci-bot-ce.exe" : "qingci
  */
 function prepareBackend() {
   const version = app.getVersion();
-  const base = path.join(app.getPath("userData"), "backend");
+  // 解压到数据目录下：这是几百 MB 的产物，应和实例数据放在一起，
+  // 而不是散落在 userData 里（userData 只留 Electron 自己的缓存）。
+  const base = path.join(dataHome || app.getPath("userData"), "backend");
   const dir = path.join(base, version);
   const marker = path.join(dir, ".ready");
 
@@ -293,10 +317,7 @@ function makeWindow({ error = false } = {}) {
 }
 
 // 产品目录名固定为安装器使用的名称。
-// 不能用 app.getPath("userData")：它取的是 package.json 的 name
-// （qingci-bot-ce-desktop），与安装器写入的 "Qingci-Bot CE" 不是同一个目录，
-// 会导致安装时选的数据目录读不到、数据落到另一个隐藏路径。
-const PRODUCT_DIR_NAME = "Qingci-Bot CE";
+// 产品目录名与安装器保持一致（常量定义在文件顶部）
 
 /**
  * 安装器写入选择结果的位置，按可靠性排序：
@@ -377,7 +398,7 @@ function migrateLegacyInstances(home) {
     //    %APPDATA%\qingci-bot-ce-desktop\data\instances
     const candidates = [
       path.join(path.dirname(app.getPath("exe")), "instances"),
-      path.join(app.getPath("userData"), "data", "instances"),
+      path.join(legacyUserDataDir(), "data", "instances"),
     ];
 
     for (const legacy of candidates) {
@@ -397,6 +418,24 @@ function migrateLegacyInstances(home) {
     }
   } catch (e) {
     elog("[electron] 旧实例目录迁移失败（忽略）:", String(e));
+  }
+}
+
+/**
+ * 清理旧版 userData 里可重建的产物。
+ *
+ * ≤1.18.11 把后端解压到 %APPDATA%\qingci-bot-ce-desktopackend（约 700MB）。
+ * 现在解压到数据目录，旧目录纯属占空间——只删 backend/，其余不动：
+ * 实例数据已由 migrateLegacyInstances 迁走，Electron 缓存无害，避免误删用户数据。
+ */
+function cleanupLegacyUserData() {
+  try {
+    const legacyBackend = path.join(legacyUserDataDir(), "backend");
+    if (!fs.existsSync(legacyBackend)) return;
+    fs.rmSync(legacyBackend, { recursive: true, force: true });
+    elog("[electron] 已清理旧版解压目录:", legacyBackend);
+  } catch (e) {
+    elog("[electron] 清理旧解压目录失败（忽略）:", String(e));
   }
 }
 
@@ -663,6 +702,7 @@ app.whenReady().then(async () => {
       elog("[electron] 数据目录:", dataHome);
       recoverStashIfNeeded(dataHome); // 先救暂存，再迁移旧位置
       migrateLegacyInstances(dataHome);
+      cleanupLegacyUserData();
       prepareBackend();
     }
 
