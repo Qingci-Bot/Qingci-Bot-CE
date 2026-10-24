@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ② 后端解压产物（数百 MB）改到数据目录下的 `backend/<版本>/`；
   ③ 启动时清理旧版遗留在 `%APPDATA%\qingci-bot-ce-desktopackend` 的解压目录（可重建，释放空间），其余内容不动以免误删
 
+- **`filelock` 升级到 4.2.4（3.32.2 存在 3 个 CVE）**：修复版 4.2.1 要求 Python ≥3.11，而项目仍支持 3.10，该分支只能装到仍有漏洞的 4.1.0。已在 CI 审计中显式豁免这 3 个 CVE 并注明原因——属「无修复可用」，移除 3.10 支持后应删除豁免
+
 ## \[1.18.11] - 2026-10-23（修复安装向导与安装包构建）
 
 ### Fixed

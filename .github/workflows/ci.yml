@@ -163,7 +163,10 @@ jobs:
         run: |
           uv pip install --python .venv pip-audit
           uv export --no-emit-project --format requirements-txt --no-hashes             | grep -v '^qingci-plugin-sdk' > /tmp/audit-reqs.txt
-          uv run --no-sync pip-audit -r /tmp/audit-reqs.txt
+          # filelock：修复版 4.2.1 要求 Python >=3.11，而本项目仍支持 3.10，
+          # 该分支只能装到仍有漏洞的 4.1.0（4.2.4 已用于 >=3.11 分支）。
+          # 属「无修复可用」而非「忘记升」，故显式忽略并在移除 3.10 支持后删除。
+          uv run --no-sync pip-audit -r /tmp/audit-reqs.txt             --ignore-vuln CVE-2026-112940             --ignore-vuln CVE-2026-112913             --ignore-vuln CVE-2026-112907
 
   docker:
     name: Docker build & smoke run
