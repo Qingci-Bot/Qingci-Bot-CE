@@ -42,7 +42,7 @@
 `pyproject.toml`（打包/CI 读取）、`bot/__init__.py`（`__version__`，后端 `/api/bot/status` 及 Web 关于页据此动态显示）、`web/package.json` 与 `web/package-lock.json`（含 `packages` 两处）、`desktop/electron/package.json` 与 `desktop/electron/package-lock.json`（含 `packages` 两处，安装包版本号来源）。
 
 ```bash
-python scripts/bump_version.py 1.16.0     # 从单一输入同步升级全部版本字段
+python scripts/bump_version.py 1.19.0     # 从单一输入同步升级全部版本字段
 python scripts/bump_version.py --check    # 提交前自查各处是否一致（防止漏改）
 ```
 
@@ -111,7 +111,7 @@ npm run format    # 代码格式化
 # 第一步：Python 后端 onedir（含 Web UI 构建、SDK -e 安装、Playwright 浏览器下载）
 uv pip install -e ".[build]"
 .\build.bat       # Windows
-./build-linux.sh  # Linux（等价脚本；国内跑 SDK 走 Gitee 默认源）
+./build-linux.sh  # Linux（等价脚本；SDK 从私有索引安装，可用 QINGCI_SDK_INDEX_URL 覆盖）
 
 # 第二步：Electron 桌面壳（需 Node.js 22+/npm；Electron 44 要求 Node ≥22.12；内嵌上一步产出的后端）
 .\build-electron.bat                          # Windows 安装版 Setup.exe + 绿色解压 zip
@@ -120,7 +120,7 @@ cd desktop/electron && npm run build:linux     # Linux AppImage
 
 **发布流水线（推荐，自动）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 Release、推 Docker 镜像到 `ghcr.io`，无需手动上传/构建，见 [`.github/workflows/release.yml`](.github/workflows/release.yml)。
 
-> 构建详见 [PLUGIN_DEV.md](PLUGIN_DEV.md)「打包为 exe」与 `build.bat` / `build-linux.sh` / `build-electron.bat`。onedir（`dist\qingci-bot-ce\`）只含后端不含桌面壳；桌面壳由 electron-builder 承担，Windows 安装版/绿色解压版与 Linux AppImage 的实例与数据均随可执行目录 `instances\` 自包含分发。直接执行 `pyinstaller qingci-bot-ce.spec` 也能出 onedir 后端，但缺少 Web UI 产物复制与浏览器下载步骤。
+> 构建详见 [PLUGIN_DEV.md](PLUGIN_DEV.md)「打包为 exe」与 `build.bat` / `build-linux.sh` / `build-electron.bat`。onedir（`dist\qingci-bot-ce\`）只含后端不含桌面壳；桌面壳由 electron-builder 承担，Windows 安装版/绿色解压版与 Linux AppImage 均内嵌后端。**实例数据不在安装目录内**：安装版由向导选定数据目录（默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`），AppImage 回退到可执行目录旁（可用 `QINGCI_DATA_HOME` 覆盖），升级与卸载不会触碰数据。直接执行 `pyinstaller qingci-bot-ce.spec` 也能出 onedir 后端，但缺少 Web UI 产物复制与浏览器下载步骤。
 
 ## 项目结构
 

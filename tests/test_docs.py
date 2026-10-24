@@ -86,3 +86,44 @@ def test_documented_symbols_exist():
                 if alias.name != "*" and not hasattr(module, alias.name):
                     missing.append(f"{doc}#{index}: {node.module} 无符号 {alias.name}")
     assert not missing, "文档引用了不存在的符号：\n" + "\n".join(missing)
+
+
+def test_no_escaped_backticks():
+    """表格里不能用 `\\`\\`` 表示根路径——渲染出来是字面反斜杠，读者看不懂"""
+    bad: list[str] = []
+    for doc in DOCS:
+        if not (ROOT / doc).is_file():
+            continue
+        for lineno, line in enumerate((ROOT / doc).read_text(encoding="utf-8").splitlines(), 1):
+            if "\\`\\`" in line:
+                bad.append(f"{doc}:{lineno}: {line.strip()[:60]}")
+    assert not bad, "文档含转义反引号（应改为 `/` 或明确路径）：\n" + "\n".join(bad)
+
+
+_MD_LINK = re.compile(r"\[[^\]]*\]\((?!https?://|#)([^)\s]+)\)")
+# 代码块里形如 foo["k"](...) 的调用会被误判成 Markdown 链接，扫描前先剔除围栏代码块
+_FENCED = re.compile(r"^```.*?^```", re.DOTALL | re.MULTILINE)
+
+
+def _prose_lines(doc: str) -> list[tuple[int, str]]:
+    """返回去掉围栏代码块后的 (行号, 行内容)，行号与原文对齐（被剔除的行补空行）"""
+    text = (ROOT / doc).read_text(encoding="utf-8")
+    masked = _FENCED.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    return list(enumerate(masked.splitlines(), 1))
+
+
+def test_relative_links_exist():
+    """相对路径的文档链接必须指向真实文件（防止引用已删除/从未存在的文档）"""
+    bad: list[str] = []
+    for doc in DOCS:
+        if not (ROOT / doc).is_file():
+            continue
+        base = (ROOT / doc).parent
+        for lineno, line in _prose_lines(doc):
+            for target in _MD_LINK.findall(line):
+                path = target.split("#", 1)[0]
+                if not path:  # 纯锚点
+                    continue
+                if not (base / path).exists():
+                    bad.append(f"{doc}:{lineno}: {target}")
+    assert not bad, "文档链接指向不存在的文件：\n" + "\n".join(bad)

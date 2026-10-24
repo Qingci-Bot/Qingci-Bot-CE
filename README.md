@@ -101,7 +101,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > 浏览器缺失或下载失败时渲染能力自动降级不可用（`/api/bot/status` 的 `render` 字段可查状态），不影响框架启动。
 > 插件协议层 SDK（`qingci-plugin-sdk`）经私有索引（`https://pypi.luoqingciya.cn/simple`）随核心依赖安装，版本由 `pyproject.toml` 精确锁定；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.bat` 一致）覆盖索引版本。
 >
-> 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install qingci-plugin-sdk==1.13.9 --index-url https://pypi.luoqingciya.cn/simple` 安装 SDK）：
+> 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install qingci-plugin-sdk==1.15.0 --index-url https://pypi.luoqingciya.cn/simple` 安装 SDK）：
 >
 > ```bash
 > uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiohttp aiosqlite \
@@ -164,7 +164,7 @@ docker compose down         # 停止
 
 ```bash
 chmod +x install.sh
-./install.sh                        # 核心依赖（自动检测 Python>=3.10，优先 uv，否则 pip）
+./install.sh                        # 核心依赖（自动检测 Python>=3.11，优先 uv，否则 pip）
 ./install.sh --vector               # 追加向量知识库（lancedb）
 ./install.sh --with-gui             # 历史参数（桌面 GUI 已由 Electron 壳承担，保留仅为兼容，实际不再安装）
 ./install.sh --dev                  # 追加测试/构建/质量工具
@@ -270,7 +270,7 @@ llm:
   provider: deepseek              # openai / deepseek / ollama / siliconflow / claude / gemini / custom
   api_url: https://api.deepseek.com/v1  # 留空则按 provider 直连官方
   api_key: sk-your-key
-  model: deepseek-chat
+  model: deepseek-flash
   system_prompt: 你是一个友好、乐于助人的机器人助手。
   max_context_tokens: 8192        # 上下文窗口 token 上限，超出自动裁剪历史
   timeout: 60                     # 单次 LLM 请求超时（秒）
@@ -461,6 +461,11 @@ llm:
   mcp_servers: []                  # MCP 服务器列表（enable_tools 开启后生效，见上方示例）
   personas: []                     # 人格列表（/persona 命令切换，见上方示例）
   default_persona: ''              # 默认人格名（空 = 使用 system_prompt）
+  multimodal:                      # 图片输入（需模型支持视觉，否则会报错）
+    enabled: false                 #   开启后把消息里的图片解析为地址一并发送
+    max_images: 4                  #   单条消息最多带几张
+    max_bytes: 4194304             #   单图字节上限（本地编码时生效）
+    timeout: 15                    #   解析图片（调平台 API）的超时秒数
 rate_limit:
   enabled: false                   # 对话限流（默认关闭）
   daily_limit: 50                  # 每用户每日对话上限
@@ -532,6 +537,7 @@ lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 | `QINGCI_DB_POOL_SIZE` | `5` | SQLite 连接池大小；高并发读写争用时可调大 |
 | `QINGCI_DB_MAX_OVERFLOW` | `10` | 连接池溢出上限 |
 | `QINGCI_SKIP_MIGRATION_CHECK` | 未设置 | 设为 `1` 跳过启动期的迁移漂移检测（每次启动约省 1 秒）。打包分发 / 容器冷启动可开启，代价是模型与迁移脚本不一致时不再告警 |
+| `QINGCI_DATA_HOME` | 未设置 | 可写数据根目录（`instances/`、`backend/` 的父目录）。安装版由安装向导写入，AppImage / 容器可用它把数据放到可写卷；未设置时按 `QINGCI_APP_DIR` → 源码根目录回退 |
 | `QINGCI_APP_DIR` | 自动推断 | 由 Electron 壳注入，指向桌面 EXE 所在目录；源码 / Docker 部署无需设置 |
 
 > 与 `config.yaml` 不同，环境变量在进程启动时读取，修改后需重启。

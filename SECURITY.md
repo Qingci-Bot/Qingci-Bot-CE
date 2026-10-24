@@ -2,11 +2,13 @@
 
 ## 支持的版本
 
-| 版本   | 支持状态     |
-| ------ | ------------ |
-| 1.16.x | 积极支持     |
-| 1.15.x | 安全修复     |
-| < 1.15 | 不再支持     |
+| 版本     | 支持状态 |
+| -------- | -------- |
+| 1.19.x   | 积极支持 |
+| 1.18.x   | 安全修复 |
+| < 1.18   | 不再支持 |
+
+> 1.19.0 起要求 Python ≥3.11（不再支持 3.10），旧版本解释器上无法启动，也不在该版本的修复范围内。
 
 ## 报告漏洞
 
@@ -14,8 +16,7 @@
 
 请通过以下方式私下报告：
 
-1. 在 GitHub 主仓库（https://github.com/Qingci-Bot/Qingci-Bot-CE）提交私密 Security Advisory（推荐）
-2. 或发送邮件至安全联系邮箱（维护者尚未在文档中公开邮箱地址，请通过上面的 GitHub Security Advisory 渠道报告；若已设置，请在此处填写实际邮箱）
+1. 在 GitHub 主仓库（https://github.com/Qingci-Bot/Qingci-Bot-CE）提交私密 Security Advisory（推荐，也是唯一公开的渠道）
 
 请在报告中包含：
 
@@ -48,8 +49,8 @@
 
 ### 依赖安全
 
-- 定期更新依赖：`uv pip install --upgrade qingci-bot-ce qingci-plugin-sdk`
-- 关注 [GitHub Advisory Database](https://github.com/advisories) 中的相关漏洞
+- 及时升级到最新 Release（桌面版直接覆盖安装即可，数据目录独立于安装目录，不受影响）
+- 关注 [GitHub Advisory Database](https://github.com/advisories) 中的相关漏洞；CI 每次 PR 都会跑 `pip-audit`，零豁免
 
 ### 插件安全
 
