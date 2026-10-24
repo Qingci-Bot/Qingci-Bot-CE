@@ -8,7 +8,7 @@ dependencies = [
     # 独立插件 SDK：协议层（PluginBase/Matcher/Permission/Rule/MessageContext）唯一来源，
     # bot/plugin/ 下为薄转发。由私有索引分发（见文末 [[tool.uv.index]] 与 [tool.uv.sources]），
     # 版本精确锁定保证可复现；SDK 发新版后更新此处版本号并重新 uv lock。
-    "qingci-plugin-sdk==1.15.0",
+    "qingci-plugin-sdk==1.15.1",
     # 依赖上界策略：核心依赖一律给「下一个主版本」上界。CI/开发由 uv.lock 精确锁定，
     # 上界主要保护「用户按 pyproject 直接 pip install」的场景——litellm / fastapi 等
     # 属于高频 breaking 的包，被动跨主版本升级会直接破坏运行时。

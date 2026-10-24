@@ -101,7 +101,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > 浏览器缺失或下载失败时渲染能力自动降级不可用（`/api/bot/status` 的 `render` 字段可查状态），不影响框架启动。
 > 插件协议层 SDK（`qingci-plugin-sdk`）经私有索引（`https://pypi.luoqingciya.cn/simple`）随核心依赖安装，版本由 `pyproject.toml` 精确锁定；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.bat` 一致）覆盖索引版本。
 >
-> 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install qingci-plugin-sdk==1.15.0 --index-url https://pypi.luoqingciya.cn/simple` 安装 SDK）：
+> 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install qingci-plugin-sdk==1.15.1 --index-url https://pypi.luoqingciya.cn/simple` 安装 SDK）：
 >
 > ```bash
 > uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiohttp aiosqlite \

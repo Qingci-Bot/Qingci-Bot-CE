@@ -2802,7 +2802,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "qingci-bot-ce", extras = ["test", "build", "vector", "render"], marker = "extra == 'dev'" },
-    { name = "qingci-plugin-sdk", specifier = "==1.15.0", index = "https://pypi.luoqingciya.cn/simple" },
+    { name = "qingci-plugin-sdk", specifier = "==1.15.1", index = "https://pypi.luoqingciya.cn/simple" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
     { name = "sqlmodel", specifier = ">=0.0.22,<1" },
@@ -2813,11 +2813,11 @@ provides-extras = ["vector", "render", "test", "build", "dev"]
 
 [[package]]
 name = "qingci-plugin-sdk"
-version = "1.15.0"
+version = "1.15.1"
 source = { registry = "https://pypi.luoqingciya.cn/simple" }
-sdist = { url = "https://pypi.luoqingciya.cn/packages/c8/c804392189c88701344ec4c50338b86323657c9cdf652d5b8d228508cc463b56/qingci_plugin_sdk-1.15.0.tar.gz", hash = "sha256:c804392189c88701344ec4c50338b86323657c9cdf652d5b8d228508cc463b56", size = 140643, upload-time = "2026-10-23T07:43:55Z" }
+sdist = { url = "https://pypi.luoqingciya.cn/packages/57/572d01b6137df75fab44f8fb0d8df520f1099ea39c19c5aac9fefbbd53241c6e/qingci_plugin_sdk-1.15.1.tar.gz", hash = "sha256:572d01b6137df75fab44f8fb0d8df520f1099ea39c19c5aac9fefbbd53241c6e", size = 144135, upload-time = "2026-10-24T10:04:49Z" }
 wheels = [
-    { url = "https://pypi.luoqingciya.cn/packages/39/39dd49a105d4be69558397008a24d5acc4991fd042e00deede575b450239ad42/qingci_plugin_sdk-1.15.0-py3-none-any.whl", hash = "sha256:39dd49a105d4be69558397008a24d5acc4991fd042e00deede575b450239ad42", size = 78951, upload-time = "2026-10-23T07:43:44Z" },
+    { url = "https://pypi.luoqingciya.cn/packages/f5/f52002baa38e29bd0c04b2c8fd8e0abeb37693defeebd7c4f97c349c93df55d6/qingci_plugin_sdk-1.15.1-py3-none-any.whl", hash = "sha256:f52002baa38e29bd0c04b2c8fd8e0abeb37693defeebd7c4f97c349c93df55d6", size = 80199, upload-time = "2026-10-24T10:04:36Z" },
 ]
 
 [[package]]
