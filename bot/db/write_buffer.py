@@ -131,7 +131,7 @@ class MessageWriteBuffer:
         while not (self._closed and not self._queue):
             try:
                 await asyncio.wait_for(self._event.wait(), timeout=self._flush_interval)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass  # 窗口到期：按当前队列内容落库
             self._event.clear()
             await self._drain()
@@ -171,7 +171,7 @@ class MessageWriteBuffer:
             try:
                 # shield：wait_for 超时只取消外层等待，不打断正在进行的写入
                 await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 task.cancel()
                 logger.warning("消息写入缓冲任务退出超时，已取消")
             except asyncio.CancelledError:
@@ -182,7 +182,7 @@ class MessageWriteBuffer:
         if self._queue:
             try:
                 await asyncio.wait_for(self._drain(), timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(f"消息写入缓冲关闭时仍有 {len(self._queue)} 条未落库")
             except asyncio.CancelledError:
                 raise

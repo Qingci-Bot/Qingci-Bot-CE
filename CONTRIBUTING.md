@@ -52,6 +52,11 @@ python scripts/bump_version.py --check    # 提交前自查各处是否一致（
 > 直接 `uv lock` 会把镜像地址写进锁文件，CI（官方源）随即判定锁文件过期而失败。
 > 请始终用 `uv lock --default-index https://pypi.org/simple` 生成；CI 有一道检查会拦截
 > 含非官方索引的锁文件（允许 `pypi.org` 与私有索引 `pypi.luoqingciya.cn`）。
+>
+> 注意 `uv run` / `uv sync` 也会隐式重解析：当本机默认索引与锁文件里记录的来源不一致时，
+> 它们会按本机镜像重写锁文件的 `source` 与 wheel URL（版本与 hash 不变，只是 URL 全被换掉，
+> 表现为上千行 diff）。**每次 `uv run` 后提交前请 `git checkout -- uv.lock`**，
+> 只有确实要改依赖时才用上面的 `--default-index` 重新生成。
 
 ## 开发环境
 

@@ -10,7 +10,7 @@ SQLModel 0.0.39 不支持 Mapped 注解，故按文件禁用相关错误码。
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import delete, func, select
@@ -210,7 +210,7 @@ class Database:
             if group_id is not None:
                 stmt = stmt.where(Message.group_id == group_id)
             if before_days is not None and before_days > 0:
-                cutoff = datetime.now(timezone.utc) - timedelta(days=before_days)
+                cutoff = datetime.now(UTC) - timedelta(days=before_days)
                 stmt = stmt.where(Message.created_at < cutoff)
             result = await session.execute(stmt)
             logger.info(
@@ -344,7 +344,7 @@ class Database:
             ).scalar_one_or_none()
             if existing:
                 existing.value = value
-                existing.updated_at = datetime.now(timezone.utc)
+                existing.updated_at = datetime.now(UTC)
             else:
                 session.add(PluginConfig(key=key, value=value))
 
@@ -377,7 +377,7 @@ class Database:
             if existing:
                 existing.enabled = enabled
                 existing.trigger_mode = trigger_mode
-                existing.updated_at = datetime.now(timezone.utc)
+                existing.updated_at = datetime.now(UTC)
             else:
                 session.add(
                     GroupConfig(
@@ -434,7 +434,7 @@ class Database:
 
         返回：[{date, prompt_tokens, completion_tokens, calls}]，按日期升序
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         async with session_scope() as session:
             day_col = func.date(UsageLog.created_at).label("day")
             stmt = (

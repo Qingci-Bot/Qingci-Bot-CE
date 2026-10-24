@@ -6,7 +6,7 @@
 3. FastAPI 响应模型
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Index
 from sqlmodel import Field, SQLModel
@@ -40,7 +40,7 @@ class Message(SQLModel, table=True):
     content: str
     message_type: str = Field(default="group")
     role: str = Field(default="user")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
 
 
 class SessionHistory(SQLModel, table=True):
@@ -59,7 +59,7 @@ class SessionHistory(SQLModel, table=True):
     session_key: str = Field(index=True)
     role: str  # user / assistant
     content: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
 
 
 class PluginConfig(SQLModel, table=True):
@@ -69,7 +69,7 @@ class PluginConfig(SQLModel, table=True):
 
     key: str = Field(primary_key=True)
     value: str
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class GroupConfig(SQLModel, table=True):
@@ -83,7 +83,7 @@ class GroupConfig(SQLModel, table=True):
     group_id: int = Field(primary_key=True)
     enabled: bool = Field(default=True)
     trigger_mode: str | None = Field(default=None)  # at / keyword / always，空=跟随全局
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class UsageLog(SQLModel, table=True):
@@ -101,7 +101,7 @@ class UsageLog(SQLModel, table=True):
     prompt_tokens: int = Field(default=0)
     completion_tokens: int = Field(default=0)
     source: str = Field(default="chat")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
 
 
 class AuditLog(SQLModel, table=True):
@@ -113,7 +113,7 @@ class AuditLog(SQLModel, table=True):
     action: str
     detail: str = Field(default="")
     client_ip: str = Field(default="")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
 
 
 class KnowledgeItem(SQLModel, table=True):
@@ -129,4 +129,4 @@ class KnowledgeItem(SQLModel, table=True):
     user_id: int = Field(index=True)
     content: str
     embedding: str = Field(default="")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

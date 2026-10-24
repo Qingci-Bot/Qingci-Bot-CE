@@ -211,7 +211,7 @@ async def _run_installer(cmd: list[str]) -> bool:
         return False
     try:
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_INSTALL_TIMEOUT)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # communicate 超时：进程可能卡死，终止并回收，避免僵尸进程
         try:
             proc.kill()

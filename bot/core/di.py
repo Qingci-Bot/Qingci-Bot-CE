@@ -26,7 +26,7 @@ import inspect
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Union, cast, get_args, get_origin
 
 logger = logging.getLogger("qingci-bot.di")
@@ -200,7 +200,7 @@ def _is_event_annotation(ann: Any) -> bool:
         return False
 
 
-class ServiceLifetime(str, Enum):
+class ServiceLifetime(StrEnum):
     """服务生命周期"""
 
     SINGLETON = "singleton"  # 单例（默认）：注册后始终返回同一实例

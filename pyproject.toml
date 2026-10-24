@@ -72,9 +72,7 @@ testpaths = ["tests"]
 addopts = ["--cov=bot", "--cov=api", "--cov-report=term-missing", "--cov-fail-under=50"]
 
 [tool.ruff]
-# 暂留 py310：升到 py311 会触发 34 处 UP 规则改写（typing 现代化），
-# 与「停止支持 3.10」无关，单独开 PR 处理以保持改动可审查
-target-version = "py310"
+target-version = "py311"
 line-length = 100
 exclude = [".venv", "dist", "build", "__pycache__", ".git"]
 

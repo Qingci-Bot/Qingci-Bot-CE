@@ -71,7 +71,7 @@ async def start_bot(request: Request):
             await asyncio.wait_for(bot.start(), timeout=_START_TIMEOUT)
             await record_audit("bot_start", "启动 Bot", request)
             return {"message": "Bot 启动成功"}
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Bot 启动超时（>{_START_TIMEOUT}s），执行兜底清理")
             await _cleanup_after_timeout(bot)
             raise HTTPException(
@@ -96,7 +96,7 @@ async def stop_bot(request: Request):
             await asyncio.wait_for(bot.stop(), timeout=_STOP_TIMEOUT)
             await record_audit("bot_stop", "停止 Bot", request)
             return {"message": "Bot 停止成功"}
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Bot 停止超时（>{_STOP_TIMEOUT}s），执行兜底清理")
             await _cleanup_after_timeout(bot)
             raise HTTPException(
@@ -120,7 +120,7 @@ async def restart_bot(request: Request):
             if bot.is_running:
                 try:
                     await asyncio.wait_for(bot.stop(), timeout=_STOP_TIMEOUT)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.error(f"重启时 Bot 停止超时（>{_STOP_TIMEOUT}s），执行兜底清理")
                     await _cleanup_after_timeout(bot)
                     raise HTTPException(
@@ -130,7 +130,7 @@ async def restart_bot(request: Request):
                 stopped = True
             try:
                 await asyncio.wait_for(bot.start(), timeout=_START_TIMEOUT)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error(f"重启时 Bot 启动超时（>{_START_TIMEOUT}s），执行兜底清理")
                 await _cleanup_after_timeout(bot)
                 detail = (

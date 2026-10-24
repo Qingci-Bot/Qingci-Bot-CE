@@ -195,7 +195,7 @@ class TestDataRetention:
         from bot.db.engine import session_scope
         from bot.db.models import AuditLog, Message, SessionHistory, UsageLog
 
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         old = now - datetime.timedelta(days=30)
         recent = now - datetime.timedelta(days=1)
 

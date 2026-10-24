@@ -298,7 +298,7 @@ def create_app() -> FastAPI:
                 try:
                     await asyncio.wait_for(ws.receive_text(), timeout=60)
                     last_recv = time.monotonic()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # 60 秒无消息，发送 ping 再等 30 秒
                     if time.monotonic() - last_recv > 90:
                         # 超过 90 秒无任何消息，断开
@@ -403,7 +403,7 @@ def create_app() -> FastAPI:
             while True:
                 try:
                     payload = await asyncio.wait_for(client_queue.get(), timeout=30)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # 30 秒无日志，发送 ping 保活；客户端断开后连接池会自动回收
                     try:
                         await ws.send_json({"type": "ping"})

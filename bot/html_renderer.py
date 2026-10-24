@@ -193,7 +193,7 @@ class HtmlRenderer:
                 ),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # 超时取消可能让浏览器处于不稳定状态，关闭后下次自动重建
             logger.warning(f"HTML 渲染超时（>{timeout}s），将重建浏览器实例")
             await self.close()
