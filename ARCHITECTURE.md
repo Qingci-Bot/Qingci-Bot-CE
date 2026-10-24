@@ -187,8 +187,9 @@ Qingci-Bot-CE/
 │   └── assets/
 │       └── app-icon.ico       # 应用图标（Python exe 图标 + Electron 窗口/exe 图标）
 ├── scripts/                   # 运维/构建辅助脚本
-│   ├── bump_version.py        # 版本号统一升级（pyproject/bot/__init__/web/package*）
+│   ├── bump_version.py        # 版本号统一升级（pyproject/bot/__init__/web/package*/desktop/electron/package*）
 │   ├── verify_migrations.py   # 迁移与模型漂移校验（CI 使用）
+│   ├── pack_backend.py        # 后端 onedir → 单 zip（安装包只写 1 个大文件，首启解压）
 │   └── migrate_sqlite_to_pg.py # SQLite → PostgreSQL 数据迁移
 ├── tests/                     # pytest 测试（按 test_<模块>.py 命名；plugin_pkg/ 为测试插件包）
 │   └── plugin_pkg/            # 测试用插件（dep/di/p1/p2/sdk_llm_tool/subcmd_runtime 等）
@@ -200,7 +201,7 @@ Qingci-Bot-CE/
 
 | 层     | 技术                                                                                                                                         |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 后端    | Python 3.12 + FastAPI + uvicorn                                                                                                            |
+| 后端    | Python 3.11+（推荐 3.12）+ FastAPI + uvicorn                                                                                                            |
 | 平台接入  | 内核统一 OneBot 12 事件模型；输入含 OneBot 11（aiocqhttp 反向 WS，v11\_compat 翻译层）+ OneBot 12（原生反向 WS，事件直通）+ Telegram（Bot API 长轮询），统一 `PlatformAdapter` 契约 |
 | LLM   | litellm (统一接口，延迟导入加速启动)                                                                                                                    |
 | MCP   | mcp (Model Context Protocol，stdio/HTTP)                                                                                                    |
@@ -461,12 +462,14 @@ alembic upgrade head
 
 ### 协议端断连恢复
 
-Qingci-Bot CE 启动后会自动监测协议端（OneBot 11 客户端）的 WebSocket 连接状态。若协议端异常退出或重启：
+Qingci-Bot CE 在 OneBot 11 / OneBot 12 两种接入方式下都是**反向 WebSocket 的服务端**：连接由协议端发起，断连后的重连也由协议端驱动，本项目不主动发起重连，只负责监测状态与恢复收发：
 
-- **自动重连**：检测到断连后，以指数退避策略（初始 1s，上限 60s）自动尝试重连，无需手动干预
+- **断连检测**：WebSocket 断开即触发 `on_disconnect` 回调，`/api/bot/status` 与 Web UI 侧边栏同步显示「未连接」
 
-- **优雅降级**：断连期间 Web UI 与 API 服务正常可用，Bot 状态显示为"未连接"
+- **优雅降级**：断连期间 Web UI 与 API 服务正常可用，已加载插件与配置保持不变
 
-- **重连成功**：自动恢复消息收发，已加载插件与配置保持不变
+- **重连恢复**：协议端重新连入时触发 `on_reconnect` / `on_connect`（插件级 `on_bot_connect`），自动恢复消息收发
 
-断连监控与重连回调内置于 `bot/core/platforms/onebot11.py`，无需额外配置。
+- **主动重连（仅 Telegram）**：Telegram 是长轮询客户端角色，失败时由本项目按指数退避重试（起始 1.5s，上限 60s，连续失败累加、成功即复位）
+
+断连监控与重连回调内置于 `bot/core/platforms/onebot11.py` / `onebot12.py` / `telegram.py`，无需额外配置。

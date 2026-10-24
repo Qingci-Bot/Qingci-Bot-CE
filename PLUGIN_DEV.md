@@ -106,7 +106,7 @@ Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，�
 
 ### 两种插件形态（内置 vs 独立 SDK）
 
-插件协议层（`PluginBase`/`Matcher`/`Permission`/`Rule`/`MessageContext`）统一由独立插件 SDK 维护，主项目 `bot/plugin/{base,matcher,permission,rule,ratelimit}.py` 为薄转发。两种插件形态的基类是**同一个类**，只是导入入口不同：
+插件协议层（`PluginBase`/`Matcher`/`Permission`/`Rule`/`MessageContext`）统一由独立插件 SDK 维护：`bot/plugin/protocol/*.py` 为薄转发，`bot/plugin/{base,matcher,permission,rule,ratelimit,session,events}.py` 为兼容再导出。两种插件形态的基类是**同一个类**，只是导入入口不同：
 
 | 形态           | 基类导入                                       | 适用场景                    |
 | ------------ | ------------------------------------------ | ----------------------- |
@@ -197,7 +197,7 @@ plugin.enabled  # bool，向后兼容：LOADING/LOADED 为 True
 
 ### 依赖注入容器（DI Container）
 
-框架内置轻量级 DI 容器 `bot.di`，按类型自动注入服务。插件只需声明类型注解即可：
+框架内置轻量级 DI 容器 `bot.core.di`，按类型自动注入服务。插件只需声明类型注解即可：
 
 ```python
 from bot.core.session_state import SessionStateManager
@@ -1129,7 +1129,7 @@ class WelcomePlugin(PluginBase):
         await self.connection.send_group_msg(event.group_id, msg.as_dicts())
 ```
 
-> 通知事件统一由 SDK 类型化（`GroupIncreaseNotice` 等，`typedef 事件` handler 参数注入即自动填充）。框架内核为 OneBot 12 事件模型，但 `send_group_msg`/`send_private_msg` 等便捷发送仍接受 v12 段数组并自动转为平台 CQ 码，插件无需关心 v11/v12 差异。
+> 通知事件统一由 SDK 类型化（`GroupIncreaseNotice` 等）：handler 声明对应事件的类型注解即自动注入，无需手写 `notice_type` / `detail_type` 判断。框架内核为 OneBot 12 事件模型，但 `send_group_msg`/`send_private_msg` 等便捷发送仍接受 v12 段数组并自动转为平台 CQ 码，插件无需关心 v11/v12 差异。
 
 ### 示例五：旧式 on\_message（向后兼容，已弃用）
 
@@ -1352,7 +1352,7 @@ async def on_edited(ctx: MatcherContext, event: MessageEditedEvent) -> str | Non
     return f"你刚刚把消息改成了：{event.alt_message}"
 ```
 
-**跨协议动作与能力约定**（详见《跨协议一致性审查报告-OneBot11-12-Telegram-2026-08-22.md》）：
+**跨协议动作与能力约定**：
 
 - **发消息一律用** **`send_msg`（或** **`ctx.send`）**，不要用裸 `call_api("send_private_msg" / "send_message")` 动作名——三端动作命名空间不同（OB11 无 `send_message`、OB12 无 `send_private_msg`、Telegram 透传的是 camelCase 方法名），没有跨端通用的动作名。`send_msg` 是唯一跨平台安全的发送入口。
 
@@ -1539,8 +1539,8 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 
 | 方法   | 路径               | 鉴权 | 说明                                                  |
 | ---- | ---------------- | -- | --------------------------------------------------- |
-| GET  | \`\`             | 是  | 获取完整配置（敏感字段脱敏为 `***`）                               |
-| PUT  | \`\`             | 是  | 更新配置（深度合并，`***` 占位符自动过滤）                            |
+| GET  | `/`              | 是  | 获取完整配置（敏感字段脱敏为 `***`）                               |
+| PUT  | `/`              | 是  | 更新配置（深度合并，`***` 占位符自动过滤）                            |
 | GET  | `/bot`           | 是  | 获取 Bot 配置                                           |
 | PUT  | `/bot`           | 是  | 更新 Bot 配置                                           |
 | GET  | `/llm`           | 是  | 获取 LLM 配置                                           |
@@ -1557,7 +1557,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 
 | 方法     | 路径                   | 鉴权 | 说明                                                                                                         |
 | ------ | -------------------- | -- | ---------------------------------------------------------------------------------------------------------- |
-| GET    | \`\`                 | 是  | 获取插件列表（含状态、分类、Web 管理页面入口）                                                                                  |
+| GET    | `/`                  | 是  | 获取插件列表（含状态、分类、Web 管理页面入口）                                                                                  |
 | GET    | `/{name}`            | 是  | 获取插件详情                                                                                                     |
 | POST   | `/{name}/reload`     | 是  | 重载插件                                                                                                       |
 | POST   | `/load`              | 是  | 加载外部插件（仅允许 `plugins.*` / `bot.plugin.builtin.*` 白名单前缀）                                                     |
@@ -1573,7 +1573,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 
 | 方法   | 路径         | 鉴权 | 说明                         |
 | ---- | ---------- | -- | -------------------------- |
-| GET  | \`\`       | 是  | 拉取市场索引（含缓存 TTL）            |
+| GET  | `/`        | 是  | 拉取市场索引（含缓存 TTL）            |
 | GET  | `/info`    | 是  | 市场源信息（url / mirror / 更新时间） |
 | POST | `/install` | 是  | 安装市场插件（按 `name`）           |
 | POST | `/update`  | 是  | 更新已安装插件                    |
@@ -1634,8 +1634,8 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 
 | 方法     | 路径              | 鉴权 | 说明                            |
 | ------ | --------------- | -- | ----------------------------- |
-| GET    | \`\`            | 是  | 实例列表（含端口、主平台、数据占用）            |
-| POST   | \`\`            | 是  | 创建实例（指定名称与主平台）                |
+| GET    | `/`             | 是  | 实例列表（含端口、主平台、数据占用）            |
+| POST   | `/`             | 是  | 创建实例（指定名称与主平台）                |
 | DELETE | `/{name}`       | 是  | 删除实例                          |
 | PUT    | `/{name}`       | 是  | 重命名实例（同步重命名目录与 instance.json） |
 | POST   | `/{name}/start` | 是  | 切换/启动到指定实例（跨进程重启）             |
@@ -1696,7 +1696,7 @@ dist\qingci-bot-ce\
 
 ### 注意事项
 
-- 实例目录 `instances\` 按 **exe 所在目录** 相对定位（`app_root`）：分发时整个 `dist\qingci-bot-ce\` 目录一起拷贝，勿单独移动 exe。
+- 直接命令行运行 onedir 时，实例目录 `instances\` 按 **exe 所在目录** 相对定位（`app_root`）：分发时整个 `dist\qingci-bot-ce\` 目录一起拷贝，勿单独移动 exe。若设置了环境变量 `QINGCI_DATA_HOME`，则以该目录为准（Electron 壳拉起后端时正是这样把数据指向安装时选定的目录）。
 
 - 首次运行自动创建 `instances\default\` 实例并生成默认 `config.yaml`；数据库自动建表（SQLModel create\_all）。
 
@@ -1713,36 +1713,37 @@ dist\qingci-bot-ce\
 ```powershell
 # 先决条件
 #  1) 已执行 .\build.bat，产物位于 dist\qingci-bot-ce\（后端 onedir）
-#  2) Node.js 18+ 与 npm 可用
+#  2) Node.js 22+ 与 npm 可用（Electron 44 要求 Node ≥22.12）
 .\build-electron.bat
 ```
 
-- 产物：`dist\electron\Qingci-Bot-CE-<version>-win-x64.exe`（electron-builder portable，内嵌后端为 `resources\backend`，Playwright Chromium 随其一并内置）。
+- 产物（`dist\electron\`）：`Qingci-Bot-CE-<version>-Setup-x64.exe`（NSIS 安装向导，可选安装目录与数据目录）与 `Qingci-Bot CE-<version>-win-x64.zip`（绿色解压版，无向导）；后端以单个 `backend.zip` 放在 `resources\`，Playwright Chromium 随其一并内置。
 
 ```powershell
-.\dist\electron\Qingci-Bot-CE-<version>-win-x64.exe   # 启动桌面壳
+.\dist\electron\Qingci-Bot-CE-<version>-Setup-x64.exe   # 安装版
+# 绿色解压版：解压 zip 后运行其中的 Qingci-Bot CE.exe
 ```
 
 - **运行方式**：双击桌面 EXE（安装版或绿色解压版）即由 Electron 壳启动——先解析当前实例 → spawn 内嵌 Python 后端（`--backend`）→ 就绪后加载 Web UI；系统托盘、按 data-dir 的单实例锁与聚焦、启动画面、关闭驻留后台全部由壳承担。
 
-- **数据位置**：安装版/绿色解压版均随可执行目录自包含分发——实例与数据统一落在 EXE 旁的 `instances\<name>\`（DB/日志/插件数据），便于整体拷贝迁移。绿色解压版请放到固定目录后运行，勿直接解压到系统临时目录，以免数据随临时目录清理而丢失。
+- **数据位置**：**数据不在安装目录内**。安装向导有一步「选择数据目录」（默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`），选择结果记在注册表 `HKCU\Software\Qingci-Bot CE` 与 `%APPDATA%\Qingci-Bot CE\datadir.txt`；`instances\<name>\` 与后端解压产物 `backend\<版本>\` 都落在该目录下。绿色解压版没有向导，直接使用默认目录（存在 `datadir.txt` 时以它为准）。升级与卸载只清理安装目录，不会触碰数据；旧版本放在 EXE 旁 `instances/` 的数据首次启动会自动迁移。
 
-- **调试**：壳主进程日志随实例数据写 `instances\<name>\data\logs\electron.log`；后端超时（默认 90s 未就绪）会展示错误页并可重试/查看日志。
+- **调试**：壳主进程日志写到该实例的数据目录（`<数据目录>\instances\<name>\data\logs\electron.log`）；后端超时（默认 90s 未就绪）会展示错误页并可重试/查看日志。
 
 ### 桌面壳（Linux AppImage）打包
 
 Linux 与 Windows 同源：先用 `build-linux.sh` 产出后端 onedir（`build.bat` 的对应脚本，产出 `dist/qingci-bot-ce/`），再经 electron-builder 打 AppImage。
 
 ```bash
-# 先决条件：.venv + [build] 依赖、Node.js 18+ 与 npm
+# 先决条件：.venv + [build] 依赖、Node.js 22+ 与 npm（Electron 44 要求 Node ≥22.12）
 ./build-linux.sh
 cd desktop/electron && npm ci && npx electron-builder --linux --publish never
 ```
 
-- 产物：`dist/electron/Qingci-Bot-CE-<version>-linux-x64.AppImage`（内嵌后端为 `resources/backend`）。
+- 产物：`dist/electron/Qingci-Bot-CE-<version>-linux-x64.AppImage`（内嵌后端为 `resources/backend.zip`）。
 - 运行：双击/`./Qingci-Bot-CE-<version>-linux-x64.AppImage` 即由 Electron 壳启动（需系统具备 FUSE/libfuse2）。
-- 数据位置：随可执行目录自包含分发，与 Windows 一致落于程序目录 `instances\` 下。
-- 注意：海外 CI 构建时 SDK 走 Gitee 源会被限流（429），`build-linux.sh` 支持用环境变量 `QINGCI_SDK_GIT_URL` 覆盖为 GitHub 主仓库（release 流水线已注入）。
+- 数据位置：AppImage 没有安装向导，数据回退到可执行目录旁（`instances/`），可用环境变量 `QINGCI_DATA_HOME` 指到可写卷。
+- 注意：SDK 经私有索引安装，`build-linux.sh` 支持用环境变量 `QINGCI_SDK_INDEX_URL` 覆盖索引地址（内网镜像 / 离线环境）。
 
 ### 自动发布（GitHub Actions）
 

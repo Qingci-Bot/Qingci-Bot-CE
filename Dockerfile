@@ -7,19 +7,19 @@
 #
 # 说明：
 #   - 容器内只跑 Headless 后端（Bot + WebUI/API），不启用桌面 GUI 与启动画面。
-#   - qingci-plugin-sdk 是 git 依赖，安装需 git。
+#   - qingci-plugin-sdk 经私有 PyPI 索引分发（构建期需能访问该索引）。
 #   - 首次启动会在实例目录自动生成默认 config.yaml（onebot.host=127.0.0.1）。
 #     若要外部 OneBot 前端（NapCat/LLBot 等）连入，请把该文件 onebot.host 改为 0.0.0.0。
 
 # ── 构建阶段：只负责安装 Python 依赖 ──
 FROM python:3.12-slim AS builder
 
-# git：qingci-plugin-sdk 为 git 依赖；build-essential：兜底无预编译 wheel 的依赖
+# build-essential：兜底无预编译 wheel 的依赖；git 保留（依赖或插件可能从 git 源拉取）
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# uv：依赖解析与安装明显快于 pip（本项目 16 个直接依赖 + git 依赖）。
+# uv：依赖解析与安装明显快于 pip（本项目 16 个直接依赖 + 私有索引上的 SDK）。
 # 只装进 builder 阶段，运行镜像不含 uv。--prefix 布局与 pip 完全一致，
 # 因此运行阶段仍整体拷贝 /install，镜像结构不变。
 RUN pip install --no-cache-dir uv==0.12.3

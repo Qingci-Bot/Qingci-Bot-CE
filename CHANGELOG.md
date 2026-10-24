@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **移除审计中的 CVE 豁免**：3.10 分支取消后，`filelock` 在全部 Python 版本上都解析到 4.2.4，此前为 3.10 加的 3 条 `--ignore-vuln` 已删除，审计恢复为「零豁免」
 
+- **ruff `target-version` 升到 `py311`**：3.10 支持移除后 `target-version` 仍是 `py310` 的遗留值。升上去触发 34 处 UP 规则改写，均为等价替换、无运行时行为变化：`datetime.timezone.utc` → `datetime.UTC`（18 处）、`asyncio.TimeoutError` → 内置 `TimeoutError`（16 处，3.11 起两者是同一对象）、`ServiceLifetime(str, Enum)` → `ServiceLifetime(StrEnum)`（1 处，全项目只用成员比较与 `.value`，不依赖 `str()` 表示）
+
+### Docs
+
+- **文档审计修正**：统一修正过时表述——README 的 SDK 版本（1.13.9 → 1.15.0）、`install.sh` 解释器要求（3.10 → 3.11）、DeepSeek 示例模型（已停用的 `deepseek-chat` → `deepseek-flash`）、缺失的 `QINGCI_DATA_HOME` 环境变量与 `llm.multimodal` 配置项；SECURITY 的支持版本表（1.16/1.15 → 1.19/1.18）与报告渠道；CODING_STANDARDS 的 `target-version`；PROJECT_STRUCTURE / Dockerfile 中残留的「SDK 是 git 依赖」；PLUGIN_DEV 的桌面打包产物（`portable` → NSIS 安装版 + 绿色 zip）、数据目录位置（不再在安装目录内）、`QINGCI_SDK_GIT_URL`（→ `QINGCI_SDK_INDEX_URL`）与 4 处表格转义反引号
+- **ARCHITECTURE 修正断连恢复描述**：原文称 OneBot 11 断连后由本项目「指数退避自动重连」，实际反向 WebSocket 里本项目是服务端、重连由协议端驱动；指数退避（1.5s → 60s）是 Telegram 长轮询客户端的行为，已分别说明
+
 ## \[1.18.12] - 2026-10-24（数据目录收口：不再散落在 AppData）
 
 ### Fixed
