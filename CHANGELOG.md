@@ -5,7 +5,11 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## \[1.18.12] - 2026-10-24（数据目录收口：不再散落在 AppData）
+## \[1.18.12] - 2026-10-24（数据目录收口；停止支持 Python 3.10）
+
+### Changed
+
+- **停止支持 Python 3.10**：`requires-python` 改为 `>=3.11`，CI 兼容矩阵去掉 3.10，`install.sh` 的解释器发现列表不再尝试 `python3.10`。原因是 `filelock` 的修复版（4.2.1，含 3 个 CVE 的修复）要求 Python ≥3.11——3.10 上没有任何可用修复，只能带着已知漏洞运行。3.11 与 3.12 继续支持
 
 ### Fixed
 
@@ -14,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ② 后端解压产物（数百 MB）改到数据目录下的 `backend/<版本>/`；
   ③ 启动时清理旧版遗留在 `%APPDATA%\qingci-bot-ce-desktopackend` 的解压目录（可重建，释放空间），其余内容不动以免误删
 
-- **`filelock` 升级到 4.2.4（3.32.2 存在 3 个 CVE）**：修复版 4.2.1 要求 Python ≥3.11，而项目仍支持 3.10，该分支只能装到仍有漏洞的 4.1.0。已在 CI 审计中显式豁免这 3 个 CVE 并注明原因——属「无修复可用」，移除 3.10 支持后应删除豁免
+- **`filelock` 3.32.2 → 4.2.4（3 个 CVE）**：修复版 4.2.1 要求 Python ≥3.11；配合下面的 3.10 支持移除，现在全部分支都解析到 4.2.4，无需任何豁免
 
 ## \[1.18.11] - 2026-10-23（修复安装向导与安装包构建）
 

@@ -49,12 +49,12 @@ for c in git python3; do
 done
 
 PY=
-for py in python3.13 python3.12 python3.11 python3.10 python3; do
+for py in python3.13 python3.12 python3.11 python3; do
   if command -v "$py" >/dev/null 2>&1 && "$py" -c 'import sys; exit(0 if sys.version_info >= (3,10) else 1)' 2>/dev/null; then
     PY="$py"; break
   fi
 done
-[ -n "$PY" ] || { echo "需要 Python >= 3.10，未找到可用解释器" >&2; exit 1; }
+[ -n "$PY" ] || { echo "需要 Python >= 3.11，未找到可用解释器" >&2; exit 1; }
 echo "使用 Python: $PY（$("$PY" --version)）"
 
 # ── 系统依赖安装（可选，需 root）───────────────────────────

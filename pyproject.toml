@@ -2,7 +2,7 @@
 name = "qingci-bot-ce"
 version = "1.18.12"
 description = "多平台机器人框架（OneBot 11 / OneBot 12 / Telegram），支持 LLM 对话、Web UI 和 Desktop UI"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
 dependencies = [
     # 独立插件 SDK：协议层（PluginBase/Matcher/Permission/Rule/MessageContext）唯一来源，
@@ -72,6 +72,8 @@ testpaths = ["tests"]
 addopts = ["--cov=bot", "--cov=api", "--cov-report=term-missing", "--cov-fail-under=50"]
 
 [tool.ruff]
+# 暂留 py310：升到 py311 会触发 34 处 UP 规则改写（typing 现代化），
+# 与「停止支持 3.10」无关，单独开 PR 处理以保持改动可审查
 target-version = "py310"
 line-length = 100
 exclude = [".venv", "dist", "build", "__pycache__", ".git"]
@@ -113,7 +115,8 @@ qingci-plugin-sdk = { index = "qingci" }
 
 [tool.mypy]
 # 有意按 3.12 检查（与推荐运行版本一致，见 CHANGELOG）：
-# requires-python 仍声明 >=3.10 以兼容旧解释器，但类型检查采用更严格/更新的标准
+# requires-python 声明 >=3.11（3.10 已停止支持：filelock 等依赖的修复版要求 3.11+），
+# 类型检查按 3.12 标准
 python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true

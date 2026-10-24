@@ -4,7 +4,7 @@ name: CI
 # 1) push 只跑 main —— 此前 branches: ["**"] 会让 Dependabot 分支既跑 push
 #    又跑 pull_request，同一提交触发两遍完整流水线（12 个 PR → 24 次运行）
 # 2) paths 只覆盖 Python 侧 —— Web / 桌面壳改动由 ci-web.yml / ci-desktop.yml
-#    负责，不再连带跑 docker build、install.sh 冒烟与 3.10/3.11 矩阵
+#    负责，不再连带跑 docker build、install.sh 冒烟与 3.11 矩阵
 on:
   push:
     branches: ["main"]
@@ -113,9 +113,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # requires-python 声明 >=3.10，但此前只在 3.12 上验证：
+        # requires-python 声明 >=3.11，但此前只在 3.12 上验证：
         # 一旦引入 3.11/3.12 专属语法或 API，CI 全绿而低版本用户直接崩。
-        python: ["3.10", "3.11"]
+        python: ["3.11"]
     steps:
       - uses: actions/checkout@v7
 
@@ -163,10 +163,7 @@ jobs:
         run: |
           uv pip install --python .venv pip-audit
           uv export --no-emit-project --format requirements-txt --no-hashes             | grep -v '^qingci-plugin-sdk' > /tmp/audit-reqs.txt
-          # filelock：修复版 4.2.1 要求 Python >=3.11，而本项目仍支持 3.10，
-          # 该分支只能装到仍有漏洞的 4.1.0（4.2.4 已用于 >=3.11 分支）。
-          # 属「无修复可用」而非「忘记升」，故显式忽略并在移除 3.10 支持后删除。
-          uv run --no-sync pip-audit -r /tmp/audit-reqs.txt             --ignore-vuln CVE-2026-112940             --ignore-vuln CVE-2026-112913             --ignore-vuln CVE-2026-112907
+          uv run --no-sync pip-audit -r /tmp/audit-reqs.txt
 
   docker:
     name: Docker build & smoke run
