@@ -316,7 +316,7 @@ bot:
 | `on_startup()`        | Bot 启动完成、所有插件加载完毕后                 | 连接数据库、注册后台任务等耗时初始化     |
 | `on_shutdown()`       | Bot 停止时（在 `on_unload` 之前）          | 释放 `on_startup` 中申请的资源 |
 | `on_bot_connect()`    | 有 OneBot 11 会话（协议端）连接到反向 WebSocket | 初始连接与重连均触发，用于初始化会话资源   |
-| `on_metaevent(event)` | 元事件到达（heartbeat / lifecycle 等）     | 返回 `True` 表示已消费        |
+| `on_metaevent(event)` | 元事件到达（heartbeat / lifecycle 等）     | 旁路通知，每个插件都会收到；返回值被忽略 |
 
 ```python
 class MyPlugin(PluginBase):
@@ -1324,6 +1324,7 @@ v11_segments = segments_to_v11(ctx.segments)
 | 平台特有扩展事件     | 无                       | `message_edited` / `callback_query` / `message_reaction`（用 `on_notice()` 消费） |
 | 群聊触发         | 默认直接响应                  | 需 `@Bot` 提及（at 触发模式），私聊天然放行                                                  |
 | 媒体段映射        | `face`/`record` 等 QQ 段  | `photo→image`、`voice→voice`、`video→video`                                    |
+| 图片交给大模型     | `get_image` 直接返回 URL | 适配器把 `get_image`/`get_file` 映射为 Telegram `getFile`，下载后以 base64 交给 `resolve_images`；**超过 Bot API 20 MB 下载上限的文件取不到**（跳过该图） |
 | 回调按钮         | 无                       | `callback_query` 需 `call_api("answer_callback_query")` 应答                    |
 | 发送者字段        | `nickname`/`card`       | `first_name`/`username`                                                      |
 

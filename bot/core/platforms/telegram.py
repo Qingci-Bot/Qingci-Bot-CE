@@ -53,6 +53,12 @@ logger = logging.getLogger("qingci-bot.platforms.telegram")
 # Telegram Bot API 基础地址
 API_BASE = "https://api.telegram.org/bot{token}/{method}"
 
+# 文件下载地址（getFile 返回 file_path 后按此拼接）
+FILE_BASE = "https://api.telegram.org/file/bot{token}/{file_path}"
+
+# Bot API 单文件下载上限 20 MB：超限时 getFile 不返回 file_path
+MAX_FILE_BYTES = 20 * 1024 * 1024
+
 # 长轮询超时（秒）：超过则 Telegram 侧保持连接等待新消息
 POLL_TIMEOUT = 30
 # 单次轮询最大更新数
@@ -939,6 +945,41 @@ class TelegramAdapter(PlatformAdapter):
 
     # ============ 能力透传 ============
 
+    async def _fetch_file_ref(self, params: dict) -> dict:
+        """把 OneBot 的 get_image / get_file 映射为 Telegram getFile
+
+        返回 ``{"file_id": ..., "base64": ...}``，交给 SDK 的 media 模块编码成
+        data URI。**刻意不返回带 token 的下载 URL**——``api.telegram.org/file/bot<token>/...``
+        一旦作为图片地址交给模型服务商，Bot Token 就等于泄露给第三方及其访问日志。
+
+        下载失败、超限或 Telegram 未返回 file_path（文件 > 20 MB）时返回空 dict，
+        由 media 跳过该图，不影响其余图片与整条消息。
+        """
+        file_id = str(params.get("file_id") or params.get("file") or "").strip()
+        if not file_id:
+            return {}
+
+        info = await self._api("getFile", file_id=file_id)
+        file_path = str((info or {}).get("file_path") or "")
+        if not file_path:
+            logger.warning(
+                f"Telegram getFile 未返回 file_path（file_id={file_id}），"
+                f"可能超过 {MAX_FILE_BYTES // (1024 * 1024)}MB 下载上限"
+            )
+            return {}
+
+        url = FILE_BASE.format(token=self.token, file_path=file_path)
+        resp = await self._client().get(url)
+        resp.raise_for_status()
+        data = resp.content
+        if not data:
+            logger.warning(f"Telegram 文件下载为空（file_id={file_id}）")
+            return {}
+        if len(data) > MAX_FILE_BYTES:
+            logger.warning(f"Telegram 文件过大已跳过（file_id={file_id}，{len(data)} 字节）")
+            return {}
+        return {"file_id": file_id, "base64": base64.b64encode(data).decode("ascii")}
+
     async def call_api(self, action: str, params: dict | None = None, timeout: float = 30) -> dict:
         """映射 OneBot action → Telegram 方法；其余透传为 Telegram 方法名"""
         params = params or {}
@@ -960,6 +1001,12 @@ class TelegramAdapter(PlatformAdapter):
         elif action == "get_group_info":
             # Telegram 无群资料 API，返回最小兼容结构
             return {"group_id": self._safe_int(params.get("group_id")), "group_name": "Telegram 群"}
+        elif action in ("get_image", "get_file"):
+            # 多模态：SDK 的 media.resolve_image 对不透明 file_id 会依次尝试
+            # get_image（v11 名）/ get_file（v12 名）。Telegram 没有这两个方法，
+            # 不补映射就会被下面 else 透传成 Telegram 方法名而 404，表现为
+            # 「Telegram 开了多模态也拿不到图」。
+            return await self._fetch_file_ref(params)
         elif action.startswith(_UNSUPPORTED_OB_ACTION_PREFIXES):
             # Telegram 无群管/成员能力：明确报错而非透传成小写方法名（会 404）
             raise NotImplementedError(f"Telegram 不支持 OneBot 动作: {action}")

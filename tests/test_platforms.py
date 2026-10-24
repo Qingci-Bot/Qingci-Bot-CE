@@ -11,6 +11,7 @@
 """
 
 import asyncio
+import base64
 import json
 from types import SimpleNamespace
 
@@ -288,6 +289,96 @@ async def test_call_api_rejects_unsupported_onebot_actions(adapter, monkeypatch)
     ):
         with pytest.raises(NotImplementedError, match=action):
             await adapter.call_api(action, {})
+
+
+# ---------- 多模态：get_image / get_file 映射 ----------
+
+
+def _install_mock_http(adapter, content: bytes) -> dict:
+    """把适配器的 HTTP 客户端换成 MockTransport，返回记录到的请求信息"""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(200, content=content)
+
+    adapter._http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return seen
+
+
+@pytest.mark.parametrize("action", ["get_file", "get_image"])
+async def test_call_api_maps_file_actions_to_getfile(adapter, monkeypatch, action):
+    """get_file（v12 名）与 get_image（v11 名）都要映射到 Telegram getFile
+
+    SDK 的 media.resolve_image 靠这两个动作把不透明 file_id 换成可读地址；
+    缺映射时会透传成 Telegram 方法名而 404，表现为「Telegram 开了多模态也拿不到图」。
+    """
+    calls = {}
+
+    async def fake_api(method, **params):
+        calls["method"] = method
+        calls["params"] = params
+        return {"file_id": "abc", "file_path": "photos/file_1.jpg"}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    seen = _install_mock_http(adapter, b"\x89PNG\r\n\x1a\nxxxx")
+    try:
+        out = await adapter.call_api(action, {"file_id": "abc"})
+    finally:
+        await adapter._http.aclose()
+
+    assert calls["method"] == "getFile"
+    assert calls["params"] == {"file_id": "abc"}
+    assert seen["url"] == "https://api.telegram.org/file/bottest:token/photos/file_1.jpg"
+    assert base64.b64decode(out["base64"]).startswith(b"\x89PNG")
+
+
+async def test_call_api_file_ref_never_leaks_token(adapter, monkeypatch):
+    """返回值里不能出现带 token 的下载 URL——那会把 Bot Token 交给模型服务商"""
+
+    async def fake_api(method, **params):
+        return {"file_path": "photos/a.jpg"}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    _install_mock_http(adapter, b"\x89PNG\r\n\x1a\nxxxx")
+    try:
+        out = await adapter.call_api("get_file", {"file_id": "abc"})
+    finally:
+        await adapter._http.aclose()
+
+    assert "test:token" not in json.dumps(out)
+    assert "api.telegram.org" not in json.dumps(out)
+
+
+async def test_call_api_file_ref_without_file_path(adapter, monkeypatch):
+    """Telegram 未返回 file_path（文件 > 20 MB）时返回空 dict，由 media 跳过"""
+
+    async def fake_api(method, **params):
+        return {"file_id": "big"}  # 大文件不带 file_path
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    assert await adapter.call_api("get_file", {"file_id": "big"}) == {}
+
+
+async def test_resolve_images_works_on_telegram(adapter, monkeypatch):
+    """端到端：SDK 的 resolve_images 在 Telegram 上能拿到 data URI
+
+    这是本映射存在的理由——此前 resolve_images 恒返回 []，模型只看到文字。
+    """
+    from qingci_plugin_sdk import resolve_images
+
+    async def fake_api(method, **params):
+        return {"file_path": "photos/b.png"}
+
+    monkeypatch.setattr(adapter, "_api", fake_api)
+    _install_mock_http(adapter, b"\x89PNG\r\n\x1a\n" + b"x" * 16)
+    try:
+        urls = await resolve_images(adapter, ["file-id-1"])
+    finally:
+        await adapter._http.aclose()
+
+    assert len(urls) == 1
+    assert urls[0].startswith("data:image/png;base64,")
 
 
 async def test_send_msg_reply_with_non_numeric_id_ignored(adapter, monkeypatch):
