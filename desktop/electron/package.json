@@ -73,12 +73,12 @@
   },
   "devDependencies": {
     "electron": "^44.9.1",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.18.0"
   },
   "allowScripts": {
     "electron": true
   },
   "dependencies": {
-    "adm-zip": "^0.5.16"
+    "adm-zip": "^0.6.1"
   }
 }
