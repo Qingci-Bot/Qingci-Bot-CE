@@ -53,7 +53,7 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
 插件协议层（`PluginBase`/`Matcher`/`MatcherContext`/`Permission`/`Rule`/`MessageContext`/`RateLimiter`）的**唯一实现在 `Plugins-SDK`**（`qingci_plugin_sdk` 包）。本仓库约束：
 
 - `bot/plugin/protocol/{base,matcher,permission,rule,ratelimit,session,events,context}.py` **只允许薄转发**（`from qingci_plugin_sdk.xxx import *` + 显式 `__all__`），不得新增协议层实现；`bot/plugin/` 顶层同名文件仅作**兼容再导出**（不新增逻辑）。
-- 修改协议行为（权限语义、匹配规则、基类方法等）必须改 `Plugins-SDK` 仓库，发版上传私有索引后，在主项目提升 `qingci-plugin-sdk==X.Y.Z` 版本号并重新 `uv lock`。
+- 修改协议行为（权限语义、匹配规则、基类方法等）必须改 `Plugins-SDK` 仓库，发版后（Release 上会带 wheel）在主项目更新 `pyproject.toml` 里的 SDK URL 版本并重新 `uv lock`。
 - 主项目可在 `bot/plugin/llm_tool.py` 等保留**运行时专属逻辑**（如注册到 `ToolRegistry`），但协议定义本身不得在本仓库重复。
 
 ### 装配与单例
@@ -98,5 +98,5 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
   `feat:` / `fix:` / `docs:` / `refactor:` / `test:` / `chore:` / `perf:` / `build:`。
 - 分支命名：`feat/xxx`、`fix/xxx`。
 - 大改动同步更新 `CHANGELOG.md`（`[Unreleased]` 段）。
-- 协议层改动在 `Plugins-SDK` 仓库提交后，主项目通过 `pyproject.toml` 的 `qingci-plugin-sdk==X.Y.Z` 提升版本并重新锁定（三处一致：`pyproject.toml` / `build.bat` / `build-linux.sh`），两个仓库的 CHANGELOG 均需记录。
+- 协议层改动在 `Plugins-SDK` 仓库提交后，主项目更新 `pyproject.toml` 中 SDK URL 的 tag 与文件名（两处版本号必须一致）并重新锁定（CI 会校验两者一致且与已安装版本相符），两个仓库的 CHANGELOG 均需记录。
 - 不提交产物与缓存（见 `docs/PROJECT_STRUCTURE.md` 产物归属约定）。

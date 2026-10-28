@@ -51,7 +51,7 @@ python scripts/bump_version.py --check    # 提交前自查各处是否一致（
 > **`uv.lock` 生成约束**：若本机配置了 pip 镜像（`pip.conf` / `~/.config/uv/uv.toml`），
 > 直接 `uv lock` 会把镜像地址写进锁文件，CI（官方源）随即判定锁文件过期而失败。
 > 请始终用 `uv lock --default-index https://pypi.org/simple` 生成；CI 有一道检查会拦截
-> 含非官方索引的锁文件（允许 `pypi.org` 与私有索引 `pypi.luoqingciya.cn`）。
+> 含非官方索引的锁文件（只允许 `pypi.org`；SDK 来自 GitHub Release 直链，不经过索引）。
 >
 > 注意 `uv run` / `uv sync` 也会隐式重解析：当本机默认索引与锁文件里记录的来源不一致时，
 > 它们会按本机镜像重写锁文件的 `source` 与 wheel URL（版本与 hash 不变，只是 URL 全被换掉，
@@ -72,7 +72,7 @@ uv venv
 .venv\Scripts\activate  # Windows
 source .venv/bin/activate  # Linux/macOS
 
-# 安装开发依赖（含插件协议层 SDK，经私有索引自动安装）
+# 安装开发依赖（含插件协议层 SDK，从 GitHub Release 直链下载）
 # 推荐用 uv sync：严格按 uv.lock 安装，与 CI 解析结果完全一致
 uv sync --locked --extra dev
 
@@ -90,7 +90,7 @@ uv run ruff format --check .
 uv run mypy api bot desktop plugins
 ```
 
-> **协议层说明**：`bot/plugin/protocol/{base,context,matcher,permission,rule,ratelimit,session,events}.py` 为 `qingci_plugin_sdk` 薄转发（`bot/plugin/` 顶层同名模块为兼容再导出）。修改权限语义、匹配规则、基类等协议行为时，请前往 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 仓库修改、发版并上传私有索引，再在主项目提升版本号；主项目内只改运行时逻辑（如 `bot/plugin/manager.py`、`bot/plugin/llm_tool.py`）。
+> **协议层说明**：`bot/plugin/protocol/{base,context,matcher,permission,rule,ratelimit,session,events}.py` 为 `qingci_plugin_sdk` 薄转发（`bot/plugin/` 顶层同名模块为兼容再导出）。修改权限语义、匹配规则、基类等协议行为时，请前往 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 仓库修改、发版（GitHub Release 会带 wheel），再在主项目更新 `pyproject.toml` 里的 SDK URL 版本并重新 `uv lock`；主项目内只改运行时逻辑（如 `bot/plugin/manager.py`、`bot/plugin/llm_tool.py`）。
 
 ### 前端
 
@@ -111,7 +111,7 @@ npm run format    # 代码格式化
 # 第一步：Python 后端 onedir（含 Web UI 构建、SDK -e 安装、Playwright 浏览器下载）
 uv pip install -e ".[build]"
 .\build.bat       # Windows
-./build-linux.sh  # Linux（等价脚本；SDK 从私有索引安装，可用 QINGCI_SDK_INDEX_URL 覆盖）
+./build-linux.sh  # Linux（等价脚本；构建前先 uv sync，SDK 随依赖装好）
 
 # 第二步：Electron 桌面壳（需 Node.js 22+/npm；Electron 44 要求 Node ≥22.12；内嵌上一步产出的后端）
 .\build-electron.bat                          # Windows 安装版 Setup.exe + 绿色解压 zip

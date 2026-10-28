@@ -99,9 +99,9 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.bat`/`build-linux.sh` 分别出后端、`build-electron.bat`/`electron-builder --linux` 出 EXE / AppImage，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](.github/workflows/release.yml)。
 >
 > 浏览器缺失或下载失败时渲染能力自动降级不可用（`/api/bot/status` 的 `render` 字段可查状态），不影响框架启动。
-> 插件协议层 SDK（`qingci-plugin-sdk`）经私有索引（`https://pypi.luoqingciya.cn/simple`）随核心依赖安装，版本由 `pyproject.toml` 精确锁定；本地开发时若需对 SDK 改代码，可优先 `uv pip install -e ..\Plugins-SDK`（与 `build.bat` 一致）覆盖索引版本。
+> 插件协议层 SDK（`qingci-plugin-sdk`）以**直接 URL** 依赖随核心依赖安装——指向 SDK 仓库 GitHub Release 上的 wheel（见 `pyproject.toml`），公开可下载、无需令牌或索引配置；版本由 URL 与 `uv.lock` 共同锁定。本地开发时若需对 SDK 改代码，可 `uv pip install -e ..\Plugins-SDK` 覆盖。
 >
-> 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install qingci-plugin-sdk==1.15.0 --index-url https://pypi.luoqingciya.cn/simple` 安装 SDK）：
+> 若跳过 `pyproject.toml`，可手动安装核心依赖（另需 `pip install https://github.com/Qingci-Bot/Plugins-SDK/releases/download/v1.15.1/qingci_plugin_sdk-1.15.1-py3-none-any.whl` 安装 SDK）：
 >
 > ```bash
 > uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiohttp aiosqlite \
@@ -156,7 +156,7 @@ docker compose down         # 停止
 
 - 文件内容与完整说明见 `Dockerfile` / `docker-compose.yml`（`.dockerignore` 排除 venv/产物，实例目录不进镜像）
 
-> 构建依赖 `qingci-plugin-sdk`（私有索引，见 [pyproject.toml](./pyproject.toml) 的 `[[tool.uv.index]]`）需构建期联网；若索引地址变化，可用 `QINGCI_SDK_INDEX_URL` 覆盖（Docker 构建用 `--build-arg SDK_INDEX_URL=...`）。
+> 构建依赖 `qingci-plugin-sdk`（`pyproject.toml` 里的 GitHub Release 直链依赖）需构建期能访问 github.com；离线环境可先把该 wheel 下载到本地并临时改为本地路径。
 
 ### 2.2 Linux 源码部署（一键脚本 install.sh）
 
