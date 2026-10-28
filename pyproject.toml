@@ -35,7 +35,16 @@ dependencies = [
     "packaging>=24.0",
     "pyyaml>=6.0,<7",
     "httpx>=0.28.0,<1",
-    "litellm>=1.50.0,<2",
+    # litellm 上限收紧到 <1.104：1.100.4 起修掉 CVE-2026-114612，
+    # 但 1.104.0 起把 filelock 钉成 `>=3.16.1,<4.0`，会把 filelock 拉回 3.x
+    # ——而 1.19.0 停止支持 Python 3.10 正是为了用上 filelock 4.2.1+ 的 CVE 修复。
+    # 1.103.1 是「已修 litellm CVE 且不限制 filelock」的最后一版。
+    # 待 litellm 放宽该约束后可移除本上限（届时同步 `uv lock` 与 pip-audit）。
+    "litellm>=1.103.1,<1.104",
+    # 显式钉住 filelock 下界：1.19.0 停止支持 Python 3.10 就是为了它（4.2.1 修了 3 个
+    # CVE）。写成直接依赖，防止某个间接依赖把约束放宽成 `<4` 时悄悄降级——litellm
+    # 1.104+ 正是这么干的（`filelock>=3.16.1,<4.0`），解析器会静默退回 3.x。
+    "filelock>=4.2.1,<5",
     "apscheduler>=3.10,<4",
     "mcp>=1.6,<2",
 ]
