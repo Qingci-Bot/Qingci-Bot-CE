@@ -24,7 +24,7 @@ dependencies = [
     # 升级主版本时手动放宽上界并重新 uv lock（Dependabot 会提 PR 提示）。
     "fastapi>=0.115.0,<1",
     "uvicorn[standard]>=0.34.0,<1",
-    "websockets>=14.0,<17",
+    "websockets>=14.0,<18",
     "aiocqhttp>=1.4.4,<2",
     "aiohttp>=3.9.0,<4",
     "aiosqlite>=0.20.0,<1",
