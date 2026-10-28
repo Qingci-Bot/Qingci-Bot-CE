@@ -6,9 +6,18 @@ requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
 dependencies = [
     # 独立插件 SDK：协议层（PluginBase/Matcher/Permission/Rule/MessageContext）唯一来源，
-    # bot/plugin/ 下为薄转发。由私有索引分发（见文末 [[tool.uv.index]] 与 [tool.uv.sources]），
-    # 版本精确锁定保证可复现；SDK 发新版后更新此处版本号并重新 uv lock。
-    "qingci-plugin-sdk==1.15.0",
+    # bot/plugin/ 下为薄转发。
+    #
+    # 以**直接 URL** 依赖，指向 SDK 仓库 GitHub Release 上的 wheel：
+    #   - 公开可下载，CI / Docker / 源码安装都不需要令牌或额外配置
+    #   - 私有制品仓库（pypi.luoqingciya.cn）自 2026-10-28 起不再提供 PEP 503
+    #     `/simple` 索引，且下载需要令牌，无法作为包管理器索引使用；它保留作归档
+    #     与门户展示，安装链路改走 GitHub Release
+    #
+    # 升级 SDK：把下面 URL 里的 tag 与文件名两处版本号一起改（保持一致），
+    # 再 `uv lock --default-index https://pypi.org/simple`。
+    # 可用地址：https://github.com/Qingci-Bot/Plugins-SDK/releases/download/v<版本>/qingci_plugin_sdk-<版本>-py3-none-any.whl
+    "qingci-plugin-sdk @ https://github.com/Qingci-Bot/Plugins-SDK/releases/download/v1.15.1/qingci_plugin_sdk-1.15.1-py3-none-any.whl",
     # 依赖上界策略：核心依赖一律给「下一个主版本」上界。CI/开发由 uv.lock 精确锁定，
     # 上界主要保护「用户按 pyproject 直接 pip install」的场景——litellm / fastapi 等
     # 属于高频 breaking 的包，被动跨主版本升级会直接破坏运行时。
@@ -26,7 +35,16 @@ dependencies = [
     "packaging>=24.0",
     "pyyaml>=6.0,<7",
     "httpx>=0.28.0,<1",
-    "litellm>=1.50.0,<2",
+    # litellm 上限收紧到 <1.104：1.100.4 起修掉 CVE-2026-114612，
+    # 但 1.104.0 起把 filelock 钉成 `>=3.16.1,<4.0`，会把 filelock 拉回 3.x
+    # ——而 1.19.0 停止支持 Python 3.10 正是为了用上 filelock 4.2.1+ 的 CVE 修复。
+    # 1.103.1 是「已修 litellm CVE 且不限制 filelock」的最后一版。
+    # 待 litellm 放宽该约束后可移除本上限（届时同步 `uv lock` 与 pip-audit）。
+    "litellm>=1.103.1,<1.104",
+    # 显式钉住 filelock 下界：1.19.0 停止支持 Python 3.10 就是为了它（4.2.1 修了 3 个
+    # CVE）。写成直接依赖，防止某个间接依赖把约束放宽成 `<4` 时悄悄降级——litellm
+    # 1.104+ 正是这么干的（`filelock>=3.16.1,<4.0`），解析器会静默退回 3.x。
+    "filelock>=4.2.1,<5",
     "apscheduler>=3.10,<4",
     "mcp>=1.6,<2",
 ]
@@ -97,19 +115,10 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 # ── 依赖索引 ────────────────────────────────────────────────
-# qingci-plugin-sdk 由私有索引分发（Twine 兼容，上传走 /legacy/）。
-# 索引对私有项目只返回本地文件；未收录的包会中转代理上游 PyPI（链接改写为
-# /proxy/），上游异常时按 404 处理。本项目的其余依赖仍从默认源（PyPI）解析。
-# explicit = true：此索引只服务下面 sources 显式绑定的包，不参与其他包的
-# 解析——避免为 130 个依赖逐个请求私有索引，也避免同名包被公网抢占。
-[[tool.uv.index]]
-name = "qingci"
-url = "https://pypi.luoqingciya.cn/simple"
-publish-url = "https://admin.pypi.luoqingciya.cn/legacy/"
-explicit = true
-
-[tool.uv.sources]
-qingci-plugin-sdk = { index = "qingci" }
+# 只留默认源（PyPI）。qingci-plugin-sdk 走 `dependencies` 里的直接 URL（见文件头），
+# 不参与索引解析——私有制品仓库已不提供 PEP 503 `/simple`，原先的
+# `[[tool.uv.index]] qingci` + `[tool.uv.sources]` 绑定已移除。
+# 若将来该仓库重新提供索引，改回索引绑定即可，其余代码无需变动。
 
 [tool.mypy]
 # 有意按 3.12 检查（与推荐运行版本一致，见 CHANGELOG）：

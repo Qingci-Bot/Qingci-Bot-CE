@@ -116,10 +116,8 @@ jobs:
         shell: powershell
         run: |
           uv venv .venv
-          # SDK 在私有索引上：先单独装，再装项目。
-          # 不给整棵树加 --extra-index-url，避免每个包都去问私有索引（回源慢）。
-          $spec = (Select-String -Path pyproject.toml -Pattern '"qingci-plugin-sdk[=<>!~][^"]*"').Matches[0].Value.Trim('"')
-          uv pip install --index-url https://pypi.luoqingciya.cn/simple $spec
+          # qingci-plugin-sdk 是 pyproject 里的直接 URL 依赖（GitHub Release wheel），
+          # 随项目一起装，无需单独预装、也不经过私有索引。
           uv pip install -e ".[build]"
 
       - name: Set up Node.js (for Web UI build)

@@ -54,8 +54,9 @@ jobs:
         run: uv sync --locked --python 3.12 --extra dev
 
       - name: Verify SDK version matches lock
-        # SDK 由私有索引分发并精确锁定；构建可复现要求实际安装的版本
-        # 与 pyproject.toml 声明完全一致，防止锁错/上游漂移
+        # SDK 是直接 URL 依赖（GitHub Release 上的 wheel）。构建可复现要求
+        # URL 里的版本、锁文件里的版本、实际安装的版本三者一致——URL 的 tag 与
+        # 文件名各含一次版本号，最容易只改一处。
         run: |
           uv run --no-sync python - <<'EOF'
           import re, tomllib
@@ -63,27 +64,44 @@ jobs:
 
           spec = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
           dep = next(d for d in spec if d.startswith("qingci-plugin-sdk"))
-          m = re.search(r"==\s*([\d.]+)", dep)
-          assert m, f"SDK 依赖未精确锁定版本: {dep!r}"
-          locked = m.group(1)
+          urls = re.findall(r"https://\S+?\.whl", dep)
+          assert len(urls) == 1, f"SDK 依赖应为单个 wheel URL: {dep!r}"
+          url = urls[0]
+          # .../download/v1.15.1/qingci_plugin_sdk-1.15.1-py3-none-any.whl
+          tag = re.search(r"/download/v([\d.]+)/", url)
+          fname = re.search(r"-(\d+\.\d+\.\d+)-py3-none-any\.whl$", url)
+          assert tag and fname, f"无法从 URL 解析版本: {url}"
+          assert tag.group(1) == fname.group(1), (
+              f"URL 里 tag 与文件名的版本不一致: {tag.group(1)} vs {fname.group(1)}"
+          )
+          locked = fname.group(1)
           installed = qingci_plugin_sdk.__version__
           assert locked == installed, (
-              f"SDK 版本不一致: pyproject 锁定 {locked}，实际安装 {installed}"
+              f"SDK 版本不一致: URL 指向 {locked}，实际安装 {installed}"
           )
-          print(f"SDK {installed} == 锁定 {locked} OK")
+          print(f"SDK {installed} == URL/锁定 {locked} OK")
           EOF
 
       - name: Verify lock sources are canonical
         # uv.lock 若在配置了镜像（pip.conf / uv.toml）的机器上生成，会把镜像地址
         # 写进锁文件；CI 用官方源解析时就会判定「锁文件需要更新」而失败。
-        # 只允许官方 PyPI 与私有索引两种来源。
+        # 索引只允许官方 PyPI；SDK 必须来自 SDK 仓库的 GitHub Release。
         run: |
-          bad=$(grep -oE 'registry = "https://[^"]+"' uv.lock | sort -u                 | grep -vE 'https://pypi\.org/simple|https://pypi\.luoqingciya\.cn/simple' || true)
+          bad=$(grep -oE 'registry = "https://[^"]+"' uv.lock | sort -u | grep -vE 'https://pypi\.org/simple' || true)
           if [ -n "$bad" ]; then
             echo "uv.lock 含非官方索引，请用 --default-index https://pypi.org/simple 重新生成："
             echo "$bad"
             exit 1
           fi
+          sdk_src=$(grep -A1 'name = "qingci-plugin-sdk"' uv.lock | grep -oE 'https://[^"]+' | head -1)
+          case "$sdk_src" in
+            https://github.com/Qingci-Bot/Plugins-SDK/releases/download/v*/*.whl) ;;
+            *)
+              echo "SDK 来源不是 SDK 仓库的 GitHub Release：$sdk_src"
+              exit 1
+              ;;
+          esac
+          echo "uv.lock 来源检查通过（索引=PyPI，SDK=$sdk_src）"
           echo "uv.lock 索引来源检查通过"
 
       - name: Lint (ruff)

@@ -37,12 +37,17 @@ echo "Root:     $Root"
 echo "Python:   $PY"
 
 # ---------- [0/3] 独立插件 SDK ----------
-# 与 build.bat 一致：从私有索引安装，版本精确锁定（与 pyproject.toml 同步）。
-# 该索引对私有项目只返回本地文件，未收录包经 /proxy/ 中转上游；PyPI 挂为额外索引作兜底。
-# QINGCI_SDK_INDEX_URL 可覆盖索引地址（内网镜像 / 离线环境）。
-SDK_INDEX_URL="${QINGCI_SDK_INDEX_URL:-https://pypi.luoqingciya.cn/simple}"
-echo "==> [0/3] installing qingci-plugin-sdk (1.15.0) from $SDK_INDEX_URL ..."
-uv pip install --python "$PY" --index-url "$SDK_INDEX_URL" --extra-index-url https://pypi.org/simple "qingci-plugin-sdk==1.15.0"
+# 与 build.bat 一致：外部插件运行时会 import qingci_plugin_sdk，PyInstaller 的
+# collect_all 需要它已在构建环境里。
+# 它是直接 URL 依赖（GitHub Release 上的 wheel，见 pyproject.toml），
+# `uv sync` / `uv pip install -e .` 已经装好锁定版本——这里只做存在性校验，
+# 不再重复安装、也不在脚本里复制版本号。
+if ! "$PY" -c "import qingci_plugin_sdk" >/dev/null 2>&1; then
+  echo "ERROR: qingci-plugin-sdk 未安装到 $PY 对应的环境" >&2
+  echo "       先准备环境： uv sync" >&2
+  exit 1
+fi
+echo "==> [0/3] qingci-plugin-sdk present in build env"
 
 # ---------- 确保 pip 在 venv（供打包后插件依赖安装器使用） ----------
 # 打包（frozen）模式下插件依赖安装器（bot/plugin/deps.py）调用 pip._internal，

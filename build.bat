@@ -31,23 +31,19 @@ if errorlevel 1 (
 )
 
 rem ---- [0/3] standalone plugin SDK ----
-rem External plugins import qingci_plugin_sdk at runtime, so it must be
-rem installed into the build env for PyInstaller collect_all. Pin the exact
-rem version (kept in sync with pyproject.toml) for reproducible builds.
-rem Source is the private index; it serves private projects locally and relays
-rem unknown ones via /proxy/, so PyPI stays as extra index for fallback.
-rem QINGCI_SDK_INDEX_URL can override the index (e.g. a mirror or LAN address).
-if defined QINGCI_SDK_INDEX_URL (
-    set "SdkIndexUrl=%QINGCI_SDK_INDEX_URL%"
-) else (
-    set "SdkIndexUrl=https://pypi.luoqingciya.cn/simple"
-)
-echo ==^> [0/3] installing qingci-plugin-sdk ^(1.15.0^) from !SdkIndexUrl! ...
-uv pip install --python "%Python%" --index-url "!SdkIndexUrl!" --extra-index-url https://pypi.org/simple "qingci-plugin-sdk==1.15.0"
+rem External plugins import qingci_plugin_sdk at runtime, so it must be present
+rem in the build env for PyInstaller collect_all.
+rem It is a direct-URL dependency (GitHub Release wheel, see pyproject.toml), so
+rem `uv sync` / `uv pip install -e .` already installs the pinned version — this
+rem step only verifies it, instead of re-installing and duplicating the version
+rem string in three places.
+"%Python%" -c "import qingci_plugin_sdk" >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] qingci-plugin-sdk install failed
+    echo [ERROR] qingci-plugin-sdk not installed in .venv
+    echo          prepare the env first:  uv sync
     exit /b 1
 )
+echo ==^> [0/3] qingci-plugin-sdk present in build env
 
 rem ---- ensure pip in venv (for bundled deps installer) ----
 rem uv-managed venvs ship without pip by default. In packaged (frozen) mode the

@@ -7,7 +7,8 @@
 #
 # 说明：
 #   - 容器内只跑 Headless 后端（Bot + WebUI/API），不启用桌面 GUI 与启动画面。
-#   - qingci-plugin-sdk 经私有 PyPI 索引分发（构建期需能访问该索引）。
+#   - qingci-plugin-sdk 是 pyproject 里的直接 URL 依赖（GitHub Release 上的 wheel），
+#     构建期需能访问 github.com；不需要私有索引或令牌。
 #   - 首次启动会在实例目录自动生成默认 config.yaml（onebot.host=127.0.0.1）。
 #     若要外部 OneBot 前端（NapCat/LLBot 等）连入，请把该文件 onebot.host 改为 0.0.0.0。
 
@@ -19,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# uv：依赖解析与安装明显快于 pip（本项目 16 个直接依赖 + 私有索引上的 SDK）。
+# uv：依赖解析与安装明显快于 pip（本项目 16 个直接依赖 + GitHub Release 上的 SDK）。
 # 只装进 builder 阶段，运行镜像不含 uv。--prefix 布局与 pip 完全一致，
 # 因此运行阶段仍整体拷贝 /install，镜像结构不变。
 RUN pip install --no-cache-dir uv==0.12.3
@@ -31,16 +32,9 @@ COPY pyproject.toml ./
 COPY . .
 
 # 安装到 /install，运行阶段整体拷贝以保持最小运行镜像
-# qingci-plugin-sdk 由私有索引分发。分两步装：先把 SDK 单独从私有索引装好，
-# 再用 PyPI 装其余依赖——已满足的固定版本不会再被查询。
-# 不能给整棵依赖树加 --index-url 私有：uv 的 first-match 会把 100+ 个包逐个
-# 先问私有索引，该索引回源上游时很慢，构建会从数十秒拖到十几分钟。
-# 内网/离线构建可用 --build-arg SDK_INDEX_URL=... 覆盖索引地址。
-ARG SDK_INDEX_URL=https://pypi.luoqingciya.cn/simple
-RUN SDK_SPEC=$(grep -oE '"qingci-plugin-sdk[=<>!~][^"]*"' pyproject.toml | head -1 | tr -d '"') \
-    && uv pip install --python /usr/local/bin/python --prefix /install \
-        --index-url "$SDK_INDEX_URL" "$SDK_SPEC" \
-    && uv pip install --python /usr/local/bin/python --prefix /install \
+# qingci-plugin-sdk 由 pyproject 的 URL 依赖声明，单步安装即可（无需预先单装：
+# 它不经过索引，不会像私有索引那样让 100+ 个包逐个回源）。
+RUN uv pip install --python /usr/local/bin/python --prefix /install \
         --index-url https://pypi.org/simple \
         .
 

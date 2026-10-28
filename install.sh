@@ -112,45 +112,16 @@ else
   PKG_SPEC="."
 fi
 
-# qingci-plugin-sdk 不在公共 PyPI 上，由私有索引分发。
-# pyproject 的 [tool.uv.sources] 只对 uv 的项目命令（uv sync / uv run）生效，
-# `uv pip install` 与 `pip install` 都不会读它。
-#
-# 这里分两步装，而**不能**给整棵依赖树加 --extra-index-url：
-# pip 会为每个包都向所有索引各查一次，私有索引一旦变慢或走代理回源，
-# 100+ 个包逐个超时重试，安装会从 1 分钟拖到 20 分钟以上（CI 实测）。
-# 先把 SDK 单独从私有索引装好，再用默认索引装项目——已满足的固定版本
-# 不会再被查询，pip 与 uv 都只做一次校验。
-SDK_INDEX_URL="${QINGCI_SDK_INDEX_URL:-https://pypi.luoqingciya.cn/simple}"
-SDK_SPEC=$(grep -oE '"qingci-plugin-sdk[=<>!~][^"]*"' pyproject.toml | head -1 | tr -d '"')
-if [ -z "$SDK_SPEC" ]; then
-  SDK_SPEC="qingci-plugin-sdk"
-fi
-
-echo ">> 从私有索引安装 $SDK_SPEC ..."
+# qingci-plugin-sdk 是 pyproject 里的**直接 URL** 依赖（GitHub Release 上的 wheel），
+# 安装项目时由 uv / pip 自动下载，不需要私有索引、也不需要令牌。
+# 这里不再单独预装它：原先的两步装法是为了绕开「给整棵依赖树加私有索引会拖慢
+# 100+ 个包的解析」，URL 依赖不经过索引，那个理由已不成立。
 if command -v uv >/dev/null 2>&1; then
   UV=$(command -v uv)
-  "$UV" pip install --python "$VENV_PY" --index-url "$SDK_INDEX_URL" \
-    --extra-index-url https://pypi.org/simple "$SDK_SPEC"
   echo ">> 使用 uv 安装依赖: uv pip install -e \"$PKG_SPEC\""
   "$UV" pip install -e "$PKG_SPEC" --python "$VENV_PY"
 else
   "$VENV_PY" -m pip install --upgrade pip
-  "$VENV_PY" -m pip install --index-url "$SDK_INDEX_URL" \
-    --extra-index-url https://pypi.org/simple "$SDK_SPEC"
-  echo ">> 使用 pip 安装依赖: $VENV_PY -m pip install -e \"$PKG_SPEC\""
-  "$VENV_PY" -m pip install -e "$PKG_SPEC"
-fi
-
-echo ">> 从私有索引安装 $SDK_SPEC ..."
-if command -v uv >/dev/null 2>&1; then
-  UV=$(command -v uv)
-  "$UV" pip install --python "$VENV_PY" --index-url "$SDK_INDEX_URL"     --extra-index-url https://pypi.org/simple "$SDK_SPEC"
-  echo ">> 使用 uv 安装依赖: uv pip install -e \"$PKG_SPEC\""
-  "$UV" pip install -e "$PKG_SPEC" --python "$VENV_PY"
-else
-  "$VENV_PY" -m pip install --upgrade pip
-  "$VENV_PY" -m pip install --index-url "$SDK_INDEX_URL"     --extra-index-url https://pypi.org/simple "$SDK_SPEC"
   echo ">> 使用 pip 安装依赖: $VENV_PY -m pip install -e \"$PKG_SPEC\""
   "$VENV_PY" -m pip install -e "$PKG_SPEC"
 fi
