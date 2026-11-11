@@ -132,11 +132,18 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # 排除不需要的大依赖，减小体积
+        # 排除运行时依赖树里不存在的大包，防止开发机上误装后被 PyInstaller 收进产物
         'tkinter',
         'matplotlib',
         'notebook',
         'pytest',
+        'IPython',
+        'jupyter',
+        'nbconvert',
+        'scipy',
+        'sklearn',
+        'torch',
+        'tensorflow',
     ],
     noarchive=False,
 )

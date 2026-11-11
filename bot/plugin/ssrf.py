@@ -124,10 +124,10 @@ class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(
         self,
         req,
-        fp,
+        _fp,
         code,
         msg,
         headers,
-        newurl,  # noqa: ANN001
+        _newurl,  # noqa: ANN001
     ) -> None:
         return None

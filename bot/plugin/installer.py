@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ._proc import NO_WINDOW_FLAG
+from ._proc import run_command
 from .deps import ensure_dependencies
 
 if TYPE_CHECKING:
@@ -250,32 +250,19 @@ class PluginInstaller:
 
     @staticmethod
     async def _run_subprocess(cmd: list[str]) -> bool:
-        """运行子进程并返回是否成功（communicate 带超时，防止永久挂起）"""
-
+        """运行子进程并返回是否成功（统一超时/退出码处理见 _proc.run_command）"""
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-                creationflags=NO_WINDOW_FLAG,
-            )
-            try:
-                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
-            except TimeoutError:
-                proc.kill()
-                try:
-                    await proc.wait()
-                except Exception:
-                    pass
-                logger.error(f"子进程超时（{cmd[0]}），已终止")
-                return False
-            if proc.returncode != 0:
-                logger.error(f"子进程失败 ({cmd[0]}): {stdout.decode(errors='replace')[-2000:]}")
-                return False
-            return True
+            result = await run_command(cmd)
         except (OSError, ValueError) as e:
             logger.error(f"无法运行子进程 {cmd[0]}: {e}")
             return False
+        if result.timed_out:
+            logger.error(f"子进程超时（{cmd[0]}），已终止")
+            return False
+        if result.returncode != 0:
+            logger.error(f"子进程失败 ({cmd[0]}): {result.stdout.decode(errors='replace')[-2000:]}")
+            return False
+        return True
 
     @staticmethod
     async def _download_archive(url: str, dest: Path) -> bool:

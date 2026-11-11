@@ -654,7 +654,7 @@ class LLMManager:
         message_type: str = "group",
         group_id: int = 0,
         user_id: int = 0,
-        user_name: str = "",
+        user_name: str = "",  # 保留兼容：历史参数，当前实现不读取，外部插件仍可能传入
         images: list[str] | None = None,
         system_prompt: str | None = None,
         source: str = "chat",

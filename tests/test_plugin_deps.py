@@ -132,7 +132,9 @@ def test_install_subprocess_timeout_kills_process(tmp_path, monkeypatch):
     async def fake_create(*args, **kwargs):
         return fake
 
-    monkeypatch.setattr(deps.asyncio, "create_subprocess_exec", fake_create)
+    # 子进程执行已收敛到 bot.plugin._proc.run_command；mock 打在 asyncio 模块上，
+    # 对该模块内的 create_subprocess_exec 调用同样生效
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create)
     monkeypatch.setattr(deps, "_INSTALL_TIMEOUT", 0.05)
 
     ok = asyncio.run(deps._install_subprocess(tmp_path, ["requests"]))
