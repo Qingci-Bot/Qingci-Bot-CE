@@ -116,8 +116,8 @@ jobs:
         shell: powershell
         run: |
           uv venv .venv
-          # qingci-plugin-sdk 是 pyproject 里的直接 URL 依赖（GitHub Release wheel），
-          # 随项目一起装，无需单独预装、也不经过私有索引。
+          # qingci-plugin-sdk 是 pyproject 里的固定版本依赖（官方 PyPI），
+          # 随项目一起装，无需单独预装、也不需要额外索引或令牌。
           uv pip install -e ".[build]"
 
       - name: Set up Node.js (for Web UI build)

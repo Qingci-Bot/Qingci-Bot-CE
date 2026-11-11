@@ -42,7 +42,7 @@
 
 - 修改权限语义、匹配规则等协议时只改 SDK 一处，主项目无需同步
 
-- SDK 是主项目的**正式依赖**（`pyproject.toml` 里以直接 URL 指向 SDK 仓库 GitHub Release 上的 wheel，`uv.lock` 记录 URL + SHA256；公开可下载，无需令牌或索引；本地开发需改 SDK 源码时 `uv pip install -e ../Plugins-SDK` 覆盖）
+- SDK 是主项目的**正式依赖**（`pyproject.toml` 里钉成官方 PyPI 的精确版本 `qingci-plugin-sdk==X.Y.Z`，`uv.lock` 记录版本 + wheel URL + SHA256；无需令牌或额外索引；本地开发需改 SDK 源码时 `uv pip install -e ../Plugins-SDK` 覆盖）
 
 ## 进程模型与外壳边界（无头内核库化方向）
 

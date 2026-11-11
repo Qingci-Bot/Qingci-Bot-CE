@@ -5,6 +5,14 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Changed
+
+- **插件 SDK 依赖改为官方 PyPI**：`qingci-plugin-sdk` 从 GitHub Release wheel 直接 URL（`v1.15.1`）改为 PyPI 固定版本 `==1.15.2`，`uv.lock` 重新锁定；CI / Docker / 源码安装统一走默认索引，不再需要访问 github.com 下载 SDK
+- CI 的 SDK 版本校验与锁文件来源检查改为按 PyPI 依赖校验；pip-audit 不再剔除 SDK（它已是公开包）
+- 同步更新 README / CONTRIBUTING / 规范文档 / 打包注释中关于 SDK 安装与升级的说明
+
 ## \[1.19.0] - 2026-10-24（停止支持 Python 3.10）
 
 ### Breaking
