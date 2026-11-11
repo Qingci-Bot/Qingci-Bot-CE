@@ -34,7 +34,9 @@
 
 > **多平台原则**：事件在入口归一化为 OneBot 12、回复在出口路由回平台，插件/命令对来源平台完全无感知——一套 Matcher/Rule/Permission 逻辑基于统一事件模型天然支持所有已接入平台。
 
-> **事件契约层**：`bot/core/events.py` 定义 `V12Event` / `V11Event` TypedDict 契约与只读 `EventView`，Dispatcher 的字段默认值统一在此维护。事件在运行时**仍是同一个 dict** —— `MessageContext.from_v12_event` 及插件的 `Permission.check` / `Rule.check` 都由 SDK 以 dict 定义，换成自定义对象会让内置插件与外部插件走两条路径。新增适配器可用 `validate_v12_event()` 在边界校验结构；主链路不强制校验，未知事件仍原样透传。
+> **事件契约层**：`bot/core/events.py` 定义 `V12Event` / `V11Event` TypedDict 契约与只读 `EventView`，Dispatcher 的字段默认值统一在此维护。事件在运行时**仍是同一个 dict** —— `MessageContext.from_v12_event` 及插件的 `Permission.check` / `Rule.check` 都由 SDK 以 dict 定义，换成自定义对象会让内置插件与外部插件走两条路径。`PlatformAdapter.emit_event()` 在边界做**非阻断**结构检查（只要求 `type` / `detail_type`），缺字段只记 WARNING 并原样转发；完整校验留给契约测试与新增适配器自检。
+
+> **配置契约**：`config.example.yaml` 的顶层节必须与 `AppConfig` 的字段一一对应，由 `tests/test_config_example_contract.py` 锁定（Pydantic 默认忽略未知键，写错字段名会被静默吞掉，因此必须显式检查）。示例保留手写注释、不做生成替换；新增配置字段时同步补示例，测试会拦住漂移。
 
 ### 协议层归属
 

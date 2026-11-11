@@ -17,6 +17,8 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from ..events import EventContractError, validate_v12_event
+
 logger = logging.getLogger("qingci-bot.platforms")
 
 
@@ -103,10 +105,21 @@ class PlatformAdapter:
         """向 Bot 上报一个事件（子类归一化后调用）
 
         自动补充 platform 字段；异常隔离，单个处理器异常不影响其余。
+        v12 事件在边界做一次非阻断结构检查：缺核心字段只告警、不丢事件
+        （协议端实现差异大，强制校验会改变现有行为）。
         """
         if "platform" not in event:
             event = dict(event)
             event["platform"] = self.name
+        if event.get("type"):
+            try:
+                validate_v12_event(event, required=("type", "detail_type"))
+            except EventContractError as exc:
+                logger.warning(
+                    "平台 %s 上报的 v12 事件结构不完整: %s（已原样转发）",
+                    self.name,
+                    exc,
+                )
         for handler in list(self._event_handlers):
             try:
                 res = handler(event)

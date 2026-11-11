@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### 配置契约与适配器边界（P1 第二阶段）
+
+- **配置示例补齐**：`config.example.yaml` 顶层只有 18 节，而 `AppConfig` 有 20 个字段，缺 `plugins` / `lang`；已补齐并加注释
+- 新增 `tests/test_config_example_contract.py`：锁住「示例顶层节 == 模型字段」「无未知键」「无缺失必填字段」「示例可解析为 `AppConfig`」。Pydantic 默认忽略未知键，写错字段名会被静默吞掉，故必须显式检查；示例带大量手写注释，刻意不做生成替换
+- `validate_v12_event()` 新增 `required` 参数；`PlatformAdapter.emit_event()` 在边界对 v12 事件做**非阻断**结构检查（只要求 `type` / `detail_type`），缺字段只记 WARNING、原样转发，不改变事件传递
+- 新增 9 项契约测试；全量 708 项测试，覆盖率 63.31%；ARCHITECTURE.md 补充配置契约与边界校验说明
+
 ### 事件类型化（P1 第一阶段）
 
 - 新增 `bot/core/events.py`：`V12Event` / `V11Event` TypedDict 契约、只读 `EventView`（字段默认值集中一处）、`validate_v12_event()` 结构校验；事件在运行时仍是同一个 dict，零拷贝、零行为变化
