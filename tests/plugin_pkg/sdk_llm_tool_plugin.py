@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Zhou Zhe (aka luoqingci)
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Additional terms under GPLv3 Section 7: see LICENSE
+# Additional terms under GPLv3 Section 7: see NOTICE
 
 """on_load 场景用 SDK 路径导入 llm_tool 的插件（对应官方 hello 用法）"""
 

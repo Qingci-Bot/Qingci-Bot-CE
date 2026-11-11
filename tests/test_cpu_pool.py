@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Zhou Zhe (aka luoqingci)
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Additional terms under GPLv3 Section 7: see LICENSE
+# Additional terms under GPLv3 Section 7: see NOTICE
 
 """CPU 执行器测试 — run_cpu 的返回值、异常传播与不阻塞事件循环"""
 

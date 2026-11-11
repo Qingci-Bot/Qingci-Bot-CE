@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Zhou Zhe (aka luoqingci)
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Additional terms under GPLv3 Section 7: see LICENSE
+# Additional terms under GPLv3 Section 7: see NOTICE
 
 """CPU 执行器 — 把同步 CPU 计算移出事件循环的防御性基础设施
 

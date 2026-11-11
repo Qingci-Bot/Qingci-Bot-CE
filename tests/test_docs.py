@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Zhou Zhe (aka luoqingci)
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Additional terms under GPLv3 Section 7: see LICENSE
+# Additional terms under GPLv3 Section 7: see NOTICE
 
 """文档一致性测试 — Markdown 代码块必须可解析、导入的符号必须真实存在
 

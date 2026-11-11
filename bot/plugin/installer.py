@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Zhou Zhe (aka luoqingci)
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Additional terms under GPLv3 Section 7: see LICENSE
+# Additional terms under GPLv3 Section 7: see NOTICE
 
 """插件安装/卸载 — 来源拉取、归档安全解压、目录落位
 

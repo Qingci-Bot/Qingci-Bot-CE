@@ -633,8 +633,6 @@ the "copyright" line and a pointer to where the full notice is found.
 
     Qingci-Bot CE — Community Edition, based on Qingci-Bot
     Copyright (C) 2026  Zhou Zhe (aka luoqingci)
-    Qingci-Bot Organization is the authorized maintainer; see the
-    "Copyright holder and organization authorization" notice below.
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -674,87 +672,3 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
-
-
-ADDITIONAL TERMS UNDER GNU GPLv3 SECTION 7
-==========================================
-
-Qingci-Bot CE is licensed under the GNU General Public License, version 3
-or (at your option) any later version ("GPLv3"), with the following
-additional terms added under Section 7 of GPLv3. These terms form part of
-the License for this Program and are of the kinds permitted by Section 7
-(preservation of reasonable legal notices and author attributions; marking
-modified versions as different; prohibiting misrepresentation of origin and
-limiting use of licensor/author names for publicity purposes).
-
-  (a) Preservation of notices
-      When you convey the Program or any Covered Work, you must preserve
-      all copyright notices, author attributions and project/origin notices
-      contained in the Source form (including the original-author notice in
-      README.md), and reproduce them in any Appropriate Legal Notices
-      displayed by works containing the Covered Work. You may not remove
-      or alter these notices.
-
-  (b) Modified versions must bear a different name
-      Any Covered Work that you modify must be conveyed under a name that
-      is clearly distinguishable from "Qingci-Bot CE"; you must not use
-      "Qingci-Bot CE", "Qingci-Bot" or the project's logos as the name of
-      the modified work. You must also mark the modified version in
-      reasonable ways as different from the original, including a prominent
-      notice stating that it is a modified version.
-
-  (c) No implied endorsement
-      You may not use the names "Qingci-Bot", "Qingci-Bot CE", "luoqingci",
-      "Zhou Zhe" or the names of the original authors/contributors for
-      publicity purposes, and you may not state or imply that your use of
-      the Program, or a modified version of it, is endorsed, approved,
-      sponsored by or affiliated with the original authors or the
-      Qingci-Bot organization, without their prior written permission.
-
-These additional terms apply to the Program as a whole. All other terms of
-GPLv3 remain in full force; if any additional term cannot be complied with
-in a particular context, it shall be interpreted in the manner closest to
-the above intent that is permitted under GPLv3 Section 7.
-
-中文摘要（仅作说明，解释不一致时以上述英文条款为准）：
-  (a) 保留声明：分发本程序或其衍生作品时，必须保留源码中的版权、作者与项目来源声明
-      （含 README.md 中的原创作者声明），并在适当法律声明中重现，不得删除或篡改。
-  (b) 修改版须改名：修改后的作品必须以明显区别于「Qingci-Bot CE」的名称分发，不得沿用
-      本项目名称或标识作为修改版名称，并须显著标注其为修改版。
-  (c) 不得暗示背书：不得为宣传目的使用本项目、原作者或贡献者名称，不得明示或暗示本程序
-      （含修改版）的使用获得原作者或 Qingci-Bot 组织的认可、赞助或关联，除非事先取得书面许可。
-
-
-COPYRIGHT HOLDER AND ORGANIZATION AUTHORIZATION
-==============================================
-
-Qingci-Bot CE was originally created by Zhou Zhe (aka luoqingci) as a
-personal project and is now maintained under the Qingci-Bot GitHub
-organization. The copyright in the Program is held exclusively by
-Zhou Zhe (aka luoqingci); the Qingci-Bot organization is not a
-co-owner of the copyright.
-
-The copyright holder grants the Qingci-Bot organization a perpetual,
-irrevocable, worldwide, non-exclusive, royalty-free license to use,
-reproduce, modify, distribute and convey the Program and derivative
-works under the GNU General Public License, version 3 or (at its
-option) any later version, and to maintain, develop and release the
-Program under the organization's repositories.
-
-The copyright holder further authorizes the Qingci-Bot organization to
-enforce the GNU GPL with respect to the Program, including acting in
-its own name against infringement, and to take the steps reasonably
-necessary for that enforcement. This authorization does not transfer
-copyright ownership, and it does not limit the automatic licenses that
-GPLv3 Section 10 grants to downstream recipients.
-
-Contributions submitted to the project are made available under the
-same GPLv3 terms; contributors retain the copyright in their own
-contributions.
-
-中文摘要（仅作说明，解释不一致时以上述英文为准）：
-  本程序原为 Zhou Zhe (aka luoqingci) 的个人项目，现由 Qingci-Bot 组织维护。
-  版权完整、排他地归其个人所有，组织不是共同版权人。版权人授予该组织永久、
-  不可撤销、全球、非独占、免版税的 GPLv3 使用 / 修改 / 分发许可，并授权其以
-  自己名义对侵权行为发起维权；该授权不转移版权，也不影响 GPLv3 第 10 条给予
-  下游接收者的自动许可。贡献按同一 GPLv3 条款提供，贡献者保留各自贡献的版权。

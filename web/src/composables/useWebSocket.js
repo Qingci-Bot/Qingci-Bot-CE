@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Zhou Zhe (aka luoqingci)
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Additional terms under GPLv3 Section 7: see LICENSE
+// Additional terms under GPLv3 Section 7: see NOTICE
 
 // WebSocket 统一封装：token 注入（api-key.<token> 子协议）+ 断线自动重连（3s）
 //
