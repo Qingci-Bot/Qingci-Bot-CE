@@ -41,7 +41,7 @@ import time
 from pathlib import Path
 
 from ..paths import data_root
-from ._proc import NO_WINDOW_FLAG
+from ._proc import run_command
 
 logger = logging.getLogger("qingci-bot.market")
 
@@ -267,28 +267,13 @@ class MarketClient:
             raise MarketError(f"不支持的 git 来源（仅允许 http(s)/ssh/git 协议）: {url}")
         tmp = tempfile.mkdtemp(prefix="qb-market-")
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "git",
-                "clone",
-                "--depth",
-                "1",
-                url,
-                str(tmp),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-                creationflags=NO_WINDOW_FLAG,
-            )
-            try:
-                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
-            except TimeoutError:
-                proc.kill()
-                try:
-                    await proc.wait()
-                except Exception:
-                    pass
+            result = await run_command(["git", "clone", "--depth", "1", url, str(tmp)])
+            if result.timed_out:
                 raise MarketError(f"git 克隆市场索引超时: {url}") from None
-            if proc.returncode != 0:
-                raise MarketError(f"git 克隆市场索引失败: {stdout.decode(errors='replace')[-500:]}")
+            if result.returncode != 0:
+                raise MarketError(
+                    f"git 克隆市场索引失败: {result.stdout.decode(errors='replace')[-500:]}"
+                )
             index_file = Path(tmp) / "index.json"
             if not index_file.is_file():
                 raise MarketError(f"市场仓库中缺少 index.json: {url}")

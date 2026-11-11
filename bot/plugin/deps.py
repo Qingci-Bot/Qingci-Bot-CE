@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging
@@ -20,7 +19,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from ._proc import NO_WINDOW_FLAG
+from ._proc import run_command
 
 logger = logging.getLogger("qingci-bot.plugin.deps")
 
@@ -200,28 +199,15 @@ def _pip_args(target: Path, reqs: list[str]) -> list[str]:
 async def _run_installer(cmd: list[str]) -> bool:
     """以子进程方式运行安装命令（uv 或 python -m pip），含超时回收"""
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            creationflags=NO_WINDOW_FLAG,
-        )
+        result = await run_command(cmd, timeout=_INSTALL_TIMEOUT)
     except (OSError, ValueError) as e:
         logger.error(f"无法运行依赖安装器: {e}")
         return False
-    try:
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_INSTALL_TIMEOUT)
-    except TimeoutError:
-        # communicate 超时：进程可能卡死，终止并回收，避免僵尸进程
-        try:
-            proc.kill()
-            await proc.wait()
-        except (OSError, ProcessLookupError):
-            pass
+    if result.timed_out:
         logger.error(f"依赖安装超时（>{_INSTALL_TIMEOUT}s），已终止安装进程")
         return False
-    if proc.returncode != 0:
-        logger.error(f"依赖安装失败: {stdout.decode(errors='replace')[-2000:]}")
+    if result.returncode != 0:
+        logger.error(f"依赖安装失败: {result.stdout.decode(errors='replace')[-2000:]}")
         return False
     return True
 

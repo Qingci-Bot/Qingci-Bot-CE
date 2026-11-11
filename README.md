@@ -617,6 +617,8 @@ Qingci-Bot CE 是一个通用机器人框架：它只通过**公开的、由第�
 | 去冗余瘦身 | 精简运行时依赖与重复实现：收敛历史兼容代码、合并重复的消息段 / 协议转换路径、清理无调用方的旧分支，压缩 EXE / AppImage / Docker 镜像体积，并同步评估可移除的可选依赖 |
 
 > 两项均会先在 CHANGELOG 的 `[Unreleased]` 段记录，发版时归入对应版本；涉及破坏性变更会提前在 Release Notes 说明。
+>
+> **去冗余瘦身 · 首轮进展**：已把 `installer.py` / `market.py` / `deps.py` 三处重复的子进程超时控制流收敛到 `bot/plugin/_proc.py` 的 `run_command()`，把 CQ 码序列化合并为 `bot/core/message.py` 的单一实现，并扩充 PyInstaller 排除项。依赖审计结论：现有 18 个运行时依赖均**不可安全移除** —— `aiosqlite` 是 SQLAlchemy 连接串里的动态驱动、`filelock` 是防版本降级的安全钉子、`websockets` 由 `uvicorn[standard]` 传递依赖且刚调整过上界，其余均有直接 import。后续重点是 EXE / AppImage 内置大件（Chromium、playwright 运行时）的按需化评估。
 
 ## 许可证
 

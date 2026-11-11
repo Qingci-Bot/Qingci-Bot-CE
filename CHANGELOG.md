@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 全仓文档全面核对：校准版本示例、Node / Electron 版本要求，并同步 SDK 仓库中关于主项目依赖状态、历史 Release 用途的过时表述
 
+### 去冗余瘦身（首轮）
+
+- **子进程控制流去重**：`bot/plugin/installer.py`、`bot/plugin/market.py`、`bot/plugin/deps.py` 各有一份 `create_subprocess_exec` + `wait_for` + 超时 kill 模板，收敛到 `bot/plugin/_proc.py` 新增的 `run_command()` / `CommandResult`（支持自定义 timeout）；三处各自保留原有的「返回 False」与「抛 MarketError」策略，行为不变
+- **CQ 序列化去重**：`bot/core/message.py` 里 dict 段与 `MessageSegment` 各自实现一遍的 CQ 码构造合并为 `_cq_serialize()`；text 段输出纯文本的特判仍留在 dict 路径，`MessageSegment.__str__` 行为不变
+- `qingci-bot-ce.spec` 的 `excludes` 从 4 项扩到 11 项（IPython / scipy / sklearn / torch 等），防止开发机上误装的大包被 PyInstaller 收进产物
+- `bot/plugin/ssrf.py` 覆写 `redirect_request` 时未使用的 `fp` / `newurl` 改名为 `_fp` / `_newurl`，明确表达「签名所需但刻意不用」
+- **依赖审计结论（无可删项）**：18 个运行时依赖逐一核实 —— `aiosqlite` 由 `sqlite+aiosqlite:///` 连接串动态加载、`filelock` 是防止间接依赖降级到 3.x 的安全钉子、`websockets` 是 `uvicorn[standard]` / aiocqhttp 的传递依赖且刚放宽过 `<18` 上界，其余 15 个均有直接 import；`LLMManager.chat(user_name=...)` 虽无实现读取但被测试与外部调用方使用，保留以维持兼容。Docker 运行镜像已由 `.dockerignore` 排除测试 / 文档 / 前端源码，未改动以免改变 `app_root()` 的路径行为
+
 ## \[1.19.2] - 2026-11-11（前端工具链 major 升级）
 
 无新增功能与运行时逻辑变更；本次为前端依赖与构建工具链升级。

@@ -41,6 +41,17 @@ def cq_escape(value) -> str:
     return str(value).translate(_CQ_VALUE_TRANS)
 
 
+def _cq_serialize(seg_type: str, data: dict) -> str:
+    """构造 CQ 码（跳过空值、统一转义）——dict 段与 MessageSegment 共用"""
+    parts = [f"[CQ:{seg_type}"]
+    for key, value in data.items():
+        if value is None or value == "":
+            continue
+        parts.append(f",{key}={cq_escape(value)}")
+    parts.append("]")
+    return "".join(parts)
+
+
 def _segment_to_cq(seg: dict) -> str:
     """将单条消息段 dict 序列化为 CQ 码（v11 平台专用）
 
@@ -54,13 +65,7 @@ def _segment_to_cq(seg: dict) -> str:
         data = {}
     if seg_type == "text":
         return str(data.get("text", ""))
-    parts = [f"[CQ:{seg_type}"]
-    for key, value in data.items():
-        if value is None or value == "":
-            continue
-        parts.append(f",{key}={cq_escape(value)}")
-    parts.append("]")
-    return "".join(parts)
+    return _cq_serialize(seg_type, data)
 
 
 def segments_to_cq(message: str | list) -> str:
@@ -130,13 +135,7 @@ class MessageSegment:
         return MessageSegment("forward", {"id": forward_id})
 
     def __str__(self) -> str:
-        parts = [f"[CQ:{self.type}"]
-        for key, value in self.data.items():
-            if value is None or value == "":
-                continue
-            parts.append(f",{key}={cq_escape(value)}")
-        parts.append("]")
-        return "".join(parts)
+        return _cq_serialize(self.type, self.data)
 
 
 class Message(list[MessageSegment]):
