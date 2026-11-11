@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### 事件类型化（P1 第一阶段）
+
+- 新增 `bot/core/events.py`：`V12Event` / `V11Event` TypedDict 契约、只读 `EventView`（字段默认值集中一处）、`validate_v12_event()` 结构校验；事件在运行时仍是同一个 dict，零拷贝、零行为变化
+- `MessageDispatcher.dispatch` / `_parse_message` / `_run_event_matchers` 改用 `EventView` 读取字段，消除两处重复的 `event.get(key, default)`；传给 SDK `MessageContext.from_v12_event` 与插件 `permission/rule.check` 的仍是原始 event 对象
+- **边界说明**：未在内部链路强制校验或替换事件对象 —— `MessageContext` 与插件 API 由 Plugins-SDK 以 dict 定义，替换会破坏插件兼容；未知事件继续原样透传。ARCHITECTURE.md 补充事件契约层说明
+- 新增 19 项契约测试（视图默认值对齐原 `.get` 语义、v12 结构校验、P0 黄金快照样本满足契约、Dispatcher 双模路径回归）；全量 699 项测试，覆盖率 63.29%，新模块 100% 覆盖
+
 ### Added
 
 - README 新增「合规声明」：明确本项目不含任何对 QQ / 腾讯客户端或通信协议的逆向工程、破解、客户端注入或模拟登录，仅通过公开的 OneBot 11/12 标准接口与 Telegram Bot API 接入，并说明商标关联性与使用者责任

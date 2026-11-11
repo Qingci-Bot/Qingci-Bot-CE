@@ -34,6 +34,8 @@
 
 > **多平台原则**：事件在入口归一化为 OneBot 12、回复在出口路由回平台，插件/命令对来源平台完全无感知——一套 Matcher/Rule/Permission 逻辑基于统一事件模型天然支持所有已接入平台。
 
+> **事件契约层**：`bot/core/events.py` 定义 `V12Event` / `V11Event` TypedDict 契约与只读 `EventView`，Dispatcher 的字段默认值统一在此维护。事件在运行时**仍是同一个 dict** —— `MessageContext.from_v12_event` 及插件的 `Permission.check` / `Rule.check` 都由 SDK 以 dict 定义，换成自定义对象会让内置插件与外部插件走两条路径。新增适配器可用 `validate_v12_event()` 在边界校验结构；主链路不强制校验，未知事件仍原样透传。
+
 ### 协议层归属
 
 插件系统的协议层（`PluginBase` / `Matcher` / `MatcherContext` / `Permission` / `Rule` / `MessageContext` / `RateLimiter`）**统一由独立插件 SDK 维护**（[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 的 `qingci_plugin_sdk` 包）。主项目的 `bot/plugin/protocol/{base,context,matcher,permission,rule,ratelimit,session,events}.py` 均为薄转发（`from qingci_plugin_sdk.* import *`），`bot/plugin/` 顶层同名模块为兼容再导出，不保存任何协议层实现，从根本上消除两处定义漂移：
