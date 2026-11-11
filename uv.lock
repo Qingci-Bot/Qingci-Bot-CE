@@ -2853,7 +2853,7 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
     { name = "sqlmodel", specifier = ">=0.0.22,<1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1" },
-    { name = "websockets", specifier = ">=14.0,<17" },
+    { name = "websockets", specifier = ">=14.0,<18" },
 ]
 provides-extras = ["vector", "render", "test", "build", "dev"]
 
