@@ -42,7 +42,7 @@
 `pyproject.toml`（打包/CI 读取）、`bot/__init__.py`（`__version__`，后端 `/api/bot/status` 及 Web 关于页据此动态显示）、`web/package.json` 与 `web/package-lock.json`（含 `packages` 两处）、`desktop/electron/package.json` 与 `desktop/electron/package-lock.json`（含 `packages` 两处，安装包版本号来源）。
 
 ```bash
-python scripts/bump_version.py 1.19.0     # 从单一输入同步升级全部版本字段
+python scripts/bump_version.py 1.19.2     # 示例：换成目标版本号，从单一输入同步升级全部版本字段
 python scripts/bump_version.py --check    # 提交前自查各处是否一致（防止漏改）
 ```
 
@@ -164,4 +164,4 @@ Qingci-Bot-CE/
 
 ## 许可证
 
-本项目采用 [GPL-3.0-or-later](LICENSE) 许可证。提交代码即表示你同意在此许可证下发布你的贡献。
+本项目采用 [GPL-3.0-or-later](LICENSE) 许可证，并依 GPLv3 第 7 条附加了「保留声明 / 修改版须改名 / 不得暗示背书」三项条款（完整文本见 [LICENSE](LICENSE) 末尾，说明见 [README 许可证章节](README.md#许可证)）。提交代码即表示你同意在此许可证及附加条款下发布你的贡献。

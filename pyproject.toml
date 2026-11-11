@@ -3,6 +3,7 @@ name = "qingci-bot-ce"
 version = "1.19.2"
 description = "多平台机器人框架（OneBot 11 / OneBot 12 / Telegram），支持 LLM 对话、Web UI 和 Desktop UI"
 requires-python = ">=3.11"
+# SPDX 表达式保持纯 GPLv3；依 GPLv3 第 7 条添加的附加条款见 LICENSE 末尾
 license = "GPL-3.0-or-later"
 dependencies = [
     # 独立插件 SDK：协议层（PluginBase/Matcher/Permission/Rule/MessageContext）唯一来源，

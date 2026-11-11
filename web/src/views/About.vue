@@ -28,7 +28,7 @@ onMounted(() => {
           桌面应用。
         </p>
         <p>
-          项目采用 <strong>GPLv3</strong> 开源许可，代码托管于
+          项目采用 <strong>GPLv3</strong> 开源许可（含第 7 条附加条款，详见 LICENSE），代码托管于
           <a href="https://github.com/Qingci-Bot/Qingci-Bot-CE" target="_blank" rel="noopener"
             >GitHub</a
           >。
