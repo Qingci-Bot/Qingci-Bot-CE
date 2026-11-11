@@ -151,7 +151,7 @@ Qingci-Bot-CE/
 ├── migrations/       # Alembic 数据库迁移
 ├── tests/            # pytest 测试（plugin_pkg/ 为测试插件）
 ├── scripts/          # 工具脚本（如 bump_version 版本升级、SQLite→PostgreSQL 迁移）
-└── docs/             # 规范文档（结构 / 编码约定）
+└── docs/             # SETUP / CONFIGURATION（使用与配置）+ 规范文档（结构 / 编码约定）
 ```
 
 ### 产物归属约定

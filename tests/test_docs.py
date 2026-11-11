@@ -27,6 +27,8 @@ DOCS = [
     "ARCHITECTURE.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
+    "docs/SETUP.md",
+    "docs/CONFIGURATION.md",
     "docs/CODING_STANDARDS.md",
     "docs/PROJECT_STRUCTURE.md",
 ]

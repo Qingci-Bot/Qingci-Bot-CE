@@ -125,7 +125,7 @@ Qingci-Bot-CE/
 │   ├── test_*.py           # 按被测模块命名
 │   └── plugin_pkg/         # 测试用插件包（dep/di/p1/p2/sdk_llm_tool/subcmd_runtime 等）
 ├── scripts/                # 一次性/运维脚本（版本升级 / 迁移校验 / 后端打包 / SQLite→PostgreSQL 迁移）
-├── docs/                   # 规范文档（本文档 + CODING_STANDARDS.md）
+├── docs/                   # 使用与规范文档（SETUP / CONFIGURATION / 本文档 / CODING_STANDARDS）
 ├── build.bat               # Windows 构建脚本（打包前 -e 安装 Plugins-SDK）
 ├── build-electron.bat      # Electron 打包脚本（先 build.bat 出后端 onedir，再 electron-builder 出安装版 Setup.exe + 绿色解压 zip）
 ├── qingci-bot-ce.spec      # PyInstaller 打包配置（collect_all 打包 SDK）
@@ -143,10 +143,31 @@ Qingci-Bot-CE/
 | `bot/core/` | **框架层**：生命周期、连接、调度、DI、组合根装配、事件总线、会话状态 | 具体业务与功能组件 |
 | `bot/`（根级） | 功能/横切组件：alerter / filter / broadcast / logformat / html_renderer | 框架调度核心 |
 | `bot/plugin/` | 插件系统机制（`protocol/` 协议层薄转发 SDK + 顶层兼容再导出 + 运行时 manager/market 等）+ `builtin/` 内置插件 | 框架强耦合的临时代码 |
-| `bot/llm|db|rag` | 领域能力模块 | 与框架调度耦合的逻辑 |
+| `bot/llm`、`bot/db`、`bot/rag` | 领域能力模块 | 与框架调度耦合的逻辑 |
 | `web/` | 前端 UI | 后端逻辑 |
 | `tests/` | 所有测试，按 `test_<模块>.py` 命名 | 生产代码 |
 | `scripts/` | 一次性工具脚本 | 可被 `main.py`/`__init__` 覆盖的频繁调用逻辑 |
+
+### 文档职责分工（避免内容漂移）
+
+| 文件 | 唯一职责 | 不应放入 |
+|------|----------|----------|
+| `README.md` | 项目门面：简介、特性、快速开始、文档导航、合规声明、开发计划、许可概要 | 安装步骤细节、配置字段全表、命令参考 |
+| `docs/SETUP.md` | 环境要求、安装、启动与部署、命令行参数、管理命令、API 鉴权与监控 | 配置字段语义、架构设计、插件 API |
+| `docs/CONFIGURATION.md` | 协议端 / LLM 配置、完整 `config.yaml` 字段、环境变量、进阶开关 | 安装步骤、部署方式 |
+| `ARCHITECTURE.md` | 架构分层、进程模型、技术栈、核心模块、生产部署 | 面向用户的逐步操作（应进 SETUP） |
+| `PLUGIN_DEV.md` | 插件 API、前端开发、Web UI 页面、打包 | 框架内部实现细节 |
+| `CONTRIBUTING.md` | 贡献流程、开发环境、质量门禁、本地构建与发版 | 面向使用者的安装说明 |
+| `docs/CODING_STANDARDS.md` | 类型 / 命名 / 分层 / Git 约定 | 目录职责（归本文档） |
+| `docs/PROJECT_STRUCTURE.md` | 目录职责、产物归属、分层依赖方向 | 代码风格细则 |
+| `SECURITY.md` | 支持版本、漏洞报告流程、安全实践 | 功能说明 |
+| `CHANGELOG.md` | 版本变更记录 | 使用说明 |
+| `LICENSE` / `NOTICE` | GPLv3 官方全文 / 附加条款与版权授权 | 任何项目说明（LICENSE 仅允许填 3 行占位符） |
+
+> **当前缺口**：`docs/API.md`（HTTP 端点清单，现散落在 `api/routes/` 与 `PLUGIN_DEV.md`）、
+> `docs/TROUBLESHOOTING.md`（故障排查 / FAQ）尚缺。`ARCHITECTURE.md` 的「生产环境部署」
+> 与 `PLUGIN_DEV.md` 的「前端开发 / Web UI / 打包」是历史合流，后续可按上表继续拆分。
+> 新增或移动文档后必须同步 `tests/test_docs.py` 的 `DOCS` 清单，否则代码块与链接检查会静默漏掉。
 
 **分层依赖方向（禁止反向）：**
 
