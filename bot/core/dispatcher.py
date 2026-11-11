@@ -28,6 +28,7 @@ from ..plugin.protocol.session import (
     RejectException,
     Session,
 )
+from .events import EventView
 
 if TYPE_CHECKING:
     from .bot import QingciBot
@@ -93,25 +94,27 @@ class MessageDispatcher:
         - OneBot 11 事件（post_type 字段，来自 aiocqhttp/telegram 旧适配器）
           → 本模块的 v11 解析路径（M3 平台适配器迁移完成后此路径移除）
         """
-        # v12 事件：type 为必填基础字段
-        if event.get("type"):
+        # 事件字段统一经只读视图读取（默认值策略集中在 bot/core/events.py），
+        # 传给 SDK / 插件的仍是原始 event 对象，零拷贝、行为不变
+        view = EventView(event)
+        if view.is_v12:
             return MessageContext.from_v12_event(event)
 
-        post_type = event.get("post_type", "")
+        post_type = view.post_type
 
         ctx = MessageContext(raw_event=event)
         if post_type == "message":
             ctx = self._parse_message(event)
         else:
             ctx.post_type = post_type
-            ctx.sub_type = event.get("sub_type", "")
-            ctx.self_id = self._safe_int(event.get("self_id"))
-            ctx.user_id = self._safe_int(event.get("user_id"))
-            ctx.group_id = self._safe_int(event.get("group_id"))
-            ctx.sender = event.get("sender", {}) or {}
+            ctx.sub_type = view.sub_type
+            ctx.self_id = self._safe_int(view.self_id)
+            ctx.user_id = self._safe_int(view.user_id)
+            ctx.group_id = self._safe_int(view.group_id)
+            ctx.sender = view.sender
 
         # 事件来源平台（适配器在事件 dict 中注入 platform，默认 onebot）
-        ctx.platform = str(event.get("platform", "onebot") or "onebot")
+        ctx.platform = view.platform
 
         return ctx
 
@@ -137,7 +140,7 @@ class MessageDispatcher:
         OneBot 12 迁移：v12 事件无 post_type 字段，事件类型以
         ctx.post_type（已由 type 派生）为准。
         """
-        post_type = ctx.post_type or event.get("post_type", "")
+        post_type = ctx.post_type or EventView(event).post_type
         return await self._run_matchers(bot, event, ctx, post_type)
 
     async def _run_matchers(
@@ -564,25 +567,26 @@ class MessageDispatcher:
         """
         ctx = MessageContext(raw_event=event)
 
-        ctx.post_type = event.get("post_type", "")
-        ctx.message_type = event.get("message_type", "")
-        ctx.sub_type = event.get("sub_type", "")
+        view = EventView(event)
+        ctx.post_type = view.post_type
+        ctx.message_type = view.message_type
+        ctx.sub_type = view.sub_type
         # 消息缺失 message_id 时生成占位 id，避免空串在 messages 表的
         # unique 约束下被静默丢弃（第二条起全部冲突）；
         # DB 迁移为组合索引（M2-4）后可移除该占位
-        raw_mid = event.get("message_id")
+        raw_mid = view.message_id
         if raw_mid not in (None, "", 0):
             ctx.message_id = str(raw_mid)
         else:
-            ctx.message_id = f"gen-{event.get('user_id', 0)}-{int(time.time() * 1000)}"
-        ctx.self_id = self._safe_int(event.get("self_id"))
-        ctx.user_id = self._safe_int(event.get("user_id"))
-        ctx.group_id = self._safe_int(event.get("group_id"))
-        ctx.sender = event.get("sender", {}) or {}
-        ctx.raw_message = event.get("raw_message", "")
+            ctx.message_id = f"gen-{view.user_id}-{int(time.time() * 1000)}"
+        ctx.self_id = self._safe_int(view.self_id)
+        ctx.user_id = self._safe_int(view.user_id)
+        ctx.group_id = self._safe_int(view.group_id)
+        ctx.sender = view.sender
+        ctx.raw_message = view.raw_message
 
         # 段归一化：字符串 / v11 段数组统一转为 v12 段数组
-        msg = Message.from_raw(event.get("message"))
+        msg = Message.from_raw(view.message)
         ctx.segments = msg.as_dicts()
         ctx.plain_text = msg.extract_plain_text()
 
