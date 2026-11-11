@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Changed
+
+- **版权归属厘清（重要）**：CE 与 Plugins-SDK 原为个人项目、后转入 Qingci-Bot 组织维护，版权完整、排他地归 Zhou Zhe (aka luoqingci) 个人所有，组织不是共同版权人。全部源码头去掉「and Qingci-Bot contributors」改为单一版权人；修正两份 LICENSE 里 GPLv3 示例模板把组织列为版权人的双版权表述；并在 LICENSE 末尾追加中英双语的「永久、不可撤销的全球非独占 GPLv3 许可 + 以组织名义维权」书面授权（明确不转移版权、不影响 GPLv3 第 10 条下游自动许可、贡献者保留各自贡献的版权）
+- `scripts/license_headers.py` 支持把旧版权行安全迁移为新文本（`--fix` 不会重复加头），`--check` 同步校验版权人文本；README / CONTRIBUTING 更新版权与授权说明
+- 归属区分：Plugin-Market / hello 为组织下从零开发的仓库，版权归 Qingci-Bot Organization，不套用个人版权声明
+
 ### Added
 
 - **源码版权声明**：为 CE 全部 219 个源码文件（`.py` / `.js` / `.vue` / `.css` / `.spec`）统一补齐 `Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors` 与 `SPDX-License-Identifier: GPL-3.0-or-later` 头；CE 的文件额外标注「GPLv3 §7 附加条款见 LICENSE」，与 LICENSE 的附加条款 (a) 呼应

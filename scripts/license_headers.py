@@ -1,4 +1,4 @@
-# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci)
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Additional terms under GPLv3 Section 7: see LICENSE
 
@@ -42,11 +42,15 @@ SKIP_DIRS = {
 }
 SOURCE_SUFFIXES = {".py", ".js", ".vue", ".css", ".spec"}
 
-COPYRIGHT = "Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors"
+# CE / Plugins-SDK 是个人原创后转入组织维护的项目：版权完整、排他地归个人，
+# 组织不是共同版权人（双版权表述会带来权属风险），组织另获永久授权与维权授权，
+# 授权文本见 LICENSE 末尾的 "Copyright holder and organization authorization"。
+COPYRIGHT = "Copyright (C) 2026 Zhou Zhe (aka luoqingci)"
+# 早期声明曾把「组织贡献者」并列为版权人，--fix 会把这一行安全迁移到新文本
+DEPRECATED_COPYRIGHT = "Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors"
 SPDX = "SPDX-License-Identifier: GPL-3.0-or-later"
 ADDITIONAL = "Additional terms under GPLv3 Section 7: see LICENSE"
 SECTION7_MARKER = "ADDITIONAL TERMS UNDER GNU GPLv3 SECTION 7"
-COPYRIGHT_MARKER = "Copyright (C) 2026"
 SPDX_MARKER = "SPDX-License-Identifier:"
 
 
@@ -79,12 +83,17 @@ def header_lines(path: Path) -> list[str]:
 
 def has_header(path: Path) -> bool:
     head = path.read_bytes()[:800].decode("utf-8", errors="ignore")
-    return COPYRIGHT_MARKER in head and SPDX_MARKER in head
+    return COPYRIGHT in head and SPDX_MARKER in head and DEPRECATED_COPYRIGHT not in head
 
 
 def fix_one(path: Path) -> None:
     """在文件开头插入声明；只改开头，不触碰其余内容与换行风格"""
     data = path.read_bytes()
+    # 一次性迁移：把「个人 + 组织贡献者」的旧版权行改成单一版权人（不重复加头）
+    legacy = DEPRECATED_COPYRIGHT.encode("utf-8")
+    if legacy in data[:800]:
+        path.write_bytes(data.replace(legacy, COPYRIGHT.encode("utf-8"), 1))
+        return
     bom = b""
     if data.startswith(b"\xef\xbb\xbf"):
         bom, data = data[:3], data[3:]
