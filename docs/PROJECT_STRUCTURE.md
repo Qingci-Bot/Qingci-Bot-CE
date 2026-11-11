@@ -132,7 +132,7 @@ Qingci-Bot-CE/
 ├── pyproject.toml          # 依赖（qingci-plugin-sdk 为 PyPI 固定版本依赖）、ruff/mypy/pytest 配置
 ├── alembic.ini             # 迁移配置
 ├── .pre-commit-config.yaml # pre-commit 钩子
-└── README.md / ARCHITECTURE.md / PLUGIN_DEV.md / CONTRIBUTING.md / CHANGELOG.md / SECURITY.md / LICENSE
+└── README.md / ARCHITECTURE.md / PLUGIN_DEV.md / CONTRIBUTING.md / CHANGELOG.md / SECURITY.md / LICENSE / NOTICE
 ```
 
 ## 3. 各目录职责与归属原则

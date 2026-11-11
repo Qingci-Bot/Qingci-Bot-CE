@@ -2,7 +2,7 @@
 
 > **代码托管**：本项目以 [GitHub](https://github.com/Qingci-Bot/Qingci-Bot-CE) 为唯一仓库；贡献与提 PR 一律以 GitHub 为准。
 
-> **版权与授权**：本项目（含 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK)）原为 **[Zhou Zhe (aka luoqingci)](https://github.com/luoqingciya)** 的个人项目，版权完整、排他地归其个人所有；[Qingci-Bot](https://github.com/Qingci-Bot) 组织获永久、不可撤销的 GPLv3 使用 / 修改 / 分发许可及维权授权，负责持续维护，**不是共同版权人**。完整授权文本见 [LICENSE](./LICENSE) 末尾。
+> **版权与授权**：本项目（含 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK)）原为 **[Zhou Zhe (aka luoqingci)](https://github.com/luoqingciya)** 的个人项目，版权完整、排他地归其个人所有；[Qingci-Bot](https://github.com/Qingci-Bot) 组织获永久、不可撤销的 GPLv3 使用 / 修改 / 分发许可及维权授权，负责持续维护，**不是共同版权人**。完整授权文本见 [NOTICE](./NOTICE)。
 
 > **合规声明**：本项目不含任何对 QQ / 腾讯客户端或通信协议的逆向工程、破解或模拟登录，仅通过公开的 OneBot 11/12 标准接口与 Telegram Bot API 接入，详见 [合规声明](#合规声明)。
 
@@ -624,12 +624,12 @@ Qingci-Bot CE 是一个通用机器人框架：它只通过**公开的、由第�
 
 [GNU General Public License v3.0 or later (GPL-3.0-or-later)](./LICENSE)；衍生作品须同样以 GPLv3 或更高版本开源。
 
-此外，本项目依据 **GPLv3 第 7 条**添加了以下附加条款（完整文本见 [LICENSE](./LICENSE) 末尾的 *ADDITIONAL TERMS UNDER GNU GPLv3 SECTION 7*）：
+此外，本项目依据 **GPLv3 第 7 条**添加了以下附加条款（完整文本见 [NOTICE](./NOTICE) 的 *ADDITIONAL TERMS UNDER GNU GPLv3 SECTION 7*）：
 
 1. **保留声明**：分发时须保留源码中的版权、作者与项目来源声明，不得删除或篡改；
 2. **修改版须改名**：修改后的作品必须以明显区别于「Qingci-Bot CE」的名称分发，并显著标注为修改版；
 3. **不得暗示背书**：不得为宣传目的使用本项目或原作者名称，也不得明示或暗示获得原作者 / Qingci-Bot 组织的认可、赞助或关联。
 
-> 这些条款对应 GPLv3 第 7 条允许的「保留合理法律声明」「标记修改版」「禁止误示来源 / 限制以许可人名义宣传」类别。包元数据中的 SPDX 表达式仍为 `GPL-3.0-or-later`，附加条款以 LICENSE 文件为准。
+> 这些条款对应 GPLv3 第 7 条允许的「保留合理法律声明」「标记修改版」「禁止误示来源 / 限制以许可人名义宣传」类别。包元数据中的 SPDX 表达式仍为 `GPL-3.0-or-later`，附加条款以 NOTICE 文件为准。
 >
 > 所有源码文件均带 `Copyright (C) 2026 Zhou Zhe (aka luoqingci)` 与 `SPDX-License-Identifier: GPL-3.0-or-later` 声明，由 `scripts/license_headers.py --check` 在 CI 中校验；新增源码文件请运行 `--fix` 补齐。

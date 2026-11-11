@@ -1,18 +1,18 @@
 # Copyright (C) 2026 Zhou Zhe (aka luoqingci)
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Additional terms under GPLv3 Section 7: see LICENSE
+# Additional terms under GPLv3 Section 7: see NOTICE
 
 """源码版权 / 许可证声明的检查与批量补齐
 
-LICENSE 的 GPLv3 第 7 条附加条款 (a) 要求保留源码中的版权与作者声明，
+NOTICE 中的 GPLv3 第 7 条附加条款 (a) 要求保留源码中的版权与作者声明，
 因此每个源码文件都要有 Copyright + SPDX 标识。本脚本是这件事的单一来源：
 
     python scripts/license_headers.py --check   # 列出缺失声明的文件，退出码 1
     python scripts/license_headers.py --fix     # 幂等补齐（保留 BOM / 换行符 / shebang）
 
 ``--check`` 由 ``tests/test_license_headers.py`` 在 CI 里调用，新增源码文件
-漏写声明会直接失败。CE 的 LICENSE 含第 7 条附加条款时，文件头会多一行
-指向 LICENSE；Plugins-SDK 的纯 GPLv3 LICENSE 则不加该行（同一份脚本自动判断）。
+漏写声明会直接失败。CE 的 NOTICE 含第 7 条附加条款时，文件头会多一行
+指向 NOTICE；Plugins-SDK 的 NOTICE 不含该条款则不加该行（同一份脚本自动判断）。
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LICENSE = ROOT / "LICENSE"
+NOTICE = ROOT / "NOTICE"
 
 SKIP_DIRS = {
     ".git",
@@ -44,12 +44,12 @@ SOURCE_SUFFIXES = {".py", ".js", ".vue", ".css", ".spec"}
 
 # CE / Plugins-SDK 是个人原创后转入组织维护的项目：版权完整、排他地归个人，
 # 组织不是共同版权人（双版权表述会带来权属风险），组织另获永久授权与维权授权，
-# 授权文本见 LICENSE 末尾的 "Copyright holder and organization authorization"。
+# 授权文本见 NOTICE 的 "Copyright holder and organization authorization"。
 COPYRIGHT = "Copyright (C) 2026 Zhou Zhe (aka luoqingci)"
 # 早期声明曾把「组织贡献者」并列为版权人，--fix 会把这一行安全迁移到新文本
 DEPRECATED_COPYRIGHT = "Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors"
 SPDX = "SPDX-License-Identifier: GPL-3.0-or-later"
-ADDITIONAL = "Additional terms under GPLv3 Section 7: see LICENSE"
+ADDITIONAL = "Additional terms under GPLv3 Section 7: see NOTICE"
 SECTION7_MARKER = "ADDITIONAL TERMS UNDER GNU GPLv3 SECTION 7"
 SPDX_MARKER = "SPDX-License-Identifier:"
 
@@ -67,7 +67,7 @@ def iter_sources():
 def header_lines(path: Path) -> list[str]:
     """按扩展名生成注释块（Python/JS 用行注释，Vue/CSS 用块注释）"""
     lines = [COPYRIGHT, SPDX]
-    if SECTION7_MARKER in LICENSE.read_text(encoding="utf-8", errors="ignore"):
+    if SECTION7_MARKER in NOTICE.read_text(encoding="utf-8", errors="ignore"):
         lines.append(ADDITIONAL)
     suffix = path.suffix
     if suffix in (".py", ".spec"):
