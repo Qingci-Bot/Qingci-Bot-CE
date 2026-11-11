@@ -172,3 +172,8 @@ Qingci-Bot-CE/
 python scripts/license_headers.py --fix     # 补齐缺失声明（幂等，保留 shebang / 编码行 / 换行风格）
 python scripts/license_headers.py --check   # 检查；CI 由 tests/test_license_headers.py 调用，漏写即失败
 ```
+
+**版权归属**：本仓库与 Plugins-SDK 原为个人项目、后转入 Qingci-Bot 组织维护，版权完整归
+Zhou Zhe (aka luoqingci) 个人所有，组织**不是共同版权人**（组织持有的是永久、不可撤销的
+GPLv3 许可与维权授权，见 LICENSE 末尾）。因此源码头的版权行只有个人姓名；贡献者保留
+其各自贡献的版权，提交贡献即表示同意按 GPLv3 及 LICENSE 中的附加条款发布。
