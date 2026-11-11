@@ -5,6 +5,18 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Added
+
+- README 新增「合规声明」：明确本项目不含任何对 QQ / 腾讯客户端或通信协议的逆向工程、破解、客户端注入或模拟登录，仅通过公开的 OneBot 11/12 标准接口与 Telegram Bot API 接入，并说明商标关联性与使用者责任
+- README 新增「近期开发计划」：QQ 机器人官方接入（QQ 开放平台官方 API 适配器）、去冗余瘦身（精简依赖与重复实现、压缩分发体积）
+- LICENSE 依 GPLv3 第 7 条添加三项附加条款：保留声明、修改版须改名、不得暗示背书；README / CONTRIBUTING / Web 关于页与 pyproject 注释同步说明（包元数据仍为 SPDX `GPL-3.0-or-later`）
+
+### Changed
+
+- 全仓文档全面核对：校准版本示例、Node / Electron 版本要求，并同步 SDK 仓库中关于主项目依赖状态、历史 Release 用途的过时表述
+
 ## \[1.19.2] - 2026-11-11（前端工具链 major 升级）
 
 无新增功能与运行时逻辑变更；本次为前端依赖与构建工具链升级。

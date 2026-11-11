@@ -4,6 +4,8 @@
 
 > 本项目底层核心代码由 **[Zhou Zhe (aka luoqingci)](https://github.com/luoqingciya)** 原创，并授予 [Qingci-Bot](https://github.com/Qingci-Bot) 组织持续开发。
 
+> **合规声明**：本项目不含任何对 QQ / 腾讯客户端或通信协议的逆向工程、破解或模拟登录，仅通过公开的 OneBot 11/12 标准接口与 Telegram Bot API 接入，详见 [合规声明](#合规声明)。
+
 基于 Python 的多平台机器人框架，内部统一采用 **OneBot 12 事件模型**（`type` / `detail_type` / `message[]` 消息段），基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接任意 OneBot 11 反向 WebSocket 协议端（如 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot) / NapCat / go-cqhttp，作为兼容输入层自动翻译为 v12 事件），支持 LLM 智能对话、Web UI 和桌面应用。适配器将各平台归一化为 OneBot 12 内部模型，插件对来源平台完全无感知。
 
 > 独立插件开发：[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) — 零依赖插件开发 SDK，无需克隆主项目即可开发插件
@@ -588,6 +590,42 @@ lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 
 - [docs/CODING\_STANDARDS.md](./docs/CODING_STANDARDS.md) — 编码规范（类型 / 命名 / 分层 / Git 约定）
 
+## 合规声明
+
+**本项目不包含任何针对 QQ、QQ 客户端或腾讯即时通信服务的逆向工程、协议破解、抓包分析、客户端注入、Hook 或模拟登录。**
+
+Qingci-Bot CE 是一个通用机器人框架：它只通过**公开的、由第三方协议端实现的 OneBot 11 / OneBot 12 标准接口**（反向 WebSocket / HTTP API）以及 Telegram Bot API 收发消息。QQ 侧的消息收发完全由使用者自行部署的协议端（如 NapCat、LLBot / LLOneBot、Lagrange.OneBot、go-cqhttp 等）完成，本项目：
+
+- 不内置、不捆绑、不分发任何协议端，也不参与其登录、鉴权或协议实现；
+- 不获取、不存储、不破解任何 QQ 账号凭据或加密协议；
+- 不修改、注入或附加到 QQ 客户端进程，也不与之直接通信；
+- 不使用任何非公开接口或未文档化的私有协议。
+
+**关联性与商标**：本项目与腾讯科技（深圳）有限公司及 QQ 产品无任何关联，未获其授权、认可或背书。「QQ」「腾讯」「OneBot」「Telegram」等名称仅用于说明协议兼容性，相关商标与权利归各自权利人所有。
+
+**使用者责任**：使用者应自行确认其协议端的获取、部署与使用符合适用法律法规、平台服务条款及账号规则，并自行承担由此产生的全部责任；本项目作者不对使用者的具体使用方式负责。
+
+> 计划中的「QQ 机器人官方接入」指接入 QQ 开放平台面向开发者的官方机器人接口，与现有协议端方案并列，同样不涉及任何逆向或非公开接口。
+
+## 近期开发计划
+
+以下为方向性计划，用于说明近期工作重点，**不构成功能承诺或交付时间保证**；实际进度以 [CHANGELOG.md](./CHANGELOG.md) 与 GitHub Release 为准。
+
+| 方向 | 内容 |
+| --- | --- |
+| QQ 机器人官方接入 | 新增基于 QQ 开放平台官方机器人 API 的平台适配器（Webhook / WebSocket），与现有 OneBot 11 / OneBot 12 / Telegram 适配器并列，统一归一化为 OneBot 12 内部事件模型；插件层无需改动即可复用现有能力 |
+| 去冗余瘦身 | 精简运行时依赖与重复实现：收敛历史兼容代码、合并重复的消息段 / 协议转换路径、清理无调用方的旧分支，压缩 EXE / AppImage / Docker 镜像体积，并同步评估可移除的可选依赖 |
+
+> 两项均会先在 CHANGELOG 的 `[Unreleased]` 段记录，发版时归入对应版本；涉及破坏性变更会提前在 Release Notes 说明。
+
 ## 许可证
 
-[GNU General Public License v3.0 (GPLv3)](./LICENSE)，衍生作品必须同样以 GPLv3 开源。
+[GNU General Public License v3.0 or later (GPL-3.0-or-later)](./LICENSE)；衍生作品须同样以 GPLv3 或更高版本开源。
+
+此外，本项目依据 **GPLv3 第 7 条**添加了以下附加条款（完整文本见 [LICENSE](./LICENSE) 末尾的 *ADDITIONAL TERMS UNDER GNU GPLv3 SECTION 7*）：
+
+1. **保留声明**：分发时须保留源码中的版权、作者与项目来源声明，不得删除或篡改；
+2. **修改版须改名**：修改后的作品必须以明显区别于「Qingci-Bot CE」的名称分发，并显著标注为修改版；
+3. **不得暗示背书**：不得为宣传目的使用本项目或原作者名称，也不得明示或暗示获得原作者 / Qingci-Bot 组织的认可、赞助或关联。
+
+> 这些条款对应 GPLv3 第 7 条允许的「保留合理法律声明」「标记修改版」「禁止误示来源 / 限制以许可人名义宣传」类别。包元数据中的 SPDX 表达式仍为 `GPL-3.0-or-later`，附加条款以 LICENSE 文件为准。
