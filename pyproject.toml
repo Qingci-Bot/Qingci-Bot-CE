@@ -83,8 +83,9 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 # --cov-fail-under 为覆盖率防回退门槛：低于该值测试直接失败
-# 50% 全局（当前 51.9%，LLM 子系统补强后达标）；bot/llm 目录另有 70% 门槛（见 CI）
-addopts = ["--cov=bot", "--cov=api", "--cov-report=term-missing", "--cov-fail-under=50"]
+# P0 行为锁定后全局实测 62.89%，门槛抬到 62%；bot/llm 目录另有 74% 门槛（见 CI）
+# 门槛只升不降：每轮重构按新覆盖率小幅抬升，禁止下调
+addopts = ["--cov=bot", "--cov=api", "--cov-report=term-missing", "--cov-fail-under=62"]
 
 [tool.ruff]
 target-version = "py311"
