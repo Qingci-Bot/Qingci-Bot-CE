@@ -1,6 +1,6 @@
 [project]
 name = "qingci-bot-ce"
-version = "1.19.2"
+version = "1.19.3"
 description = "多平台机器人框架（OneBot 11 / OneBot 12 / Telegram），支持 LLM 对话、Web UI 和 Desktop UI"
 requires-python = ">=3.11"
 # SPDX 表达式保持纯 GPLv3；依 GPLv3 第 7 条添加的附加条款见 LICENSE 末尾
