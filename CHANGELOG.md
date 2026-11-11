@@ -5,7 +5,10 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## \[Unreleased]
+## \[1.19.3] - 2026-11-11（文档合规、去冗余与契约化重构）
+
+无新增功能，运行时行为保持不变；本次为代码去重、类型契约化、测试加固与文档 / 许可更新。
+本版归集自 1.19.2 以来的 5 批改动：文档与许可条款、去冗余瘦身、P0 行为锁定、P1 两个阶段。
 
 ### 配置契约与适配器边界（P1 第二阶段）
 
