@@ -5,7 +5,9 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## \[Unreleased]
+## \[1.19.2] - 2026-11-11（前端工具链 major 升级）
+
+无新增功能与运行时逻辑变更；本次为前端依赖与构建工具链升级。
 
 ### Changed
 
@@ -13,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESLint 迁移到 flat config：`.eslintrc.cjs` → `eslint.config.js`，新增 `@eslint/js` / `globals` 依赖，`lint` 脚本去掉已废弃的 `--ext`；规则集与旧配置等价，`no-unused-vars` 显式维持 ESLint 8 的 `caughtErrors: 'none'` 行为
 - `ci-web.yml` 的 Node 从 20 升到 22（与 ci-desktop / release 统一，满足 vite 8 / ESLint 10 / jsdom 31 的引擎要求）
 - `request.js` 重新抛错时带上 `cause`，满足 ESLint 10 新增的 `preserve-caught-error` 规则；`ChatConfig.vue` 修正 3 处属性顺序
+- **环境要求文档校准**：Web UI 构建的 Node 要求从 18+ 更正为 22+，各处「Electron 44」更新为实际使用的 45.2.x（CHANGELOG 历史条目保持原样）
 
 ## \[1.19.1] - 2026-11-11（SDK 分发切换与依赖更新）
 
