@@ -12,10 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README 新增「合规声明」：明确本项目不含任何对 QQ / 腾讯客户端或通信协议的逆向工程、破解、客户端注入或模拟登录，仅通过公开的 OneBot 11/12 标准接口与 Telegram Bot API 接入，并说明商标关联性与使用者责任
 - README 新增「近期开发计划」：QQ 机器人官方接入（QQ 开放平台官方 API 适配器）、去冗余瘦身（精简依赖与重复实现、压缩分发体积）
 - LICENSE 依 GPLv3 第 7 条添加三项附加条款：保留声明、修改版须改名、不得暗示背书；README / CONTRIBUTING / Web 关于页与 pyproject 注释同步说明（包元数据仍为 SPDX `GPL-3.0-or-later`）
+- **P0 行为锁定（重构前置）**：新增 62 项特征测试与契约测试，覆盖此前 0% 的 `composition.py` / `scheduler.py` / `filter.py`、CQ 码与 v11→v12 事件翻译黄金快照、以及 CE 协议层薄转发与 Plugins-SDK 导出面的跨仓库契约；全量测试 618 → 680 项，覆盖率 60.56% → 62.89%
 
 ### Changed
 
 - 全仓文档全面核对：校准版本示例、Node / Electron 版本要求，并同步 SDK 仓库中关于主项目依赖状态、历史 Release 用途的过时表述
+- **覆盖率门槛只升不降**：全局 `--cov-fail-under` 50% → 62%（实测 62.89%），CI 的 `bot/llm` 目录门槛 70% → 74%（实测 76%）
 
 ### 去冗余瘦身（首轮）
 
