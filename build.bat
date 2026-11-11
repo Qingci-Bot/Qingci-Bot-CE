@@ -33,7 +33,7 @@ if errorlevel 1 (
 rem ---- [0/3] standalone plugin SDK ----
 rem External plugins import qingci_plugin_sdk at runtime, so it must be present
 rem in the build env for PyInstaller collect_all.
-rem It is a direct-URL dependency (GitHub Release wheel, see pyproject.toml), so
+rem It is a pinned dependency from official PyPI (see pyproject.toml), so
 rem `uv sync` / `uv pip install -e .` already installs the pinned version — this
 rem step only verifies it, instead of re-installing and duplicating the version
 rem string in three places.

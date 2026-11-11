@@ -2848,33 +2848,22 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "qingci-bot-ce", extras = ["test", "build", "vector", "render"], marker = "extra == 'dev'" },
-    { name = "qingci-plugin-sdk", url = "https://github.com/Qingci-Bot/Plugins-SDK/releases/download/v1.15.1/qingci_plugin_sdk-1.15.1-py3-none-any.whl" },
+    { name = "qingci-plugin-sdk", specifier = "==1.15.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
     { name = "sqlmodel", specifier = ">=0.0.22,<1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1" },
-    { name = "websockets", specifier = ">=14.0,<17" },
+    { name = "websockets", specifier = ">=14.0,<18" },
 ]
 provides-extras = ["vector", "render", "test", "build", "dev"]
 
 [[package]]
 name = "qingci-plugin-sdk"
-version = "1.15.1"
-source = { url = "https://github.com/Qingci-Bot/Plugins-SDK/releases/download/v1.15.1/qingci_plugin_sdk-1.15.1-py3-none-any.whl" }
+version = "1.15.2"
+source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://github.com/Qingci-Bot/Plugins-SDK/releases/download/v1.15.1/qingci_plugin_sdk-1.15.1-py3-none-any.whl", hash = "sha256:f52002baa38e29bd0c04b2c8fd8e0abeb37693defeebd7c4f97c349c93df55d6" },
+    { url = "https://files.pythonhosted.org/packages/ec/1e/094d82b10b56e38dd9867d0ddfe42a24f93cd424b7ae4a25f84c42cd57a0/qingci_plugin_sdk-1.15.2-py3-none-any.whl", hash = "sha256:d1d2427fed5afc8d1c185692eda65da53aebb93194d708a30a66e05d68a09d1e", size = 80201, upload-time = "2026-11-11T11:26:59.156Z" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.7" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "quart"

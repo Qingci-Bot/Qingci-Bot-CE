@@ -39,7 +39,7 @@ echo "Python:   $PY"
 # ---------- [0/3] 独立插件 SDK ----------
 # 与 build.bat 一致：外部插件运行时会 import qingci_plugin_sdk，PyInstaller 的
 # collect_all 需要它已在构建环境里。
-# 它是直接 URL 依赖（GitHub Release 上的 wheel，见 pyproject.toml），
+# 它是 pyproject 里的固定版本依赖（官方 PyPI，见 pyproject.toml），
 # `uv sync` / `uv pip install -e .` 已经装好锁定版本——这里只做存在性校验，
 # 不再重复安装、也不在脚本里复制版本号。
 if ! "$PY" -c "import qingci_plugin_sdk" >/dev/null 2>&1; then
