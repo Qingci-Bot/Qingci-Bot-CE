@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """内置帮助插件测试：渲染成图片（方案 F）+ 文本兜底（A/C）+ hidden 过滤 + 别名"""
 
 import tempfile

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """单实例保护测试
 
 验证命名互斥量的首个/重复实例判定逻辑（跨实例互斥行为仅 Windows 生效）。

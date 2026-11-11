@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """P2 测试：细粒度事件处理钩子（run_preprocessor + on_calling_api）
 
 验证：

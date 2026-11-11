@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """会话状态持久化 — 把 SessionStateManager 的 ephemeral 快照落盘
 
 SessionStateManager.serialize()/deserialize() 已提供进程内快照能力，本模块作为

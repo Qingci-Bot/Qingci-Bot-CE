@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """多模态配置测试
 
 只覆盖配置层：默认关闭、字段解析、边界值。图片解析本身在 SDK 侧

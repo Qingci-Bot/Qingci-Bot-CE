@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """轻量国际化（i18n）模块（框架侧）
 
 提供零依赖的翻译查找与格式化，供框架与内置插件加载多语言资源。

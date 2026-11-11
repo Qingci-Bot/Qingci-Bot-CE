@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """OneBot 11 事件 -> OneBot 12 事件 翻译层（方案 A 迁移 M3）
 
 OneBot 11 作为"众多平台之一"接入时，由各 v11 适配器（aiocqhttp 的

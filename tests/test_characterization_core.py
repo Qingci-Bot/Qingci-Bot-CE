@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """P0 行为锁定：0% / 低覆盖核心模块的特征测试
 
 只断言「现在实际发生的行为」，不预设理想行为、不改动产品代码。

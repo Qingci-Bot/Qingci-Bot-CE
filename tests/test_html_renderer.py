@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """HTML → 图片渲染服务测试
 
 通过 monkeypatch 注入假 playwright，避免测试依赖真实浏览器安装；

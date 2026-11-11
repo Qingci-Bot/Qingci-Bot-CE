@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """子进程执行辅助（跨平台隐藏控制台窗口）
 
 桌面壳（Electron 拉起的后端、无控制台窗口/无头）模式下，asyncio

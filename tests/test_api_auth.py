@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """登录与鉴权状态路由测试（/api/auth/status, /api/auth/login）
 
 复用 test_api 的 client fixture 模式：set_config_path + create_app + TestClient。

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """敏感信息日志脱敏
 
 异常消息中可能携带完整 URL（如 Gemini 的 ``?key=`` 查询参数）或

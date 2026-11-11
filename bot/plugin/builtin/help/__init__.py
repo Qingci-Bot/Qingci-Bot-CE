@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """内置帮助插件 - 列出当前用户可用的命令（渲染成图片，带文本兜底）
 
 遍历 PluginManager 注册的所有 Matcher，按插件分组汇聚 /help 输出。

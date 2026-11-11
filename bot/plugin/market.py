@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """插件市场 — 集中索引 + 一键安装/更新编排
 
 市场索引（index.json）由官方仓库 Qingci-Bot/Plugin-Market 维护，

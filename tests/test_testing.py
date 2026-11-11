@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """插件测试工具（bot.testing）验证测试
 
 验证 TestBot 的完整链路：加载插件 → 发送消息 → 断言回复；

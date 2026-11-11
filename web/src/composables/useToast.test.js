@@ -1,3 +1,7 @@
+// Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Additional terms under GPLv3 Section 7: see LICENSE
+
 // 全局 Toast 状态测试
 //
 // 关注点：模块级单例的可见性、4 秒自动隐藏、重复调用时重置计时器

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """OneBot 12 平台适配器 — 反向 WebSocket 原生对接
 
 OneBot 12 实现端（如 NapCat / Lagrange.OneBot 等）作为客户端反向连接

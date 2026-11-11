@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """验证 Alembic 迁移一致性（CI 冒烟 / 本地自检）
 
 在隔离的临时数据目录上执行：

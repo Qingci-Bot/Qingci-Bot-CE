@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """事件链路追踪（event_id）测试
 
 验证 set_event_id 注入的 event_id 能随 JSON 结构化日志输出，

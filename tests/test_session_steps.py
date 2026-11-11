@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """会话阶梯（多轮交互）功能测试
 
 验证 SDK Session 阶梯 API 在主项目 Dispatcher 中的完整链路：

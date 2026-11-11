@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """消息写入缓冲（write-behind）测试
 
 覆盖：批量合并、阈值触发、队列溢出降级、关闭时 flush、写入异常隔离，

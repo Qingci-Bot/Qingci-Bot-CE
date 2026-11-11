@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """Alembic 异步迁移环境
 
 与 bot/db/engine.py 共用同一数据库 URL，确保迁移与应用使用一致的连接配置。

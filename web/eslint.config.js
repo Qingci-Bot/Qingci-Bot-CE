@@ -1,3 +1,7 @@
+// Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Additional terms under GPLv3 Section 7: see LICENSE
+
 // ESLint 10 只认 flat config（原 .eslintrc.cjs 在 v9 起已废弃、v10 移除）。
 // 规则集与旧配置等价：eslint:recommended + plugin:vue/vue3-recommended，
 // 环境为 browser + node，格式类规则继续交给 Prettier（npm run check）。

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """内置知识库管理插件 - /kb 命令（批次 3：轻量 RAG）
 
 命令（权限与现有管理员命令体系一致，均为 SUPERUSER）：

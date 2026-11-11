@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """类型化事件 — 转发至独立插件 SDK
 
 notice/request 事件模型（NoticeEvent/RequestEvent 及各子类、解析工厂）

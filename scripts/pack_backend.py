@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """把 PyInstaller onedir 打成单个 zip，供桌面壳首次启动解压
 
 为什么这么做：安装慢的主因是文件数。onedir 有数千个文件，NSIS 逐个落盘 +

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """单实例保护 — 防止重复双击启动多个界面/进程
 
 Windows 下基于命名互斥量（CreateMutexW）判断本进程是否为第一个实例：

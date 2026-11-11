@@ -1,3 +1,9 @@
+<!--
+  Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Additional terms under GPLv3 Section 7: see LICENSE
+-->
+
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useWebSocket } from '../composables/useWebSocket';

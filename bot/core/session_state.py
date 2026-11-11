@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """会话状态管理器 — TTL 键值存储
 
 借鉴 NoneBot2 的 session.state 设计，为每个会话（用户/群聊）提供

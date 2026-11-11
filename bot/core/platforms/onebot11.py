@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """OneBot 11 协议层 - 基于 aiocqhttp 的反向 WebSocket 实现
 
 底层使用 aiocqhttp（nonebot 出品）处理 OneBot v11 协议：

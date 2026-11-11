@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """事件总线 — 跨插件发布-订阅事件广播
 
 用于插件间解耦协作：插件 A 发布事件，关注该事件的插件接收并响应，

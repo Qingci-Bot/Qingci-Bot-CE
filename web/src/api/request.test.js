@@ -1,3 +1,7 @@
+// Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Additional terms under GPLv3 Section 7: see LICENSE
+
 // API 请求层测试
 //
 // 覆盖鉴权头注入、GET 缓存策略、204/非 JSON 响应、401 跳转与跳过跳转、

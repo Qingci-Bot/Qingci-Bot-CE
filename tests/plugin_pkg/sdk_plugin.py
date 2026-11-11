@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """基于独立插件 SDK（qingci_plugin_sdk）的测试插件
 
 验证宿主 bot 能识别并加载 SDK 式外部插件，且 data_dir 被重定向到

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """错误告警 - ERROR 日志达到阈值时私聊通知管理员
 
 设计要点（对齐批次 1 功能 9）：

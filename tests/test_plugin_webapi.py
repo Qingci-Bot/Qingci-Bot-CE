@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """插件级 Web API 注册机制测试
 
 验证 PluginBase.register_api → PluginManager 收集 → FastAPI 挂载

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """Matcher 与一次性匹配器（temp）自动移除测试
 
 通过真实 Dispatcher.run_matchers 链路验证：

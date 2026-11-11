@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """示例插件与 @llm_tool 使用方式的回归测试
 
 SDK 的 `@llm_tool` **只接受模块级自由函数**：装饰器收集到的是未绑定函数，宿主按

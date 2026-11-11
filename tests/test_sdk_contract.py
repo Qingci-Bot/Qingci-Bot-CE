@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """P0 跨仓库契约：CE 协议层薄转发与 Plugins-SDK 导出面保持一致
 
 SDK 是协议层唯一来源，CE 的 bot/plugin/protocol/* 与顶层兼容模块都只能是

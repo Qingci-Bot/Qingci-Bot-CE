@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """LiteLLM 适配器测试
 
 通过 mock 模块级 _get_litellm（延迟导入入口）验证，无需真实网络：

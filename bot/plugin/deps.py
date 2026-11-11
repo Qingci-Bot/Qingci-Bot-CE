@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """外部插件第三方依赖的按实例隔离安装与 sys.path 注入
 
 设计（方案 A：依赖随插件分发，不随 exe 打包）：

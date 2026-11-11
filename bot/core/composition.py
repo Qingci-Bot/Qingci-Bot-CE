@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """组合根（Composition Root）— 集中 QingciBot 的组件装配
 
 将 QingciBot.__init__ 中散落的组件创建与 DI 注册收敛到单一函数：
