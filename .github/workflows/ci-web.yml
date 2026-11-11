@@ -22,7 +22,9 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # vite 8 / ESLint 10 / jsdom 31 要求 Node ^20.19 || >=22.12；
+          # 与 ci-desktop / release 统一到 22，避免引擎不匹配与 EBADENGINE
+          node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
 

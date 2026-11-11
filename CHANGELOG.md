@@ -5,6 +5,15 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Changed
+
+- **前端工具链 major 升级**：pinia 2→4、vue-router 4→5、vite 6→8、@vitejs/plugin-vue 5→6、eslint 8→10、eslint-plugin-vue 9→10、jsdom 26→31；`web/package-lock.json` 重新生成（旧锁文件残留的 eslint-plugin-vue 9 会让 npm 解析冲突）
+- ESLint 迁移到 flat config：`.eslintrc.cjs` → `eslint.config.js`，新增 `@eslint/js` / `globals` 依赖，`lint` 脚本去掉已废弃的 `--ext`；规则集与旧配置等价，`no-unused-vars` 显式维持 ESLint 8 的 `caughtErrors: 'none'` 行为
+- `ci-web.yml` 的 Node 从 20 升到 22（与 ci-desktop / release 统一，满足 vite 8 / ESLint 10 / jsdom 31 的引擎要求）
+- `request.js` 重新抛错时带上 `cause`，满足 ESLint 10 新增的 `preserve-caught-error` 规则；`ChatConfig.vue` 修正 3 处属性顺序
+
 ## \[1.19.1] - 2026-11-11（SDK 分发切换与依赖更新）
 
 无新增功能与运行时逻辑变更；本次为分发链路调整与依赖更新。

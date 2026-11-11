@@ -353,20 +353,20 @@ async function saveConfig() {
         <strong>需模型支持视觉输入</strong>，否则请求会报错；图片过大或无法解析时自动跳过。
       </div>
       <label class="mm-row">
-        <input type="checkbox" v-model="form.multimodal.enabled" />
+        <input v-model="form.multimodal.enabled" type="checkbox" />
         <span>启用图片输入</span>
       </label>
       <div v-if="form.multimodal.enabled" class="mm-row">
         <span>单条最多</span>
         <input
+          v-model.number="form.multimodal.max_images"
           type="number"
           min="1"
           max="10"
           class="mm-num"
-          v-model.number="form.multimodal.max_images"
         />
         <span>张，单图上限</span>
-        <input type="number" min="1" max="20" class="mm-num" v-model.number="maxImageMb" />
+        <input v-model.number="maxImageMb" type="number" min="1" max="20" class="mm-num" />
         <span>MB</span>
       </div>
     </div>
