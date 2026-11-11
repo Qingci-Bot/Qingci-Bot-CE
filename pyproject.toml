@@ -8,16 +8,12 @@ dependencies = [
     # 独立插件 SDK：协议层（PluginBase/Matcher/Permission/Rule/MessageContext）唯一来源，
     # bot/plugin/ 下为薄转发。
     #
-    # 以**直接 URL** 依赖，指向 SDK 仓库 GitHub Release 上的 wheel：
-    #   - 公开可下载，CI / Docker / 源码安装都不需要令牌或额外配置
-    #   - 私有制品仓库（pypi.luoqingciya.cn）自 2026-10-28 起不再提供 PEP 503
-    #     `/simple` 索引，且下载需要令牌，无法作为包管理器索引使用；它保留作归档
-    #     与门户展示，安装链路改走 GitHub Release
-    #
-    # 升级 SDK：把下面 URL 里的 tag 与文件名两处版本号一起改（保持一致），
-    # 再 `uv lock --default-index https://pypi.org/simple`。
-    # 可用地址：https://github.com/Qingci-Bot/Plugins-SDK/releases/download/v<版本>/qingci_plugin_sdk-<版本>-py3-none-any.whl
-    "qingci-plugin-sdk @ https://github.com/Qingci-Bot/Plugins-SDK/releases/download/v1.15.1/qingci_plugin_sdk-1.15.1-py3-none-any.whl",
+    # 自 SDK 1.15.2 起由官方 PyPI 分发（Trusted Publishing），这里钉成精确版本：
+    #   - CI / Docker / 源码安装都走默认 PyPI 索引，无需令牌或额外配置
+    #   - 升级 SDK：改这里的版本号，再
+    #     `uv lock --default-index https://pypi.org/simple`（CI 校验锁文件、钉定版本与已安装版本一致）
+    #   - 本地改 SDK 源码时用 `uv pip install -e ..\Plugins-SDK` 覆盖
+    "qingci-plugin-sdk==1.15.2",
     # 依赖上界策略：核心依赖一律给「下一个主版本」上界。CI/开发由 uv.lock 精确锁定，
     # 上界主要保护「用户按 pyproject 直接 pip install」的场景——litellm / fastapi 等
     # 属于高频 breaking 的包，被动跨主版本升级会直接破坏运行时。
@@ -115,10 +111,10 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 # ── 依赖索引 ────────────────────────────────────────────────
-# 只留默认源（PyPI）。qingci-plugin-sdk 走 `dependencies` 里的直接 URL（见文件头），
-# 不参与索引解析——私有制品仓库已不提供 PEP 503 `/simple`，原先的
-# `[[tool.uv.index]] qingci` + `[tool.uv.sources]` 绑定已移除。
-# 若将来该仓库重新提供索引，改回索引绑定即可，其余代码无需变动。
+# 只留默认源（PyPI）：所有依赖（含 qingci-plugin-sdk）都从官方 PyPI 解析，
+# 不需要 `[[tool.uv.index]]` 或 `[tool.uv.sources]` 绑定。
+# 若本机配置了镜像，生成锁文件时必须显式指定
+# `uv lock --default-index https://pypi.org/simple`，否则 CI 的来源检查会拦截。
 
 [tool.mypy]
 # 有意按 3.12 检查（与推荐运行版本一致，见 CHANGELOG）：

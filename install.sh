@@ -112,10 +112,10 @@ else
   PKG_SPEC="."
 fi
 
-# qingci-plugin-sdk 是 pyproject 里的**直接 URL** 依赖（GitHub Release 上的 wheel），
-# 安装项目时由 uv / pip 自动下载，不需要私有索引、也不需要令牌。
+# qingci-plugin-sdk 是 pyproject 里的固定版本依赖（官方 PyPI），
+# 安装项目时由 uv / pip 从默认索引自动下载，不需要额外索引或令牌。
 # 这里不再单独预装它：原先的两步装法是为了绕开「给整棵依赖树加私有索引会拖慢
-# 100+ 个包的解析」，URL 依赖不经过索引，那个理由已不成立。
+# 100+ 个包的解析」，现在 SDK 与其他依赖走同一索引，那个理由已不成立。
 if command -v uv >/dev/null 2>&1; then
   UV=$(command -v uv)
   echo ">> 使用 uv 安装依赖: uv pip install -e \"$PKG_SPEC\""
