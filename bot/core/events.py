@@ -82,13 +82,16 @@ class EventContractError(ValueError):
     """事件结构不符合契约（供适配器边界与测试使用，不在主链路强制开启）"""
 
 
-def validate_v12_event(raw: Mapping[str, Any]) -> V12Event:
-    """校验 v12 事件的必需字段；只校验不改写，返回同一对象（仅类型层 cast）
+def validate_v12_event(
+    raw: Mapping[str, Any], *, required: tuple[str, ...] = _REQUIRED_V12_FIELDS
+) -> V12Event:
+    """校验 v12 事件字段；只校验不改写，返回同一对象（仅类型层 cast）
 
-    刻意不在主链路调用：未知事件允许原样透传，强行校验会改变现有行为。
-    适配器新增实现时可在边界处显式调用，或用于契约测试。
+    ``required`` 可缩小到核心字段（适配器边界的非阻断检查只要求
+    ``type`` / ``detail_type``），完整校验留给契约测试与新增适配器自检。
+    未知事件允许原样透传，不在主链路强制开启完整校验。
     """
-    missing = [key for key in _REQUIRED_V12_FIELDS if key not in raw]
+    missing = [key for key in required if key not in raw]
     if missing:
         raise EventContractError(f"v12 事件缺少必需字段: {', '.join(missing)}")
     return cast(V12Event, raw)
