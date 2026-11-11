@@ -88,6 +88,7 @@ export async function request(url, options = {}) {
   try {
     return await res.json();
   } catch (parseErr) {
-    throw new Error(`HTTP ${res.status} 响应不是有效 JSON`);
+    // 保留原始解析错误，便于定位非 JSON 响应（ESLint 10: preserve-caught-error）
+    throw new Error(`HTTP ${res.status} 响应不是有效 JSON`, { cause: parseErr });
   }
 }
