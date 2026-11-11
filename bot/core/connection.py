@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """OneBot 11 平台适配器 — 兼容别名（实际实现在 platforms/onebot11.py）
 
 B2 结构调整：OneBot 11 反向 WS 实现已归入多平台适配器目录

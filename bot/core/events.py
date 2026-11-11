@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """事件契约层（P1）：OneBot 12 / OneBot 11 事件的结构化类型与只读视图
 
 边界（改动前先读这里）：

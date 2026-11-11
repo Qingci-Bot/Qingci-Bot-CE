@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """测试事件构造器 — 快速生成 OneBot 事件（v11 / v12 双模）
 
 OneBot 12 迁移（方案 A）：

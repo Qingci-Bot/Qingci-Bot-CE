@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """P1 第二阶段：适配器边界的非阻断事件契约检查
 
 ``validate_v12_event`` 在 PlatformAdapter.emit_event 以「只告警、不阻断」

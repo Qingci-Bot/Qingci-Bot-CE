@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """HTML → 图片渲染服务（可选能力）
 
 基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG 图片，供签到卡等

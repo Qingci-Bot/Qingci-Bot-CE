@@ -1,3 +1,7 @@
+// Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Additional terms under GPLv3 Section 7: see LICENSE
+
 import { ref } from 'vue';
 
 // 模块级单例：所有组件共享同一个 toast 状态，由 App.vue 统一渲染顶部悬浮通知

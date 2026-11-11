@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """依赖注入容器 — 轻量级服务注册与解析
 
 借鉴 NoneBot2 的 DI 体系，提供类型安全的服务注册、解析和生命周期管理。

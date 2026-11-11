@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """MCP (Model Context Protocol) 集成 - 借鉴 AstrBot 的 MCP 支持
 
 连接外部 MCP 服务器（stdio / HTTP 传输），将服务器暴露的工具注册进

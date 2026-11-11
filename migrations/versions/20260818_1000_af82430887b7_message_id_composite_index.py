@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """message_id 去唯一，改用平台组合索引（OneBot 12 迁移 M2）
 
 OneBot 12 的 message_id 为字符串且各平台不保证全局唯一；

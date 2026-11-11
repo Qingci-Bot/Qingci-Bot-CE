@@ -631,3 +631,5 @@ Qingci-Bot CE 是一个通用机器人框架：它只通过**公开的、由第�
 3. **不得暗示背书**：不得为宣传目的使用本项目或原作者名称，也不得明示或暗示获得原作者 / Qingci-Bot 组织的认可、赞助或关联。
 
 > 这些条款对应 GPLv3 第 7 条允许的「保留合理法律声明」「标记修改版」「禁止误示来源 / 限制以许可人名义宣传」类别。包元数据中的 SPDX 表达式仍为 `GPL-3.0-or-later`，附加条款以 LICENSE 文件为准。
+>
+> 所有源码文件均带 `Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors` 与 `SPDX-License-Identifier: GPL-3.0-or-later` 声明，由 `scripts/license_headers.py --check` 在 CI 中校验；新增源码文件请运行 `--fix` 补齐。

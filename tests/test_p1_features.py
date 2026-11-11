@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """P1 功能测试：事件总线 / LLM 工具 / 指令系统增强 / 配置 schema
 
 验证五项 P1 能力已真正接线：

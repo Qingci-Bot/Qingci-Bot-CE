@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 from .backup import router as backup_router  # noqa: F401
 from .bot import router as bot_router  # noqa: F401
 from .command import router as command_router  # noqa: F401

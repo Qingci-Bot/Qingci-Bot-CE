@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """实例管理 API 路由测试（/api/instances*）
 
 通过 monkeypatch 将实例注册表与 data_root 重定向到临时目录，

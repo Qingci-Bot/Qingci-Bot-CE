@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """内置聊天插件 - 对接 LLM 进行对话（Matcher 新式 API）
 
 触发模式（运行时读 config，配置热更新无需重新注册 Matcher）：

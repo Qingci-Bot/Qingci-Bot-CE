@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """v12 事件 ID 归一化回归测试
 
 背景：SDK 把 ``MessageContext.user_id`` / ``group_id`` 标为 ``str | int``

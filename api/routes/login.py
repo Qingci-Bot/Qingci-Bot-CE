@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """登录与鉴权状态接口（不引入 JWT）
 
 - GET  /api/auth/status: 免鉴权，返回是否需要登录（配置 api_key 是否非空）

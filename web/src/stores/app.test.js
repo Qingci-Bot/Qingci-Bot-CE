@@ -1,3 +1,7 @@
+// Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Additional terms under GPLv3 Section 7: see LICENSE
+
 // 全局 Store 测试
 //
 // 关注点：派生状态（statusText/statusColor）映射、日志环形上限、

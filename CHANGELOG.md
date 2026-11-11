@@ -5,6 +5,14 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Added
+
+- **源码版权声明**：为 CE 全部 219 个源码文件（`.py` / `.js` / `.vue` / `.css` / `.spec`）统一补齐 `Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors` 与 `SPDX-License-Identifier: GPL-3.0-or-later` 头；CE 的文件额外标注「GPLv3 §7 附加条款见 LICENSE」，与 LICENSE 的附加条款 (a) 呼应
+- 新增 `scripts/license_headers.py`（`--check` 检查 / `--fix` 幂等补齐，自动识别 LICENSE 是否含附加条款、保留 BOM 与换行符）与 `tests/test_license_headers.py`，防止后续新增源码漏写声明
+- Plugins-SDK 仓库的 32 个源码文件同步补齐（其 LICENSE 为纯 GPLv3，故不带 §7 附加行），两者的 CONTRIBUTING / CHANGELOG / 结构文档同步说明
+
 ## \[1.19.3] - 2026-11-11（文档合规、去冗余与契约化重构）
 
 无新增功能，运行时行为保持不变；本次为代码去重、类型契约化、测试加固与文档 / 许可更新。

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """SSRF 防护工具
 
 市场索引、插件归档下载等由远端来源控制的 URL 拉取必须经过本模块校验，

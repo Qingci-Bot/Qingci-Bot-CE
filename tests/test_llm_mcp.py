@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """MCP 桥接器测试
 
 不依赖真实 mcp 包：向 sys.modules 注入假 mcp 模块，验证：

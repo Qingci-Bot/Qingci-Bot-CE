@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """异步数据库引擎 - 基于 SQLAlchemy 2.0 async + aiosqlite
 
 提供全局引擎和 AsyncSession 工厂，所有仓储类共享同一连接池。

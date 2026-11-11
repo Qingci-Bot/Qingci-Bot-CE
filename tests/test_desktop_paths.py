@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """桌面端路径一致性测试
 
 安装器（NSIS）和应用（Electron 主进程）必须对「数据目录」用同一套路径约定，

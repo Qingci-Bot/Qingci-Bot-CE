@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """CPU 执行器 — 把同步 CPU 计算移出事件循环的防御性基础设施
 
 单进程 asyncio 事件循环内，任何同步重计算（图片解码/缩放、哈希、正则

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """on_load 运行时注册子命令的插件（模拟 shiguang 的注册方式）
 
 模块级收集器在 import 阶段已关闭，on_command 的子指令 matcher 只能经

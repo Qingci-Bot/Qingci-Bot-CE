@@ -165,3 +165,10 @@ Qingci-Bot-CE/
 ## 许可证
 
 本项目采用 [GPL-3.0-or-later](LICENSE) 许可证，并依 GPLv3 第 7 条附加了「保留声明 / 修改版须改名 / 不得暗示背书」三项条款（完整文本见 [LICENSE](LICENSE) 末尾，说明见 [README 许可证章节](README.md#许可证)）。提交代码即表示你同意在此许可证及附加条款下发布你的贡献。
+
+**新增源码文件必须带版权声明**：每个 `.py` / `.js` / `.vue` / `.css` / `.spec` 文件开头都要有 Copyright 行与 `SPDX-License-Identifier`（CE 另有一行指向 LICENSE 的 §7 附加条款）。统一用脚本处理，不要手写以免格式漂移：
+
+```bash
+python scripts/license_headers.py --fix     # 补齐缺失声明（幂等，保留 shebang / 编码行 / 换行风格）
+python scripts/license_headers.py --check   # 检查；CI 由 tests/test_license_headers.py 调用，漏写即失败
+```

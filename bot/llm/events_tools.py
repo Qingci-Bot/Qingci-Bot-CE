@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """类型化事件的 LLM 工具化 — 事件缓冲 + Function Calling 只读工具
 
 notice/request 事件（已类型化，见 qingci_plugin_sdk.events）经 Dispatcher

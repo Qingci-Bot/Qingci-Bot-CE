@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """应用根目录解析（兼容 PyInstaller frozen 模式）
 
 - 源码模式：项目根目录（bot/ 的上级目录）

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """内置管理插件 - 权限控制、开关、黑名单（Matcher 新式 API 示例）
 
 使用 NoneBot2 风格的 Matcher/Rule/Permission 系统：

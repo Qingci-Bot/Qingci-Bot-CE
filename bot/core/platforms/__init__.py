@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """多平台适配器层
 
 平台适配器将「平台协议」归一化为 Qingci-Bot 内部契约（OneBot-11 兼容

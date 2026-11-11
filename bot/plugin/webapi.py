@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """插件级 Web API 适配器
 
 将插件在 on_load 中经 `PluginBase.register_api` 注册的 HTTP 接口挂载到

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """插件安装/卸载 — 来源拉取、归档安全解压、目录落位
 
 从 ``PluginManager`` 拆出的独立职责单元：管理器只保留「插件生命周期与调度」，

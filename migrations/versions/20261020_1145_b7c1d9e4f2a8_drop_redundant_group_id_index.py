@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """裁剪 messages 表冗余的 group_id 单列索引
 
 messages 表原有 6 个索引，其中 ix_messages_group_id 与复合索引

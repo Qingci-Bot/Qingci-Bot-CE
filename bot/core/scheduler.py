@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """定时任务调度器 - APScheduler AsyncIOScheduler 薄封装
 
 设计要点（对齐批次 1 功能 3）：

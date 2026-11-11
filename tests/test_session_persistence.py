@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """会话状态持久化测试 — 覆盖 save_snapshot/restore_snapshot 的落盘、原子写与容错"""
 
 import asyncio

@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """P1 事件契约层：只读视图、v12 结构校验与 dispatcher 行为回归
 
 事件仍是同一个 dict（插件 API 由 SDK 定义），本组用例同时守住两件事：

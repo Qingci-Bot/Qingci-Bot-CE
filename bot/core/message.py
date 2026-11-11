@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """类型化消息构造器 - 借鉴 NoneBot2 的 Message / MessageSegment 设计
 
 提供类型化的消息段构造（text / at / image / face / voice / video /

@@ -1,3 +1,7 @@
+// Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Additional terms under GPLv3 Section 7: see LICENSE
+
 import { defineStore } from 'pinia';
 import { ref, computed, reactive } from 'vue';
 import { authHeaders, getApiKey, request, setApiKey } from '../api/request';

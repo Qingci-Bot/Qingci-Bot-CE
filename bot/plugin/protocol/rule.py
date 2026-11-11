@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """规则系统 — 转发至独立插件 SDK
 
 协议层（Rule / 内置规则工厂）统一由 qingci_plugin_sdk.rule 维护，

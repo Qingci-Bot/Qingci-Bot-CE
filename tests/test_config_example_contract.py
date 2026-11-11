@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """P1 第二阶段：config.example.yaml 与 AppConfig 的契约锁
 
 示例文件带大量手写注释（给用户的配置说明），刻意不做生成替换；

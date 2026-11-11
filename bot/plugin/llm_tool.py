@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GPLv3 Section 7: see LICENSE
+
 """插件级 LLM 工具声明（Function Calling）
 
 声明机制（`LlmToolSpec` / `llm_tool` / `begin_tool_collection` /
