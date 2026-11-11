@@ -25,7 +25,7 @@ on:
       - ".github/workflows/ci.yml"
   pull_request:
     # 不使用 YAML 锚点复用上面的列表：GitHub Actions 对 anchors/aliases 支持不可靠
-    # 不使用 paths 过滤：分支保护要求 8 项检查全部上报，
+    # 不使用 paths 过滤：分支保护要求 7 项必需检查全部上报，
     # 若 PR 只改文档或工作流文件、又不命中过滤条件，将永远等不到检查而无法合并。
 
 jobs:
@@ -54,8 +54,8 @@ jobs:
         run: uv sync --locked --python 3.12 --extra dev
 
       - name: Verify SDK version matches lock
-        # SDK 由私有索引分发并精确锁定；构建可复现要求实际安装的版本
-        # 与 pyproject.toml 声明完全一致，防止锁错/上游漂移
+        # SDK 是从官方 PyPI 安装的固定版本依赖。uv sync --locked 已保证 pyproject
+        # 与 uv.lock 一致，这里再核对「钉的版本 == 实际安装的版本」，防止锁错/上游漂移。
         run: |
           uv run --no-sync python - <<'EOF'
           import re, tomllib
@@ -63,28 +63,36 @@ jobs:
 
           spec = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
           dep = next(d for d in spec if d.startswith("qingci-plugin-sdk"))
-          m = re.search(r"==\s*([\d.]+)", dep)
-          assert m, f"SDK 依赖未精确锁定版本: {dep!r}"
-          locked = m.group(1)
+          m = re.fullmatch(r"qingci-plugin-sdk==(\d+\.\d+\.\d+)", dep)
+          assert m, f"SDK 应钉成精确版本（qingci-plugin-sdk==X.Y.Z）：{dep!r}"
+          pinned = m.group(1)
           installed = qingci_plugin_sdk.__version__
-          assert locked == installed, (
-              f"SDK 版本不一致: pyproject 锁定 {locked}，实际安装 {installed}"
+          assert installed == pinned, (
+              f"SDK 版本不一致：pyproject 钉 {pinned}，实际安装 {installed}"
           )
-          print(f"SDK {installed} == 锁定 {locked} OK")
+          print(f"SDK {installed} == pyproject 钉定版本 OK（官方 PyPI）")
           EOF
 
       - name: Verify lock sources are canonical
         # uv.lock 若在配置了镜像（pip.conf / uv.toml）的机器上生成，会把镜像地址
         # 写进锁文件；CI 用官方源解析时就会判定「锁文件需要更新」而失败。
-        # 只允许官方 PyPI 与私有索引两种来源。
+        # SDK 自 1.15.2 起也来自官方 PyPI，因此所有包一律只允许 pypi.org/simple。
         run: |
-          bad=$(grep -oE 'registry = "https://[^"]+"' uv.lock | sort -u                 | grep -vE 'https://pypi\.org/simple|https://pypi\.luoqingciya\.cn/simple' || true)
+          bad=$(grep -oE 'registry = "https://[^"]+"' uv.lock | sort -u | grep -vE 'https://pypi\.org/simple' || true)
           if [ -n "$bad" ]; then
             echo "uv.lock 含非官方索引，请用 --default-index https://pypi.org/simple 重新生成："
             echo "$bad"
             exit 1
           fi
-          echo "uv.lock 索引来源检查通过"
+          uv run --no-sync python - <<'EOF'
+          import pathlib, tomllib
+
+          lock = tomllib.loads(pathlib.Path("uv.lock").read_text(encoding="utf-8"))
+          pkg = next(p for p in lock["package"] if p["name"] == "qingci-plugin-sdk")
+          src = pkg.get("source", {}).get("registry")
+          assert src == "https://pypi.org/simple", f"SDK 未从官方 PyPI 解析：{src!r}"
+          print(f"uv.lock 来源检查通过（含 SDK 在内均为官方 PyPI，SDK {pkg['version']}）")
+          EOF
 
       - name: Lint (ruff)
         run: uv run --no-sync ruff check .
@@ -158,12 +166,11 @@ jobs:
 
       - name: Audit
         # pip-audit 不进锁文件（仅 CI 工具），临时装入 venv。
-        # 以导出清单审计第三方依赖：qingci-plugin-sdk 由私有索引分发、公共漏洞库
-        # 无记录，pip-audit 会因「PyPI 上找不到该包」直接退出 1，故从清单中剔除。
+        # 审计全部第三方依赖：qingci-plugin-sdk 自 1.15.2 起发布在官方 PyPI，
+        # 漏洞库可查，不再需要从导出清单中剔除。
         run: |
           uv pip install --python .venv pip-audit
-          uv export --no-emit-project --format requirements-txt --no-hashes \
-            | grep -v '^qingci-plugin-sdk' > /tmp/audit-reqs.txt
+          uv export --no-emit-project --format requirements-txt --no-hashes > /tmp/audit-reqs.txt
           uv run --no-sync pip-audit -r /tmp/audit-reqs.txt
 
   docker:

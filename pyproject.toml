@@ -6,9 +6,14 @@ requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
 dependencies = [
     # 独立插件 SDK：协议层（PluginBase/Matcher/Permission/Rule/MessageContext）唯一来源，
-    # bot/plugin/ 下为薄转发。由私有索引分发（见文末 [[tool.uv.index]] 与 [tool.uv.sources]），
-    # 版本精确锁定保证可复现；SDK 发新版后更新此处版本号并重新 uv lock。
-    "qingci-plugin-sdk==1.15.0",
+    # bot/plugin/ 下为薄转发。
+    #
+    # 自 SDK 1.15.2 起由官方 PyPI 分发（Trusted Publishing），这里钉成精确版本：
+    #   - CI / Docker / 源码安装都走默认 PyPI 索引，无需令牌或额外配置
+    #   - 升级 SDK：改这里的版本号，再
+    #     `uv lock --default-index https://pypi.org/simple`（CI 校验锁文件、钉定版本与已安装版本一致）
+    #   - 本地改 SDK 源码时用 `uv pip install -e ..\Plugins-SDK` 覆盖
+    "qingci-plugin-sdk==1.15.2",
     # 依赖上界策略：核心依赖一律给「下一个主版本」上界。CI/开发由 uv.lock 精确锁定，
     # 上界主要保护「用户按 pyproject 直接 pip install」的场景——litellm / fastapi 等
     # 属于高频 breaking 的包，被动跨主版本升级会直接破坏运行时。
@@ -26,7 +31,16 @@ dependencies = [
     "packaging>=24.0",
     "pyyaml>=6.0,<7",
     "httpx>=0.28.0,<1",
-    "litellm>=1.50.0,<2",
+    # litellm 上限收紧到 <1.104：1.100.4 起修掉 CVE-2026-114612，
+    # 但 1.104.0 起把 filelock 钉成 `>=3.16.1,<4.0`，会把 filelock 拉回 3.x
+    # ——而 1.19.0 停止支持 Python 3.10 正是为了用上 filelock 4.2.1+ 的 CVE 修复。
+    # 1.103.1 是「已修 litellm CVE 且不限制 filelock」的最后一版。
+    # 待 litellm 放宽该约束后可移除本上限（届时同步 `uv lock` 与 pip-audit）。
+    "litellm>=1.103.1,<1.104",
+    # 显式钉住 filelock 下界：1.19.0 停止支持 Python 3.10 就是为了它（4.2.1 修了 3 个
+    # CVE）。写成直接依赖，防止某个间接依赖把约束放宽成 `<4` 时悄悄降级——litellm
+    # 1.104+ 正是这么干的（`filelock>=3.16.1,<4.0`），解析器会静默退回 3.x。
+    "filelock>=4.2.1,<5",
     "apscheduler>=3.10,<4",
     "mcp>=1.6,<2",
 ]
@@ -97,19 +111,10 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 # ── 依赖索引 ────────────────────────────────────────────────
-# qingci-plugin-sdk 由私有索引分发（Twine 兼容，上传走 /legacy/）。
-# 索引对私有项目只返回本地文件；未收录的包会中转代理上游 PyPI（链接改写为
-# /proxy/），上游异常时按 404 处理。本项目的其余依赖仍从默认源（PyPI）解析。
-# explicit = true：此索引只服务下面 sources 显式绑定的包，不参与其他包的
-# 解析——避免为 130 个依赖逐个请求私有索引，也避免同名包被公网抢占。
-[[tool.uv.index]]
-name = "qingci"
-url = "https://pypi.luoqingciya.cn/simple"
-publish-url = "https://admin.pypi.luoqingciya.cn/legacy/"
-explicit = true
-
-[tool.uv.sources]
-qingci-plugin-sdk = { index = "qingci" }
+# 只留默认源（PyPI）：所有依赖（含 qingci-plugin-sdk）都从官方 PyPI 解析，
+# 不需要 `[[tool.uv.index]]` 或 `[tool.uv.sources]` 绑定。
+# 若本机配置了镜像，生成锁文件时必须显式指定
+# `uv lock --default-index https://pypi.org/simple`，否则 CI 的来源检查会拦截。
 
 [tool.mypy]
 # 有意按 3.12 检查（与推荐运行版本一致，见 CHANGELOG）：
