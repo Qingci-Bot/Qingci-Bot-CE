@@ -1714,7 +1714,7 @@ dist\qingci-bot-ce\
 ```powershell
 # 先决条件
 #  1) 已执行 .\build.bat，产物位于 dist\qingci-bot-ce\（后端 onedir）
-#  2) Node.js 22+ 与 npm 可用（Electron 44 要求 Node ≥22.12）
+#  2) Node.js 22+ 与 npm 可用（Electron 45.2.x，与 CI 的 Node 22 一致）
 .\build-electron.bat
 ```
 
@@ -1736,7 +1736,7 @@ dist\qingci-bot-ce\
 Linux 与 Windows 同源：先用 `build-linux.sh` 产出后端 onedir（`build.bat` 的对应脚本，产出 `dist/qingci-bot-ce/`），再经 electron-builder 打 AppImage。
 
 ```bash
-# 先决条件：.venv + [build] 依赖、Node.js 22+ 与 npm（Electron 44 要求 Node ≥22.12）
+# 先决条件：.venv + [build] 依赖、Node.js 22+ 与 npm（Electron 45.2.x，与 CI 的 Node 22 一致）
 ./build-linux.sh
 cd desktop/electron && npm ci && npx electron-builder --linux --publish never
 ```
