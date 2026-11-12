@@ -5,6 +5,14 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Changed
+
+- **DI 双轨合一（P1）**：`bot/core/di.py` 把 `inject` / `inject_sync` 两份重复实现、三份重复的生命周期解析收敛为一组同步核心方法（`_instantiate` / `_resolve_core` / `_resolve_direct` / `_inject_core` / `_register_instance`）；async 公开 API 只负责加 `asyncio.Lock` 后调用同一核心，全部公开签名保持兼容。文件 536 → 452 行，净减 84 行
+- 修正两处一致性缺陷：`resolve_sync()` 此前对 `register_as()` 的接口绑定返回 `None`，与自身文档「语义与 `await resolve()` 一致」不符（现有调用方 `get_bot()` 不涉及该路径）；`_unwrap_optional()` 增加对 PEP 604 `X | None` 的支持，修复项目启用 ruff UP045 后这类注解静默漏注入
+- 新增 `tests/test_di_contract.py`（12 项）锁定 async / sync 等价、三种生命周期、接口绑定、注入与查询；全量 721 项测试，覆盖率 63.93%
+
 ## \[1.19.4] - 2026-11-12（版权厘清、许可规范化与文档体系重组）
 
 无新增功能，运行时行为保持不变；本次为版权 / 许可声明规范化与文档体系重组。
