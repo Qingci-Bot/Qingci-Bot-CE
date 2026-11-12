@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.20.0] - 2026-11-12（P1 架构分层与能力开放：错误模型、ABI 探测、配置 schema、大组件拆分与 CI 分级）
+
+P1 路线图全部完成。插件 / 平台 / Web API 等对外行为向后兼容，内部架构分层与扩展能力显著增强。全量 757 项测试，覆盖率 64.32%。
+
+### Added
+
+- **统一错误模型**：新增 `bot/errors.py`，`AppError` 基类携带机器可读错误码（`code`）与可选 `detail`，并提供 `to_dict()` 结构化输出（供 API / 日志按错误码分类）。既有错误类经**多继承**并入且语义全兼容：`MarketError` / `HtmlRenderError`（原模块 re-export，错误类唯一定义在 errors.py）、`EventContractError(AppError, ValueError)`、`TelegramAPIError(AppError, RuntimeError)`（error_code / description 字段保持）；新增 `PluginLoadError` / `PluginDependencyError` / `PluginInstallError`（保持 ValueError 语义），替换 manager / installer 的 17 处裸 `raise ValueError`。新增 `tests/test_errors.py`（10 项）锁定 isinstance 链、str 输出、code 唯一性与 re-export 同类
+- **插件 ABI 能力探测（解除 SDK 精确钉版）**：`qingci-plugin-sdk` 依赖从 `==1.15.2` 放宽为 `>=1.15.2,<2.0.0` 区间；新增 `bot/plugin/abi.py` 持有框架实际消费的全部 SDK 符号清单（`REQUIRED_SYMBOLS`，AST 扫描提取）与兼容区间（`SDK_ABI_RANGE`），启动时版本区间 + 符号清单双检（问题 ERROR 级留痕）。CI「Verify SDK version」步骤同步改为区间语义（安装 / 锁定版本落在 pyproject 区间内 + 锁文件双检）；SDK minor 升级此后只需跑通探测 + 全量测试即可合入
+- **配置 schema 生成器（WebUI 表单单一来源）**：新增 `bot/config_schema.py` 与 `GET /api/config/schema` 端点——从 Pydantic 配置模型导出 JSON Schema（draft 2020-12），字段 / 类型 / 默认值 / 描述全部来自模型定义；敏感字段（token / secret / password / api_key 启发式）统一打 `x-secret` 标记 + `format: password`，前端据此渲染密码输入框与空值保护。`is_secret_field` 成为敏感判定唯一实现，主配置与插件配置脱敏规则合一（消除两处漂移）。新增 `tests/test_config_schema.py`（8 项）锁定 schema ↔ 模型 ↔ config.example.yaml 三方一致
+- **Chromium/playwright 按需化**：`build.bat` / `build-linux.sh` 新增 `--no-browser` 跳过 Chromium 捆绑（产物轻约百 MB，渲染能力按需事后 `playwright install chromium`）；Release 工作流手动触发新增 `bundle_browser` 输入。**默认仍捆绑**，保持桌面 EXE 开箱可渲染的既有承诺；pip / Docker / install.sh 默认安装路径本就不含渲染依赖（仅 `[render]` extra 携带）
+
 ### Changed
 
 - **AppScope 收口进程级全局（P1）**：新增 `bot/core/scope.py`，把 `bot/core/bot.py` 的 DI 容器、`bot/db/engine.py` 的引擎与会话工厂、`bot/llm/litellm_adapter.py` 的延迟导入模块、`bot/logformat.py` 的运行日志 Handler 统一收进 `AppScope`；这些模块不再各自声明 `global`，全部入口函数签名与行为不变，`reset_scope()` 提供测试隔离（只清引用、不释放资源）。锁、模块内缓存、路径状态与后台任务句柄按职责留在原模块
@@ -14,7 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **DI 双轨合一（P1）**：`bot/core/di.py` 把 `inject` / `inject_sync` 两份重复实现、三份重复的生命周期解析收敛为一组同步核心方法（`_instantiate` / `_resolve_core` / `_resolve_direct` / `_inject_core` / `_register_instance`）；async 公开 API 只负责加 `asyncio.Lock` 后调用同一核心，全部公开签名保持兼容。文件 536 → 452 行，净减 84 行
 - 修正两处一致性缺陷：`resolve_sync()` 此前对 `register_as()` 的接口绑定返回 `None`，与自身文档「语义与 `await resolve()` 一致」不符（现有调用方 `get_bot()` 不涉及该路径）；`_unwrap_optional()` 增加对 PEP 604 `X | None` 的支持，修复项目启用 ruff UP045 后这类注解静默漏注入
-- 新增 `tests/test_di_contract.py`（12 项）锁定 async / sync 等价、三种生命周期、接口绑定、注入与查询；全量 721 项测试，覆盖率 63.93%
+- 新增 `tests/test_di_contract.py`（12 项）锁定 async / sync 等价、三种生命周期、接口绑定、注入与查询
+
+- **PluginManager 门面拆分（P1）**：`bot/plugin/manager.py` 1343 → 832 行，按职责分组以 mixin 组合拆出：`manager_web.py`（Web 管理页面挂载 / 插件级 Web API / 配置 Schema 与配置值读写 + `_AuthStaticFiles`）、`manager_metrics.py`（Matcher 执行指标 + `MatcherMetrics`）、`_rwlock.py`（热重载读写屏障）、`_loading.py`（加载辅助纯函数）。公开 API 与插件加载语义（写锁交换 / 失败回滚 / 重名覆盖补偿）逐行保持；各分组状态仍由 `PluginManager.__init__` 统一持有，mixin 仅承载方法。`webapi.mount_plugin_apis` 改用 `_ManagerLike` Protocol 解除对具体类的类型耦合
+- **前端大组件拆分（P1）**：`PluginManager.vue` 1465 → 568 行，拆出 `plugin/CommandTab.vue`（命令管理 Tab）、`plugin/MarketTab.vue`（插件市场 Tab，含市场源切换与请求竞态序号）、`plugin/PluginConfigDrawer.vue`（配置抽屉，状态内聚经 `ref.open(plugin)` 打开）；`Settings.vue` 822 → 558 行，拆出 `settings/DataManagementCard.vue`（备份 / 下载 / 恢复 / CSV 导出）与 `settings/AuditLogCard.vue`（审计日志）。Tab 组件随 v-if 挂载自动拉取，行为等价；scoped 样式随职责随迁
+- **CI 路径分级（P1）**：三个 CI 工作流统一引入 `changes` job（dorny/paths-filter）+ 条件执行——Docker 构建 / Python 3.11 兼容矩阵 / 依赖审计 / install.sh 冒烟及前端、桌面壳检查按变更路径判定，未命中路径输出 Skipped（分支保护计为通过）；纯文档 PR 不再触发无关全量构建。`Lint/Type/Test` 恒跑（test_docs / 许可证头与全仓相关）
+- CONTRIBUTING.md 同步 CI 路径分级说明与 SDK 区间约束描述
 
 ## \[1.19.4] - 2026-11-12（版权厘清、许可规范化与文档体系重组）
 
