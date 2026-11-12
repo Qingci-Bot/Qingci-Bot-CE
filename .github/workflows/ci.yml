@@ -181,7 +181,10 @@ jobs:
         run: uv run --no-sync coverage report --include='bot/llm/*' --fail-under=74
 
   compat:
-    name: Python ${{ matrix.python }} compatibility
+    # 静态名（不能用 matrix 插值）：job 级 if 跳过时矩阵未展开，插值名会以
+    # 字面量上报，与分支保护必需检查名「Python 3.11 compatibility」失配，
+    # 导致合并被永久阻塞
+    name: Python 3.11 compatibility
     needs: changes
     # 兼容性只与 Python 运行代码/依赖相关，纯文档/前端 PR 跳过
     if: needs.changes.outputs.compat == 'true'
