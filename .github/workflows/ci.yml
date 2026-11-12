@@ -181,13 +181,14 @@ jobs:
         run: uv run --no-sync coverage report --include='bot/llm/*' --fail-under=74
 
   compat:
-    # 静态名（不能用 matrix 插值）：job 级 if 跳过时矩阵未展开，插值名会以
-    # 字面量上报，与分支保护必需检查名「Python 3.11 compatibility」失配，
-    # 导致合并被永久阻塞
-    name: Python 3.11 compatibility
+    # 跳过策略（重要，勿改为 job 级 if + 静态名）：
+    # - name 含 matrix 插值：job 实际运行时 GitHub 按「插值后的名字」上报（无矩阵后缀），
+    #   与分支保护必需检查名精确匹配；静态名反而会被追加矩阵后缀导致失配。
+    # - job 级 if 跳过时矩阵不展开、插值名以字面量上报，同样失配（docs-only PR 被阻塞）。
+    # 因此改为「job 始终实例化 + 每个步骤按 changes 判定条件跳过」：跳过时全部步骤
+    # no-op、结论 success、名字正确渲染，两种状态都能满足必需检查。
+    name: Python ${{ matrix.python }} compatibility
     needs: changes
-    # 兼容性只与 Python 运行代码/依赖相关，纯文档/前端 PR 跳过
-    if: needs.changes.outputs.compat == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -197,8 +198,10 @@ jobs:
         python: ["3.11"]
     steps:
       - uses: actions/checkout@v7
+        if: needs.changes.outputs.compat == 'true'
 
       - name: Install uv
+        if: needs.changes.outputs.compat == 'true'
         uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.3"
@@ -206,10 +209,12 @@ jobs:
 
       - name: Install dependencies (locked)
         # 兼容性验证只需运行期依赖 + 测试依赖，不拉 playwright/lancedb/pyinstaller
+        if: needs.changes.outputs.compat == 'true'
         run: uv sync --locked --python ${{ matrix.python }} --extra test
 
       - name: Test
         # 只验证「能在声明的最低版本上跑通」，不重复跑覆盖率门槛（见 quality job）
+        if: needs.changes.outputs.compat == 'true'
         run: uv run --no-sync pytest -q -o addopts=""
 
   audit:
