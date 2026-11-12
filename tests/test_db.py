@@ -26,9 +26,10 @@ async def db(temp_db_dir, monkeypatch):
     """设置测试数据库（每个测试独立）"""
     # 重置引擎全局状态
     import bot.db.engine as _engine
+    from bot.core.scope import get_scope
 
-    _engine._engine = None
-    _engine._session_factory = None
+    get_scope().engine = None
+    get_scope().session_factory = None
 
     # 将引擎的数据根指向临时目录，使 db_path() 解析到临时库
     monkeypatch.setattr(_engine, "data_root", lambda: temp_db_dir)
@@ -41,8 +42,8 @@ async def db(temp_db_dir, monkeypatch):
 
     # 清理
     await _engine.dispose_engine()
-    _engine._engine = None
-    _engine._session_factory = None
+    get_scope().engine = None
+    get_scope().session_factory = None
 
 
 @pytest.mark.asyncio

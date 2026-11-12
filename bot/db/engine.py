@@ -17,17 +17,16 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
 # 数据库文件位于可写数据根目录（默认 app_root()/data，可用 --data-dir 覆盖以实现多实例隔离）
+from ..core.scope import get_scope
 from ..paths import data_root
 
 logger = logging.getLogger("qingci-bot.db.engine")
 
-_engine: AsyncEngine | None = None
-_session_factory: sessionmaker | None = None
 _engine_lock = threading.Lock()
 _session_factory_lock = threading.Lock()
 
@@ -68,10 +67,10 @@ def _db_pool_params() -> dict:
 
 def get_engine():
     """获取全局异步引擎（懒加载，线程安全）"""
-    global _engine
-    if _engine is None:
+    scope = get_scope()
+    if scope.engine is None:
         with _engine_lock:
-            if _engine is None:
+            if scope.engine is None:
                 db = db_path()
                 db.parent.mkdir(parents=True, exist_ok=True)
                 engine = create_async_engine(
@@ -82,22 +81,22 @@ def get_engine():
                 )
                 # 在底层同步引擎上注册 connect 事件，设置 WAL 模式
                 event.listen(engine.sync_engine, "connect", _set_sqlite_pragma)
-                _engine = engine
-    return _engine
+                scope.engine = engine
+    return scope.engine
 
 
 def get_session_factory() -> sessionmaker:
     """获取 AsyncSession 工厂（懒加载，线程安全）"""
-    global _session_factory
-    if _session_factory is None:
+    scope = get_scope()
+    if scope.session_factory is None:
         with _session_factory_lock:
-            if _session_factory is None:
-                _session_factory = sessionmaker(
+            if scope.session_factory is None:
+                scope.session_factory = sessionmaker(
                     get_engine(),
                     class_=AsyncSession,
                     expire_on_commit=False,
                 )
-    return _session_factory
+    return scope.session_factory
 
 
 @asynccontextmanager
@@ -177,10 +176,10 @@ def _alembic_check() -> None:
 
 async def dispose_engine():
     """关闭引擎，释放连接池资源"""
-    global _engine, _session_factory
+    scope = get_scope()
     with _engine_lock:
-        engine = _engine
-        _engine = None
-        _session_factory = None
+        engine = scope.engine
+        scope.engine = None
+        scope.session_factory = None
     if engine is not None:
         await engine.dispose()

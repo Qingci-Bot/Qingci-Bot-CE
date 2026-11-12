@@ -23,6 +23,7 @@ from ..plugin.protocol.events import parse_event
 from ..plugin.watcher import PluginWatcher
 from .di import DIContainer
 from .dispatcher import MessageDispatcher
+from .scope import get_scope
 from .tasks import spawn_background_task
 
 if TYPE_CHECKING:
@@ -827,14 +828,14 @@ class QingciBot:
 # 当前进程的 DI 容器引用（set_bot 时注入）。与旧式"模块级 bot 单例"不同，
 # 这里只持有容器，bot 实例通过容器解析（QingciBot 在 __init__ 中已
 # register_sync(QingciBot, self)），避免 bot 实例本身成为模块级状态。
-_bot_container: DIContainer | None = None
 
 
 def get_bot() -> QingciBot:
     """获取当前进程的 Bot 实例（从 DI 容器解析）"""
-    if _bot_container is None:
+    container = get_scope().bot_container
+    if container is None:
         raise RuntimeError("Bot 未初始化")
-    bot = _bot_container.resolve_sync(QingciBot)
+    bot = container.resolve_sync(QingciBot)
     if bot is None:
         raise RuntimeError("Bot 未初始化")
     return cast(QingciBot, bot)
@@ -847,15 +848,14 @@ def set_bot(bot: QingciBot):
     （异常多开/测试未清理），记录告警便于排查；不主动抛错，
     以免打断测试重置等合法场景。
     """
-    global _bot_container
-    if _bot_container is not None and _bot_container is not bot.di:
+    scope = get_scope()
+    if scope.bot_container is not None and scope.bot_container is not bot.di:
         logger.warning(
             "set_bot 被重复调用：已有 Bot 实例注册，现被新实例覆盖（单进程应只存在一个 Bot 实例）"
         )
-    _bot_container = bot.di
+    scope.bot_container = bot.di
 
 
 def clear_bot():
     """清空当前进程的 DI 容器引用"""
-    global _bot_container
-    _bot_container = None
+    get_scope().bot_container = None

@@ -158,9 +158,10 @@ class TestDatabaseMessageBuffer:
     @pytest.fixture
     async def db(self, temp_db_dir, monkeypatch):
         import bot.db.engine as _engine
+        from bot.core.scope import get_scope
 
-        _engine._engine = None
-        _engine._session_factory = None
+        get_scope().engine = None
+        get_scope().session_factory = None
         monkeypatch.setattr(_engine, "data_root", lambda: temp_db_dir)
         await _engine.init_db()
 
@@ -171,8 +172,8 @@ class TestDatabaseMessageBuffer:
 
         # close() 会先停掉缓冲后台任务再释放引擎，避免残留任务与已释放引擎竞争
         await d.close()
-        _engine._engine = None
-        _engine._session_factory = None
+        get_scope().engine = None
+        get_scope().session_factory = None
 
     async def test_record_then_flush_persists(self, db):
         assert db.record_message(

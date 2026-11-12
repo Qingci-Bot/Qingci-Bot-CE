@@ -36,6 +36,8 @@ pytest                # 测试（含覆盖率）
 
 ## 3. 分层与依赖方向
 
+> **全局状态**：进程级单例引用统一经 `bot/core/scope.py` 的 `get_scope()` 读写，禁止新增模块级 `global _xxx` 服务引用。锁、模块内缓存、路径解析状态与后台任务句柄仍留在各自模块（边界说明见 [ARCHITECTURE.md](../ARCHITECTURE.md) 的「全局状态边界」）；测试隔离用 `set_scope(AppScope())` / `reset_scope()`。
+
 ```
 web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ bot/core, bot/llm, bot/db, bot/rag
                                      ▲

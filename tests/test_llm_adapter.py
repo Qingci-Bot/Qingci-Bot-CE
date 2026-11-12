@@ -283,7 +283,9 @@ def test_get_litellm_lazy_import(monkeypatch):
     fake.suppress_debug_info = False
     fake.set_verbose = lambda v: None
     monkeypatch.setitem(sys.modules, "litellm", fake)
-    monkeypatch.setattr("bot.llm.litellm_adapter._litellm", None)
+    from bot.core.scope import get_scope
+
+    monkeypatch.setattr(get_scope(), "litellm", None)
     lm = _get_litellm()
     assert lm is fake
     assert fake.suppress_debug_info is True
@@ -293,5 +295,7 @@ def test_get_litellm_without_set_verbose(monkeypatch):
     fake = types.ModuleType("litellm")
     fake.suppress_debug_info = False
     monkeypatch.setitem(sys.modules, "litellm", fake)
-    monkeypatch.setattr("bot.llm.litellm_adapter._litellm", None)
+    from bot.core.scope import get_scope
+
+    monkeypatch.setattr(get_scope(), "litellm", None)
     assert _get_litellm() is fake  # set_verbose 缺失静默通过
