@@ -101,6 +101,7 @@ Qingci-Bot-CE/
 │   │   ├── bot.py          # TestBot
 │   │   └── events.py       # 事件工厂
 │   ├── config.py           # ConfigManager（config.yaml 加载与校验）
+│   ├── config_schema.py    # 配置 JSON Schema 生成器（WebUI 表单单一来源；敏感字段 x-secret 标记）
 │   ├── instances.py        # 实例管理（instances/<name>/ 自包含目录，含 config/plugins/data）
 │   ├── i18n.py             # 国际化翻译器
 │   ├── paths.py            # 路径解析（app_root / data_root / plugins_dir 等）

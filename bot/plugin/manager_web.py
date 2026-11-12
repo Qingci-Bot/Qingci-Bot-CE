@@ -15,6 +15,7 @@ import os
 from collections.abc import Callable
 from typing import Any, Union, cast, get_args, get_origin
 
+from ..config_schema import is_secret_field as _is_secret_field
 from .protocol.base import PluginBase
 
 logger = logging.getLogger("qingci-bot.plugin.manager")
@@ -63,12 +64,6 @@ class _AuthStaticFiles:
         host = client[0] if isinstance(client, (tuple, list)) else ""
         origin = headers.get(b"origin", b"").decode()
         return is_loopback_host(host) and (not origin or is_loopback_origin(origin))
-
-
-def _is_secret_field(name: str) -> bool:
-    """M19：判断配置字段是否敏感（token/secret/password/api_key 等），用于脱敏与空值保护。"""
-    lowered = str(name).casefold()
-    return any(hint in lowered for hint in ("token", "secret", "password", "api_key", "apikey"))
 
 
 def _schema_from_annotations(config_cls: type) -> dict:

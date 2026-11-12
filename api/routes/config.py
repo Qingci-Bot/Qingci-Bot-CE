@@ -159,6 +159,18 @@ def _deep_merge(base: dict, update: dict) -> dict:
 router = APIRouter()
 
 
+@router.get("/schema", dependencies=[Depends(require_auth)])
+async def get_config_schema():
+    """配置 JSON Schema（供 WebUI 按单一来源自动渲染配置表单）
+
+    字段 / 类型 / 默认值 / 描述全部来自 Pydantic 配置模型；
+    敏感字段带 ``x-secret`` 标记（前端渲染密码输入框 + 空值保护）。
+    """
+    from bot.config_schema import build_config_schema
+
+    return build_config_schema()
+
+
 @router.get("", dependencies=[Depends(require_auth)])
 async def get_config():
     """获取完整配置（敏感字段脱敏）"""
