@@ -6,7 +6,8 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue';
-import { authHeaders } from '../api/request';
+import AuditLogCard from '../components/settings/AuditLogCard.vue';
+import DataManagementCard from '../components/settings/DataManagementCard.vue';
 import { useAppStore } from '../stores/app';
 import { useToast } from '../composables/useToast';
 
@@ -26,15 +27,6 @@ const saving = ref(false);
 const showServerKey = ref(false);
 const showLocalKey = ref(false);
 const showTelegramToken = ref(false);
-const backupLoading = ref(false);
-const backupResult = ref(null);
-const downloading = ref(false);
-const restoreFile = ref(null);
-const restoreLoading = ref(false);
-const restoreResult = ref('');
-const exporting = ref(false);
-const auditLogs = ref([]);
-const auditLoading = ref(false);
 const runLogEnabled = ref(true);
 
 // "有未保存更改"提示：开关/表单拨动后与已保存快照不一致即置脏标记，
@@ -60,7 +52,6 @@ onMounted(async () => {
   await store.fetchInstances();
   resetForm();
   apiKeyInput.value = store.getApiKey();
-  loadAuditLogs();
 });
 
 // 配置加载完成后再同步一次表单（如从保存接口刷新回来）
@@ -188,164 +179,6 @@ async function saveConfig() {
     showToast('error', `保存失败：${e.message}`);
   } finally {
     saving.value = false;
-  }
-}
-
-function formatSize(bytes) {
-  if (!bytes && bytes !== 0) return '-';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
-
-async function backupDb() {
-  backupLoading.value = true;
-  backupResult.value = null;
-  try {
-    const data = await store.apiFetch('/api/backup/db', { method: 'POST' });
-    backupResult.value = data;
-    showToast('success', `数据库备份成功：${data.filename}`);
-  } catch (e) {
-    showToast('error', `备份失败：${e.message}`);
-  } finally {
-    backupLoading.value = false;
-  }
-}
-
-async function downloadBackup() {
-  const filename = backupResult.value?.filename;
-  if (!filename) {
-    showToast('error', '请先执行一次备份再下载');
-    return;
-  }
-  downloading.value = true;
-  try {
-    // blob 下载场景不走 request（其返回 JSON），仅复用鉴权头注入
-    const res = await fetch(`/api/backup/db/download?filename=${encodeURIComponent(filename)}`, {
-      headers: authHeaders(),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      let msg = text || `HTTP ${res.status}`;
-      try {
-        msg = JSON.parse(text).detail || msg;
-      } catch (e) {
-        // 非 JSON 响应体，直接使用原文本
-      }
-      if (res.status === 401 && window.location.hash !== '#/login') {
-        window.location.hash = '#/login';
-      }
-      throw new Error(msg);
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('success', '数据库备份已开始下载');
-  } catch (e) {
-    showToast('error', `下载失败：${e.message}`);
-  } finally {
-    downloading.value = false;
-  }
-}
-
-async function restoreDb() {
-  const file = restoreFile.value?.files?.[0];
-  if (!file) {
-    showToast('error', '请先选择 .db 备份文件');
-    return;
-  }
-  if (!file.name.toLowerCase().endsWith('.db')) {
-    showToast('error', '只支持 .db 数据库备份文件');
-    return;
-  }
-  if (!window.confirm('恢复会用所选备份覆盖当前数据库，操作前系统会自动备份当前库。确认继续？')) {
-    return;
-  }
-  restoreLoading.value = true;
-  restoreResult.value = '';
-  try {
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch('/api/backup/restore', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: fd,
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      let msg = text || `HTTP ${res.status}`;
-      try {
-        msg = JSON.parse(text).detail || msg;
-      } catch (e) {
-        // 非 JSON 响应体，直接使用原文本
-      }
-      if (res.status === 401 && window.location.hash !== '#/login') {
-        window.location.hash = '#/login';
-      }
-      throw new Error(msg);
-    }
-    const data = await res.json();
-    restoreResult.value = `恢复成功。原库已自动备份为 ${data.backup_name}，请刷新页面查看恢复后的数据。`;
-    showToast('success', '数据库恢复成功');
-  } catch (e) {
-    restoreResult.value = `恢复失败：${e.message}`;
-    showToast('error', `恢复失败：${e.message}`);
-  } finally {
-    restoreLoading.value = false;
-    if (restoreFile.value) restoreFile.value.value = '';
-  }
-}
-
-async function exportCsv() {
-  exporting.value = true;
-  try {
-    // blob 下载场景不走 request（其返回 JSON），仅复用鉴权头注入
-    const res = await fetch('/api/log/messages/export', {
-      headers: authHeaders(),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      let msg = text || `HTTP ${res.status}`;
-      try {
-        msg = JSON.parse(text).detail || msg;
-      } catch (e) {
-        // 非 JSON 响应体，直接使用原文本
-      }
-      // 401 时跳转登录页，与 apiFetch 的鉴权失败行为保持一致
-      if (res.status === 401 && window.location.hash !== '#/login') {
-        window.location.hash = '#/login';
-      }
-      throw new Error(msg);
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'messages.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('success', '消息 CSV 已开始下载');
-  } catch (e) {
-    showToast('error', `导出失败：${e.message}`);
-  } finally {
-    exporting.value = false;
-  }
-}
-
-async function loadAuditLogs() {
-  auditLoading.value = true;
-  try {
-    const data = await store.apiFetch('/api/audit/logs?limit=100');
-    auditLogs.value = data.logs || [];
-  } catch (e) {
-    auditLogs.value = [];
-    showToast('error', `审计日志加载失败：${e.message}`);
-  } finally {
-    auditLoading.value = false;
   }
 }
 
@@ -630,83 +463,8 @@ async function saveConfigJson() {
       </div>
     </div>
 
-    <div class="card fade-in">
-      <div class="card-header">
-        <div class="card-title">数据管理</div>
-        <div class="action-bar">
-          <button class="btn btn-secondary" :disabled="backupLoading" @click="backupDb">
-            <span style="display: inline-block" :class="{ spin: backupLoading }">◍</span>
-            {{ backupLoading ? '备份中' : '立即备份' }}
-          </button>
-          <button
-            class="btn btn-secondary"
-            :disabled="!backupResult || downloading"
-            @click="downloadBackup"
-          >
-            <span style="display: inline-block" :class="{ spin: downloading }">⇩</span>
-            {{ downloading ? '下载中' : '下载备份' }}
-          </button>
-          <button class="btn btn-secondary" :disabled="exporting" @click="exportCsv">
-            <span style="display: inline-block" :class="{ spin: exporting }">⇩</span>
-            {{ exporting ? '导出中' : '导出消息 CSV' }}
-          </button>
-        </div>
-      </div>
-      <div v-if="backupResult" class="status-bar success">
-        备份完成：{{ backupResult.filename }}（{{ formatSize(backupResult.size) }}），保存在服务端
-        data/backups/ 目录
-      </div>
-      <div
-        class="restore-row"
-        style="margin-top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap"
-      >
-        <input ref="restoreFile" type="file" accept=".db" :disabled="restoreLoading" />
-        <button class="btn btn-secondary" :disabled="restoreLoading" @click="restoreDb">
-          {{ restoreLoading ? '恢复中…' : '从备份恢复数据库' }}
-        </button>
-      </div>
-      <div v-if="restoreResult" class="status-bar" style="margin-top: 8px">{{ restoreResult }}</div>
-      <div class="hint-text" style="margin-top: 8px">
-        备份使用 SQLite 在线备份 API，保留最近 10 份，可下载到本地；恢复上传 .db 备份会先自动
-        备份当前库再替换主库（恢复后请刷新页面）。CSV 导出包含全部消息记录（utf-8-sig 编码，Excel
-        可直接打开）。
-      </div>
-    </div>
-
-    <div class="card fade-in">
-      <div class="card-header">
-        <div class="card-title">审计日志</div>
-        <button class="btn btn-secondary btn-sm" :disabled="auditLoading" @click="loadAuditLogs">
-          <span style="display: inline-block" :class="{ spin: auditLoading }">↻</span> 刷新
-        </button>
-      </div>
-      <div v-if="auditLogs.length === 0" class="empty-state">
-        <div class="icon">✦</div>
-        <div>暂无审计日志</div>
-      </div>
-      <div v-else style="max-height: 420px; overflow-y: auto">
-        <table class="table">
-          <thead>
-            <tr>
-              <th class="audit-time">时间</th>
-              <th class="audit-action">动作</th>
-              <th class="audit-detail">详情</th>
-              <th class="audit-ip">来源 IP</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="log in auditLogs" :key="log.id">
-              <td class="audit-time">{{ log.created_at }}</td>
-              <td>
-                <span class="tag tag-blue">{{ log.action }}</span>
-              </td>
-              <td class="audit-detail">{{ log.detail || '-' }}</td>
-              <td class="audit-ip">{{ log.client_ip || '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <DataManagementCard />
+    <AuditLogCard />
 
     <div class="card fade-in">
       <div class="card-header">
@@ -779,28 +537,6 @@ async function saveConfigJson() {
 .json-editor:focus {
   outline: none;
   border-color: var(--blue);
-}
-
-/* 审计日志列样式（收敛内联样式） */
-.audit-time {
-  width: 170px;
-}
-.audit-action {
-  width: 170px;
-}
-.audit-ip {
-  width: 120px;
-}
-td.audit-time {
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-td.audit-ip {
-  font-family: var(--font-mono);
-}
-td.audit-detail {
-  word-break: break-all;
 }
 
 /* API Key 输入行：输入框撑满剩余宽度 */
