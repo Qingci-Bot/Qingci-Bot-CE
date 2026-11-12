@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Qingci-Bot CE Linux build script (PyInstaller onedir)
-# Usage: ./build-linux.sh
+# Usage: ./build-linux.sh [--no-browser]
 # Output: dist/qingci-bot-ce/qingci-bot-ce
 #
 # 与 build.bat（Windows）对应的 Linux 版本。产出 Python 后端 onedir，
@@ -16,6 +16,13 @@ set -euo pipefail
 
 Root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$Root"
+
+# 参数解析：--no-browser 跳过 Chromium 捆绑（按需化；渲染能力事后
+# `playwright install chromium` 获取，PLAYWRIGHT_BROWSERS_PATH 指向产物目录）
+SKIP_BROWSER=0
+for arg in "$@"; do
+  if [ "$arg" = "--no-browser" ]; then SKIP_BROWSER=1; fi
+done
 
 DistDir="$Root/dist"
 AppDir="$DistDir/qingci-bot-ce"
@@ -76,6 +83,8 @@ fi
 # 内置一个 Chromium 到 dist/ms-playwright/，让 EXE 开箱即可渲染 HTML（签到卡），
 # 无需最终用户再 `playwright install chromium`。运行时经 PLAYWRIGHT_BROWSERS_PATH
 # 定位。下载策略：优先 npmmirror 镜像（国内快），回退官方 CDN。
+# --no-browser 时整体跳过（产物轻约百 MB，渲染能力按需事后安装）。
+if [ "${SKIP_BROWSER:-0}" != "1" ]; then
 echo "==> [2.5/3] bundling Playwright browser..."
 if ! "$PY" -c "import playwright.async_api" >/dev/null 2>&1; then
   echo "    WARNING: playwright not importable; EXE will lack render capability, sign-in card degrades to text" >&2
@@ -107,6 +116,7 @@ else
     echo "    WARNING: all browser download attempts failed; render capability unavailable" >&2
   fi
 fi
+fi # SKIP_BROWSER gate
 
 # ---------- [3/3] ensure output folder exists ----------
 echo "==> [3/3] finished output folder..."

@@ -25,6 +25,11 @@ on:
         description: "发布版本（如 v1.17.0，须以 v 开头）"
         required: false
         default: ""
+      bundle_browser:
+        description: "桌面产物捆绑 Chromium 浏览器（false 产出轻量包，渲染按需安装）"
+        type: boolean
+        required: false
+        default: true
 
 concurrency:
   group: release
@@ -139,7 +144,14 @@ jobs:
         env:
           PLAYWRIGHT_DOWNLOAD_HOST: https://npmmirror.com/mirrors/playwright
           CI: "1"
-        run: .\build.bat
+        # bundle_browser=false（手动触发）时跳过 Chromium 捆绑，产出轻量包；
+        # tag 推送触发时 inputs 为空 → 默认捆绑，保持开箱可渲染
+        run: |
+          if /i "${{ inputs.bundle_browser }}"=="false" (
+            call .\build.bat --no-browser
+          ) else (
+            call .\build.bat
+          )
 
       - name: Package Windows desktop (build-electron.bat)
         shell: cmd
@@ -201,7 +213,13 @@ jobs:
           npm run build
 
       - name: Build backend onedir (build-linux.sh)
-        run: bash build-linux.sh
+        # bundle_browser=false（手动触发）时跳过 Chromium 捆绑（见 build.bat 步骤说明）
+        run: |
+          if [ "${{ inputs.bundle_browser }}" = "false" ]; then
+            bash build-linux.sh --no-browser
+          else
+            bash build-linux.sh
+          fi
 
       - name: Pack backend into single archive
         # 后端 onedir 数千个文件 → 单个 zip，安装/解压阶段只处理 1 个文件

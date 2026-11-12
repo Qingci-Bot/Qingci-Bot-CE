@@ -2,8 +2,13 @@
 setlocal enabledelayedexpansion
 rem ============================================================
 rem Qingci-Bot CE build script (PyInstaller onedir)
-rem Usage: build.bat
+rem Usage: build.bat [--no-browser]
 rem Output: dist\qingci-bot-ce\qingci-bot-ce.exe
+rem
+rem --no-browser：跳过 Chromium 浏览器捆绑（产物轻约百 MB），
+rem 渲染能力按需获取——最终用户或构建方可事后执行
+rem `playwright install chromium`（PLAYWRIGHT_BROWSERS_PATH 指向产物目录）。
+rem 默认仍捆绑，保证 EXE 开箱即可渲染（签到卡）。
 rem
 rem Since v1.6 config/plugin/data are self-contained under
 rem instances\<name>\ so the build output no longer creates a
@@ -12,6 +17,12 @@ rem ============================================================
 
 set "Root=%~dp0"
 cd /d "%Root%"
+
+rem ---- 参数解析：--no-browser 跳过 Chromium 捆绑（按需化） ----
+set "SKIP_BROWSER=0"
+for %%a in (%*) do (
+    if /i "%%a"=="--no-browser" set "SKIP_BROWSER=1"
+)
 
 set "Python=%Root%.venv\Scripts\python.exe"
 set "DistDir=%Root%dist"
@@ -81,6 +92,11 @@ if exist "%Root%web\dist\index.html" (
 rem ---- [2.5/3] bundle Playwright browser ----
 rem Bundle a Chromium browser into dist/ms-playwright so the EXE renders HTML
 rem out of the box (sign-in card) without requiring `playwright install`.
+rem --no-browser 时整体跳过（产物轻约百 MB，渲染能力按需事后安装）。
+if "!SKIP_BROWSER!"=="1" (
+    echo ==^> [2.5/3] skipping Playwright browser bundling ^(--no-browser^)
+    goto :pw_finish
+)
 rem Download strategy: prefer npmmirror (fast in CN), fall back to official CDN.
 rem Success is decided by the on-disk browser dir, NOT the exit code (Playwright
 rem writes progress to stdout and may exit non-zero even after a successful run).
