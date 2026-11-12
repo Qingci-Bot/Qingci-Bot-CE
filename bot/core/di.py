@@ -28,6 +28,7 @@
 import asyncio
 import inspect
 import logging
+import types
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -239,76 +240,135 @@ class DIContainer:
     - SCOPED:    同一 scope 内返回同一实例（跨 resolve 共享）
 
     支持按类型解析，也支持 Optional 类型提示的注入。
+
+    实现说明（P1 双轨合一）：解析与注入本身没有异步 I/O，全部逻辑收敛到
+    一组同步核心方法；async 公开 API 负责加 asyncio.Lock 后调用同一个核心，
+    sync 公开 API 直接调用。两条路径结果恒等，公开签名全部保持兼容。
     """
 
     def __init__(self):
         self._services: dict[type, ServiceDescriptor] = {}
         self._lock = asyncio.Lock()
 
-    # ---- 注册 ----
+    # ---- 单一同步核心（async / sync 共用） ----
 
-    async def register(
-        self,
-        service_type: type,
-        instance: Any,
-    ) -> None:
+    def _set_descriptor(self, service_type: type, descriptor: ServiceDescriptor) -> None:
+        self._services[service_type] = descriptor
+
+    @staticmethod
+    def _instantiate(desc: ServiceDescriptor) -> Any | None:
+        """按生命周期取实例；懒单例的工厂在此触发（调用方负责加锁）"""
+        if desc.lifetime in (ServiceLifetime.SINGLETON, ServiceLifetime.SCOPED):
+            if desc.instance is None and desc.factory is not None:
+                desc.instance = desc.factory()
+            return desc.instance
+        if desc.lifetime == ServiceLifetime.TRANSIENT:
+            return desc.factory() if desc.factory is not None else None
+        return None
+
+    def _resolve_direct(self, service_type: type) -> Any | None:
+        """仅按直接注册的键解析（注入路径使用）"""
+        desc = self._services.get(service_type)
+        return self._instantiate(desc) if desc is not None else None
+
+    def _resolve_core(self, service_type: type) -> Any | None:
+        """完整解析：直接注册 + register_as 的接口绑定（两条路径共用）"""
+        desc = self._services.get(service_type)
+        if desc is not None:
+            return self._instantiate(desc)
+        for sd in self._services.values():
+            if service_type in sd.bound_types:
+                if (
+                    sd.lifetime == ServiceLifetime.SINGLETON
+                    and sd.instance is None
+                    and sd.factory is not None
+                ):
+                    sd.instance = sd.factory()
+                return sd.instance
+        return None
+
+    def _inject_core(self, target: Any, *, skip_missing: bool) -> None:
+        """按类型注解注入（async / sync 共用）"""
+        annotations: dict[str, type] = {}
+        for cls in type(target).__mro__:
+            if hasattr(cls, "__annotations__"):
+                annotations.update(cls.__annotations__)
+
+        for attr_name, attr_type in annotations.items():
+            if attr_name.startswith("_"):
+                continue
+            if getattr(target, attr_name, None) is not None:
+                continue
+            resolved_type = self._unwrap_optional(attr_type)
+            if resolved_type not in self._services:
+                if not skip_missing:
+                    raise RuntimeError(
+                        f"注入失败: 未注册服务 {resolved_type.__name__} "
+                        f"(目标 {type(target).__name__}.{attr_name})"
+                    )
+                continue
+            service = self._resolve_direct(resolved_type)
+            if service is not None:
+                setattr(target, attr_name, service)
+
+    # ---- 注册（async 加锁；sync 供启动期装配） ----
+
+    async def register(self, service_type: type, instance: Any) -> None:
         """注册单例服务实例"""
         async with self._lock:
-            self._services[service_type] = ServiceDescriptor(
+            self._register_instance(service_type, instance)
+
+    def register_sync(self, service_type: type, instance: Any) -> None:
+        """同步注册单例服务实例（组合根 / 测试装配使用）"""
+        self._register_instance(service_type, instance)
+
+    def _register_instance(self, service_type: type, instance: Any) -> None:
+        self._set_descriptor(
+            service_type,
+            ServiceDescriptor(
                 service_type=service_type,
                 lifetime=ServiceLifetime.SINGLETON,
                 instance=instance,
-            )
+            ),
+        )
 
-    async def register_factory(
-        self,
-        service_type: type,
-        factory: Callable[[], Any],
-    ) -> None:
+    async def register_factory(self, service_type: type, factory: Callable[[], Any]) -> None:
         """注册 TRANSIENT 工厂（每次 resolve 创建新实例）"""
         async with self._lock:
-            self._services[service_type] = ServiceDescriptor(
-                service_type=service_type,
-                lifetime=ServiceLifetime.TRANSIENT,
-                factory=factory,
+            self._set_descriptor(
+                service_type,
+                ServiceDescriptor(
+                    service_type=service_type,
+                    lifetime=ServiceLifetime.TRANSIENT,
+                    factory=factory,
+                ),
             )
 
-    async def register_singleton(
-        self,
-        service_type: type,
-        factory: Callable[[], Any],
-    ) -> None:
+    async def register_singleton(self, service_type: type, factory: Callable[[], Any]) -> None:
         """注册懒加载单例（首次 resolve 时创建，只创建一次）"""
         async with self._lock:
-            self._services[service_type] = ServiceDescriptor(
-                service_type=service_type,
-                lifetime=ServiceLifetime.SINGLETON,
-                factory=factory,
-                instance=None,
+            self._set_descriptor(
+                service_type,
+                ServiceDescriptor(
+                    service_type=service_type,
+                    lifetime=ServiceLifetime.SINGLETON,
+                    factory=factory,
+                    instance=None,
+                ),
             )
 
-    async def register_as(
-        self,
-        interface_type: type,
-        instance: Any,
-    ) -> None:
-        """接口绑定：将实例注册为接口类型
-
-        示例：
-            container.register_as(IDatabase, db_instance)
-            container.resolve(IDatabase)  # -> db_instance
-
-        同时支持按实际类型和接口类型解析。
-        """
+    async def register_as(self, interface_type: type, instance: Any) -> None:
+        """接口绑定：将实例注册为接口类型，同时可按实际类型解析"""
         inst_type = type(instance)
         async with self._lock:
-            # 注册为接口类型
-            self._services[interface_type] = ServiceDescriptor(
-                service_type=interface_type,
-                lifetime=ServiceLifetime.SINGLETON,
-                instance=instance,
+            self._set_descriptor(
+                interface_type,
+                ServiceDescriptor(
+                    service_type=interface_type,
+                    lifetime=ServiceLifetime.SINGLETON,
+                    instance=instance,
+                ),
             )
-            # 如果实际类型也已注册，为其添加接口绑定
             if inst_type in self._services:
                 self._services[inst_type].bound_types.add(interface_type)
 
@@ -317,37 +377,11 @@ class DIContainer:
     async def resolve(self, service_type: type) -> Any | None:
         """按类型解析服务"""
         async with self._lock:
-            desc = self._services.get(service_type)
-            if desc is None:
-                # 尝试通过 bound_types 查找
-                for sd in self._services.values():
-                    if service_type in sd.bound_types:
-                        # lazy singleton 尚未初始化时触发工厂，避免误判"未注册"
-                        if (
-                            sd.lifetime == ServiceLifetime.SINGLETON
-                            and sd.instance is None
-                            and sd.factory is not None
-                        ):
-                            sd.instance = sd.factory()
-                        return sd.instance
-                return None
+            return self._resolve_core(service_type)
 
-            if desc.lifetime == ServiceLifetime.SINGLETON:
-                if desc.instance is None and desc.factory is not None:
-                    desc.instance = desc.factory()
-                return desc.instance
-
-            if desc.lifetime == ServiceLifetime.TRANSIENT:
-                if desc.factory is not None:
-                    return desc.factory()
-                return None
-
-            if desc.lifetime == ServiceLifetime.SCOPED:
-                if desc.instance is None and desc.factory is not None:
-                    desc.instance = desc.factory()
-                return desc.instance
-
-            return None
+    def resolve_sync(self, service_type: type) -> Any | None:
+        """同步解析；语义与 await resolve() 一致（含接口绑定）"""
+        return self._resolve_core(service_type)
 
     async def resolve_required(self, service_type: type) -> Any:
         """解析服务，不存在时抛出异常"""
@@ -359,144 +393,23 @@ class DIContainer:
     # ---- 注入 ----
 
     async def inject(self, target: Any, *, skip_missing: bool = True) -> None:
-        """自动注入：将容器中的服务按类型注入到目标对象的属性
-
-        扫描目标对象上已声明的类型注解属性，
-        若容器中有对应类型的服务则注入，无时跳过（skip_missing=True）
-        或抛出异常（skip_missing=False）。
-
-        支持 Optional[X] 类型注解（自动提取内部类型 X）。
-        不会覆盖已设置的非 None 属性值。
-
-        Args:
-            target: 注入目标（如 PluginBase 实例）
-            skip_missing: 未找到服务时是否跳过（默认 True）
-        """
-        # 收集目标对象及其所有父类的类型注解
-        annotations: dict[str, type] = {}
-        for cls in type(target).__mro__:
-            if hasattr(cls, "__annotations__"):
-                annotations.update(cls.__annotations__)
-
-        for attr_name, attr_type in annotations.items():
-            if attr_name.startswith("_"):
-                continue
-
-            # 跳过已设置非 None 值的属性
-            current_value = getattr(target, attr_name, None)
-            if current_value is not None:
-                continue
-
-            # 处理 Optional[X] -> 提取内部类型 X
-            resolved_type = self._unwrap_optional(attr_type)
-
-            async with self._lock:
-                if resolved_type not in self._services:
-                    if not skip_missing:
-                        raise RuntimeError(
-                            f"注入失败: 未注册服务 {resolved_type.__name__} "
-                            f"(目标 {type(target).__name__}.{attr_name})"
-                        )
-                    continue
-
-                service = await self._resolve_locked(resolved_type)
-                if service is not None:
-                    setattr(target, attr_name, service)
-
-    # ---- 同步注册（兼容旧代码） ----
-
-    def register_sync(self, service_type: type, instance: Any) -> None:
-        """同步注册单例服务实例（兼容旧代码，内部直接写字典）"""
-        self._services[service_type] = ServiceDescriptor(
-            service_type=service_type,
-            lifetime=ServiceLifetime.SINGLETON,
-            instance=instance,
-        )
-
-    def resolve_sync(self, service_type: type) -> Any | None:
-        """同步解析服务（兼容旧代码 / 非异步上下文）
-
-        语义与 await resolve() 一致：按类型解析，未注册返回 None。
-        供 get_bot() 等无法使用 async 的模块级入口使用。
-        """
-        return self._resolve_sync(service_type)
+        """自动注入：按类型注解把已注册服务注入目标对象"""
+        async with self._lock:
+            self._inject_core(target, skip_missing=skip_missing)
 
     def inject_sync(self, target: Any, *, skip_missing: bool = True) -> None:
         """同步注入（兼容旧代码）"""
-        annotations: dict[str, type] = {}
-        for cls in type(target).__mro__:
-            if hasattr(cls, "__annotations__"):
-                annotations.update(cls.__annotations__)
+        self._inject_core(target, skip_missing=skip_missing)
 
-        for attr_name, attr_type in annotations.items():
-            if attr_name.startswith("_"):
-                continue
-
-            current_value = getattr(target, attr_name, None)
-            if current_value is not None:
-                continue
-
-            resolved_type = self._unwrap_optional(attr_type)
-
-            if resolved_type not in self._services:
-                if not skip_missing:
-                    raise RuntimeError(
-                        f"注入失败: 未注册服务 {resolved_type.__name__} "
-                        f"(目标 {type(target).__name__}.{attr_name})"
-                    )
-                continue
-
-            service = self._resolve_sync(resolved_type)
-            if service is not None:
-                setattr(target, attr_name, service)
-
-    # ---- 内部解析 ----
+    # ---- 兼容内部别名 ----
 
     async def _resolve_locked(self, service_type: type) -> Any | None:
-        """内部解析（调用前需持有锁）"""
-        desc = self._services.get(service_type)
-        if desc is None:
-            return None
-
-        if desc.lifetime == ServiceLifetime.SINGLETON:
-            if desc.instance is None and desc.factory is not None:
-                desc.instance = desc.factory()
-            return desc.instance
-
-        if desc.lifetime == ServiceLifetime.TRANSIENT:
-            if desc.factory is not None:
-                return desc.factory()
-            return None
-
-        if desc.lifetime == ServiceLifetime.SCOPED:
-            if desc.instance is None and desc.factory is not None:
-                desc.instance = desc.factory()
-            return desc.instance
-
-        return None
+        """内部解析（调用前需持有锁）；保留签名兼容旧调用方"""
+        return self._resolve_direct(service_type)
 
     def _resolve_sync(self, service_type: type) -> Any | None:
-        """同步解析（内部使用）"""
-        desc = self._services.get(service_type)
-        if desc is None:
-            return None
-
-        if desc.lifetime == ServiceLifetime.SINGLETON:
-            if desc.instance is None and desc.factory is not None:
-                desc.instance = desc.factory()
-            return desc.instance
-
-        if desc.lifetime == ServiceLifetime.TRANSIENT:
-            if desc.factory is not None:
-                return desc.factory()
-            return None
-
-        if desc.lifetime == ServiceLifetime.SCOPED:
-            if desc.instance is None and desc.factory is not None:
-                desc.instance = desc.factory()
-            return desc.instance
-
-        return None
+        """同步直接解析；保留签名兼容旧调用方"""
+        return self._resolve_direct(service_type)
 
     # ---- 查询 ----
 
@@ -526,9 +439,13 @@ class DIContainer:
 
     @staticmethod
     def _unwrap_optional(tp: type) -> type:
-        """提取 Optional[X] / Union[X, None] 中的 X"""
+        """提取 Optional[X] / X | None 中的 X
+
+        同时支持 ``typing.Union`` 与 PEP 604 的 ``types.UnionType``——项目启用
+        ruff UP045 后注解统一写作 ``X | None``，只认前者会让这类属性静默漏注入。
+        """
         origin = get_origin(tp)
-        if origin is Union:
+        if origin is Union or origin is types.UnionType:
             args = [a for a in get_args(tp) if a is not type(None)]
             if len(args) == 1:
                 return cast(type, args[0])
