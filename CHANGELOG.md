@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **AppScope 收口进程级全局（P1）**：新增 `bot/core/scope.py`，把 `bot/core/bot.py` 的 DI 容器、`bot/db/engine.py` 的引擎与会话工厂、`bot/llm/litellm_adapter.py` 的延迟导入模块、`bot/logformat.py` 的运行日志 Handler 统一收进 `AppScope`；这些模块不再各自声明 `global`，全部入口函数签名与行为不变，`reset_scope()` 提供测试隔离（只清引用、不释放资源）。锁、模块内缓存、路径状态与后台任务句柄按职责留在原模块
+- 同步调整 3 个测试里对私有全局的清理方式（`_engine._engine = None` 等）为经作用域读写；新增 `tests/test_app_scope.py`（7 项）验证入口等价、引擎生命周期、litellm 缓存、日志 Handler 与作用域隔离。ARCHITECTURE / CODING_STANDARDS 补充全局状态边界约定
+
 - **DI 双轨合一（P1）**：`bot/core/di.py` 把 `inject` / `inject_sync` 两份重复实现、三份重复的生命周期解析收敛为一组同步核心方法（`_instantiate` / `_resolve_core` / `_resolve_direct` / `_inject_core` / `_register_instance`）；async 公开 API 只负责加 `asyncio.Lock` 后调用同一核心，全部公开签名保持兼容。文件 536 → 452 行，净减 84 行
 - 修正两处一致性缺陷：`resolve_sync()` 此前对 `register_as()` 的接口绑定返回 `None`，与自身文档「语义与 `await resolve()` 一致」不符（现有调用方 `get_bot()` 不涉及该路径）；`_unwrap_optional()` 增加对 PEP 604 `X | None` 的支持，修复项目启用 ruff UP045 后这类注解静默漏注入
 - 新增 `tests/test_di_contract.py`（12 项）锁定 async / sync 等价、三种生命周期、接口绑定、注入与查询；全量 721 项测试，覆盖率 63.93%

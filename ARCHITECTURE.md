@@ -68,6 +68,8 @@ Qingci-Bot-CE 采用**单进程 = 单 Bot 实例**（`set_bot` 重复注册有�
 
 数据保留：`config.log.retention_days`（默认 0 不清理）由 Bot 每日清理 `messages` / `sessions` / `usage_logs` / `audit_logs` 中超期记录（`bot/core/bot.py` `_data_retention_loop`），防止长期运行单表无限膨胀。
 
+**全局状态边界（P1 AppScope）**：进程级服务引用统一由 `bot/core/scope.py` 的 `AppScope` 持有 —— Bot 的 DI 容器、DB 引擎与会话工厂、延迟导入的 litellm、运行日志 Handler。各模块只保留原有入口函数（`get_bot()` / `get_engine()` / `session_scope()` / `set_run_log_enabled()` 等），不再各自声明 `global`；`get_scope()` / `set_scope()` / `reset_scope()` 提供集中访问与测试隔离，且 `reset_scope()` **只清引用、不释放资源**（释放仍走 `dispose_engine()` / `_detach_runlog_handler()`）。同步原语（各类 Lock）、模块内缓存（`api/auth.py` 的 key 缓存、`api/routes/config.py` 的 fallback）、路径解析状态（`bot/paths.py`）与后台任务句柄（`api/server.py` 的 runlog pump）属于各自模块的内部状态，刻意不纳入作用域。
+
 ## 项目结构
 
 ```

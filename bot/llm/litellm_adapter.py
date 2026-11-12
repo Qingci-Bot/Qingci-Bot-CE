@@ -19,6 +19,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
+from ..core.scope import get_scope
 from ..logredact import redact_secrets
 from .adapter import ChatResult, LLMAdapter
 
@@ -26,13 +27,12 @@ logger = logging.getLogger("qingci-bot.llm.litellm_adapter")
 
 # litellm 包导入耗时 ~3.5s（含依赖加载），顶层导入会拖慢 exe 启动。
 # 延迟到首次真正调用 LLM 时才导入，仅在首条对话时付出一次性代价。
-_litellm = None
 
 
 def _get_litellm():
     """延迟导入 litellm 并完成一次性日志/遥测配置，返回模块引用"""
-    global _litellm
-    if _litellm is None:
+    scope = get_scope()
+    if scope.litellm is None:
         import litellm
 
         # 关闭 litellm 的冗余日志与遥测
@@ -41,8 +41,8 @@ def _get_litellm():
             litellm.set_verbose(False)
         except (AttributeError, TypeError):
             pass  # 某些 litellm 版本中 set_verbose 不是可调用对象
-        _litellm = litellm
-    return _litellm
+        scope.litellm = litellm
+    return scope.litellm
 
 
 class LiteLLMAdapter(LLMAdapter):
@@ -269,12 +269,14 @@ class LiteLLMAdapter(LLMAdapter):
             # 脱敏后存储（异常文本可能含完整 URL / Key，后续会写入日志/状态）
             self.last_error = f"{err_type}: {redact_secrets(str(e))}"
             # 防御：_get_litellm() 导入失败时局部变量 litellm 未绑定，
-            # 直接引用会二次抛 NameError；改用模块级 _litellm 安全取值。
+            # 直接引用会二次抛 NameError；改用作用域里的引用安全取值
+            # （未成功导入时为 None，getattr 会走默认值，不抛 AttributeError）。
             # 分类仅用于日志措辞，任何取值失败都不影响失败判定。
             try:
-                auth_err = getattr(_litellm, "AuthenticationError", ())
-                timeout_err = getattr(_litellm, "Timeout", ())
-                conn_err = getattr(_litellm, "APIConnectionError", ())
+                lm = get_scope().litellm
+                auth_err = getattr(lm, "AuthenticationError", ())
+                timeout_err = getattr(lm, "Timeout", ())
+                conn_err = getattr(lm, "APIConnectionError", ())
             except AttributeError:
                 auth_err = timeout_err = conn_err = ()
             if isinstance(e, auth_err):

@@ -22,6 +22,8 @@ import threading
 from pathlib import Path
 from typing import Union
 
+from .core.scope import get_scope
+
 # 事件链路追踪：contextvar 贯穿单条事件处理链路，跨模块串查同一条消息的
 # 分发/匹配/插件/LLM 处理过程（排障"这条消息为什么没回复"）。
 # 每条事件在独立 asyncio task 中处理，task 自带独立 context，无需手动复位。
@@ -118,7 +120,6 @@ class _RunLogStore:
 _runlog_store = _RunLogStore()
 
 # 运行日志 Handler 单例（attach/detach 由 configure_logging / set_run_log_enabled 控制）
-_runlog_handler: "RunLogHandler | None" = None
 _runlog_handler_lock = threading.Lock()
 
 
@@ -182,19 +183,19 @@ class RunLogHandler(logging.Handler):
 
 
 def _attach_runlog_handler(root_logger: logging.Logger) -> None:
-    global _runlog_handler
+    scope = get_scope()
     with _runlog_handler_lock:
-        if _runlog_handler is None:
-            _runlog_handler = RunLogHandler()
-        if _runlog_handler not in root_logger.handlers:
-            root_logger.addHandler(_runlog_handler)
+        if scope.runlog_handler is None:
+            scope.runlog_handler = RunLogHandler()
+        if scope.runlog_handler not in root_logger.handlers:
+            root_logger.addHandler(scope.runlog_handler)
 
 
 def _detach_runlog_handler(root_logger: logging.Logger) -> None:
-    global _runlog_handler
+    scope = get_scope()
     with _runlog_handler_lock:
-        if _runlog_handler is not None and _runlog_handler in root_logger.handlers:
-            root_logger.removeHandler(_runlog_handler)
+        if scope.runlog_handler is not None and scope.runlog_handler in root_logger.handlers:
+            root_logger.removeHandler(scope.runlog_handler)
 
 
 def set_run_log_enabled(enabled: bool) -> None:
