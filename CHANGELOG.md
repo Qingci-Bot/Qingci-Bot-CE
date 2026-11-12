@@ -5,27 +5,24 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## \[Unreleased]
+## \[1.19.4] - 2026-11-12（版权厘清、许可规范化与文档体系重组）
 
-### Changed
+无新增功能，运行时行为保持不变；本次为版权 / 许可声明规范化与文档体系重组。
 
-- **文档错位与欠缺依次修正**：`ARCHITECTURE.md` 的「生产环境部署」（向量检索初始化 / PostgreSQL 迁移 / 断连恢复，约 130 行）迁至新建 `docs/DEPLOYMENT.md`；`PLUGIN_DEV.md` 1755 → 1492 行，前端 / API / 打包分别拆为 `docs/FRONTEND.md` / `docs/API.md` / `docs/PACKAGING.md`（API 端点与真实路由校准，补齐 backup 的 `/db/download` 与 `/restore`）；新增 `docs/TROUBLESHOOTING.md` 与 `CODE_OF_CONDUCT.md`。同步 `tests/test_docs.py` 的 `DOCS` 清单（15 份文档）、README 导航、`docs/PROJECT_STRUCTURE.md` 职责矩阵与全部交叉引用锚点
+### 版权与许可
 
-- **README 瘦身与文档职责分工**：README 从 635 行收至 127 行，只保留门面内容（简介 / 特性 / 快速开始 / 文档导航 / 合规声明 / 开发计划 / 许可）；使用指南拆为 `docs/SETUP.md`（安装运行与运维，243 行）与 `docs/CONFIGURATION.md`（配置参考，238 行）。与 CONTRIBUTING 重复的「运行测试 / 代码质量」段落删除并改为指向 CONTRIBUTING；`tests/test_docs.py` 的 `DOCS` 清单纳入新文档，保证代码块与相对链接仍受 CI 校验；`docs/PROJECT_STRUCTURE.md` 新增文档职责矩阵、修正目录树并列出待补缺口（`docs/API.md` / `docs/TROUBLESHOOTING.md`）
+- **版权归属厘清**：CE 与 Plugins-SDK 原为 Zhou Zhe (aka luoqingci) 的个人项目、后转入 Qingci-Bot 组织维护，版权完整、排他地归个人所有，组织**不是共同版权人**。全部 219 个源码文件的版权行统一为单一版权人；Plugin-Market / hello 为组织下从零开发，版权归 Qingci-Bot Organization
+- **LICENSE 恢复 GPLv3 官方全文**：从 FSF 官方 `gpl-3.0.txt` 重建（674 行），仅替换 3 行示例占位符（项目名 / 版权人 / 终端交互示例），其余一字未改
+- **新建 `NOTICE`**：承载 §7 附加条款（保留声明 / 修改版须改名 / 不得暗示背书）与「永久、不可撤销、全球、非独占 GPLv3 许可 + 以组织名义维权」的中英双语书面授权（明确不转移版权、不影响 GPLv3 第 10 条下游自动许可、贡献者保留各自贡献版权）
+- 所有源码文件带 `Copyright (C) 2026 Zhou Zhe (luoqingci)` 与 `SPDX-License-Identifier: GPL-3.0-or-later`；新增 `scripts/license_headers.py`（`--check` 检查 / `--fix` 幂等补齐与旧文本安全迁移）与 `tests/test_license_headers.py`，CI 防止后续源码漏写声明
+- `pyproject.toml` 的 `license-files = ["LICENSE", "NOTICE"]`（`setuptools>=77`）确保两者随 wheel 分发
 
-- **LICENSE 恢复为 GPLv3 官方全文**：此前在 LICENSE 末尾直接追加 §7 附加条款与组织授权声明，不符合 GPL「原样提供许可证全文」的规范。现从 FSF 官方 `gpl-3.0.txt` 重建 LICENSE（674 行），按维护者确认**仅替换 3 行示例占位符**（项目名 / 版权人 / 终端交互示例），其余一字未改
-- 新建 `NOTICE` 承载全部项目特定声明（§7 附加条款 + 组织授权，中英双语；首行为 `Copyright (C) 2026 Zhou Zhe (luoqingci)`）；219 个源码头第三行、README / CONTRIBUTING / Web 关于页 / pyproject 注释与 `license_headers.py` 统改指向 NOTICE
-- `pyproject.toml` 新增 `license-files = ["LICENSE", "NOTICE"]`（`setuptools>=77`，与 SDK 一致），确保 NOTICE 随 wheel 分发；目录结构文档补 NOTICE 条目
+### 文档体系
 
-- **版权归属厘清（重要）**：CE 与 Plugins-SDK 原为个人项目、后转入 Qingci-Bot 组织维护，版权完整、排他地归 Zhou Zhe (aka luoqingci) 个人所有，组织不是共同版权人。全部源码头去掉「and Qingci-Bot contributors」改为单一版权人；修正两份 LICENSE 里 GPLv3 示例模板把组织列为版权人的双版权表述；并在 LICENSE 末尾追加中英双语的「永久、不可撤销的全球非独占 GPLv3 许可 + 以组织名义维权」书面授权（明确不转移版权、不影响 GPLv3 第 10 条下游自动许可、贡献者保留各自贡献的版权）
-- `scripts/license_headers.py` 支持把旧版权行安全迁移为新文本（`--fix` 不会重复加头），`--check` 同步校验版权人文本；README / CONTRIBUTING 更新版权与授权说明
-- 归属区分：Plugin-Market / hello 为组织下从零开发的仓库，版权归 Qingci-Bot Organization，不套用个人版权声明
-
-### Added
-
-- **源码版权声明**：为 CE 全部 219 个源码文件（`.py` / `.js` / `.vue` / `.css` / `.spec`）统一补齐 `Copyright (C) 2026 Zhou Zhe (aka luoqingci) and Qingci-Bot contributors` 与 `SPDX-License-Identifier: GPL-3.0-or-later` 头；CE 的文件额外标注「GPLv3 §7 附加条款见 LICENSE」，与 LICENSE 的附加条款 (a) 呼应
-- 新增 `scripts/license_headers.py`（`--check` 检查 / `--fix` 幂等补齐，自动识别 LICENSE 是否含附加条款、保留 BOM 与换行符）与 `tests/test_license_headers.py`，防止后续新增源码漏写声明
-- Plugins-SDK 仓库的 32 个源码文件同步补齐（其 LICENSE 为纯 GPLv3，故不带 §7 附加行），两者的 CONTRIBUTING / CHANGELOG / 结构文档同步说明
+- **README 瘦身**：635 → 133 行，只留门面（简介 / 特性 / 快速开始 / 文档导航 / 合规声明 / 开发计划 / 许可）；使用指南拆为 `docs/SETUP.md`（243 行）与 `docs/CONFIGURATION.md`（238 行）
+- **错位修正**：`ARCHITECTURE.md` 的生产部署段迁至 `docs/DEPLOYMENT.md`；`PLUGIN_DEV.md` 1755 → 1493 行，前端 / API / 打包分别拆为 `docs/FRONTEND.md` / `docs/API.md` / `docs/PACKAGING.md`，API 端点与真实路由校准并补齐 backup 的 `/db/download` 与 `/restore`
+- **欠缺补齐**：新增 `docs/TROUBLESHOOTING.md` 与 `CODE_OF_CONDUCT.md`；`docs/PROJECT_STRUCTURE.md` 新增文档职责矩阵；README 导航表、目录树与全部交叉引用锚点同步
+- `tests/test_docs.py` 的 `DOCS` 清单扩至 15 份，代码块语法 / 导入符号 / 相对链接检查覆盖全部文档；删除与 CONTRIBUTING 重复的「运行测试 / 代码质量」段落
 
 ## \[1.19.3] - 2026-11-11（文档合规、去冗余与契约化重构）
 
