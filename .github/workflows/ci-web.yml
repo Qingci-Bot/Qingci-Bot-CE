@@ -9,12 +9,29 @@ on:
       - "web/**"
       - ".github/workflows/ci-web.yml"
   pull_request:
-    # 不使用 paths 过滤：分支保护要求 7 项必需检查全部上报，
-    # 若 PR 只改文档或工作流文件、又不命中过滤条件，将永远等不到检查而无法合并。
+    # 分支保护要求前端检查全部上报：用 changes job + 条件执行替代 paths 过滤，
+    # 未命中路径时 frontend job 输出 Skipped（分支保护计为通过），免跑无关构建。
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'web/**'
+              - '.github/workflows/ci-web.yml'
+
   frontend:
     name: Frontend lint / format / test / build
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

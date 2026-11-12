@@ -36,6 +36,11 @@
 4. 确保测试通过：`pytest`
 5. 提交 Pull Request
 
+   > **CI 路径分级**：PR 会全量上报必需检查，但 Docker 构建 / Python 3.11 兼容矩阵 /
+   > 依赖审计 / install.sh 冒烟（ci.yml），以及前端（ci-web.yml）、桌面壳（ci-desktop.yml）
+   > 检查按**变更路径**条件执行——未命中路径时对应检查输出 Skipped（分支保护计为通过）。
+   > 纯文档 PR 不会触发无关全量构建。
+
 ### 版本号管理
 
 升级版本号时**不要手动逐文件修改**，使用统一脚本一次同步全部版本字段：
@@ -90,7 +95,7 @@ uv run ruff format --check .
 uv run mypy api bot desktop plugins
 ```
 
-> **协议层说明**：`bot/plugin/protocol/{base,context,matcher,permission,rule,ratelimit,session,events}.py` 为 `qingci_plugin_sdk` 薄转发（`bot/plugin/` 顶层同名模块为兼容再导出）。修改权限语义、匹配规则、基类等协议行为时，请前往 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 仓库修改、发版到官方 PyPI，再在主项目更新 `pyproject.toml` 里的 SDK 精确版本约束并重新 `uv lock`（CI 会校验钉定版本与已安装版本相符）；主项目内只改运行时逻辑（如 `bot/plugin/manager.py`、`bot/plugin/llm_tool.py`）。
+> **协议层说明**：`bot/plugin/protocol/{base,context,matcher,permission,rule,ratelimit,session,events}.py` 为 `qingci_plugin_sdk` 薄转发（`bot/plugin/` 顶层同名模块为兼容再导出）。修改权限语义、匹配规则、基类等协议行为时，请前往 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 仓库修改、发版到官方 PyPI，再在主项目更新 `pyproject.toml` 里的 SDK 版本区间（与 `bot/plugin/abi.py` 的 `SDK_ABI_RANGE` 同步，契约测试锁两边一致）并重新 `uv lock`（CI 会校验安装版本落在区间内 + ABI 符号清单齐全）；主项目内只改运行时逻辑（如 `bot/plugin/manager.py`、`bot/plugin/llm_tool.py`）。
 
 ### 前端
 

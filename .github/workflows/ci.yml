@@ -5,6 +5,9 @@ name: CI
 #    又跑 pull_request，同一提交触发两遍完整流水线（12 个 PR → 24 次运行）
 # 2) paths 只覆盖 Python 侧 —— Web / 桌面壳改动由 ci-web.yml / ci-desktop.yml
 #    负责，不再连带跑 docker build、install.sh 冒烟与 3.11 矩阵
+# 3) PR 全量上报必需检查，但 docker / compat / audit / install-script 按
+#    changes job 的路径判定条件执行（Skipped 计为通过），文档/前端-only 的
+#    PR 不再触发无关全量构建
 on:
   push:
     branches: ["main"]
@@ -24,11 +27,61 @@ on:
       - "install.sh"
       - ".github/workflows/ci.yml"
   pull_request:
-    # 不使用 YAML 锚点复用上面的列表：GitHub Actions 对 anchors/aliases 支持不可靠
-    # 不使用 paths 过滤：分支保护要求 7 项必需检查全部上报，
-    # 若 PR 只改文档或工作流文件、又不命中过滤条件，将永远等不到检查而无法合并。
+    # 不使用 paths 过滤：分支保护要求 7 项必需检查全部上报。
+    # 改用 changes job + 条件执行：未命中路径的 job 输出 Skipped 状态——
+    # 分支保护将 Skipped 计为通过，既上报了必需检查又免跑无关全量构建。
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      compat: ${{ steps.filter.outputs.compat }}
+      audit: ${{ steps.filter.outputs.audit }}
+      docker: ${{ steps.filter.outputs.docker }}
+      install: ${{ steps.filter.outputs.install }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            compat:
+              - 'bot/**'
+              - 'api/**'
+              - 'tests/**'
+              - 'main.py'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'migrations/**'
+              - 'alembic.ini'
+              - 'config.example.yaml'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
+            audit:
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci.yml'
+            docker:
+              - 'Dockerfile'
+              - 'docker-compose.yml'
+              - 'bot/**'
+              - 'api/**'
+              - 'main.py'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'config.example.yaml'
+              - '.github/workflows/ci.yml'
+            install:
+              - 'install.sh'
+              - 'main.py'
+              - 'bot/**'
+              - 'api/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'config.example.yaml'
+              - '.github/workflows/ci.yml'
+
   quality:
     name: Lint / Type / Test
     runs-on: ubuntu-latest
@@ -129,6 +182,9 @@ jobs:
 
   compat:
     name: Python ${{ matrix.python }} compatibility
+    needs: changes
+    # 兼容性只与 Python 运行代码/依赖相关，纯文档/前端 PR 跳过
+    if: needs.changes.outputs.compat == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -155,6 +211,9 @@ jobs:
 
   audit:
     name: Dependency audit (pip-audit)
+    needs: changes
+    # 依赖审计只依赖锁文件/清单变化（本 job 本身 continue-on-error，非阻断）
+    if: needs.changes.outputs.audit == 'true'
     runs-on: ubuntu-latest
     # 初始为「只报告不阻断」：存量依赖可能带有已知 CVE，需人工 triage 后再
     # 提升为阻断（去掉 continue-on-error）。否则一上线就是红的，无人处理。
@@ -187,6 +246,9 @@ jobs:
 
   docker:
     name: Docker build & smoke run
+    needs: changes
+    # 镜像构建只与运行代码/镜像定义相关，纯文档/前端 PR 跳过
+    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -216,6 +278,9 @@ jobs:
 
   install-script:
     name: install.sh smoke test
+    needs: changes
+    # 安装冒烟只与安装脚本/运行入口/依赖清单相关
+    if: needs.changes.outputs.install == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
