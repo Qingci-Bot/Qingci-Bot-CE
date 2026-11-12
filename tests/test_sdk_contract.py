@@ -9,9 +9,6 @@ SDK 是协议层唯一来源，CE 的 bot/plugin/protocol/* 与顶层兼容模�
 """
 
 import importlib
-import re
-import tomllib
-from pathlib import Path
 
 import pytest
 import qingci_plugin_sdk as sdk
@@ -80,13 +77,11 @@ def test_top_level_compat_module_reexports(short):
 
 
 def test_installed_sdk_version_matches_pyproject_pin():
-    deps = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"][
-        "dependencies"
-    ]
-    dep = next(d for d in deps if d.startswith("qingci-plugin-sdk"))
-    pinned = re.fullmatch(r"qingci-plugin-sdk==(\d+\.\d+\.\d+)", dep)
-    assert pinned, f"SDK 依赖未钉成精确版本: {dep!r}"
-    assert sdk.__version__ == pinned.group(1)
+    # SDK 钉版契约已升级为区间 + ABI 能力探测（tests/test_abi.py）：
+    # - pyproject 声明与 abi.SDK_ABI_RANGE 同步
+    # - 安装版本落在区间内且符号清单齐全
+    # 此处仅保留环境哨兵：SDK 必须已安装
+    assert sdk.__version__
 
 
 def test_sdk_critical_exports_present():

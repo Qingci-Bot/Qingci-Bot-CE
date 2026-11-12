@@ -68,6 +68,7 @@ Qingci-Bot-CE/
 │   │   ├── ratelimit.py    # 兼容再导出（指向 protocol/ratelimit.py）
 │   │   ├── session.py      # 兼容再导出（指向 protocol/session.py）
 │   │   ├── events.py       # 兼容再导出（指向 protocol/events.py）
+│   │   ├── abi.py          # SDK ABI 能力探测（REQUIRED_SYMBOLS 符号清单 + 版本区间双检；解除 SDK 精确钉版）
 │   │   ├── manager.py      # PluginManager 门面：加载/热重载/卸载/依赖/元数据 + SDK data_root 实例重定向
 │   │   ├── manager_web.py  # Web 职责分组 mixin：管理页面挂载 / 插件级 API 收集 / 配置 Schema
 │   │   ├── manager_metrics.py  # 指标职责分组 mixin：Matcher 执行指标记录与查询
