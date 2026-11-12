@@ -31,6 +31,8 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from .errors import HtmlRenderError  # noqa: F401  # 错误基类唯一定义在 bot/errors.py，此处 re-export 兼容既有导入
+
 if TYPE_CHECKING:
     from .config import RenderConfig
 
@@ -56,16 +58,16 @@ _ANIMATION_DISABLE_STYLE = """
 _TEMP_FILE_PREFIX = "qingci-render-"
 
 
-class HtmlRenderError(Exception):
-    """HTML 渲染错误基类"""
-
-
 class HtmlRenderUnavailableError(HtmlRenderError):
     """渲染能力不可用（playwright 未安装 / 浏览器缺失 / render.enabled 关闭）"""
+
+    code = "html_render_unavailable"
 
 
 class HtmlRenderTimeoutError(HtmlRenderError):
     """渲染超时"""
+
+    code = "html_render_timeout"
 
 
 def _import_async_playwright() -> Any:

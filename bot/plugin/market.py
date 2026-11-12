@@ -44,6 +44,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from ..errors import MarketError  # noqa: F401  # 错误类唯一定义在 bot/errors.py，此处 re-export 兼容既有导入
 from ..paths import data_root
 from ._proc import run_command
 
@@ -55,10 +56,6 @@ DEFAULT_MARKET_URL = "https://gitee.com/qingci-bot/Plugin-Market.git"
 DEFAULT_REFRESH_INTERVAL = 3600.0
 # 索引版本号（schema 演进时递增）
 INDEX_VERSION = 1
-
-
-class MarketError(Exception):
-    """插件市场错误"""
 
 
 class MarketIndex:

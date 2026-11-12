@@ -50,6 +50,7 @@ from typing import Any
 import httpx
 from qingci_plugin_sdk.segments import Message
 
+from ...errors import AppError
 from .base import PlatformAdapter, cancel_and_await
 
 logger = logging.getLogger("qingci-bot.platforms.telegram")
@@ -88,8 +89,10 @@ _MEDIA_API: dict[str, tuple[str, str]] = {
 _UNSUPPORTED_OB_ACTION_PREFIXES = ("set_group_", "get_group_member_", "set_friend_", "get_friend_")
 
 
-class TelegramAPIError(RuntimeError):
-    """Telegram Bot API 调用失败"""
+class TelegramAPIError(AppError, RuntimeError):
+    """Telegram Bot API 调用失败（AppError 子类，code=telegram_api_error）"""
+
+    code = "telegram_api_error"
 
     def __init__(self, message: str, *, error_code: int = 0, description: str = ""):
         super().__init__(message)
