@@ -35,7 +35,7 @@ npm run build    # 构建生产版本到 web/dist/
 | `web/src/api/request.js` | 统一请求层（API Key、错误与 `cause`） |
 | `web/src/router/index.js` | vue-router 页面路由 |
 | `web/src/views/` | 页面组件（Dashboard / Settings / PluginManager 等） |
-| `web/src/components/` | 复用组件（Drawer 等） |
+| `web/src/components/` | 复用组件：`Drawer.vue`；`plugin/`（PluginManager 视图的职责分组：CommandTab / MarketTab / PluginConfigDrawer）；`settings/`（Settings 视图的卡片分组：DataManagementCard / AuditLogCard） |
 | `web/src/stores/app.js` | Pinia 全局状态 |
 | `web/src/composables/` | useWebSocket / useToast |
 | `web/src/styles/main.css` | 全局样式 |
