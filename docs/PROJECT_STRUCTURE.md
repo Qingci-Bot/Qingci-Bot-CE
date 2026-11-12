@@ -43,6 +43,7 @@ Qingci-Bot-CE/
 │   │   ├── dispatcher.py   # 消息分发 + Matcher 调度（MessageContext 引 protocol.context）
 │   │   └── platforms/      # 多平台适配器：base.py（PlatformAdapter 契约 + 高频动作便捷方法 + _api_action 动作名映射）+ onebot11/onebot12/telegram
 │   │                       #   OneBotConnection 实现契约作为「onebot」平台；回复按来源平台路由
+│   ├── errors.py           # 统一错误模型（AppError 基类 + 领域错误类唯一定义处；新增领域错误继承 AppError）
 │   ├── alerter.py          # 错误告警器（ERROR 日志阈值 → 私聊通知管理员）
 │   ├── filter.py           # 敏感词过滤器（词库 + 打码）
 │   ├── broadcast.py        # 消息广播（WS 实时推送 broker）

@@ -25,6 +25,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, TypedDict, cast
 
+from ..errors import AppError
+
 __all__ = [
     "EventContractError",
     "EventView",
@@ -82,8 +84,10 @@ _V12_TYPE_TO_POST = {
 }
 
 
-class EventContractError(ValueError):
+class EventContractError(AppError, ValueError):
     """事件结构不符合契约（供适配器边界与测试使用，不在主链路强制开启）"""
+
+    code = "event_contract_error"
 
 
 def validate_v12_event(

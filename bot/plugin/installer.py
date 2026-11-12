@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..errors import PluginInstallError
 from ._proc import run_command
 from .deps import ensure_dependencies
 
@@ -332,7 +333,7 @@ class PluginInstaller:
             with zipfile.ZipFile(archive) as zf:
                 # 解压总量上限（防 zip 炸弹）
                 if sum(i.file_size for i in zf.infolist()) > _MAX_EXTRACT_BYTES:
-                    raise ValueError("归档解压后过大，已拒绝")
+                    raise PluginInstallError("归档解压后过大，已拒绝")
                 # 安全解压：与下方 tar 分支同规则，预检每个成员路径，
                 # 拒绝绝对路径（含盘符）与 .. 穿越条目，防止 Zip Slip；
                 # 同时拒绝符号链接条目（防 symlink 逃逸覆写目录外文件）
@@ -341,16 +342,16 @@ class PluginInstaller:
                     member = info.filename.replace("\\", "/")
                     member_target = (dest_root / member).resolve()
                     if not member_target.is_relative_to(dest_root):
-                        raise ValueError(f"归档包含非法路径: {info.filename}")
+                        raise PluginInstallError(f"归档包含非法路径: {info.filename}")
                     mode = (info.external_attr >> 16) & 0xFFFF
                     if stat.S_ISLNK(mode):
-                        raise ValueError(f"归档包含符号链接，已拒绝: {info.filename}")
+                        raise PluginInstallError(f"归档包含符号链接，已拒绝: {info.filename}")
                 zf.extractall(dest_dir)
         elif fmt == "tar":
             with tarfile.open(archive) as tf:
                 # 解压总量上限（防 zip 炸弹）
                 if sum(m.size for m in tf.getmembers()) > _MAX_EXTRACT_BYTES:
-                    raise ValueError("归档解压后过大，已拒绝")
+                    raise PluginInstallError("归档解压后过大，已拒绝")
                 # 安全解压：Py3.12+ 用 data_filter；旧版本手动预检成员路径，
                 # 拒绝绝对路径与 .. 成员，并拒绝 symlink/hardlink 成员——
                 # 3.10/3.11 下预检只查文本路径，symlink 可指向解压目录外
@@ -361,13 +362,13 @@ class PluginInstaller:
                     dest_root = dest_dir.resolve()
                     for m in tf.getmembers():
                         if m.issym() or m.islnk():
-                            raise ValueError(f"归档包含符号链接，已拒绝: {m.name}")
+                            raise PluginInstallError(f"归档包含符号链接，已拒绝: {m.name}")
                         member_target = (dest_root / m.name).resolve()
                         if not member_target.is_relative_to(dest_root):
-                            raise ValueError(f"归档包含非法路径: {m.name}")
+                            raise PluginInstallError(f"归档包含非法路径: {m.name}")
                     tf.extractall(dest_dir)
         else:
-            raise ValueError(f"不支持的归档格式: {fname}")
+            raise PluginInstallError(f"不支持的归档格式: {fname}")
         # 若顶层为单个目录，返回该目录
         entries = [p for p in dest_dir.iterdir() if not p.name.startswith("__")]
         if len(entries) == 1 and entries[0].is_dir():
@@ -431,7 +432,7 @@ class PluginInstaller:
         # 兜底校验：解析后必须位于插件目录内（防插件声明恶意 name 越界删除）
         plugin_dir = (base / name).resolve()
         if not plugin_dir.is_relative_to(base.resolve()):
-            raise ValueError(f"非法插件删除路径: {name!r}")
+            raise PluginInstallError(f"非法插件删除路径: {name!r}")
 
         data_dir = (data_root() / "plugins" / name).resolve()
         # 实例模式下 plugins_dir 与 data_root()/plugins 重合 → 代码目录即数据目录

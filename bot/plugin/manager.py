@@ -27,6 +27,7 @@ from typing import Any
 
 from packaging.version import InvalidVersion, Version
 
+from ..errors import PluginDependencyError, PluginLoadError
 from ._loading import (
     _BUILTIN_PLUGINS,
     _expand_subcommand_matchers,
@@ -374,12 +375,12 @@ class PluginManager(PluginWebMixin, PluginMetricsMixin):
                     try:
                         dep_version = Version(existing.version)
                     except InvalidVersion:
-                        raise ValueError(
+                        raise PluginDependencyError(
                             f"插件 {plugin.name} 依赖 {dep_name}{version_spec}，"
                             f"但 {dep_name} 版本号 {existing.version} 无效"
                         ) from None
                     if dep_version not in version_spec:
-                        raise ValueError(
+                        raise PluginDependencyError(
                             f"插件 {plugin.name} 依赖 {dep_name}{version_spec}，"
                             f"但当前版本为 {existing.version}"
                         )
@@ -387,13 +388,13 @@ class PluginManager(PluginWebMixin, PluginMetricsMixin):
 
             if dep_name in loading:
                 chain = " -> ".join([*loading, dep_name])
-                raise ValueError(f"插件循环依赖: {chain}")
+                raise PluginDependencyError(f"插件循环依赖: {chain}")
 
             dep_module = f"bot.plugin.builtin.{dep_name}"
             try:
                 importlib.import_module(dep_module)
             except ImportError:
-                raise ValueError(
+                raise PluginDependencyError(
                     f"插件 {plugin.name} 依赖的插件 {dep_name} 不存在（找不到模块 {dep_module}）"
                 ) from None
             await self._load_or_reload(dep_module, bot, _loading=loading)
@@ -405,12 +406,12 @@ class PluginManager(PluginWebMixin, PluginMetricsMixin):
                     try:
                         dep_version = Version(dep_plugin.version)
                     except InvalidVersion:
-                        raise ValueError(
+                        raise PluginDependencyError(
                             f"插件 {plugin.name} 依赖 {dep_name}{version_spec}，"
                             f"但 {dep_name} 版本号 {dep_plugin.version} 无效"
                         ) from None
                     if dep_version not in version_spec:
-                        raise ValueError(
+                        raise PluginDependencyError(
                             f"插件 {plugin.name} 依赖 {dep_name}{version_spec}，"
                             f"但加载后版本为 {dep_plugin.version}"
                         )
@@ -436,13 +437,13 @@ class PluginManager(PluginWebMixin, PluginMetricsMixin):
 
         if not plugin_classes:
             if replaced_name is not None:
-                raise ValueError(
+                raise PluginLoadError(
                     f"模块 {module.__name__} 中未找到插件类，无法替换已注册的插件 {replaced_name}"
                 )
             return
 
         if len(plugin_classes) > 1:
-            raise ValueError(
+            raise PluginLoadError(
                 f"模块 {module.__name__} 定义了 {len(plugin_classes)} 个 PluginBase 子类，"
                 f"每模块仅允许 1 个"
             )
@@ -464,7 +465,7 @@ class PluginManager(PluginWebMixin, PluginMetricsMixin):
         loading = _loading if _loading is not None else set()
         if plugin.name in loading:
             chain = " -> ".join([*loading, plugin.name])
-            raise ValueError(f"插件循环依赖: {chain}")
+            raise PluginDependencyError(f"插件循环依赖: {chain}")
         loading.add(plugin.name)
         try:
             await self._ensure_dependencies(plugin, bot, loading)
