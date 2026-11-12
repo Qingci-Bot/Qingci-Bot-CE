@@ -12,10 +12,13 @@ dependencies = [
     #
     # 自 SDK 1.15.2 起由官方 PyPI 分发（Trusted Publishing），这里钉成精确版本：
     #   - CI / Docker / 源码安装都走默认 PyPI 索引，无需令牌或额外配置
-    #   - 升级 SDK：改这里的版本号，再
+    #   - 升级 SDK：改这里的版本区间（与 bot/plugin/abi.py 的 SDK_ABI_RANGE 同步，
+    #     tests/test_abi.py 契约测试锁两边一致），再
     #     `uv lock --default-index https://pypi.org/simple`（CI 校验锁文件、钉定版本与已安装版本一致）
     #   - 本地改 SDK 源码时用 `uv pip install -e ..\Plugins-SDK` 覆盖
-    "qingci-plugin-sdk==1.15.2",
+    #   - 兼容性由 ABI 能力探测保证（bot/plugin/abi.py REQUIRED_SYMBOLS），
+    #     区间内 minor 升级无需改代码，跑通全量测试即可
+    "qingci-plugin-sdk>=1.15.2,<2.0.0",
     # 依赖上界策略：核心依赖一律给「下一个主版本」上界。CI/开发由 uv.lock 精确锁定，
     # 上界主要保护「用户按 pyproject 直接 pip install」的场景——litellm / fastapi 等
     # 属于高频 breaking 的包，被动跨主版本升级会直接破坏运行时。

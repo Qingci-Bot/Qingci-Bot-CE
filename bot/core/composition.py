@@ -48,6 +48,11 @@ if TYPE_CHECKING:
 
 def assemble_bot(bot: "QingciBot") -> None:
     """装配 QingciBot 的全部组件并注册到 DI 容器（仅 __init__ 调用一次）"""
+    from ..plugin.abi import log_sdk_abi_status
+
+    # SDK ABI 能力探测：版本区间 + 符号清单双检，问题在启动早期以 ERROR
+    # 留痕（不终止启动——缺失符号会在首次 import 时以 ImportError 暴露）
+    log_sdk_abi_status()
     config: ConfigManager = bot.config
 
     # ---- 核心服务 ----

@@ -53,24 +53,35 @@ jobs:
         # 锁定的版本完全不同，且会随上游发版静默漂移。
         run: uv sync --locked --python 3.12 --extra dev
 
-      - name: Verify SDK version matches lock
-        # SDK 是从官方 PyPI 安装的固定版本依赖。uv sync --locked 已保证 pyproject
-        # 与 uv.lock 一致，这里再核对「钉的版本 == 实际安装的版本」，防止锁错/上游漂移。
+      - name: Verify SDK version within ABI range
+        # SDK 兼容性由 ABI 能力探测保证（bot/plugin/abi.py），pyproject 声明的是
+        # 版本区间而非精确钉版。这里核对「实际安装/锁定的版本落在 pyproject 区间内」，
+        # 防止锁文件与 pyproject 漂移或区间外版本混入；uv sync --locked 已保证二者
+        # 一致，此步骤为独立双检。
         run: |
           uv run --no-sync python - <<'EOF'
-          import re, tomllib
+          import pathlib, re, tomllib
+
+          from packaging.specifiers import SpecifierSet
+          from packaging.version import Version
+
           import qingci_plugin_sdk
 
           spec = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
           dep = next(d for d in spec if d.startswith("qingci-plugin-sdk"))
-          m = re.fullmatch(r"qingci-plugin-sdk==(\d+\.\d+\.\d+)", dep)
-          assert m, f"SDK 应钉成精确版本（qingci-plugin-sdk==X.Y.Z）：{dep!r}"
-          pinned = m.group(1)
+          m = re.fullmatch(r"qingci-plugin-sdk(>=.+)", dep)
+          assert m, f"SDK 应声明区间约束（qingci-plugin-sdk>=X,<Y）：{dep!r}"
+          req = m.group(1)
           installed = qingci_plugin_sdk.__version__
-          assert installed == pinned, (
-              f"SDK 版本不一致：pyproject 钉 {pinned}，实际安装 {installed}"
+          assert Version(installed) in SpecifierSet(req), (
+              f"SDK 版本越界：pyproject 允许 {req}，实际安装 {installed}"
           )
-          print(f"SDK {installed} == pyproject 钉定版本 OK（官方 PyPI）")
+          lock = tomllib.loads(pathlib.Path("uv.lock").read_text(encoding="utf-8"))
+          pkg = next(p for p in lock["package"] if p["name"] == "qingci-plugin-sdk")
+          assert pkg["version"] == installed, (
+              f"uv.lock 锁定 {pkg['version']} 与实际安装 {installed} 不一致"
+          )
+          print(f"SDK {installed} 在兼容区间 {req} 内 OK（官方 PyPI，ABI 探测见 bot/plugin/abi.py）")
           EOF
 
       - name: Verify lock sources are canonical

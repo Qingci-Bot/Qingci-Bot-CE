@@ -2848,7 +2848,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "qingci-bot-ce", extras = ["test", "build", "vector", "render"], marker = "extra == 'dev'" },
-    { name = "qingci-plugin-sdk", specifier = "==1.15.2" },
+    { name = "qingci-plugin-sdk", specifier = ">=1.15.2,<2.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.17.3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
     { name = "sqlmodel", specifier = ">=0.0.22,<1" },
