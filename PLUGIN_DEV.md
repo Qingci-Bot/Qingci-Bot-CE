@@ -671,7 +671,7 @@ async def wizard(ctx: MatcherContext) -> None:
 - 跨轮状态直接挂在 `ctx.session` 上（`ctx.session.任意属性 = 值`），SDK 已声明 `__getattr__`/`__setattr__`，类型检查不会报错
 - 提示文本走**主动发送**通道，handler 正常 `return` 的文本走**回复**通道
 
-> 完整说明与更多示例见 SDK 文档 `Plugins-SDK/README.md` 的「会话阶梯（多轮交互）」章节。
+> 完整说明与更多示例见 SDK 文档 `Plugins-SDK/docs/PLUGIN_GUIDE.md` 的「会话阶梯（多轮交互）」章节。
 
 ## 插件依赖（require）
 
