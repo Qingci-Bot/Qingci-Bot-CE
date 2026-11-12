@@ -67,7 +67,11 @@ Qingci-Bot-CE/
 │   │   ├── ratelimit.py    # 兼容再导出（指向 protocol/ratelimit.py）
 │   │   ├── session.py      # 兼容再导出（指向 protocol/session.py）
 │   │   ├── events.py       # 兼容再导出（指向 protocol/events.py）
-│   │   ├── manager.py      # 插件生命周期：加载/热重载/卸载/依赖/元数据 + SDK data_root 实例重定向
+│   │   ├── manager.py      # PluginManager 门面：加载/热重载/卸载/依赖/元数据 + SDK data_root 实例重定向
+│   │   ├── manager_web.py  # Web 职责分组 mixin：管理页面挂载 / 插件级 API 收集 / 配置 Schema
+│   │   ├── manager_metrics.py  # 指标职责分组 mixin：Matcher 执行指标记录与查询
+│   │   ├── _rwlock.py      # 热重载读写屏障（分发共享读 / 重载独占写 / 同任务重入安全）
+│   │   ├── _loading.py     # 加载辅助纯函数：内置插件清单 / 子指令展开 / 依赖版本解析 / plugin.json 读取
 │   │   ├── installer.py    # 插件安装/卸载（来源拉取 + 归档安全解压 + 目录原子落位；manager 的薄委托实现）
 │   │   ├── market.py       # 插件市场：索引拉取/缓存 + 安装/更新编排
 │   │   ├── deps.py         # 插件第三方依赖自动安装（data_root()/deps/<name>/ 按插件隔离 + sys.path 注入）

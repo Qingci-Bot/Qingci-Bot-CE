@@ -283,6 +283,8 @@ Qingci-Bot-CE/
 
 - 职责边界：安装/卸载链路（来源拉取、归档安全解压、目录落位、依赖清理）独立在 `bot/plugin/installer.py`（`PluginInstaller`），`PluginManager.install/remove` 为薄委托。安全约束（SSRF 白名单、归档炸弹上限、Zip Slip 预检、插件名穿越校验）集中在该模块，改动时不应绕开
 
+- 门面分组：`PluginManager` 以 mixin 组合承载各职责分组，公开 API 全部留在 manager 门面上——`manager_web.py`（Web 管理页面挂载 / 插件级 Web API / 配置 Schema）、`manager_metrics.py`（Matcher 执行指标）、`_rwlock.py`（热重载读写屏障）、`_loading.py`（加载辅助纯函数：内置插件清单、子指令展开、依赖版本解析、plugin.json 读取、插件类识别）。各分组状态仍由 `PluginManager.__init__` 统一持有，mixin 仅承载方法
+
 ### LLMManager（`bot/llm/manager.py`）
 
 - 会话管理：按群聊/用户独立维护对话历史，内存 + 数据库双写

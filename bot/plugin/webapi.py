@@ -20,20 +20,23 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, Protocol, cast
 
 from fastapi import Depends, Request
 from fastapi.responses import JSONResponse, Response
 
 from api.auth import require_auth
 
-if TYPE_CHECKING:
-    from .manager import PluginManager
-
 logger = logging.getLogger("qingci-bot.plugin.webapi")
 
 # 插件 Web API 统一挂载前缀
 API_BASE = "/api/plugin-web"
+
+
+class _ManagerLike(Protocol):
+    """管理器最小接口（PluginManager 满足；不耦合具体类以便门面拆分）"""
+
+    def get(self, name: str) -> Any | None: ...
 
 
 def _normalize_result(result: Any) -> Response:
@@ -71,7 +74,7 @@ def _find_api(plugin: Any, path: str, method: str) -> dict[str, Any] | None:
 
 
 def _build_endpoint(
-    manager: PluginManager, plugin_name: str, api_path: str
+    manager: _ManagerLike, plugin_name: str, api_path: str
 ) -> Callable[..., Awaitable[Response]]:
     """构造路由端点：请求时动态解析插件实例与 handler"""
 
@@ -102,7 +105,7 @@ def _build_endpoint(
 
 def mount_plugin_apis(
     app: Any,
-    manager: PluginManager,
+    manager: _ManagerLike,
     plugin_name: str,
     apis: list[dict[str, Any]],
 ) -> None:
