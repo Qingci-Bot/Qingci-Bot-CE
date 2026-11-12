@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **文档错位与欠缺依次修正**：`ARCHITECTURE.md` 的「生产环境部署」（向量检索初始化 / PostgreSQL 迁移 / 断连恢复，约 130 行）迁至新建 `docs/DEPLOYMENT.md`；`PLUGIN_DEV.md` 1755 → 1492 行，前端 / API / 打包分别拆为 `docs/FRONTEND.md` / `docs/API.md` / `docs/PACKAGING.md`（API 端点与真实路由校准，补齐 backup 的 `/db/download` 与 `/restore`）；新增 `docs/TROUBLESHOOTING.md` 与 `CODE_OF_CONDUCT.md`。同步 `tests/test_docs.py` 的 `DOCS` 清单（15 份文档）、README 导航、`docs/PROJECT_STRUCTURE.md` 职责矩阵与全部交叉引用锚点
+
 - **README 瘦身与文档职责分工**：README 从 635 行收至 127 行，只保留门面内容（简介 / 特性 / 快速开始 / 文档导航 / 合规声明 / 开发计划 / 许可）；使用指南拆为 `docs/SETUP.md`（安装运行与运维，243 行）与 `docs/CONFIGURATION.md`（配置参考，238 行）。与 CONTRIBUTING 重复的「运行测试 / 代码质量」段落删除并改为指向 CONTRIBUTING；`tests/test_docs.py` 的 `DOCS` 清单纳入新文档，保证代码块与相对链接仍受 CI 校验；`docs/PROJECT_STRUCTURE.md` 新增文档职责矩阵、修正目录树并列出待补缺口（`docs/API.md` / `docs/TROUBLESHOOTING.md`）
 
 - **LICENSE 恢复为 GPLv3 官方全文**：此前在 LICENSE 末尾直接追加 §7 附加条款与组织授权声明，不符合 GPL「原样提供许可证全文」的规范。现从 FSF 官方 `gpl-3.0.txt` 重建 LICENSE（674 行），按维护者确认**仅替换 3 行示例占位符**（项目名 / 版权人 / 终端交互示例），其余一字未改

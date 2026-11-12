@@ -1,42 +1,13 @@
 # Qingci-Bot CE 插件开发指南
 
-## 前端开发
-
-```bash
-cd web
-npm install
-npm run dev      # 开发模式（热更新，http://localhost:5173）
-npm run build    # 构建生产版本到 web/dist/
-```
-
-开发模式下，前端请求会自动代理到 `http://127.0.0.1:8080`（在 `vite.config.js` 中配置）。
-
-## Web UI 页面
-
-| 页面     | 路由           | 说明                                                                         |
-| ------ | ------------ | -------------------------------------------------------------------------- |
-| 仪表盘    | `/`          | 运行状态卡片 + LLM 用量统计图表（依赖 `log.usage_tracking`）                               |
-| LLM 配置 | `/config`    | 提供商切换（联动 api\_url/model）、模型列表拉取、人格管理、MCP 服务器配置、连接测试                        |
-| 对话调试台  | `/lab`       | 无需进入 QQ 即可流式测试 LLM 回复；独立会话 key，不污染真实对话（走 `/api/ws/chat`）                   |
-| 群配置    | `/groups`    | 各群 Bot 开关与触发模式                                                             |
-| 插件管理   | `/plugins`   | 插件列表 / 详情 / 重载 / 加载外部插件 / 卸载 / 禁用 / 启用；内含「命令管理」Tab 与「插件市场」                 |
-| 消息日志   | `/logs`      | 实时消息流 + 会话记录可视化（按会话分组查看/删除，支持清理与 CSV 导出）                                   |
-| 运行日志   | `/runlog`    | 实时运行日志流 + 级别过滤（受 `log.run_log_enabled` 开关控制；关闭后页面提示无数据，走 `/api/ws/runlog`） |
-| 系统设置   | `/settings`  | Bot/OneBot/平台适配器配置、服务端/浏览器 API Key、运行日志采集开关、数据库备份、登录审计                     |
-| 实例管理   | `/instances` | 新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用）                                            |
-| 关于     | `/about`     | 版本信息                                                                       |
-| 登录     | `/login`     | API Key 登录（服务端已配置 `api_key` 时显示）                                           |
-| 首次启动向导 | `/setup`     | 首次启动引导（配置未完成时自动跳转）                                                         |
-
-***
-
-## 插件开发
+> 插件基类、Matcher / Rule / Permission、生命周期钩子、依赖注入、工具声明与测试工具。
+> 前端开发见 [docs/FRONTEND.md](docs/FRONTEND.md)、HTTP 端点见 [docs/API.md](docs/API.md)、打包发布见 [docs/PACKAGING.md](docs/PACKAGING.md)。
 
 > **快速开始**：复制 `plugins/_template/` 目录为 `plugins/my_plugin/` 即可开始开发。
 > 模板目录涵盖所有功能（命令/前缀/关键词/通知/请求/定时任务/Function Calling），附详细中文注释。
 > 最小示例见独立仓库 [Qingci-Bot/hello](https://github.com/Qingci-Bot/hello)（开箱即用，可一键从插件市场安装）。
 
-### 命名规范
+## 命名规范
 
 | 项目        | 规范                                            | 示例                         |
 | --------- | --------------------------------------------- | -------------------------- |
@@ -57,7 +28,7 @@ npm run build    # 构建生产版本到 web/dist/
 
 - 单文件 `.py` 插件仍兼容，但推荐使用目录结构
 
-### 目录结构要求
+## 目录结构要求
 
 框架通过扫描 `plugins/` 目录识别插件。**目录型插件**（推荐）和**文件型插件**（兼容）的判断规则：
 
@@ -104,7 +75,7 @@ Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，�
 
 两种方式可共存，Dispatcher 按 priority 优先调度 Matcher，无匹配时回退到旧式 `on_message`。
 
-### 两种插件形态（内置 vs 独立 SDK）
+## 两种插件形态（内置 vs 独立 SDK）
 
 插件协议层（`PluginBase`/`Matcher`/`Permission`/`Rule`/`MessageContext`）统一由独立插件 SDK 维护：`bot/plugin/protocol/*.py` 为薄转发，`bot/plugin/{base,matcher,permission,rule,ratelimit,session,events}.py` 为兼容再导出。两种插件形态的基类是**同一个类**，只是导入入口不同：
 
@@ -115,7 +86,7 @@ Qingci-Bot CE 插件系统借鉴 NoneBot2 的 Matcher/Rule/Permission 设计，�
 
 SDK 式插件在 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) 工作区开发（SDK 已随 exe 打包，插件运行时无需另行安装），两类插件混用不受影响：`PluginManager` 自动识别 SDK 式 `PluginBase` 子类，并调用 `set_data_root()` 将数据目录重定向到当前实例（`data_root()/plugins/<name>/`），保持实例隔离。由于内置插件的 `bot.plugin.base` 也是 SDK 转发，内置插件同样经此路径，实例隔离行为一致。
 
-### 插件基类
+## 插件基类
 
 所有插件继承 `PluginBase`（可从 `bot.plugin.base` 或 `qingci_plugin_sdk` 导入，两者等价）：
 
@@ -157,7 +128,7 @@ class MyPlugin(PluginBase):
         return None
 ```
 
-### 插件状态（PluginStatus）
+## 插件状态（PluginStatus）
 
 插件状态由 `PluginStatus` 枚举管理，替代原 `enabled` 布尔值：
 
@@ -175,7 +146,7 @@ plugin.status  # PluginStatus.LOADED
 plugin.enabled  # bool，向后兼容：LOADING/LOADED 为 True
 ```
 
-### 注入的依赖
+## 注入的依赖
 
 插件加载后，以下属性由 `PluginManager` 自动注入：
 
@@ -195,7 +166,7 @@ plugin.enabled  # bool，向后兼容：LOADING/LOADED 为 True
 | `self.i18n`            | `I18n`                | 国际化翻译器（`self._ = self.i18n.t`） |
 | `self.data_dir`        | `Path`                | 插件专属数据目录（自动创建）                 |
 
-### 依赖注入容器（DI Container）
+## 依赖注入容器（DI Container）
 
 框架内置轻量级 DI 容器 `bot.core.di`，按类型自动注入服务。插件只需声明类型注解即可：
 
@@ -230,7 +201,7 @@ class MyPlugin(PluginBase):
 | `TRANSIENT` | 每次 resolve 创建新实例 |
 | `SCOPED`    | 同一 scope 内返回同一实例 |
 
-### handler 参数级依赖注入（Depends）
+## handler 参数级依赖注入（Depends）
 
 Matcher handler 的**参数**也支持依赖注入：框架按函数签名自动解析参数，将 `MatcherContext`、`Bot` 实例及 DI 容器中的服务注入到调用位置，无需手动从 `ctx` 或 `self` 取。
 
@@ -259,7 +230,7 @@ async def stats(
 
 `Depends` 接受 `use_cache=True` 参数（当前保留兼容、暂未实现缓存）；可调用依赖的返回值会自动等待 `await`。
 
-### 插件数据目录（data\_dir）
+## 插件数据目录（data\_dir）
 
 每个插件拥有专属数据目录 `data_root()/plugins/<name>/`（默认 `app_root()/data/plugins/<name>/`；实例模式下为 `instances/<name>/data/plugins/<name>/`），用于持久化运行时数据（缓存、导出文件等）。目录自动创建；**卸载插件（默认）不删除数据目录**（保留以防重装），仅「彻底删除（purge=true）」时才一并删除数据目录与第三方依赖。
 
@@ -269,7 +240,7 @@ async def on_load(self):
     (self.data_dir / "cache.json").write_text('{"key": "value"}', encoding="utf-8")
 ```
 
-### 插件第三方依赖
+## 插件第三方依赖
 
 插件可声明自己的 Python 第三方库依赖（随插件分发，不随 exe 打包）。在插件目录放置 `requirements.txt`，或在 `plugin.json` 中声明 `requirements` 字段：
 
@@ -307,7 +278,7 @@ bot:
   auto_install_plugin_deps: false
 ```
 
-### 全局生命周期钩子
+## 全局生命周期钩子
 
 插件可覆写以下钩子，在 Bot 与连接的关键节点获得通知（全部为可选，异常隔离，不影响主流程）：
 
@@ -335,7 +306,7 @@ class MyPlugin(PluginBase):
         pass
 ```
 
-### 事件总线（EventBus / 跨插件事件广播）
+## 事件总线（EventBus / 跨插件事件广播）
 
 事件总线提供发布-订阅式跨插件事件广播，让插件间**无需显式依赖**即可协作（区别于 `export`/`require` 的服务式调用）。插件通过注入的 `self.event_bus` 使用：
 
@@ -379,7 +350,7 @@ async def order(ctx: MatcherContext) -> str:
 
 - 插件卸载时需自行 `unsubscribe`（或依赖 `EventBus` 常驻实例的引用）
 
-### 插件级 LLM 工具声明（@llm\_tool）
+## 插件级 LLM 工具声明（@llm\_tool）
 
 插件可用 `@llm_tool` 装饰器直接注册 Function Calling 工具，让插件参与 LLM 推理，构建「LLM 原生插件」。工具在插件加载时自动注册到全局 `ToolRegistry`，卸载时自动注销。
 
@@ -419,7 +390,7 @@ def add(a: int, b: int) -> int:
 
 - 工具实际参与调用需 `config.yaml` 中 `llm.enable_tools` 开启
 
-### 指令系统增强（别名 / 子指令 / 类型化参数 / help 可见性）
+## 指令系统增强（别名 / 子指令 / 类型化参数 / help 可见性）
 
 `on_command` 提供以下能力，更灵活地组织命令：
 
@@ -475,7 +446,7 @@ async def debug(ctx: MatcherContext) -> str:
 
 上述能力可自由组合。
 
-### 插件级配置 UI（Config schema 自动生成）
+## 插件级配置 UI（Config schema 自动生成）
 
 插件定义 `Config` 内嵌类（pydantic `BaseModel`）后，框架自动将其导出为 JSON Schema，Web「插件管理」页据此**自动渲染配置表单**，无需编写任何前端代码。
 
@@ -500,7 +471,7 @@ class MyPlugin(PluginBase):
 
 - 相关 API：`GET /api/plugin/{name}/config`（获取 schema + 当前值）、`PUT /api/plugin/{name}/config`（更新）
 
-### 自动热重载（PluginWatcher）
+## 自动热重载（PluginWatcher）
 
 开发期监听外部插件目录（`plugins/`）的 `.py` 文件变更并自动重载对应插件，改代码无需手动重载。生产环境建议关闭。
 
@@ -517,7 +488,7 @@ hot_reload:
 
 - 监听目录为 `app_root()/plugins/`，目录型（`__init__.py`）与文件型（`.py`）插件均支持
 
-### 细粒度事件处理钩子（run\_preprocessor / on\_calling\_api）
+## 细粒度事件处理钩子（run\_preprocessor / on\_calling\_api）
 
 除事件级钩子与插件级 `before/after_handler` 外，框架提供两个更细粒度的全局钩子，用于跨插件横切逻辑：
 
@@ -566,7 +537,7 @@ async def check_api(api_name: str, params: dict) -> dict | None:
 
 - 覆盖所有经 `OneBotConnection.call_api` 的调用（含 `send_*`/`get_*` 便捷方法）
 
-### 国际化（i18n）
+## 国际化（i18n）
 
 插件可声明多语言翻译资源，通过 `self.i18n` / `self._` 使用。翻译文件约定为插件目录下的 `i18n/<locale>.json`：
 
@@ -592,7 +563,7 @@ class MyPlugin(PluginBase):
 
 - 支持 `{placeholder}` 格式化；`self.i18n.load_dir()` 也可手动加载翻译目录
 
-### 会话状态（SessionState / TTL 键值存储）
+## 会话状态（SessionState / TTL 键值存储）
 
 借鉴 NoneBot2 的 `session.state`，提供带过期时间的会话级临时键值存储，适用于多步骤对话、表单填写、等待确认等场景。
 
@@ -660,7 +631,7 @@ self.session_state.set("banned_keywords", ["广告"], group_id=456)
 | `await serialize()`                 | 序列化所有会话状态      |
 | `await deserialize(data)`           | 从序列化数据恢复       |
 
-### 会话阶梯（多轮交互）
+## 会话阶梯（多轮交互）
 
 `ctx.session_state` 是「按会话存键值」，适合表单式的零散状态；需要**一个 handler 跨多轮续接**时用
 `ctx.session`（会话阶梯）：handler 调 `pause` 挂起，用户下一条消息会再次进入同一 handler，
@@ -702,7 +673,7 @@ async def wizard(ctx: MatcherContext) -> None:
 
 > 完整说明与更多示例见 SDK 文档 `Plugins-SDK/README.md` 的「会话阶梯（多轮交互）」章节。
 
-### 插件依赖（require）
+## 插件依赖（require）
 
 插件可声明依赖的其他插件，加载前 `PluginManager` 会自动先加载依赖：
 
@@ -732,7 +703,7 @@ require = ["admin>=1.1"]  # 依赖 admin 插件 1.1 及以上
 require = ["knowledge"]  # 无版本约束
 ```
 
-### 插件级配置（plugin\_config）
+## 插件级配置（plugin\_config）
 
 插件可通过定义 `Config` 内嵌类声明配置项，框架自动从 `config.yaml` 的 `plugins.<name>` 节加载：
 
@@ -762,7 +733,7 @@ plugins:
     max_length: 200
 ```
 
-### 插件导出/导入（export / require）
+## 插件导出/导入（export / require）
 
 插件间可通过 `export()` / `get_exports()` 暴露和调用服务接口：
 
@@ -788,7 +759,7 @@ class MyPlugin(PluginBase):
 
 > 注意：获取导出使用 `get_exports()` 方法，`require` 仅作为类属性声明依赖（两者原本重名，已拆分）。
 
-### 插件级中间件（register\_before / register\_after）
+## 插件级中间件（register\_before / register\_after）
 
 每个插件可注册 handler 前置/后置钩子，拦截或修改 handler 返回值：
 
@@ -811,7 +782,7 @@ class MyPlugin(PluginBase):
         return result
 ```
 
-### 插件元数据发现（plugin.json）
+## 插件元数据发现（plugin.json）
 
 在插件目录下放置 `plugin.json` 文件，无需导入模块即可发现插件元信息：
 
@@ -829,7 +800,7 @@ class MyPlugin(PluginBase):
 
 框架提供 `GET /api/plugin/discover/metadata` API 扫描插件目录根层 `.py` 文件旁的同名 `plugin.json`（文件型插件），无需导入模块即可发现元信息。
 
-### Web 管理页面（register\_page）
+## Web 管理页面（register\_page）
 
 插件可注册自带的 Web 管理页面，入口自动显示在「插件管理」页面的插件卡片上，点击后右侧滑出抽屉 iframe 加载。
 
@@ -865,7 +836,7 @@ plugins/my_plugin/
 
 **静态文件挂载：** 框架自动将 `web/` 目录挂载到 `/api/plugin-data/{plugin_name}/`，前端通过 iframe 加载。插件页面需预构建为纯静态 HTML/CSS/JS，不依赖框架前端构建链。
 
-### 插件级 Web API（register\_api）
+## 插件级 Web API（register\_api）
 
 插件可注册 HTTP 接口（管理页面后端、数据查询等），框架统一挂载到 `/api/plugin-web/{plugin_name}/{path}`，鉴权对齐现有 API 体系（`X-API-Key`），无需引入独立服务。
 
@@ -909,7 +880,7 @@ class MyPlugin(PluginBase):
 
 > 插件热重载/卸载后路由自动指向新实现或返回 404，无需重启服务。前端页面（`register_page`）可通过 `/api/plugin-web/{plugin_name}/...` 直接调用接口。
 
-### Matcher / Rule / Permission
+## Matcher / Rule / Permission
 
 **核心概念：**
 
@@ -944,7 +915,7 @@ self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 
 > 权限分两级：`SUPERUSER` = 超级管理员（唯一，`config.yaml` 的 `bot.super_admin`）；`ADMIN` = 普通管理员（多个，`bot.admin_users`，超级管理员自动继承普通管理员权限）。两者与黑白名单均以**平台无关字符串 ID** 配置（如 QQ 号 / Telegram 用户 ID），`USER(ids)` / `GROUP_MEMBER(ids)` 的 ID 参数支持数字或字符串（内部归一为字符串比较），多平台插件无需区分 ID 类型。
 
-### MatcherContext 字段
+## MatcherContext 字段
 
 继承自 `MessageContext`，额外字段：
 
@@ -968,7 +939,7 @@ self.matchers.append(on_command("confirm", temp=True)(self._confirm))
 >
 > **v12 消息段访问**：`ctx.segments` 为 OneBot 12 标准段数组（`{type, data}`，媒体用 `file_id`）；`ctx.message` 为 SDK `Message` 容器（`extract_plain_text()` / `mentions()` / `images()` / `first_reply()` / `as_dicts()` / `as_v11()`）；`ctx.as_v12_segments()` / `ctx.as_v11_segments()` 提供 v12/v11 视图。
 
-### 注册方式
+## 注册方式
 
 **方式一：插件内注册（推荐，可访问 self）**
 
@@ -1003,7 +974,7 @@ async def ping_handler(ctx: MatcherContext) -> str:
     return "pong"
 ```
 
-### 示例一：命令匹配 + 权限控制
+## 示例一：命令匹配 + 权限控制
 
 ```python
 # plugins/greet.py
@@ -1029,7 +1000,7 @@ class GreetPlugin(PluginBase):
         return f"你好，{name}！"
 ```
 
-### 示例二：前缀匹配 + Rule 组合
+## 示例二：前缀匹配 + Rule 组合
 
 ```python
 # plugins/translator.py
@@ -1063,7 +1034,7 @@ class TranslatorPlugin(PluginBase):
         return reply
 ```
 
-### 示例三：正则匹配 + 关键词
+## 示例三：正则匹配 + 关键词
 
 ```python
 # plugins/reminder.py
@@ -1096,7 +1067,7 @@ class ReminderPlugin(PluginBase):
         return "格式：提醒我 X 点 Y 分"
 ```
 
-### 示例四：通知事件处理
+## 示例四：通知事件处理
 
 ```python
 # plugins/welcome.py
@@ -1131,7 +1102,7 @@ class WelcomePlugin(PluginBase):
 
 > 通知事件统一由 SDK 类型化（`GroupIncreaseNotice` 等）：handler 声明对应事件的类型注解即自动注入，无需手写 `notice_type` / `detail_type` 判断。框架内核为 OneBot 12 事件模型，但 `send_group_msg`/`send_private_msg` 等便捷发送仍接受 v12 段数组并自动转为平台 CQ 码，插件无需关心 v11/v12 差异。
 
-### 示例五：旧式 on\_message（向后兼容，已弃用）
+## 示例五：旧式 on\_message（向后兼容，已弃用）
 
 旧式插件无需改动，继续工作；但 `on_message`/`on_notice`/`on_request` 已标记 **deprecated**，新插件请优先使用 Matcher（`on_message(rule=...)` 装饰器等）：
 
@@ -1170,7 +1141,7 @@ class PingPongPlugin(PluginBase):
 
 > 注意：`MessageContext` 现由 SDK 定义（`qingci_plugin_sdk.context`），主项目 `bot.core.dispatcher` 为转发导出，两者是同一类型，任意导入路径均可。
 
-### 插件测试工具（bot.testing）
+## 插件测试工具（bot.testing）
 
 框架内置 `bot.testing` 包，无需启动真实 Bot 即可用 pytest 模拟消息事件、加载插件、断言回复。插件作者可在自己项目中编写：
 
@@ -1232,7 +1203,7 @@ async def test_group_and_permission(bot):
 
 - 插件主动发送的消息记录在 `sent_messages`，便于断言
 
-### 调度顺序
+## 调度顺序
 
 1. Bot 收到消息 → Dispatcher 解析为 `MessageContext`
 2. 收集所有 Matcher，按 `priority` 升序排序（越小越先执行）
@@ -1246,7 +1217,7 @@ async def test_group_and_permission(bot):
    - 返回 `None` + `block=False` → 继续下一个 Matcher
 5. 所有 Matcher 都未匹配 → 回退到旧式 `on_message`（跳过已注册 Matcher 的插件）
 
-### 优先级与阻塞控制
+## 优先级与阻塞控制
 
 ```python
 # priority 越小越先执行（默认 1）
@@ -1269,7 +1240,7 @@ async def weather_log(ctx: MatcherContext) -> None:
 > 内置插件中 admin（priority=1）先于 chat（priority=50）执行。
 > 外部插件开发者若此前依赖旧的"大者优先"实际顺序，请自查 priority 配置。
 
-### 消息构造（SDK 类型化消息段）
+## 消息构造（SDK 类型化消息段）
 
 **推荐使用 OneBot 12 标准消息段**（`qingci_plugin_sdk.segments`），媒体统一以 `file_id` 引用：
 
@@ -1302,7 +1273,7 @@ from qingci_plugin_sdk.segments import segments_to_v11
 v11_segments = segments_to_v11(ctx.segments)
 ```
 
-### 多平台插件开发（QQ / Telegram）
+## 多平台插件开发（QQ / Telegram）
 
 内核统一采用 **OneBot 12 事件模型**，QQ（OneBot 11/12 协议端）与 Telegram 的事件在入口由各自适配器归一化为同一套内部事件，因此**插件对来源平台完全无感知**——同一份插件代码在 QQ 和 Telegram 实例上零改动即可运行，无需任何平台分支。
 
@@ -1365,7 +1336,7 @@ async def on_edited(ctx: MatcherContext, event: MessageEditedEvent) -> str | Non
 
 - **`mention`** **段在 Telegram 降级为可见文本** `@<id>`（不触发真实 @ 通知，OB11/12 为真实 @）；`reply` 段的非数字 `message_id`（OB12 字符串 id / 派生 id）在 Telegram 会被静默丢弃引用。跨平台提及/引用不可靠，插件不应依赖这两者在 Telegram 上触发通知或精确引用。
 
-### 全局事件钩子（消息中间件）
+## 全局事件钩子（消息中间件）
 
 Bot 提供全局前置 / 后置钩子，用于横切统计、审计、预处理，建议在插件 `on_load` 中注册：
 
@@ -1388,7 +1359,7 @@ self.bot.register_post_hook(post_hook)
 
 钩子异常隔离（不影响主链路），注册自动去重。
 
-### 插件加载方式
+## 插件加载方式
 
 **方式一：外部目录自动加载（推荐）**
 
@@ -1438,7 +1409,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 
 安装流程：拉取到 `plugins/<name>/` → 自动安装 `requirements.txt`（或 `plugin.json` 的 `requirements` 字段）声明的 Python 依赖到实例隔离的 `data_root()/deps/<name>/` 目录 → 加载插件。来源支持 git 仓库、HTTP 指向 zip/tar 的归档、本地目录或归档文件。
 
-### 常用 OneBot API
+## 常用 OneBot API
 
 通过 `self.connection.call_api(action, params)` 调用（任意 OneBot 标准动作透传）；高频群管理动作另有**便捷方法**（`self.connection.set_group_kick(...)` 等，OneBot 11/12 动作名自动映射，见下方）：
 
@@ -1463,7 +1434,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 | `delete_msg`       | `message_id`                      | 撤回消息   |
 | `group_poke`       | `group_id`, `user_id`             | 戳一戳    |
 
-### 命令管理
+## 命令管理
 
 多个插件可能注册同名命令（如两个插件都注册 `/help`），调度时优先级高的胜出，其余被静默覆盖。框架提供命令管理能力，可在 WebUI 中查看冲突、禁用单条命令或调整优先级。
 
@@ -1490,7 +1461,7 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 | GET | `/api/command/conflicts`         | 列出所有命令及冲突信息（含 `permission` 权限等级） |
 | PUT | `/api/command/{owner}/{command}` | 更新命令状态（`disabled` / `priority`）  |
 
-### 注意事项
+## 注意事项
 
 - `on_load` 和 `on_unload` 是 `@abstractmethod`，**必须实现**（可以是 `pass`）
 
@@ -1514,242 +1485,9 @@ ok = await bot.plugin_manager.install(bot, "/path/to/local/plugin", allow_local=
 
 ***
 
-## API 接口
-
-所有接口前缀 `/api`。启用鉴权（配置 `api_key`）时，除 `/api/bot/status`、`/api/bot/health`、`/api/auth/*`、`/api/config/wizard*`（首次启动向导）外均需携带 `X-API-Key` 请求头；`api_key` 为空时全部免鉴权。
-
-**错误响应与超时说明：**
-
-- `/api/bot/start`、`/stop`、`/restart` 有超时保护（启动 30s / 停止 15s），超时返回 `504` 并自动尝试清理残留资源，可通过 `/api/bot/status` 确认实际状态
-
-- `/api/plugin/load` 请求体必须为 JSON 且包含字符串字段 `module_path`，类型非法时返回 `422`
-
-- 所有 `5xx` 错误的 `detail` 为通用文案（不暴露内部异常细节），详细原因见服务端日志
-
-### Bot 控制 `/api/bot`
-
-| 方法   | 路径         | 鉴权 | 说明          |
-| ---- | ---------- | -- | ----------- |
-| GET  | `/status`  | 否  | 获取 Bot 运行状态 |
-| GET  | `/health`  | 否  | 健康检查        |
-| POST | `/start`   | 是  | 启动 Bot      |
-| POST | `/stop`    | 是  | 停止 Bot      |
-| POST | `/restart` | 是  | 重启 Bot      |
-
-### 配置管理 `/api/config`
-
-| 方法   | 路径               | 鉴权 | 说明                                                  |
-| ---- | ---------------- | -- | --------------------------------------------------- |
-| GET  | `/`              | 是  | 获取完整配置（敏感字段脱敏为 `***`）                               |
-| PUT  | `/`              | 是  | 更新配置（深度合并，`***` 占位符自动过滤）                            |
-| GET  | `/bot`           | 是  | 获取 Bot 配置                                           |
-| PUT  | `/bot`           | 是  | 更新 Bot 配置                                           |
-| GET  | `/llm`           | 是  | 获取 LLM 配置                                           |
-| PUT  | `/llm`           | 是  | 更新 LLM 配置（provider=custom 时强制校验 api\_url）           |
-| GET  | `/llm/presets`   | 是  | 获取 LLM 提供商预设（api\_url + 推荐 model，切换 provider 自动联动）  |
-| POST | `/llm/models`    | 是  | 查询提供商可用模型列表（按 provider 调用对应 API，10s 超时，失败 400 透传原因） |
-| GET  | `/onebot`        | 是  | 获取 OneBot 配置                                        |
-| POST | `/llm/test`      | 是  | 测试 LLM 连接（返回 `{available, message}`）                |
-| GET  | `/wizard/status` | 否  | 首次启动向导状态（`needs_setup`）                             |
-| POST | `/wizard`        | 否  | 提交首次启动配置（仅未完成向导时可用）                                 |
-| POST | `/wizard/skip`   | 否  | 跳过首次启动向导                                            |
-
-### 插件管理 `/api/plugin`
-
-| 方法     | 路径                   | 鉴权 | 说明                                                                                                         |
-| ------ | -------------------- | -- | ---------------------------------------------------------------------------------------------------------- |
-| GET    | `/`                  | 是  | 获取插件列表（含状态、分类、Web 管理页面入口）                                                                                  |
-| GET    | `/{name}`            | 是  | 获取插件详情                                                                                                     |
-| POST   | `/{name}/reload`     | 是  | 重载插件                                                                                                       |
-| POST   | `/load`              | 是  | 加载外部插件（仅允许 `plugins.*` / `bot.plugin.builtin.*` 白名单前缀）                                                     |
-| DELETE | `/{name}`            | 是  | 卸载插件（默认删代码目录、保留数据与依赖；`?purge=true` 彻底删除——一并删除数据目录与第三方依赖，不可恢复；内置插件 chat/admin/help/imagegen/knowledge 不可卸载） |
-| POST   | `/{name}/disable`    | 是  | 禁用插件（保留实例，跳过事件分发）                                                                                          |
-| POST   | `/{name}/enable`     | 是  | 启用插件（恢复事件分发）                                                                                               |
-| GET    | `/{name}/metrics`    | 是  | 获取插件执行指标（调用次数、平均耗时、错误率）                                                                                    |
-| GET    | `/{name}/config`     | 是  | 获取插件配置 JSON Schema 与当前值（用于自动渲染配置表单）                                                                        |
-| PUT    | `/{name}/config`     | 是  | 更新插件配置（写入 config.yaml 并应用到插件实例）                                                                            |
-| GET    | `/discover/metadata` | 是  | 无导入发现：扫描插件目录根层 `.py` 文件旁的同名 `plugin.json`（文件型插件）                                                           |
-
-### 插件市场 `/api/plugins/market`
-
-| 方法   | 路径         | 鉴权 | 说明                         |
-| ---- | ---------- | -- | -------------------------- |
-| GET  | `/`        | 是  | 拉取市场索引（含缓存 TTL）            |
-| GET  | `/info`    | 是  | 市场源信息（url / mirror / 更新时间） |
-| POST | `/install` | 是  | 安装市场插件（按 `name`）           |
-| POST | `/update`  | 是  | 更新已安装插件                    |
-| POST | `/refresh` | 是  | 强制刷新索引缓存                   |
-| GET  | `/source`  | 是  | 获取当前市场源                    |
-| PUT  | `/source`  | 是  | 修改市场源（url / mirror\_url）   |
-
-### 命令管理 `/api/command`
-
-| 方法  | 路径                   | 鉴权 | 说明                                                    |
-| --- | -------------------- | -- | ----------------------------------------------------- |
-| GET | `/conflicts`         | 是  | 列出所有已注册命令，自动标记同名冲突                                    |
-| PUT | `/{owner}/{command}` | 是  | 更新命令：`disabled`（bool）禁用/启用，`priority`（int 0–100）调整优先级 |
-
-### 消息日志与用量 `/api/log`
-
-| 方法     | 路径                   | 鉴权 | 说明                                                                         |
-| ------ | -------------------- | -- | -------------------------------------------------------------------------- |
-| GET    | `/messages`          | 是  | 搜索消息记录                                                                     |
-| GET    | `/messages/count`    | 是  | 获取消息总数                                                                     |
-| GET    | `/messages/export`   | 是  | 导出消息记录（CSV 流式，utf-8-sig，Excel 直接打开不乱码）                                     |
-| GET    | `/usage`             | 是  | LLM 用量统计（依赖 `log.usage_tracking`）                                          |
-| DELETE | `/messages`          | 是  | 删除消息记录；支持 `user_id` / `group_id` / `before_days` 过滤，全部删除需显式 `confirm=true` |
-| DELETE | `/sessions`          | 是  | 清除所有会话（需 `confirm=true`）                                                   |
-| GET    | `/sessions`          | 是  | 会话列表（按最后活跃排序，含条数与归属 QQ）                                                    |
-| GET    | `/sessions/messages` | 是  | 查看指定会话历史（`?key=private:10001` 或 `group:10001:20002`）                       |
-| DELETE | `/sessions/one`      | 是  | 删除指定会话（`?key=会话key`，带审计）                                                   |
-
-### 群配置 `/api/group`
-
-| 方法     | 路径            | 鉴权 | 说明             |
-| ------ | ------------- | -- | -------------- |
-| GET    | `/list`       | 是  | 群配置列表          |
-| GET    | `/{group_id}` | 是  | 获取单群配置         |
-| PUT    | `/{group_id}` | 是  | 更新群配置（Bot 开关等） |
-| DELETE | `/{group_id}` | 是  | 删除群配置（带审计埋点）   |
-
-### 登录与鉴权 `/api/auth`
-
-| 方法   | 路径        | 鉴权 | 说明                                     |
-| ---- | --------- | -- | -------------------------------------- |
-| GET  | `/status` | 否  | 是否需要登录（配置 api\_key 是否非空）               |
-| POST | `/login`  | 否  | 登录；按来源 IP 防暴力限流，连续失败 5 次后冷却 60 秒返回 429 |
-
-### 数据库备份 `/api/backup`
-
-| 方法   | 路径    | 鉴权 | 说明                                                          |
-| ---- | ----- | -- | ----------------------------------------------------------- |
-| POST | `/db` | 是  | 在线备份到 `data/backups/`（sqlite backup API，文件名带随机后缀，保留最近 10 份） |
-
-### 审计日志 `/api/audit`
-
-| 方法  | 路径      | 鉴权 | 说明                             |
-| --- | ------- | -- | ------------------------------ |
-| GET | `/logs` | 是  | 审计日志倒序查询（配置变更 / 启停 / 登录 / 备份等） |
-
-### 实例管理 `/api/instances`
-
-| 方法     | 路径              | 鉴权 | 说明                            |
-| ------ | --------------- | -- | ----------------------------- |
-| GET    | `/`             | 是  | 实例列表（含端口、主平台、数据占用）            |
-| POST   | `/`             | 是  | 创建实例（指定名称与主平台）                |
-| DELETE | `/{name}`       | 是  | 删除实例                          |
-| PUT    | `/{name}`       | 是  | 重命名实例（同步重命名目录与 instance.json） |
-| POST   | `/{name}/start` | 是  | 切换/启动到指定实例（跨进程重启）             |
-
-### WebSocket
-
-| 路径               | 鉴权                                                        | 说明                                                                                                                                        |
-| ---------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/ws/log`    | `token` 查询参数或 `sec-websocket-protocol: api-key.<key>` 子协议 | 实时推送消息记录，连接后自动接收新消息；60s 心跳保活（90s 无消息断开），连接数上限 32                                                                                          |
-| `/api/ws/chat`   | 同上                                                        | 对话调试台：客户端发送 `{"message": "...", "user_id": 900000001}`，服务端逐块返回 `{"type":"delta","text":...}`，结束返回 `{"type":"done"}`；流式调用 LLM，独立连接池（上限 32） |
-| `/api/ws/runlog` | 同上                                                        | 运行日志：连接即回发环形缓冲快照（`{"type":"snapshot"}`），随后实时推送 `{"type":"log"}` 条目；30s 心跳保活                                                               |
-
-***
-
-## 打包为 exe
-
-使用 PyInstaller 将 Qingci-Bot CE 打包为 Windows 可执行程序（onedir 模式）。
-
-### 构建
-
-```powershell
-# 依赖：PyInstaller 已安装在 .venv（uv pip install pyinstaller）
-# Web UI 需先构建（web\dist 存在时可跳过）
-cd web; npm install; npm run build; cd ..
-
-# 一键打包
-.\build.bat
-```
-
-> `instances/` 目录已被 `.gitignore` 忽略（其中的 `config.yaml` 可能含密钥）。新克隆的仓库中没有该目录，首次启动会自动创建 `default` 实例并生成其 `config.yaml`；如需预先配置，可参考 `config.example.yaml` 在 `instances/default/config.yaml` 中填写。
-
-产物位于 `dist\qingci-bot-ce\`：
-
-```
-dist\qingci-bot-ce\
-├── qingci-bot-ce.exe       # 主程序（windowed 无控制台窗口；日志请开启文件日志）
-├── _internal\              # Python 运行时与依赖（勿动）
-├── ms-playwright\          # 内置 Playwright 无头浏览器（build.bat 下载，HTML 渲染用）
-├── web\dist\               # Web UI 静态资源（build.bat 复制）
-└── instances\              # 实例目录（首次启动自动创建 default 实例，含 config.yaml/plugins/data）
-```
-
-> 自 v1.5.1 起配置/插件/数据已收敛到 `instances\<name>\` 自包含目录，构建产物不再生成根级 `config.yaml` 或 `data\`。用户数据（配置、插件、数据库、日志）均按实例隔离，随实例目录一起分发。
-
-> **HTML 渲染全内置**：`build.bat` 会下载 Playwright 无头 Chromium 到产物目录 `ms-playwright\`，运行时 `main.py` 通过 `PLAYWRIGHT_BROWSERS_PATH` 指向它，EXE 开箱即可渲染签到卡等 HTML → 图片，无需最终用户另行 `playwright install chromium`。若构建环境网络不佳导致下载失败，产物仍可运行，仅渲染能力降级（签到卡回退纯文本）。构建期可设 `set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright` 走国内镜像加速。
-
-### 运行
-
-```powershell
-.\dist\qingci-bot-ce\qingci-bot-ce.exe              # Bot + API 服务
-.\dist\qingci-bot-ce\qingci-bot-ce.exe --no-bot     # 仅 API / Web UI
-.\dist\qingci-bot-ce\qingci-bot-ce.exe --port 9000  # 指定端口
-```
-
-启动后访问 `http://127.0.0.1:8080/ui/`。
-
-> **启动性能**：litellm 采用延迟导入，启动阶段不会加载该重型依赖（节省约 3.5 秒），仅首次真正调用 LLM 时一次性导入；首次运行自动创建 `default` 实例并生成其 `config.yaml`，无需手工准备。
-
-### 注意事项
-
-- 直接命令行运行 onedir 时，实例目录 `instances\` 按 **exe 所在目录** 相对定位（`app_root`）：分发时整个 `dist\qingci-bot-ce\` 目录一起拷贝，勿单独移动 exe。若设置了环境变量 `QINGCI_DATA_HOME`，则以该目录为准（Electron 壳拉起后端时正是这样把数据指向安装时选定的目录）。
-
-- 首次运行自动创建 `instances\default\` 实例并生成默认 `config.yaml`；数据库自动建表（SQLModel create\_all）。
-
-- 重新执行 `build.bat` 不会覆盖 `instances\` 中已有的实例配置与数据（用户数据始终保留在实例目录内）。
-
-- 当前产物为 **windowed 无控制台** 模式（`qingci-bot-ce.spec` 中 `console=False`），日志不直接可见，建议开启文件日志（`log.log_file_enabled: true`）；如需控制台窗口排障，将 `console` 改为 `True` 后重新构建。
-
-- 桌面 GUI 由 Electron 壳（`desktop\electron\`）承担：分发用 `build-electron.bat` 生成桌面壳 EXE（安装版 + 绿色解压 zip），其内嵌 Python 后端（`--backend`）就绪时通过标准输出上报端口供壳加载 Web UI；不依赖系统 WebView2 / pywebview。
-
-### 桌面壳（Electron）打包
-
-`build.bat` 产出的 onedir 是"后端形态"（可加 `--backend` 由壳拉起，也可直接命令行运行 Bot/API）。要给最终用户一个免配置的桌面应用，再跑第二步 `build-electron.bat` 出安装版 / 绿色解压版 EXE。
-
-```powershell
-# 先决条件
-#  1) 已执行 .\build.bat，产物位于 dist\qingci-bot-ce\（后端 onedir）
-#  2) Node.js 22+ 与 npm 可用（Electron 45.2.x，与 CI 的 Node 22 一致）
-.\build-electron.bat
-```
-
-- 产物（`dist\electron\`）：`Qingci-Bot-CE-<version>-Setup-x64.exe`（NSIS 安装向导，可选安装目录与数据目录）与 `Qingci-Bot.CE-<version>-win.zip`（绿色解压版，无向导；electron-builder 把产品名的空格转成了点）；后端以单个 `backend.zip` 放在 `resources\`，Playwright Chromium 随其一并内置。
-
-```powershell
-.\dist\electron\Qingci-Bot-CE-<version>-Setup-x64.exe   # 安装版
-# 绿色解压版：解压 zip 后运行其中的 Qingci-Bot CE.exe
-```
-
-- **运行方式**：双击桌面 EXE（安装版或绿色解压版）即由 Electron 壳启动——先解析当前实例 → spawn 内嵌 Python 后端（`--backend`）→ 就绪后加载 Web UI；系统托盘、按 data-dir 的单实例锁与聚焦、启动画面、关闭驻留后台全部由壳承担。
-
-- **数据位置**：**数据不在安装目录内**。安装向导有一步「选择数据目录」（默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`），选择结果记在注册表 `HKCU\Software\Qingci-Bot CE` 与 `%APPDATA%\Qingci-Bot CE\datadir.txt`；`instances\<name>\` 与后端解压产物 `backend\<版本>\` 都落在该目录下。绿色解压版没有向导，直接使用默认目录（存在 `datadir.txt` 时以它为准）。升级与卸载只清理安装目录，不会触碰数据；旧版本放在 EXE 旁 `instances/` 的数据首次启动会自动迁移。
-
-- **调试**：壳主进程日志写到该实例的数据目录（`<数据目录>\instances\<name>\data\logs\electron.log`）；后端超时（默认 90s 未就绪）会展示错误页并可重试/查看日志。
-
-### 桌面壳（Linux AppImage）打包
-
-Linux 与 Windows 同源：先用 `build-linux.sh` 产出后端 onedir（`build.bat` 的对应脚本，产出 `dist/qingci-bot-ce/`），再经 electron-builder 打 AppImage。
-
-```bash
-# 先决条件：.venv + [build] 依赖、Node.js 22+ 与 npm（Electron 45.2.x，与 CI 的 Node 22 一致）
-./build-linux.sh
-cd desktop/electron && npm ci && npx electron-builder --linux --publish never
-```
-
-- 产物：`dist/electron/Qingci-Bot-CE-<version>-linux-x86_64.AppImage`（内嵌后端为 `resources/backend.zip`）。
-- 运行：双击/`./Qingci-Bot-CE-<version>-linux-x86_64.AppImage` 即由 Electron 壳启动（需系统具备 FUSE/libfuse2）。
-- 数据位置：AppImage 没有安装向导，数据回退到可执行目录旁（`instances/`），可用环境变量 `QINGCI_DATA_HOME` 指到可写卷。
-- 注意：SDK 是 `pyproject.toml` 里的固定版本依赖（官方 PyPI），构建前先 `uv sync` 装好；无需额外索引配置。
-
-### 自动发布（GitHub Actions）
-
-打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](.github/workflows/release.yml)，各平台自动联编：
-- Windows 桌面 EXE（安装版 Setup.exe + 绿色解压 zip，`build.bat` + `build-electron.bat`）
-- Linux AppImage（`build-linux.sh` + `electron-builder --linux`）
-- Docker 镜像（tag：`vX.Y.Z` / `X.Y` / `X` / `latest`）
-
+## 相关文档
+
+- [docs/FRONTEND.md](docs/FRONTEND.md) — 前端开发与 Web UI 页面
+- [docs/API.md](docs/API.md) — HTTP API 与 WebSocket 端点
+- [docs/PACKAGING.md](docs/PACKAGING.md) — 打包与发布
+- [ARCHITECTURE.md](ARCHITECTURE.md) — 架构与核心模块

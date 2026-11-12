@@ -125,14 +125,14 @@ Qingci-Bot-CE/
 │   ├── test_*.py           # 按被测模块命名
 │   └── plugin_pkg/         # 测试用插件包（dep/di/p1/p2/sdk_llm_tool/subcmd_runtime 等）
 ├── scripts/                # 一次性/运维脚本（版本升级 / 迁移校验 / 后端打包 / SQLite→PostgreSQL 迁移）
-├── docs/                   # 使用与规范文档（SETUP / CONFIGURATION / 本文档 / CODING_STANDARDS）
+├── docs/                   # 使用、配置、部署、前端、API、打包、排查与规范文档
 ├── build.bat               # Windows 构建脚本（打包前 -e 安装 Plugins-SDK）
 ├── build-electron.bat      # Electron 打包脚本（先 build.bat 出后端 onedir，再 electron-builder 出安装版 Setup.exe + 绿色解压 zip）
 ├── qingci-bot-ce.spec      # PyInstaller 打包配置（collect_all 打包 SDK）
 ├── pyproject.toml          # 依赖（qingci-plugin-sdk 为 PyPI 固定版本依赖）、ruff/mypy/pytest 配置
 ├── alembic.ini             # 迁移配置
 ├── .pre-commit-config.yaml # pre-commit 钩子
-└── README.md / ARCHITECTURE.md / PLUGIN_DEV.md / CONTRIBUTING.md / CHANGELOG.md / SECURITY.md / LICENSE / NOTICE
+└── README.md / ARCHITECTURE.md / PLUGIN_DEV.md / CONTRIBUTING.md / CHANGELOG.md / SECURITY.md / CODE_OF_CONDUCT.md / LICENSE / NOTICE
 ```
 
 ## 3. 各目录职责与归属原则
@@ -155,8 +155,14 @@ Qingci-Bot-CE/
 | `README.md` | 项目门面：简介、特性、快速开始、文档导航、合规声明、开发计划、许可概要 | 安装步骤细节、配置字段全表、命令参考 |
 | `docs/SETUP.md` | 环境要求、安装、启动与部署、命令行参数、管理命令、API 鉴权与监控 | 配置字段语义、架构设计、插件 API |
 | `docs/CONFIGURATION.md` | 协议端 / LLM 配置、完整 `config.yaml` 字段、环境变量、进阶开关 | 安装步骤、部署方式 |
-| `ARCHITECTURE.md` | 架构分层、进程模型、技术栈、核心模块、生产部署 | 面向用户的逐步操作（应进 SETUP） |
-| `PLUGIN_DEV.md` | 插件 API、前端开发、Web UI 页面、打包 | 框架内部实现细节 |
+| `ARCHITECTURE.md` | 架构分层、进程模型、技术栈、核心模块 | 逐步操作（进 SETUP / DEPLOYMENT） |
+| `docs/DEPLOYMENT.md` | 向量检索初始化、PostgreSQL 迁移、协议端断连恢复 | 日常安装步骤 |
+| `docs/FRONTEND.md` | 前端命令、页面路由、`web/src` 结构 | 后端/插件 API |
+| `docs/API.md` | HTTP 端点与 WebSocket 清单、鉴权与错误约定 | 配置字段语义 |
+| `docs/PACKAGING.md` | PyInstaller / Electron 打包、发布流水线 | 开发环境搭建 |
+| `docs/TROUBLESHOOTING.md` | 按现象定位的故障排查 | 功能介绍 |
+| `CODE_OF_CONDUCT.md` | 社区行为准则、报告与处理 | 贡献流程（进 CONTRIBUTING） |
+| `PLUGIN_DEV.md` | 插件 API（Matcher / Rule / 钩子 / DI / 工具 / 测试） | 前端、打包、端点清单 |
 | `CONTRIBUTING.md` | 贡献流程、开发环境、质量门禁、本地构建与发版 | 面向使用者的安装说明 |
 | `docs/CODING_STANDARDS.md` | 类型 / 命名 / 分层 / Git 约定 | 目录职责（归本文档） |
 | `docs/PROJECT_STRUCTURE.md` | 目录职责、产物归属、分层依赖方向 | 代码风格细则 |
@@ -164,9 +170,9 @@ Qingci-Bot-CE/
 | `CHANGELOG.md` | 版本变更记录 | 使用说明 |
 | `LICENSE` / `NOTICE` | GPLv3 官方全文 / 附加条款与版权授权 | 任何项目说明（LICENSE 仅允许填 3 行占位符） |
 
-> **当前缺口**：`docs/API.md`（HTTP 端点清单，现散落在 `api/routes/` 与 `PLUGIN_DEV.md`）、
-> `docs/TROUBLESHOOTING.md`（故障排查 / FAQ）尚缺。`ARCHITECTURE.md` 的「生产环境部署」
-> 与 `PLUGIN_DEV.md` 的「前端开发 / Web UI / 打包」是历史合流，后续可按上表继续拆分。
+> **已补齐**：生产部署迁至 `docs/DEPLOYMENT.md`；前端 / API / 打包分别迁至
+> `docs/FRONTEND.md` / `docs/API.md` / `docs/PACKAGING.md`；新增 `docs/TROUBLESHOOTING.md`
+> 与 `CODE_OF_CONDUCT.md`。`PLUGIN_DEV.md` 现只保留插件开发主题。
 > 新增或移动文档后必须同步 `tests/test_docs.py` 的 `DOCS` 清单，否则代码块与链接检查会静默漏掉。
 
 **分层依赖方向（禁止反向）：**
