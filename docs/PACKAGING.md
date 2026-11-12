@@ -15,6 +15,9 @@ cd web; npm install; npm run build; cd ..
 
 # 一键打包
 .\build.bat
+
+# 轻量包（跳过 Chromium 捆绑，产物轻约百 MB；渲染能力按需事后安装）
+.\build.bat --no-browser
 ```
 
 > `instances/` 目录已被 `.gitignore` 忽略（其中的 `config.yaml` 可能含密钥）。新克隆的仓库中没有该目录，首次启动会自动创建 `default` 实例并生成其 `config.yaml`；如需预先配置，可参考 `config.example.yaml` 在 `instances/default/config.yaml` 中填写。
@@ -33,6 +36,8 @@ dist\qingci-bot-ce\
 > 自 v1.5.1 起配置/插件/数据已收敛到 `instances\<name>\` 自包含目录，构建产物不再生成根级 `config.yaml` 或 `data\`。用户数据（配置、插件、数据库、日志）均按实例隔离，随实例目录一起分发。
 
 > **HTML 渲染全内置**：`build.bat` 会下载 Playwright 无头 Chromium 到产物目录 `ms-playwright\`，运行时 `main.py` 通过 `PLAYWRIGHT_BROWSERS_PATH` 指向它，EXE 开箱即可渲染签到卡等 HTML → 图片，无需最终用户另行 `playwright install chromium`。若构建环境网络不佳导致下载失败，产物仍可运行，仅渲染能力降级（签到卡回退纯文本）。构建期可设 `set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright` 走国内镜像加速。
+
+> **按需化（轻量包）**：不需要开箱渲染、想减小分发体积时，可用 `--no-browser`（Windows）/ `--no-browser`（Linux，或设 `SKIP_BROWSER=1`）跳过浏览器捆绑；产物不含 `ms-playwright\`，需要渲染能力时在产物目录执行 `playwright install chromium`（`PLAYWRIGHT_BROWSERS_PATH` 指向产物目录）。GitHub Actions 手动触发 Release 时可在 `bundle_browser` 输入中选择是否捆绑。默认（tag 推送）仍捆绑，保持开箱可渲染。
 
 ## 运行
 
