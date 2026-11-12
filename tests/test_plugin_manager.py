@@ -447,7 +447,7 @@ async def test_load_builtin_fallback_when_dir_missing(bot, monkeypatch):
     """
     import pkgutil
 
-    from bot.plugin.manager import _BUILTIN_PLUGINS
+    from bot.plugin._loading import _BUILTIN_PLUGINS
 
     monkeypatch.setattr(pkgutil, "iter_modules", lambda *a, **k: iter([]))
     pm = bot.plugin_manager
@@ -513,7 +513,7 @@ async def test_watcher_does_not_retry_unknown_plugin():
 
 async def test_reload_rwlock_read_shared_write_exclusive():
     """读者可并发持有；写者在读者全部释放前阻塞"""
-    from bot.plugin.manager import _ReloadRWLock
+    from bot.plugin._rwlock import _ReloadRWLock
 
     rw = _ReloadRWLock()
     entered: list[str] = []
@@ -554,7 +554,7 @@ async def test_reload_rwlock_read_shared_write_exclusive():
 
 async def test_reload_rwlock_reentrancy():
     """同任务读→写跳过（返回 False）；写锁内重入读/写均放行"""
-    from bot.plugin.manager import _ReloadRWLock
+    from bot.plugin._rwlock import _ReloadRWLock
 
     rw = _ReloadRWLock()
     await rw.acquire_read()
@@ -647,7 +647,7 @@ def test_expand_subcommand_matchers_on_load_registration():
     """on_load 运行时注册的 on_command：子指令 matcher 随 parent 展开注册"""
     from qingci_plugin_sdk.matcher import on_command
 
-    from bot.plugin.manager import _expand_subcommand_matchers
+    from bot.plugin._loading import _expand_subcommand_matchers
 
     async def sub_handler(ctx):  # noqa: ANN001
         return "sub"
@@ -669,7 +669,7 @@ def test_expand_subcommand_matchers_dedup():
     """模块级场景：子 matcher 已被收集进列表时展开不重复"""
     from qingci_plugin_sdk.matcher import on_command
 
-    from bot.plugin.manager import _expand_subcommand_matchers
+    from bot.plugin._loading import _expand_subcommand_matchers
 
     async def sub_handler(ctx):  # noqa: ANN001
         return "sub"

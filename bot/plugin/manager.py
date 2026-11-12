@@ -2,26 +2,44 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Additional terms under GPLv3 Section 7: see NOTICE
 
-"""插件管理器"""
+"""插件管理器（门面）
+
+对外 API 与职责分组：
+- 本模块（PluginManager）：插件注册表、调度缓存、加载/重载/卸载/启停、
+  依赖解析、i18n、生命周期钩子分发、安装委托；
+- manager_web.py（PluginWebMixin）：Web 管理页面挂载、插件级 Web API、
+  配置 Schema / 配置值读写；
+- manager_metrics.py（PluginMetricsMixin）：Matcher 执行指标记录与查询；
+- _rwlock.py：热重载读写屏障；_loading.py：加载辅助纯函数。
+
+支持两种 Matcher 注册方式：
+1. 模块级装饰器 @on_command(...)：加载模块时自动收集
+2. 插件内 self.matchers.append(...)：在 on_load 中手动注册
+"""
 
 import asyncio
 import importlib
-import json
 import logging
-import os
 import pkgutil
-import re
 import sys
-import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Union, cast, get_args, get_origin
+from typing import Any
 
-from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from ._loading import (
+    _BUILTIN_PLUGINS,
+    _expand_subcommand_matchers,
+    _load_plugin_json,
+    _module_plugin_classes,
+    _parse_version_spec,
+    _sdk_plugin_base,
+)
+from ._rwlock import _ReloadRWLock
 from .deps import ensure_dependencies, ensure_in_sys_path
 from .installer import PluginInstaller
+from .manager_metrics import PluginMetricsMixin
+from .manager_web import PluginWebMixin
 from .protocol.base import PluginBase, PluginStatus
 from .protocol.matcher import (
     Matcher,
@@ -31,251 +49,9 @@ from .protocol.matcher import (
 
 logger = logging.getLogger("qingci-bot.plugin.manager")
 
-# 内置插件显式清单（PyInstaller 打包后 pkgutil 无法扫描 PYZ 归档内模块，
-# 需回退到显式清单加载；新增内置插件时同步更新此处与 qingci-bot-ce.spec 的 hiddenimports）
-_BUILTIN_PLUGINS: tuple[str, ...] = ("admin", "chat", "help", "imagegen", "knowledge")
 
-
-def _expand_subcommand_matchers(matchers: list[Matcher], owner: str) -> None:
-    """展开 on_command 子指令 matcher：parent.meta["sub_matchers"] → matchers
-
-    SDK 在 on_command 创建 parent 时把全部子指令 matcher 挂到
-    `parent.meta["sub_matchers"]`，覆盖两类注册场景：
-    - 模块级（import 阶段）：子 matcher 已被收集器收集进 matchers → 按对象 id
-      去重，避免双份；
-    - on_load 运行时注册：子 matcher 仅挂在 parent.meta → 随 parent 展开，
-      修复"父指令已排除子指令、子指令 matcher 又不注册"导致的子命令不触发。
-    """
-    known_ids = {id(m) for m in matchers}
-    for m in list(matchers):
-        if "command" in m.meta and "sub_matchers" not in m.meta:
-            # SDK < 1.13.1 不挂 sub_matchers：on_load 运行时注册的子指令会静默丢失
-            logger.warning(
-                f"插件 {owner} 的命令 matcher {m.meta.get('command')!r} 缺少 "
-                f"sub_matchers 元数据（qingci-plugin-sdk 版本过旧，需 >=1.13.1），"
-                f"on_load 注册的子指令可能不触发"
-            )
-        for sub in m.meta.get("sub_matchers") or []:
-            if id(sub) in known_ids:
-                continue
-            if not sub.owner:
-                sub.owner = owner
-            matchers.append(sub)
-            known_ids.add(id(sub))
-
-
-class _ReloadRWLock:
-    """热重载读写屏障：事件分发共享读、重载独占写
-
-    防止重载窗口内（importlib.reload 就地替换模块 dict / 注册表替换）
-    事件分发读到半新半旧的插件状态。同任务重入安全：
-    - handler 内触发 reload（读→写）：acquire_write 返回 False，跳过写锁
-    - 写锁持有者内重新读（写→读）：acquire_read 直接放行
-    - 嵌套写（reload 内部再走 _register_from_module）：幂等放行
-    """
-
-    def __init__(self) -> None:
-        self._readers: set[asyncio.Task] = set()
-        self._writer: asyncio.Task | None = None
-        self._cond = asyncio.Condition()
-
-    def _current_task(self) -> asyncio.Task | None:
-        """当前任务；事件循环外调用时返回 None（防御性，不抛错）"""
-        return asyncio.current_task()
-
-    async def acquire_read(self) -> None:
-        task = self._current_task()
-        if task is None:
-            return  # 事件循环外调用：无锁语义
-        if task is self._writer:
-            return  # 写锁持有者内重入读：直接放行
-        async with self._cond:
-            while self._writer is not None:
-                await self._cond.wait()
-            self._readers.add(task)
-
-    async def release_read(self) -> None:
-        task = self._current_task()
-        if task is None:
-            return
-        if task is self._writer:
-            return
-        async with self._cond:
-            if task in self._readers:
-                self._readers.discard(task)
-                # 无论是否有写者在等都要 notify：等待中的写者尚未设置
-                # _writer，其唤醒依赖读者释放时通知（while 循环防误唤醒）
-                if not self._readers:
-                    self._cond.notify_all()
-
-    async def acquire_write(self) -> bool:
-        """返回 False 表示本任务已持读锁（读→写重入），调用方须跳过写锁"""
-        task = self._current_task()
-        if task is None:
-            return False
-        if task in self._readers:
-            return False
-        async with self._cond:
-            while self._writer is not None or self._readers:
-                if self._writer is task:
-                    return True  # 嵌套写：已由本任务持有，幂等放行
-                await self._cond.wait()
-            self._writer = task
-        return True
-
-    async def release_write(self) -> None:
-        task = self._current_task()
-        if task is None or self._writer is not task:
-            return
-        async with self._cond:
-            self._writer = None
-            self._cond.notify_all()
-
-
-class _AuthStaticFiles:
-    """带鉴权的插件静态文件服务（包装 StaticFiles）
-
-    插件管理页面（/api/plugin-data/...）与 /api/plugin 鉴权对齐：
-    - 配置了 api_key：要求 X-API-Key 头或 ?token= 查询参数
-      （iframe/img 无法携带自定义请求头，故支持 query token 作为前端回退）
-    - 未配置：仅环回来源 + Origin 为环回时放行
-    """
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        from fastapi.staticfiles import StaticFiles
-
-        self._inner = StaticFiles(*args, **kwargs)
-
-    async def __call__(self, scope: dict, receive, send) -> None:
-        if scope["type"] == "http" and not self._authorized(scope):
-            from starlette.responses import Response
-
-            await Response("Unauthorized", status_code=401)(scope, receive, send)
-            return
-        await self._inner(scope, receive, send)
-
-    @staticmethod
-    def _authorized(scope: dict) -> bool:
-        import secrets
-        from urllib.parse import parse_qs
-
-        from api.auth import _get_configured_api_key, is_loopback_host, is_loopback_origin
-
-        headers = {k.lower(): v for k, v in (scope.get("headers") or [])}
-        query = parse_qs(scope.get("query_string", b"").decode(errors="replace"))
-        key = headers.get(b"x-api-key", b"").decode() or (query.get("token") or [""])[0]
-        configured = _get_configured_api_key()
-        if configured is None:
-            # 配置读取失败，fail-closed
-            return False
-        if configured:
-            return bool(key) and secrets.compare_digest(key, configured)
-        # 未配 key：环回来源 + Origin 环回（防任意网页驱动本地插件页面）
-        client = scope.get("client") or ("", 0)
-        host = client[0] if isinstance(client, (tuple, list)) else ""
-        origin = headers.get(b"origin", b"").decode()
-        return is_loopback_host(host) and (not origin or is_loopback_origin(origin))
-
-
-@dataclass
-class MatcherMetrics:
-    """单个 Matcher 的执行指标（含阶段耗时细分）"""
-
-    call_count: int = 0
-    total_time_ms: float = 0.0
-    error_count: int = 0
-    last_call_time: float = 0.0
-    # 阶段耗时累计（毫秒）：permission 检查 / rule 检查 / handler 执行
-    permission_time_ms: float = 0.0
-    rule_time_ms: float = 0.0
-    handler_time_ms: float = 0.0
-    # 慢调用计数：执行耗时超过 slow_threshold_ms 的次数（未设阈值时恒为 0）
-    slow_count: int = 0
-
-    @property
-    def avg_time_ms(self) -> float:
-        if self.call_count == 0:
-            return 0.0
-        return self.total_time_ms / self.call_count
-
-    @property
-    def avg_handler_time_ms(self) -> float:
-        if self.call_count == 0:
-            return 0.0
-        return self.handler_time_ms / self.call_count
-
-
-def _parse_version_spec(dep_spec: str) -> tuple[str, SpecifierSet | None]:
-    """解析依赖声明，返回 (name, version_spec)。
-
-    示例：
-        "chat"           -> ("chat", None)
-        "chat>=1.0"      -> ("chat", SpecifierSet(">=1.0"))
-        "chat>=1.0,<2.0" -> ("chat", SpecifierSet(">=1.0,<2.0"))
-    """
-    match = re.match(r"^([a-zA-Z][a-zA-Z0-9_]*)\s*(.*)$", dep_spec)
-    if not match:
-        raise ValueError(f"无效的依赖声明: {dep_spec}")
-    name = match.group(1)
-    spec_str = match.group(2).strip()
-    if spec_str:
-        try:
-            return name, SpecifierSet(spec_str)
-        except Exception:
-            raise ValueError(f"无效的版本约束: {dep_spec}") from None
-    return name, None
-
-
-def _load_plugin_json(directory: Path) -> dict | None:
-    """从目录中加载 plugin.json 元数据（若存在）"""
-    json_path = directory / "plugin.json"
-    if not json_path.is_file():
-        return None
-    try:
-        return cast(dict, json.loads(json_path.read_text(encoding="utf-8")))
-    except (json.JSONDecodeError, OSError):
-        logger.warning(f"plugin.json 解析失败: {json_path}")
-        return None
-
-
-def _sdk_plugin_base():
-    """惰性获取独立插件 SDK 的 PluginBase 基类（SDK 未安装时返回 None）
-
-    外部插件可能基于 bot.plugin.base.PluginBase（内置式）或
-    qingci_plugin_sdk.base.PluginBase（独立 SDK 式）开发，两者是镜像类、
-    无继承关系。管理器需同时识别这两类插件。
-    """
-    try:
-        from qingci_plugin_sdk.base import PluginBase as _SdkBase
-
-        return _SdkBase
-    except ImportError:
-        return None
-
-
-def _module_plugin_classes(module, sdk_base) -> list[type]:
-    """返回模块中定义的插件类（bot 基类或 SDK 基类的直接子类）"""
-    result: list[type] = []
-    for attr_name in dir(module):
-        attr = getattr(module, attr_name)
-        if not isinstance(attr, type) or attr.__module__ != module.__name__:
-            continue
-        if attr is PluginBase or (sdk_base is not None and attr is sdk_base):
-            continue
-        if issubclass(attr, PluginBase):
-            result.append(attr)
-        elif sdk_base is not None and issubclass(attr, sdk_base):
-            result.append(attr)
-    return result
-
-
-class PluginManager:
-    """插件管理器：加载、卸载、热重载、状态管理、指标监控
-
-    支持两种 Matcher 注册方式：
-    1. 模块级装饰器 @on_command(...)：加载模块时自动收集
-    2. 插件内 self.matchers.append(...)：在 on_load 中手动注册
-    """
+class PluginManager(PluginWebMixin, PluginMetricsMixin):
+    """插件管理器：加载、卸载、热重载、状态管理、指标监控"""
 
     def __init__(self):
         self._plugins: dict[str, PluginBase] = {}
@@ -294,7 +70,7 @@ class PluginManager:
         # 事件类型倒排索引: event_type -> 该类型的 Matcher（保持优先级升序）
         self._matcher_index: dict[str, list[Matcher]] = {}
         # Matcher 执行指标: owner_name -> Matcher 实例 -> MatcherMetrics
-        self._metrics: dict[str, dict[Matcher, MatcherMetrics]] = {}
+        self._metrics: dict[str, dict[Matcher, Any]] = {}
         # plugin.json 预取缓存: module_path -> metadata dict
         self._metadata_cache: dict[str, dict] = {}
         # Web 管理页面注册信息: plugin_name -> [{"title": ..., "icon": ..., "static_dir": ...}]
@@ -309,6 +85,8 @@ class PluginManager:
         self._plugin_tools: dict[str, list[str]] = {}
         # 插件加载失败记录: plugin_name -> 错误摘要（供 WebUI 展示，替代静默失败）
         self._load_errors: dict[str, str] = {}
+
+    # ---- i18n ----
 
     def set_i18n_locale(self, locale: str) -> None:
         """设置全局语言并刷新已加载插件的翻译"""
@@ -325,6 +103,8 @@ class PluginManager:
         loaded = load_plugin_i18n(plugin)
         if loaded.locale == self._i18n_locale and loaded._data:
             plugin.i18n._data.update(loaded._data)
+
+    # ---- 注册表与调度缓存 ----
 
     @property
     def plugins(self) -> dict[str, PluginBase]:
@@ -378,255 +158,6 @@ class PluginManager:
     def _invalidate_matchers_cache(self) -> None:
         self._cached_matchers = None
         self._matcher_index = {}
-
-    # ---- 指标 ----
-
-    def record_metric(
-        self,
-        matcher: Matcher,
-        elapsed_ms: float,
-        is_error: bool = False,
-        handler_ms: float | None = None,
-        permission_ms: float | None = None,
-        rule_ms: float | None = None,
-        slow_threshold_ms: float | None = None,
-    ) -> None:
-        """记录一次 Matcher 执行指标（elapsed_ms 为总耗时，阶段耗时可选细分）
-
-        slow_threshold_ms 非 None 且 elapsed_ms 超过该值（毫秒）时累计 slow_count。
-        """
-        owner = getattr(matcher, "owner", "__unknown__")
-        if owner not in self._metrics:
-            self._metrics[owner] = {}
-        if matcher not in self._metrics[owner]:
-            self._metrics[owner][matcher] = MatcherMetrics()
-        m = self._metrics[owner][matcher]
-        m.call_count += 1
-        m.total_time_ms += elapsed_ms
-        if permission_ms is not None:
-            m.permission_time_ms += permission_ms
-        if rule_ms is not None:
-            m.rule_time_ms += rule_ms
-        if handler_ms is not None:
-            m.handler_time_ms += handler_ms
-        if (
-            slow_threshold_ms is not None
-            and slow_threshold_ms > 0
-            and elapsed_ms > slow_threshold_ms
-        ):
-            m.slow_count += 1
-        if is_error:
-            m.error_count += 1
-        m.last_call_time = time.time()
-
-    def get_metrics(self, plugin_name: str) -> list[dict]:
-        """获取指定插件的执行指标"""
-        plugin = self._plugins.get(plugin_name)
-        if not plugin:
-            return []
-        result = []
-        for matcher in plugin.matchers or []:
-            owner_metrics = self._metrics.get(plugin_name, {})
-            m = owner_metrics.get(matcher)
-            if m is None:
-                continue
-            handler_name = getattr(matcher.handler, "__name__", "unknown")
-            result.append(
-                {
-                    "handler": handler_name,
-                    "event_type": matcher.event_type,
-                    "priority": matcher.priority,
-                    "description": (matcher.meta or {}).get("description", ""),
-                    "call_count": m.call_count,
-                    "avg_time_ms": round(m.avg_time_ms, 2),
-                    "total_time_ms": round(m.total_time_ms, 2),
-                    "error_count": m.error_count,
-                    "last_call_time": m.last_call_time,
-                    # 阶段耗时均值（毫秒）：定位到 rule / permission / handler 环节
-                    "avg_permission_ms": round(
-                        m.permission_time_ms / m.call_count if m.call_count else 0.0, 2
-                    ),
-                    "avg_rule_ms": round(m.rule_time_ms / m.call_count if m.call_count else 0.0, 2),
-                    "avg_handler_ms": round(m.avg_handler_time_ms, 2),
-                    "slow_count": m.slow_count,
-                }
-            )
-        return result
-
-    # ---- Web 管理页面 ----
-
-    def set_web_app(self, app) -> None:
-        """注入 FastAPI 应用引用（由 create_app 后调用），并挂载已注册的插件页面与 API"""
-        self._web_app = app
-        self._mount_all_plugin_pages()
-        self._mount_all_plugin_apis()
-
-    def _mount_all_plugin_pages(self) -> None:
-        """挂载所有已注册插件的静态文件目录"""
-        if self._web_app is None:
-            return
-
-        for plugin_name, pages in self._plugin_pages.items():
-            for idx, page in enumerate(pages):
-                static_dir = page.get("static_dir", "")
-                if static_dir and os.path.isdir(static_dir):
-                    # 首个页面挂载在 /api/plugin-data/<name>/，其余页面按索引区分，
-                    # 保证多页面插件每个入口都能打开对应静态目录
-                    mount_path = (
-                        f"/api/plugin-data/{plugin_name}"
-                        if idx == 0
-                        else f"/api/plugin-data/{plugin_name}/{idx}"
-                    )
-                    # 避免重复挂载
-                    if not any(
-                        r.path == mount_path for r in self._web_app.routes if hasattr(r, "path")
-                    ):
-                        try:
-                            self._web_app.mount(
-                                mount_path,
-                                _AuthStaticFiles(directory=static_dir, html=True),
-                                name=f"plugin-static-{plugin_name}-{idx}",
-                            )
-                            logger.info(
-                                f"插件 {plugin_name} 管理页面已挂载: {mount_path} -> {static_dir}"
-                            )
-                        except Exception:
-                            logger.exception(f"挂载插件 {plugin_name} 管理页面失败: {static_dir}")
-
-    def get_plugin_pages(self, name: str) -> list[dict]:
-        """获取指定插件的管理页面注册信息（不含 static_dir，附带访问 URL）"""
-        pages = self._plugin_pages.get(name, [])
-        return [
-            {
-                "title": p["title"],
-                "icon": p["icon"],
-                "url": (f"/api/plugin-data/{name}" if i == 0 else f"/api/plugin-data/{name}/{i}"),
-            }
-            for i, p in enumerate(pages)
-        ]
-
-    # ---- 配置 schema 自动生成配置 UI ----
-
-    def get_config_schema(self, name: str) -> dict | None:
-        """获取插件的配置 JSON Schema（用于自动渲染 Web 配置表单）
-
-        插件定义 Config 内嵌类（pydantic BaseModel）时，返回其 JSON Schema；
-        定义为普通类时，从 __annotations__ 兜底生成简单 schema；
-        未定义 Config 时返回 None。
-        """
-        plugin = self._plugins.get(name)
-        if not plugin:
-            return None
-        config_cls = getattr(type(plugin), "Config", None)
-        if config_cls is None or not isinstance(config_cls, type):
-            return None
-        # pydantic v2：直接导出 JSON Schema（含默认值、必填字段、描述）
-        if hasattr(config_cls, "model_json_schema"):
-            try:
-                return cast(dict, config_cls.model_json_schema())
-            except Exception:
-                # 降级到注解兜底；留痕便于排查"配置表单字段缺失"的真实原因
-                logger.debug(f"插件 {name} 的 JSON Schema 导出失败，回退注解推断", exc_info=True)
-        return _schema_from_annotations(config_cls)
-
-    def get_config_values(self, name: str) -> dict:
-        """获取插件当前配置值（dict 形式）"""
-        plugin = self._plugins.get(name)
-        if not plugin or plugin.plugin_config is None:
-            return {}
-        cfg = plugin.plugin_config
-        if hasattr(cfg, "model_dump"):
-            try:
-                values = cast(dict, cfg.model_dump())
-            except Exception:
-                values = dict(cfg)
-        else:
-            values = dict(cfg)
-        # M19：敏感字段（token/secret/password/api_key 等）脱敏，WebUI 不回显明文
-        return {k: ("" if (_is_secret_field(k) and v) else v) for k, v in values.items()}
-
-    async def update_config(self, name: str, values: dict, bot) -> bool:
-        """更新插件配置：写入 config.yaml 并重新校验应用到插件实例
-
-        Args:
-            name: 插件名
-            values: 新配置值（dict）
-            bot: Bot 实例
-
-        Returns:
-            是否成功
-        """
-        plugin = self._plugins.get(name)
-        if not plugin:
-            return False
-        try:
-            # M19：与现有配置合并后写回——敏感字段提交空值时保留已有值，
-            # 避免「读取脱敏→保存空串」误清空 token/密码等密钥。
-            existing = plugin.plugin_config
-            if existing is not None:
-                existing_dict = (
-                    existing.model_dump() if hasattr(existing, "model_dump") else dict(existing)
-                )
-            else:
-                existing_dict = {}
-            merged = dict(existing_dict)
-            for key, value in (values or {}).items():
-                if _is_secret_field(key) and value in ("", None):
-                    continue
-                merged[key] = value
-            bot.config.set_plugin_config(name, merged)
-            await self._load_plugin_config(plugin, bot)
-            return True
-        except Exception:
-            logger.exception(f"更新插件 {name} 配置失败")
-            return False
-
-    def _collect_plugin_pages(self, plugin: PluginBase) -> None:
-        """从插件实例收集已注册的 Web 管理页面"""
-        if plugin._pages:
-            self._plugin_pages[plugin.name] = list(plugin._pages)
-            if self._web_app is not None:
-                self._mount_all_plugin_pages()
-
-    def _remove_plugin_pages(self, name: str) -> None:
-        """移除插件的 Web 管理页面注册，并摘除已挂载的静态路由"""
-        self._plugin_pages.pop(name, None)
-        if self._web_app is not None:
-            # 摘除该插件名下所有静态挂载路由，避免卸载后路由残留
-            self._web_app.routes[:] = [
-                r
-                for r in self._web_app.routes
-                if not (
-                    getattr(r, "name", "").startswith(f"plugin-static-{name}-")
-                    or getattr(r, "path", "").startswith(f"/api/plugin-data/{name}")
-                )
-            ]
-
-    # ---- 插件级 Web API ----
-
-    def _mount_all_plugin_apis(self) -> None:
-        """挂载所有已注册插件的 Web API 路由"""
-        if self._web_app is None:
-            return
-        from .webapi import mount_plugin_apis
-
-        for plugin_name, apis in self._plugin_apis.items():
-            try:
-                mount_plugin_apis(self._web_app, self, plugin_name, apis)
-            except Exception:
-                logger.exception(f"挂载插件 {plugin_name} Web API 失败")
-
-    def _collect_plugin_apis(self, plugin: PluginBase) -> None:
-        """从插件实例收集已注册的 Web API 并挂载"""
-        apis = getattr(plugin, "_apis", None)
-        if apis:
-            self._plugin_apis[plugin.name] = list(apis)
-            if self._web_app is not None:
-                self._mount_all_plugin_apis()
-
-    def _remove_plugin_apis(self, name: str) -> None:
-        """移除插件的 Web API 注册（已挂载路由保留，请求时动态解析失效）"""
-        self._plugin_apis.pop(name, None)
 
     # ---- 元数据发现 ----
 
@@ -1299,45 +830,3 @@ class PluginManager:
         if plugin is not None and plugin.matchers and matcher in plugin.matchers:
             plugin.matchers.remove(matcher)
             self._invalidate_matchers_cache()
-
-
-def _is_secret_field(name: str) -> bool:
-    """M19：判断配置字段是否敏感（token/secret/password/api_key 等），用于脱敏与空值保护。"""
-    lowered = str(name).casefold()
-    return any(hint in lowered for hint in ("token", "secret", "password", "api_key", "apikey"))
-
-
-def _schema_from_annotations(config_cls: type) -> dict:
-    """从普通类的类型注解兜底生成 JSON Schema（非 pydantic Config 类）"""
-    props: dict[str, dict] = {}
-    annotations = getattr(config_cls, "__annotations__", {}) or {}
-    for field_name, ann in annotations.items():
-        if field_name.startswith("_"):
-            continue
-        props[field_name] = {
-            "title": field_name,
-            "type": _annotation_json_type(ann),
-        }
-    return {"type": "object", "properties": props, "required": []}
-
-
-def _annotation_json_type(ann: Any) -> str:
-    """将 Python 类型注解映射为 JSON Schema 类型（兜底用）"""
-    if ann is bool:
-        return "boolean"
-    if ann is int:
-        return "integer"
-    if ann is float:
-        return "number"
-    if ann is str:
-        return "string"
-    if ann is list:
-        return "array"
-    if ann is dict:
-        return "object"
-    origin = get_origin(ann)
-    if origin is Union:
-        args = [a for a in get_args(ann) if a is not type(None)]
-        if args:
-            return _annotation_json_type(args[0])
-    return "string"
