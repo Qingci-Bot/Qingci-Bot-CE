@@ -120,7 +120,7 @@ cd desktop/electron && npm run build:linux     # Linux AppImage
 
 **发布流水线（推荐，自动）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 Release、推 Docker 镜像到 `ghcr.io`，无需手动上传/构建，见 [`.github/workflows/release.yml`](.github/workflows/release.yml)。
 
-> 构建详见 [PLUGIN_DEV.md](PLUGIN_DEV.md)「打包为 exe」与 `build.bat` / `build-linux.sh` / `build-electron.bat`。onedir（`dist\qingci-bot-ce\`）只含后端不含桌面壳；桌面壳由 electron-builder 承担，Windows 安装版/绿色解压版与 Linux AppImage 均内嵌后端。**实例数据不在安装目录内**：安装版由向导选定数据目录（默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`），AppImage 回退到可执行目录旁（可用 `QINGCI_DATA_HOME` 覆盖），升级与卸载不会触碰数据。直接执行 `pyinstaller qingci-bot-ce.spec` 也能出 onedir 后端，但缺少 Web UI 产物复制与浏览器下载步骤。
+> 构建详见 [docs/PACKAGING.md](docs/PACKAGING.md)「打包与发布」与 `build.bat` / `build-linux.sh` / `build-electron.bat`。onedir（`dist\qingci-bot-ce\`）只含后端不含桌面壳；桌面壳由 electron-builder 承担，Windows 安装版/绿色解压版与 Linux AppImage 均内嵌后端。**实例数据不在安装目录内**：安装版由向导选定数据目录（默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`），AppImage 回退到可执行目录旁（可用 `QINGCI_DATA_HOME` 覆盖），升级与卸载不会触碰数据。直接执行 `pyinstaller qingci-bot-ce.spec` 也能出 onedir 后端，但缺少 Web UI 产物复制与浏览器下载步骤。
 
 ## 项目结构
 

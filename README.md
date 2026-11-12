@@ -71,15 +71,21 @@ uv run python main.py --host 127.0.0.1
 | 分类 | 文档 | 内容 |
 | --- | --- | --- |
 | 上手 | [docs/SETUP.md](./docs/SETUP.md) | 环境要求、安装、本地 / Docker / Linux 部署、桌面 EXE、命令行参数、管理命令、API 鉴权与监控 |
+| 上手 | [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) | 故障排查：协议端、鉴权、能力降级、性能、Docker |
 | 配置 | [docs/CONFIGURATION.md](./docs/CONFIGURATION.md) | OneBot / Telegram 协议端、LLM、完整 `config.yaml` 字段、环境变量、进阶功能开关 |
 | 配置 | [config.example.yaml](./config.example.yaml) | 带注释的配置模板（复制为 `config.yaml`） |
-| 开发 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构、进程模型、技术栈、核心模块、生产环境部署 |
-| 开发 | [PLUGIN_DEV.md](./PLUGIN_DEV.md) | 插件开发、Web UI 页面、前端开发、打包 |
+| 开发 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构、进程模型、技术栈、核心模块 |
+| 开发 | [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | 生产部署：向量检索初始化、PostgreSQL 迁移、断连恢复 |
+| 开发 | [docs/FRONTEND.md](./docs/FRONTEND.md) | 前端开发、Web UI 页面与目录结构 |
+| 开发 | [docs/API.md](./docs/API.md) | HTTP API 与 WebSocket 端点清单 |
+| 开发 | [docs/PACKAGING.md](./docs/PACKAGING.md) | PyInstaller / Electron 打包与自动发布 |
+| 开发 | [PLUGIN_DEV.md](./PLUGIN_DEV.md) | 插件开发：Matcher / Rule / 生命周期 / DI / 工具 |
 | 开发 | [docs/CODING_STANDARDS.md](./docs/CODING_STANDARDS.md) | 类型 / 命名 / 分层 / Git 约定与质量门禁 |
 | 开发 | [docs/PROJECT_STRUCTURE.md](./docs/PROJECT_STRUCTURE.md) | 目录职责与产物归属 |
 | 治理 | [CONTRIBUTING.md](./CONTRIBUTING.md) | 贡献流程、开发环境、本地构建与发版 |
 | 治理 | [SECURITY.md](./SECURITY.md) | 安全策略、漏洞报告与最佳实践 |
 | 治理 | [CHANGELOG.md](./CHANGELOG.md) | 版本变更记录 |
+| 治理 | [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) | 社区行为准则 |
 | 治理 | [LICENSE](./LICENSE) / [NOTICE](./NOTICE) | GPLv3 官方全文 / 附加条款与版权授权声明 |
 
 ## 合规声明
