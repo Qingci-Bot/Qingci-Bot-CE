@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Linux 服务端包（headless + systemd）**：新增 `scripts/pack_linux_server.sh`，用 `dpkg-deb` / `rpmbuild` 原生打 `Qingci-Bot-CE-server` 包（不引入 fpm），产出 deb 与 rpm。不打包 Electron 壳，纯 Python 冻结产物 + systemd 单元，适配无桌面服务器。布局遵循 FHS：程序 `/opt/qingci-bot-ce-server`、实例数据 `/var/lib/qingci-bot-ce-server/instances/<name>`、日志 `/var/log/qingci-bot-ce-server/`；安装即创建系统用户 `qingci-bot` 并注册 / `enable` 单元 `qingci-bot-ce.service`（首次安装不自动 `start`，确认配置后手动启动）；卸载保留实例数据，`apt purge` 才清除。服务单元含基础加固（`ProtectSystem=full`、`ProtectHome=true`、`NoNewPrivileges`、显式 `ReadWritePaths`）
+- **Linux 服务端包（headless + systemd）**：新增 `scripts/pack_linux_server.sh`，用 `dpkg-deb` / `rpmbuild` 原生打 `qingci-bot-ce-server` 包（不引入 fpm），产出 deb 与 rpm。不打包 Electron 壳，纯 Python 冻结产物 + systemd 单元，适配无桌面服务器。布局遵循 FHS：程序 `/opt/qingci-bot-ce-server`、实例数据 `/var/lib/qingci-bot-ce-server/instances/<name>`、日志 `/var/log/qingci-bot-ce-server/`；安装即创建系统用户 `qingci-bot` 并注册 / `enable` 单元 `qingci-bot-ce.service`（首次安装不自动 `start`，确认配置后手动启动）；卸载保留实例数据，`apt purge` 才清除。服务单元含基础加固（`ProtectSystem=full`、`ProtectHome=true`、`NoNewPrivileges`、显式 `ReadWritePaths`）
 - **桌面版 deb / rpm**：`desktop/electron/package.json` 的 `build.linux.target` 由 AppImage 改为 deb + rpm，补齐 `deb.depends` / `rpm.depends`（GTK3 / NSS / libnotify / libXtst 等 Electron 运行时库）、`maintainer`、`synopsis` 与 `description`
 
 ### Changed
@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Linux 下内置 uv 永远定位不到**：`bot/plugin/deps.py` 的 `_bundled_uv()` 写死 `uv.exe`，而 Linux/macOS 的 uv 无扩展名，导致插件依赖安装退化为较慢的内嵌 pip。改为按 `uv.exe` → `uv` 依次探测
 - **`desktop/py/relaunch.py` 在 POSIX 下未真正脱离父会话**：此前仅设置 Windows 专属的 `DETACHED_PROCESS` / `CREATE_NEW_PROCESS_GROUP`（POSIX 上取 0，等于无操作），主进程退出时同会话的助手可能收到 SIGHUP 被终止，切换实例 / 重启流程半途而废。新增 `_spawn_detached()`，POSIX 改用 `start_new_session=True`
 - **Electron 开发模式在 Linux 找不到 venv 解释器**：`resolvePython()` 只查找 `Scripts/python.exe`，改为同时探测 `.venv/bin/python`
+- **electron-builder 打 deb / rpm 时报 `Please specify project homepage`**：`desktop/electron/package.json` 原缺 `homepage` / `repository` 字段。AppImage 走的是另一条打包路径、不校验该项，切到 deb / rpm 后 `FpmTarget` 强制要求，首轮 CI 构建即在此失败。补齐 `homepage`、`repository`，并把 `author` 规范为 `名字 <URL>` 形式
+- **发布流水线漏收桌面版安装包**：electron-builder 按 `build.directories.output` 输出到 `dist/electron`，而上传步骤只 glob `dist/linux`，桌面版 deb / rpm 永远不会被上传。新增归集步骤把 `dist/electron/*.deb|*.rpm` 复制到 `dist/linux`，复制不到时直接报错而不是静默跳过
 
 ## \[1.20.0] - 2026-11-12（P1 架构分层与能力开放：错误模型、ABI 探测、配置 schema、大组件拆分与 CI 分级）
 
