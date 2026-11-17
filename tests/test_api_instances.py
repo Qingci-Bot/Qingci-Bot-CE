@@ -95,7 +95,12 @@ class TestListInstances:
         assert item["description"] == "测试实例"
         assert item["platform"] == "telegram"
         assert item["disk_usage"] == 2048
-        assert item["adapters"] == {"onebot": False, "onebot12": False, "telegram": True}
+        assert item["adapters"] == {
+            "onebot": False,
+            "onebot12": False,
+            "telegram": True,
+            "qq": False,
+        }
 
 
 class TestCreateInstance:

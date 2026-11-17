@@ -115,6 +115,15 @@ platforms:
     enabled: false
     token: ''
     poll_interval: 1.0
+  qq:                              # QQ 官方机器人（QQ 开放平台，默认关闭）
+    enabled: false
+    app_id: ''                     # 开放平台 AppID
+    app_secret: ''                 # 开放平台 AppSecret（仅显示一次）
+    sandbox: false                 # true 连接沙箱环境
+    intents: 33554432              # 1<<25：群消息 + 单聊消息
+    api_base: ''                   # 留空按 sandbox 自动选择正式/沙箱地址
+    request_timeout: 30.0
+    max_retries: 2
 llm:
   provider: openai                 # openai / deepseek / ollama / siliconflow / claude / gemini / custom
   api_url: https://api.openai.com/v1  # 留空则按 provider 直连官方
@@ -235,4 +244,5 @@ lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 | `llm.timeout` / `llm.num_retries` | 请求超时与重试          | `60` / `2`                                                                                                                                                  | 单次 LLM 请求超时秒数与失败重试次数                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `market`                          | 插件市场             | `url` 默认指向 Gitee 镜像（`https://gitee.com/qingci-bot/Plugin-Market.git`，GitHub 主仓库的国内自动同步镜像，拉取更快更稳；可用 `https://github.com/Qingci-Bot/Plugin-Market.git` 切换主仓库） | WebUI「插件管理 → 插件市场」浏览/搜索/一键安装/更新/刷新；`url` 可指向自定义市场索引仓库，`mirror_url` 为索引备用源（主源拉取失败时回退），`refresh_interval` 为索引缓存 TTL（秒）；市场条目可声明 `python_requires` 版本约束，WebUI 对不兼容插件显示提示并禁用安装                                                                                                                                                                                                                                                                                                                                                          |
 | `platforms.telegram`              | Telegram 平台适配器   | `enabled: false`                                                                                                                                            | 启用后以 Bot API 长轮询接入 Telegram（`token` 由 @BotFather 获取）；事件归一化为 OneBot 12 内部模型（`type`/`detail_type`/v12 消息段），插件/命令零改动可用；回复自动路由到 Telegram；群聊 `@Bot` 可触发（支持 at 触发模式）；收发支持 v12 `image`/`voice`/`video` 段（photo → `image`、voice → `voice`、video → `video`；发送 `image`/`voice`/`video` 段分别走 `sendPhoto`/`sendVoice`/`sendVideo`，支持 file\_id / URL / base64 / 本地路径）与 `reply` 回复段；成员进出群/权限变更归一化为 OneBot `notice`（`group_member_increase` / `group_member_decrease` / `group_admin_set` / `group_admin_unset`），事件插件可响应；`poll_interval` 为轮询间隔（秒） |
+| `platforms.qq`                    | QQ 官方机器人适配器        | `enabled: false`                                                                                                                                            | 启用后连接 QQ 开放平台（`app_id` / `app_secret` 在 q.qq.com 创建机器人后获取），走官方 WebSocket 网关 + OpenAPI v2，非协议端方案；群聊 `@机器人` 与消息列表单聊事件归一化为 v12 消息事件（`detail_type` = `group` / `private`），附件按 `content_type` 映射为 `image` / `voice` / `video` / `file` 段；发送支持文本与富媒体（图片/视频/语音/文件，公网 URL 直传或本地文件 base64 上传）；`sandbox: true` 连沙箱环境，`intents` 默认 `33554432`（1<<25，群+单聊消息）。**平台限制**：无好友/群列表接口，只能回复来过消息的会话；被动回复群聊 5 分钟/5 条、单聊 60 分钟/4 条，超出需用户再次发消息 |
 | `bot.log_json`                    | 结构化 JSON 日志      | `false`                                                                                                                                                     | 面向机器可读的日志采集场景                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |

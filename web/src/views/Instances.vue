@@ -25,6 +25,11 @@ const platformOptions = [
     hint: '原生反向 WebSocket，对接 OneBot 12 协议端（如 NapCat / Lagrange.OneBot）',
   },
   { value: 'telegram', label: 'Telegram', hint: 'Bot API 长轮询（创建后在设置中填写 token）' },
+  {
+    value: 'qq',
+    label: 'QQ 官方机器人',
+    hint: 'QQ 开放平台 Bot API v2（创建后在设置中填写 AppID / AppSecret）',
+  },
 ];
 
 function platformLabel(value) {
@@ -37,6 +42,7 @@ const adapterLabels = [
   { key: 'onebot', label: 'OneBot 11' },
   { key: 'onebot12', label: 'OneBot 12' },
   { key: 'telegram', label: 'Telegram' },
+  { key: 'qq', label: 'QQ 官方机器人' },
 ];
 
 function enabledAdapters(adapters) {
