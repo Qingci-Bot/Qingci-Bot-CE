@@ -427,4 +427,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ver="${{ needs.prepare.outputs.ver }}"
-          gh release upload "$ver" SHA256SUMS.txt --clobber
+          # 本 job 不 checkout（无 .git），gh 无法推断仓库，必须显式 --repo；
+          # 否则报 fatal: not a git repository
+          gh release upload "$ver" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
