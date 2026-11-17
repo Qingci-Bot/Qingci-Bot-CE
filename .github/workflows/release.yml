@@ -386,10 +386,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-  # 校验和收口：等两个构建 job 都成功后，把 Release 上已有的分发包下载回来
-  # 统一算 SHA256，产出 SHA256SUMS.txt（sha256sum 格式，用户可 `sha256sum -c`）。
+  # 校验和收口：等两个构建 job 都成功后，产出 SHA256SUMS.txt
+  # （sha256sum 格式，用户可 `sha256sum -c SHA256SUMS.txt`）。
   # 单独成 job 的原因：Windows / Linux 是两个并行 job，各自只能算自己那几个文件，
   # 只有 Release 才是两者的合集。
+  #
+  # 实现上直接用 Release 资产的 `digest` 字段（GitHub 在接收上传时已算好的 sha256），
+  # 不把 ~1.8GB 产物下载回来重算——既省 CI 带宽/时间，也避免"算的是一份、用户下的是
+  # 另一份"的窗口。若某个资产没有 digest（老资产或平台未提供），直接失败而不是产出
+  # 残缺的校验文件。
   checksums:
     name: Release checksums
     needs: [prepare, windows-exe, linux-deb-rpm]
@@ -401,24 +406,28 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Compute SHA256SUMS.txt from release assets
+      - name: Generate SHA256SUMS.txt from asset digests
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           ver="${{ needs.prepare.outputs.ver }}"
-          mkdir -p assets && cd assets
-          gh release download "$ver" --repo "$GITHUB_REPOSITORY" \
-            --pattern '*.deb' --pattern '*.rpm' --pattern '*.exe' --pattern '*.zip' --clobber
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$ver" \
+            --jq '.assets[] | select(.name != "SHA256SUMS.txt") | "\(.digest // "")  \(.name)"' \
+            > /tmp/assets.txt
 
-          count=$(ls -1 | wc -l)
-          echo "下载到 $count 个分发包："
-          ls -l
+          echo "== Release 资产 =="
+          cat /tmp/assets.txt
           # 期望 4 个 Linux 包 + Windows 安装版 + 便携版
+          count=$(wc -l < /tmp/assets.txt)
           [ "$count" -eq 6 ] || { echo "::error::期望 6 个分发包，实际 $count"; exit 1; }
 
-          sha256sum * > ../SHA256SUMS.txt
-          cd ..
+          # 缺 digest 的行形如 "  <name>"（前缀是空串），据此判残缺
+          if grep -qE '^  ' /tmp/assets.txt; then
+            echo "::error::存在未提供 digest 的资产，拒绝生成残缺校验文件"; exit 1
+          fi
+
+          sed 's/^sha256://' /tmp/assets.txt | sort -k2 > SHA256SUMS.txt
           echo "== SHA256SUMS.txt =="
           cat SHA256SUMS.txt
 
