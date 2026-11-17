@@ -1,16 +1,18 @@
 # 发布流水线：打 v* tag 触发，全自动构建并上传分发包
 #
 # 触发：
-#   1) git tag v1.17.0 && git push origin v1.17.0   -> 构建 EXE/AppImage 并上传同名 Release，
+#   1) git tag v1.17.0 && git push origin v1.17.0   -> 构建 EXE / deb / rpm 并上传同名 Release，
 #      同时构建并推送 Docker 镜像到 ghcr.io
-#   2) workflow_dispatch（手动）-> 仅重建并上传 EXE/AppImage 到指定 Release（不推镜像）
+#   2) workflow_dispatch（手动）-> 仅重建并上传 EXE / deb / rpm 到指定 Release（不推镜像）
 #
 # 产物：
-#   - Windows 便携 EXE（PyInstaller 后端 onedir + electron-builder portable）
-#   - Linux AppImage（PyInstaller 后端 onedir + electron-builder AppImage）
+#   - Windows 便携 EXE（PyInstaller 后端 onedir + electron-builder nsis/zip）
+#   - Linux deb / rpm（PyInstaller 后端 onedir + electron-builder deb/rpm），x86_64，两款包：
+#       * Qingci-Bot-CE-<ver>-<arch>.deb/.rpm         桌面版（Electron 壳 + 内嵌后端）
+#       * Qingci-Bot-CE-server-<ver>-<arch>.deb/.rpm  服务端版（headless 后端 + systemd 服务）
 #   - Docker 镜像（ghcr.io，tag: vX.Y.Z / X.Y / X / latest）
 #
-# 每个平台先产后端 onedir，再让 electron-builder 打成便携/AppImage，
+# 每个平台先产后端 onedir，再让 electron-builder 打成安装包，
 # 与本地 build.ps1 + build-electron.ps1 / build-linux.sh 链路一致。
 
 name: Release
@@ -178,8 +180,8 @@ jobs:
           if (-not $zip) { throw "green zip not found under dist\electron" }
           gh release upload "$ver" "$($setup.FullName)" "$($zip.FullName)" dist\qingci-bot-ce.sha256 --clobber
 
-  linux-appimage:
-    name: Linux AppImage
+  linux-deb-rpm:
+    name: Linux deb / rpm
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -187,6 +189,17 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+
+      # electron-builder 生成 deb / rpm 依赖宿主工具链：
+      #   rpm      —— electron-builder 的 rpm 目标通过 fpm 调 rpmbuild 打包
+      #   fakeroot —— fpm 非 root 打包 deb 时需要
+      #   xz-utils —— rpm payload 压缩
+      # 缺任一项会让 --linux deb rpm 在「生成安装包」阶段才失败，故前置安装。
+      - name: Install packaging toolchain (rpm / fpm deps)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            rpm fakeroot xz-utils file
 
       - name: Set up Python + uv
         uses: astral-sh/setup-uv@v7
@@ -225,20 +238,34 @@ jobs:
         # 后端 onedir 数千个文件 → 单个 zip，安装/解压阶段只处理 1 个文件
         run: python3 scripts/pack_backend.py
 
-      - name: Package AppImage (electron-builder --linux)
+      - name: Package deb + rpm (electron-builder --linux)
         working-directory: desktop/electron
         run: |
           npm ci
-          npx electron-builder --linux --publish never
+          npx electron-builder --linux deb rpm --publish never
+
+      # 服务端（headless）包：同一份 PyInstaller 后端 onedir，装到 /opt 并注册 systemd 服务，
+      # 不依赖 Electron / X11，适配无桌面环境的服务器。
+      - name: Build server deb + rpm (headless + systemd)
+        run: |
+          ver="${{ needs.prepare.outputs.ver }}"
+          bash scripts/pack_linux_server.sh --version "${ver#v}"
 
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ver="${{ needs.prepare.outputs.ver }}"
-          appimage=$(ls dist/electron/*.AppImage 2>/dev/null | head -n1)
-          if [ -z "$appimage" ]; then echo "::error::AppImage not found under dist/electron"; exit 1; fi
-          gh release upload "$ver" "$appimage" dist/qingci-bot-ce.sha256 --clobber
+          # 桌面包（Electron）与服务端包（headless）分别以不同 packageName 产出，
+          # 文件名前缀不同，一次 glob 收齐四个产物
+          debs=$(ls dist/linux/*.deb 2>/dev/null || true)
+          rpms=$(ls dist/linux/*.rpm 2>/dev/null || true)
+          if [ -z "$debs" ] || [ -z "$rpms" ]; then
+            echo "::error::linux packages missing under dist/linux (deb/rpm)"
+            ls -R dist/linux 2>/dev/null || true
+            exit 1
+          fi
+          gh release upload "$ver" $debs $rpms dist/qingci-bot-ce.sha256 --clobber
 
   docker:
     name: Docker image (ghcr.io)

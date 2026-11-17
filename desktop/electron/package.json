@@ -1,6 +1,6 @@
 {
   "name": "qingci-bot-ce-desktop",
-  "version": "1.20.0",
+  "version": "1.21.0",
   "description": "Qingci-Bot CE Electron 桌面壳（Electron + Python 混合架构）",
   "main": "src/main.js",
   "author": "Qingci-Bot",
@@ -10,7 +10,7 @@
     "start": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
-    "build:linux": "electron-builder --linux",
+    "build:linux": "electron-builder --linux deb rpm",
     "build:win:dir": "electron-builder --win --dir",
     "build:linux:dir": "electron-builder --linux --dir"
   },
@@ -60,7 +60,13 @@
     "linux": {
       "target": [
         {
-          "target": "AppImage",
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "rpm",
           "arch": [
             "x64"
           ]
@@ -68,7 +74,42 @@
       ],
       "icon": "icon.png",
       "category": "Network",
-      "artifactName": "Qingci-Bot-CE-${version}-${os}-${arch}.${ext}"
+      "synopsis": "Multi-platform bot framework",
+      "description": "Qingci-Bot CE desktop application: Electron shell with embedded Python backend, providing Web UI for bot / LLM configuration and monitoring.",
+      "maintainer": "Qingci-Bot <https://github.com/Qingci-Bot>",
+      "vendor": "Qingci-Bot",
+      "artifactName": "Qingci-Bot-CE-${version}-${arch}.${ext}"
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libsecret-1-0"
+      ],
+      "recommends": [
+        "libayatana-appindicator3-1"
+      ]
+    },
+    "rpm": {
+      "depends": [
+        "gtk3",
+        "libnotify",
+        "nss",
+        "libXScrnSaver",
+        "libXtst",
+        "xdg-utils",
+        "at-spi2-atk",
+        "libsecret"
+      ],
+      "fpm": [
+        "--rpm-rpmbuild-define",
+        "_build_id_links none"
+      ]
     }
   },
   "devDependencies": {

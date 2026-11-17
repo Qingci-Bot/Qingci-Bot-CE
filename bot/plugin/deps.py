@@ -180,12 +180,19 @@ async def _install_frozen(target: Path, reqs: list[str]) -> bool:
 
 
 def _bundled_uv() -> str | None:
-    """打包模式定位随产物的 uv 可执行文件；未打包则返回 None"""
+    """打包模式定位随产物的 uv 可执行文件；未打包则返回 None
+
+    uv 是独立二进制，Windows 下为 ``uv.exe``，Linux/macOS 下无扩展名。
+    不能只拼 ``uv.exe``——否则 Linux 包（deb/rpm）里的内置 uv 永远找不到，
+    插件依赖安装会退化到内嵌 pip（较慢）。
+    """
     meipass = getattr(sys, "_MEIPASS", None)  # PyInstaller 专用，非打包环境不存在
-    if meipass:
-        uv = str(Path(meipass, "uv.exe"))
-        if shutil.which(uv):
-            return uv
+    if not meipass:
+        return None
+    for name in ("uv.exe", "uv"):
+        candidate = str(Path(meipass, name))
+        if shutil.which(candidate):
+            return candidate
     return None
 
 

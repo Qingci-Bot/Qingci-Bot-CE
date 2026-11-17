@@ -37,7 +37,7 @@ PACKAGE_INIT = PROJECT_ROOT / "bot" / "__init__.py"
 WEB_PACKAGE_JSON = PROJECT_ROOT / "web" / "package.json"
 WEB_PACKAGE_LOCK = PROJECT_ROOT / "web" / "package-lock.json"
 # Electron 壳：electron-builder 用这里的 version 命名产物
-# （Qingci-Bot-CE-<ver>-Setup-x64.exe / -win.zip / .AppImage），
+# （Qingci-Bot-CE-<ver>-Setup-x64.exe / -win.zip / -x64.deb / -x64.rpm），
 # 漏改会让整个 Release 的安装包版本号落后一版
 ELECTRON_PACKAGE_JSON = PROJECT_ROOT / "desktop" / "electron" / "package.json"
 ELECTRON_PACKAGE_LOCK = PROJECT_ROOT / "desktop" / "electron" / "package-lock.json"

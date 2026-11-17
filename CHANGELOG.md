@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.21.0] - 2026-11-17（Linux 分发改为 deb / rpm：新增 headless 服务端包，修复三处 Linux 阻断缺陷）
+
+**破坏性变更**：Linux 不再提供 AppImage，改为原生包管理的 **deb**（Debian / Ubuntu）与 **rpm**（Fedora / RHEL / openSUSE）。运行时协议与配置完全不变，仅分发形态变更。
+
+### Added
+
+- **Linux 服务端包（headless + systemd）**：新增 `scripts/pack_linux_server.sh`，用 `dpkg-deb` / `rpmbuild` 原生打 `Qingci-Bot-CE-server` 包（不引入 fpm），产出 deb 与 rpm。不打包 Electron 壳，纯 Python 冻结产物 + systemd 单元，适配无桌面服务器。布局遵循 FHS：程序 `/opt/qingci-bot-ce-server`、实例数据 `/var/lib/qingci-bot-ce-server/instances/<name>`、日志 `/var/log/qingci-bot-ce-server/`；安装即创建系统用户 `qingci-bot` 并注册 / `enable` 单元 `qingci-bot-ce.service`（首次安装不自动 `start`，确认配置后手动启动）；卸载保留实例数据，`apt purge` 才清除。服务单元含基础加固（`ProtectSystem=full`、`ProtectHome=true`、`NoNewPrivileges`、显式 `ReadWritePaths`）
+- **桌面版 deb / rpm**：`desktop/electron/package.json` 的 `build.linux.target` 由 AppImage 改为 deb + rpm，补齐 `deb.depends` / `rpm.depends`（GTK3 / NSS / libnotify / libXtst 等 Electron 运行时库）、`maintainer`、`synopsis` 与 `description`
+
+### Changed
+
+- **发布流水线**：`release.yml` 的 `linux-appimage` job 替换为 `linux-deb-rpm`，前置安装 `rpm` / `fakeroot` / `xz-utils` / `file`（electron-builder 的 rpm 目标经 fpm 调 rpmbuild）；一次产出 4 个 Linux 包（桌面版 + 服务端版，各 deb / rpm）。Release 说明同步更新
+- **`ci-desktop.yml` 配置断言加固**：锁定 Linux 目标必须同时包含 deb 与 rpm、禁止回退到 AppImage，并校验两类 `depends` 非空
+- **Linux 桌面版数据目录改按 XDG 规范**：由 `~/.config/Qingci-Bot CE` 改为 `$XDG_DATA_HOME/Qingci-Bot CE`（默认 `~/.local/share/Qingci-Bot CE`）。数百 MB 的后端与实例数据不应放在配置目录，也避免被「清理配置目录」误删；`QINGCI_DATA_HOME` 仍可覆盖
+- **`build-linux.sh` / `build.bat` 补分发 `config.example.yaml`**：首次启动创建实例时以其为模板，此前未随产物复制，frozen 模式下新实例只能得到仅含平台字段的精简配置
+- 文档同步：PACKAGING（新增 Linux 打包章节，含两款包对照表与「为何不用 AppImage」）、SETUP（发行版包安装与 systemd 运维）、CONFIGURATION / TROUBLESHOOTING（数据目录说明）、CONTRIBUTING / README
+
+### Fixed
+
+- **Linux 下后端无法启动（权限位丢失）**：adm-zip 在非 Windows 平台解压时不还原 zip 内的 Unix 权限位，一律按 `0o666` 落盘，PyInstaller 主程序丢失可执行位后 spawn 报 EACCES，表现为「后端进程启动失败」且日志无权限线索。新增 `ensureBackendExecutable()` 按 zip 清单逐项还原 mode，清单缺失权限信息时兜底为主程序补 `0755`
+- **Linux 下内置 uv 永远定位不到**：`bot/plugin/deps.py` 的 `_bundled_uv()` 写死 `uv.exe`，而 Linux/macOS 的 uv 无扩展名，导致插件依赖安装退化为较慢的内嵌 pip。改为按 `uv.exe` → `uv` 依次探测
+- **`desktop/py/relaunch.py` 在 POSIX 下未真正脱离父会话**：此前仅设置 Windows 专属的 `DETACHED_PROCESS` / `CREATE_NEW_PROCESS_GROUP`（POSIX 上取 0，等于无操作），主进程退出时同会话的助手可能收到 SIGHUP 被终止，切换实例 / 重启流程半途而废。新增 `_spawn_detached()`，POSIX 改用 `start_new_session=True`
+- **Electron 开发模式在 Linux 找不到 venv 解释器**：`resolvePython()` 只查找 `Scripts/python.exe`，改为同时探测 `.venv/bin/python`
+
 ## \[1.20.0] - 2026-11-12（P1 架构分层与能力开放：错误模型、ABI 探测、配置 schema、大组件拆分与 CI 分级）
 
 P1 路线图全部完成。插件 / 平台 / Web API 等对外行为向后兼容，内部架构分层与扩展能力显著增强。全量 757 项测试，覆盖率 64.32%。

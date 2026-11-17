@@ -52,7 +52,23 @@ jobs:
 
       - name: Validate package.json build config
         working-directory: desktop/electron
-        run: node -e "const b=require('./package.json').build; if(!b||!b.win||!b.extraResources) throw new Error('build config missing'); console.log('build config OK')"
+        # 同时锁定 Linux 分发目标为 deb + rpm：本项目不发 AppImage。
+        # 若有人误改回 AppImage 或漏掉某一格式，这里立即失败。
+        run: |
+          node -e "
+          const b = require('./package.json').build;
+          if (!b || !b.win || !b.extraResources) throw new Error('build config missing');
+          const targets = ((b.linux && b.linux.target) || []).map(t => (typeof t === 'string' ? t : t.target));
+          for (const want of ['deb', 'rpm']) {
+            if (!targets.includes(want)) {
+              throw new Error('linux target missing: ' + want + ' (got ' + targets.join(',') + ')');
+            }
+          }
+          if (targets.includes('AppImage')) throw new Error('AppImage target must not be used');
+          if (!b.deb || !b.deb.depends || !b.deb.depends.length) throw new Error('deb depends missing');
+          if (!b.rpm || !b.rpm.depends || !b.rpm.depends.length) throw new Error('rpm depends missing');
+          console.log('build config OK: linux=' + targets.join(','));
+          "
 
       # 注意：Windows 便携版完整打包（Python 后端 onedir + electron-builder portable）
       # 走 build.bat + build-electron.bat（需 Windows + PyInstaller），不在本 job 复现。

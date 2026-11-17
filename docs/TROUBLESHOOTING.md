@@ -38,7 +38,7 @@
 并从备份文件恢复。另外：
 
 - 环境变量只在**进程启动时**读取，修改后需重启；
-- 数据目录：安装版由向导选定，AppImage / 容器用 `QINGCI_DATA_HOME` 指向可写位置；
+- 数据目录：安装版由向导选定；Linux 桌面版（deb/rpm）落在 `~/.local/share/Qingci-Bot CE`；服务端包固定在 `/var/lib/qingci-bot-ce-server`；容器用 `QINGCI_DATA_HOME` 指向可写位置；
 - 一键部署、CLI 参数与实例目录布局见 [SETUP.md](./SETUP.md)。
 
 ## 能力自动降级

@@ -62,15 +62,29 @@ def _prepend_launcher(args: list[str]) -> list[str]:
     return [sys.executable, os.path.abspath(sys.argv[0])] + args
 
 
+def _spawn_detached(argv: list[str]) -> None:
+    """以「脱离父进程」的方式启动助手进程（跨平台）
+
+    Windows：DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP，避免继承控制台。
+    POSIX：两者常量都不存在（getattr 取 0），真正让子进程脱离父会话的是
+    start_new_session=True —— 否则主进程退出时，同会话的助手可能收到
+    SIGHUP 被一并终止，重启流程半途而废。
+    """
+    if os.name == "nt":
+        subprocess.Popen(
+            argv,
+            close_fds=True,
+            creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+        )
+        return
+    subprocess.Popen(argv, close_fds=True, start_new_session=True)
+
+
 def spawn_relaunch(app_args: list[str]) -> None:
     """派发分离的助手进程，等待本进程退出后以 app_args 重新拉起应用"""
     helper = _prepend_launcher([_RELAUNCH_FLAG, str(os.getpid())] + app_args)
-    subprocess.Popen(
-        helper,
-        close_fds=True,
-        creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
-        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
-    )
+    _spawn_detached(helper)
 
 
 def run_helper_if_requested() -> bool:
@@ -115,10 +129,5 @@ def run_helper_if_requested() -> bool:
             )
 
     if rest:
-        subprocess.Popen(
-            _prepend_launcher(rest),
-            close_fds=True,
-            creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
-            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
-        )
+        _spawn_detached(_prepend_launcher(rest))
     return True
