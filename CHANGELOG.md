@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Electron 开发模式在 Linux 找不到 venv 解释器**：`resolvePython()` 只查找 `Scripts/python.exe`，改为同时探测 `.venv/bin/python`
 - **electron-builder 打 deb / rpm 时报 `Please specify project homepage`**：`desktop/electron/package.json` 原缺 `homepage` / `repository` 字段。AppImage 走的是另一条打包路径、不校验该项，切到 deb / rpm 后 `FpmTarget` 强制要求，首轮 CI 构建即在此失败。补齐 `homepage`、`repository`，并把 `author` 规范为 `名字 <URL>` 形式
 - **发布流水线漏收桌面版安装包**：electron-builder 按 `build.directories.output` 输出到 `dist/electron`，而上传步骤只 glob `dist/linux`，桌面版 deb / rpm 永远不会被上传。新增归集步骤把 `dist/electron/*.deb|*.rpm` 复制到 `dist/linux`，复制不到时直接报错而不是静默跳过
+- **Windows 打包在产物就绪后仍判失败**：`build-electron.bat` 调用 `electron-builder --win` 未关闭自动发布，tag 触发时它会尝试把 nsis 产物直接发布到 GitHub，缺 `GH_TOKEN` 便报错退出——而此时 `Setup-x64.exe` 与 blockmap 其实都已生成。`package.json` 增加 `"publish": null`、bat 补 `--publish never`，发布统一交给 `release.yml` 的 `gh release upload`
 
 ## \[1.20.0] - 2026-11-12（P1 架构分层与能力开放：错误模型、ABI 探测、配置 schema、大组件拆分与 CI 分级）
 
