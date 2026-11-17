@@ -209,7 +209,7 @@ lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 | `QINGCI_DB_POOL_SIZE` | `5` | SQLite 连接池大小；高并发读写争用时可调大 |
 | `QINGCI_DB_MAX_OVERFLOW` | `10` | 连接池溢出上限 |
 | `QINGCI_SKIP_MIGRATION_CHECK` | 未设置 | 设为 `1` 跳过启动期的迁移漂移检测（每次启动约省 1 秒）。打包分发 / 容器冷启动可开启，代价是模型与迁移脚本不一致时不再告警 |
-| `QINGCI_DATA_HOME` | 未设置 | 可写数据根目录（`instances/`、`backend/` 的父目录）。安装版由安装向导写入，AppImage / 容器可用它把数据放到可写卷；未设置时按 `QINGCI_APP_DIR` → 源码根目录回退 |
+| `QINGCI_DATA_HOME` | 未设置 | 可写数据根目录（`instances/`、`backend/` 的父目录）。安装版由安装向导写入；Linux 桌面版（deb/rpm）默认按 XDG 落在 `~/.local/share/Qingci-Bot CE`；服务端包（deb/rpm）由 systemd 单元固化为 `/var/lib/qingci-bot-ce-server`；容器可用它把数据放到可写卷；未设置时按 `QINGCI_APP_DIR` → 源码根目录回退 |
 | `QINGCI_APP_DIR` | 自动推断 | 由 Electron 壳注入，指向桌面 EXE 所在目录；源码 / Docker 部署无需设置 |
 
 > 与 `config.yaml` 不同，环境变量在进程启动时读取，修改后需重启。

@@ -4,8 +4,8 @@
 # Output: dist/qingci-bot-ce/qingci-bot-ce
 #
 # 与 build.bat（Windows）对应的 Linux 版本。产出 Python 后端 onedir，
-# 供 release 流水线（.github/workflows/ci.yml 的 release job）随后用
-# electron-builder 打 Linux AppImage。
+# 供 release 流水线随后用 electron-builder 打 deb / rpm（桌面版），
+# 并由 scripts/pack_linux_server.sh 打 headless 服务端 deb / rpm。
 #
 # 自 v1.6 起配置/插件/数据已收敛到 instances/<name>/ 自包含目录，
 # 构建产物不再生成根级 config.yaml 或 data/（用户数据按实例隔离，随实例目录分发）。
@@ -77,6 +77,17 @@ if [ -f "$Root/web/dist/index.html" ]; then
   echo "    copied web/dist into output folder"
 else
   echo "    WARNING: web/dist/index.html not found; run 'npm run build' in web/ first, /ui will be unavailable" >&2
+fi
+
+# 配置模板：首次启动创建 default 实例时，create_instance() 以
+# app_root()/config.example.yaml 为模板生成实例 config.yaml。
+# frozen 模式下 app_root() 是产物目录，模板不在包里就只能退化成一个
+# 只含平台字段的精简配置——用户会缺掉绝大部分注释与可选项，故必须随产物分发。
+if [ -f "$Root/config.example.yaml" ]; then
+  cp "$Root/config.example.yaml" "$AppDir/config.example.yaml"
+  echo "    copied config.example.yaml into output folder"
+else
+  echo "    WARNING: config.example.yaml not found; new instances will get a minimal default config" >&2
 fi
 
 # ---------- [2.5/3] bundle Playwright browser ----------

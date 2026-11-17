@@ -82,10 +82,22 @@ function isDev() {
   return !app.isPackaged;
 }
 
+// PyInstaller 产物名跨平台：Windows 为 qingci-bot-ce.exe，Linux/macOS 无扩展名
+const BACKEND_EXE = process.platform === "win32" ? "qingci-bot-ce.exe" : "qingci-bot-ce";
+
 function resolvePython() {
   if (isDev()) {
-    const winPy = path.join(APP_ROOT, ".venv", "Scripts", "python.exe");
-    return { cmd: fs.existsSync(winPy) ? winPy : (process.platform === "win32" ? "python" : "python3"), script: path.join(APP_ROOT, "main.py") };
+    // venv 布局跨平台不同：Windows 为 Scripts/python.exe，POSIX 为 bin/python。
+    // 只找 Scripts 会让 Linux 开发时回落到 PATH 里的 python3（可能缺依赖）。
+    const venvCandidates = [
+      path.join(APP_ROOT, ".venv", "Scripts", "python.exe"),
+      path.join(APP_ROOT, ".venv", "bin", "python"),
+    ];
+    const found = venvCandidates.find((p) => fs.existsSync(p));
+    return {
+      cmd: found || (process.platform === "win32" ? "python" : "python3"),
+      script: path.join(APP_ROOT, "main.py"),
+    };
   }
   // 打包：后端以**单个 zip** 随包分发（resources/backend.zip），首次启动由
   // prepareBackend() 解压到 userData 下再启动。这样安装阶段只写 1 个大文件，
@@ -96,8 +108,58 @@ function resolvePython() {
   return { cmd: path.join(backendRoot, BACKEND_EXE), script: null };
 }
 
-// PyInstaller 产物名跨平台：Windows 为 qingci-bot-ce.exe，Linux/macOS 无扩展名
-const BACKEND_EXE = process.platform === "win32" ? "qingci-bot-ce.exe" : "qingci-bot-ce";
+/**
+ * 修正解压后后端产物的可执行权限（Linux / macOS）。
+ *
+ * 背景：adm-zip 在非 Windows 平台解压时不还原 zip 里的 Unix 权限位，
+ * 一律按 0o666 落盘（见其 util/utils.js 的 chmod(path, attr || 0o666)）。
+ * 结果是 PyInstaller 主程序解开后没有可执行位，spawn 直接 EACCES——
+ * 表现为「启动失败：后端进程启动失败」，且日志里看不出是权限问题。
+ *
+ * 这里按 zip 清单逐项还原：entry.attr 的高 16 位是 Unix mode。
+ * 若清单里没带（attribute 为 0，例如在 Windows 上打的包），退化为
+ * 对主程序与 _internal 下常见二进制补 0755。
+ */
+function ensureBackendExecutable(dir) {
+  if (process.platform === "win32") return;
+  const zipPath = path.join(process.resourcesPath, "backend.zip");
+  const forceMode = (p, mode) => {
+    try {
+      fs.chmodSync(p, mode);
+      return true;
+    } catch (e) {
+      elog("[electron] chmod 失败:", p, String(e && e.message || e));
+      return false;
+    }
+  };
+
+  let restored = 0;
+  try {
+    const AdmZip = require("adm-zip");
+    for (const entry of new AdmZip(zipPath).getEntries()) {
+      if (entry.isDirectory) continue;
+      const mode = (entry.attr >>> 16) & 0o777;
+      if (!mode) continue;
+      const target = path.join(dir, entry.entryName);
+      // 目录穿越防护：只允许落在解压根内
+      if (!path.resolve(target).startsWith(path.resolve(dir) + path.sep)) continue;
+      fs.chmodSync(target, mode);
+      if (mode & 0o111) restored++;
+    }
+  } catch (e) {
+    elog("[electron] 按 zip 清单还原权限失败，回退主程序补位:", String(e && e.message || e));
+  }
+
+  if (restored > 0) {
+    elog(`[electron] 已按清单还原 ${restored} 个可执行文件的权限位`);
+  } else {
+    // 兜底：清单无权限信息时，至少保证能启动
+    elog("[electron] zip 未携带权限位，回退为主程序 + 二进制补 0755");
+    forceMode(path.join(dir, BACKEND_EXE), 0o755);
+  }
+  // 无论哪条路径，最后都确保主程序可执行（幂等）
+  forceMode(path.join(dir, BACKEND_EXE), 0o755);
+}
 
 /**
  * 首次启动时把 resources/backend.zip 解压到 userData/backend/<version>/。
@@ -128,6 +190,7 @@ function prepareBackend() {
   fs.mkdirSync(dir, { recursive: true });
   const AdmZip = require("adm-zip");
   new AdmZip(zipPath).extractAllTo(dir, true);
+  ensureBackendExecutable(dir);
   fs.writeFileSync(marker, version);
   backendRoot = dir;
 
@@ -280,13 +343,24 @@ function sanitizeRelaunchArgs(arr) {
  * 让后端（bot/paths.py 的 instances_dir）把实例/数据落在桌面 EXE 旁的
  * instances/ 下，而非后端 onedir 所在的 resources/backend/。源码/onedir 直跑
  * 不注入该变量，实例随 app_root()/instances 自包含分发。
+ *
+ * Linux（deb / rpm）：程序装在 /opt/<pkg>/，属安装包管理范围，升级会整体替换，
+ * 绝不能让数据写进去。此时只注入 QINGCI_DATA_HOME（解析到 XDG 数据目录），
+ * 不注入 QINGCI_APP_DIR —— 后端据此把数据根定在用户数据目录。
  */
 function backendEnv() {
   const env = Object.assign({}, process.env);
   if (!isDev()) {
-    env.QINGCI_APP_DIR = path.dirname(app.getPath("exe"));
     // 数据根独立于安装目录：升级/卸载都不会删
-    if (dataHome) env.QINGCI_DATA_HOME = dataHome;
+    if (dataHome) {
+      env.QINGCI_DATA_HOME = dataHome;
+      if (process.platform !== "win32") {
+        // Linux 不需要（也不应）把数据落到程序目录，显式不设置 QINGCI_APP_DIR
+        delete env.QINGCI_APP_DIR;
+      }
+    } else {
+      env.QINGCI_APP_DIR = path.dirname(app.getPath("exe"));
+    }
   }
   return env;
 }
@@ -337,6 +411,15 @@ function dataDirRecordPaths() {
 
 /** 未选择时的默认数据目录（与安装器默认值保持一致） */
 function defaultDataHome() {
+  if (process.platform !== "win32") {
+    // Linux（deb / rpm 安装版）：数据属于「用户数据」而非配置，按 XDG 规范放
+    // $XDG_DATA_HOME（默认 ~/.local/share）下。不能沿用 appData（= ~/.config）：
+    // 该目录用于配置，把数百 MB 的后端与实例数据放进去不符合发行版惯例，
+    // 也容易被「清理配置目录」的操作误删。
+    // 更不能放在 app.getPath("exe") 旁：那是 /opt/<pkg>/，包升级会整体替换。
+    const xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
+    return path.join(xdgData, PRODUCT_DIR_NAME);
+  }
   const localAppData = process.env.LOCALAPPDATA || app.getPath("appData");
   return path.join(localAppData, PRODUCT_DIR_NAME, "data");
 }

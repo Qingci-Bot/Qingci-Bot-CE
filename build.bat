@@ -89,6 +89,17 @@ if exist "%Root%web\dist\index.html" (
     echo [WARN] web\dist\index.html not found; run 'npm run build' in web\ first
 )
 
+rem config 模板：首次启动创建 default 实例时，create_instance() 以
+rem app_root()\config.example.yaml 为模板生成实例 config.yaml。
+rem frozen 模式下 app_root() 即产物目录，模板不在包里就只能退化成
+rem 仅含平台字段的精简配置，故必须随产物分发。
+if exist "%Root%config.example.yaml" (
+    copy /y "%Root%config.example.yaml" "%AppDir%\config.example.yaml" >nul
+    echo      copied config.example.yaml into output folder
+) else (
+    echo [WARN] config.example.yaml not found; new instances get a minimal default config
+)
+
 rem ---- [2.5/3] bundle Playwright browser ----
 rem Bundle a Chromium browser into dist/ms-playwright so the EXE renders HTML
 rem out of the box (sign-in card) without requiring `playwright install`.
