@@ -74,10 +74,10 @@ dist\qingci-bot-ce\
 .\build-electron.bat
 ```
 
-- 产物（`dist\electron\`）：`Qingci-Bot-CE-<version>-Setup-x64.exe`（NSIS 安装向导，可选安装目录与数据目录）与 `Qingci-Bot.CE-<version>-win.zip`（绿色解压版，无向导；electron-builder 把产品名的空格转成了点）；后端以单个 `backend.zip` 放在 `resources\`，Playwright Chromium 随其一并内置。
+- 产物（`dist\electron\`）：`qingci-bot-ce-<version>-x64-setup.exe`（NSIS 安装向导，可选安装目录与数据目录）与 `qingci-bot-ce-<version>-x64-portable.zip`（绿色解压版，无向导）；后端以单个 `backend.zip` 放在 `resources\`，Playwright Chromium 随其一并内置。命名由 `desktop/electron/package.json` 的 `nsis.artifactName` / `win.artifactName` 决定。
 
 ```powershell
-.\dist\electron\Qingci-Bot-CE-<version>-Setup-x64.exe   # 安装版
+.\dist\electron\qingci-bot-ce-<version>-x64-setup.exe      # 安装版
 # 绿色解压版：解压 zip 后运行其中的 Qingci-Bot CE.exe
 ```
 
@@ -91,10 +91,10 @@ dist\qingci-bot-ce\
 
 Linux 分发**不使用 AppImage**，改为原生包管理的 **deb**（Debian / Ubuntu）与 **rpm**（Fedora / RHEL / openSUSE）。每个发行版格式出两款包：
 
-| 包 | 内容 | 安装位置 | 适用场景 |
+| 包名（deb / rpm 一致） | 内容 | 安装位置 | 适用场景 |
 | --- | --- | --- | --- |
-| `Qingci-Bot-CE` | Electron 桌面壳 + 内嵌后端 | `/opt/Qingci-Bot CE` | 有图形环境的桌面使用 |
-| `Qingci-Bot-CE-server` | headless 后端 + systemd 单元 | `/opt/qingci-bot-ce-server` | 无桌面服务器 / 长期驻留 |
+| `qingci-bot-ce` | Electron 桌面壳 + 内嵌后端 | `/opt/Qingci-Bot CE`（可执行文件 `qingci-bot-ce`） | 有图形环境的桌面使用 |
+| `qingci-bot-ce-server` | headless 后端 + systemd 单元 | `/opt/qingci-bot-ce-server` | 无桌面服务器 / 长期驻留 |
 
 两款包的共同前提是先产出 Python 后端 onedir（`build-linux.sh`，对应 Windows 的 `build.bat`，输出 `dist/qingci-bot-ce/`）。
 
@@ -106,8 +106,8 @@ Linux 分发**不使用 AppImage**，改为原生包管理的 **deb**（Debian /
 cd desktop/electron && npm ci && npx electron-builder --linux deb rpm --publish never
 ```
 
-- 产物：`dist/electron/Qingci-Bot-CE-<version>-x64.deb` 与 `.rpm`（内嵌后端为 `resources/backend.zip`，首次启动解压到数据目录）。
-- 安装：`sudo apt install ./Qingci-Bot-CE-<ver>-x64.deb` 或 `sudo dnf install ./Qingci-Bot-CE-<ver>-x64.rpm`。
+- 产物（`dist/electron/`）：`qingci-bot-ce_<version>_amd64.deb` 与 `qingci-bot-ce-<version>-1.x86_64.rpm`（内嵌后端为 `resources/backend.zip`，首次启动解压到数据目录）。
+- 安装：`sudo apt install ./qingci-bot-ce_<ver>_amd64.deb` 或 `sudo dnf install ./qingci-bot-ce-<ver>-1.x86_64.rpm`。
 - 数据位置：按 XDG 规范落在 `$XDG_DATA_HOME/Qingci-Bot CE`（默认 `~/.local/share/Qingci-Bot CE`），**不在 `/opt` 内**——包升级会整体替换 `/opt` 下的程序文件。
 - 依赖声明：deb/rpm 的 `depends` 见 `desktop/electron/package.json` 的 `build.deb` / `build.rpm`（GTK3 / NSS / libnotify 等 Electron 运行时库）。
 
@@ -116,11 +116,11 @@ cd desktop/electron && npm ci && npx electron-builder --linux deb rpm --publish 
 ### 2. 服务端版（headless + systemd）
 
 ```bash
-bash scripts/pack_linux_server.sh --version 1.20.0          # 同时出 deb 与 rpm
-bash scripts/pack_linux_server.sh --version 1.20.0 --only rpm
+bash scripts/pack_linux_server.sh --version 1.22.0          # 同时出 deb 与 rpm
+bash scripts/pack_linux_server.sh --version 1.22.0 --only rpm
 ```
 
-- 产物：`dist/linux/Qingci-Bot-CE-server_<ver>_<arch>.deb`（文件名按 dpkg 规范）与 `Qingci-Bot-CE-server-<ver>-1.<arch>.rpm`。
+- 产物：`dist/linux/qingci-bot-ce-server_<ver>_amd64.deb`（文件名按 dpkg 规范）与 `qingci-bot-ce-server-<ver>-1.x86_64.rpm`。
 - 布局（遵循 FHS）：程序 `/opt/qingci-bot-ce-server`、实例数据 `/var/lib/qingci-bot-ce-server/instances/<name>`、日志 `/var/log/qingci-bot-ce-server/`。
 - 安装即创建系统用户 `qingci-bot`，注册并 `enable` systemd 单元 `qingci-bot-ce.service`；**首次安装不自动 start**，确认 `config.yaml` 后手动 `systemctl start`。
 - 卸载保留 `/var/lib` 下的实例数据；`apt purge` 才删除。
@@ -128,9 +128,33 @@ bash scripts/pack_linux_server.sh --version 1.20.0 --only rpm
 
 > 构建机需具备 `dpkg-deb`（deb）与 `rpmbuild`（rpm）：缺哪个就跳过哪种格式，用 `--only` 可强制只出一种并在缺失时报错。
 
+## 产物命名与校验
+
+发布产物统一为 **小写包名 + 版本 + 架构**，各格式沿用其生态的分隔符约定（deb 用下划线、rpm 用连字符 + release、Windows 用连字符）：
+
+| 产物 | 文件名 | 包内标识 |
+| --- | --- | --- |
+| 桌面版 deb | `qingci-bot-ce_<ver>_amd64.deb` | `Package: qingci-bot-ce` |
+| 桌面版 rpm | `qingci-bot-ce-<ver>-1.x86_64.rpm` | `Name: qingci-bot-ce` |
+| 桌面版 Windows 安装向导 | `qingci-bot-ce-<ver>-x64-setup.exe` | 产品名 `Qingci-Bot CE` |
+| 桌面版 Windows 便携包 | `qingci-bot-ce-<ver>-x64-portable.zip` | 解压后运行 `Qingci-Bot CE.exe` |
+| 服务端 deb | `qingci-bot-ce-server_<ver>_amd64.deb` | `Package: qingci-bot-ce-server` |
+| 服务端 rpm | `qingci-bot-ce-server-<ver>-1.x86_64.rpm` | `Name: qingci-bot-ce-server` |
+| 校验和 | `SHA256SUMS.txt` | 上述 6 个包的 sha256 |
+
+命名在 `desktop/electron/package.json`（`deb` / `rpm` / `nsis` / `win` 的 `artifactName`、`packageName`）与 `scripts/pack_linux_server.sh` 中定义，并由两处 CI 断言锁定：
+
+- `ci-desktop.yml` 校验 `artifactName` 模板与 `packageName`，防止改回旧的大写命名；
+- `release.yml` 的 `Verify package metadata & filenames` 用 `dpkg-deb -f` / `rpm -qp` 读回包元数据，断言**文件名与包内 Name/Version/Arch 一致**、且恰好 4 个 Linux 产物。
+
+校验和说明：`dist/backend-manifest.sha256` 是**后端构建清单**（冻结后的可执行文件 + Web UI 入口），由 `build.bat` / `build-linux.sh` 生成，不进 Release；发布包的校验和是 `SHA256SUMS.txt`，由 `release.yml` 的 `checksums` job 从 Release 已上传的产物统一计算（`sha256sum -c SHA256SUMS.txt` 可直接校验）。
+
+本地产物落点：桌面版在 `dist/electron/`，服务端包在 `dist/linux/`；CI 会把桌面版归集到 `dist/linux/` 后统一上传（`Collect desktop packages into dist/linux` 步骤），本地构建无需手动搬。
+
 ## 自动发布（GitHub Actions）
 
 打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](../.github/workflows/release.yml)，各平台自动联编：
-- Windows 桌面 EXE（安装版 Setup.exe + 绿色解压 zip，`build.bat` + `build-electron.bat`）
+- Windows 桌面（`qingci-bot-ce-<ver>-x64-setup.exe` + `-portable.zip`，`build.bat` + `build-electron.bat`）
 - Linux deb / rpm 共 4 个产物（`build-linux.sh` + `electron-builder --linux deb rpm` 出桌面版，`scripts/pack_linux_server.sh` 出服务端版）
+- `SHA256SUMS.txt`（两个构建 job 都成功后由 `checksums` job 统一生成）
 - Docker 镜像（tag：`vX.Y.Z` / `X.Y` / `X` / `latest`）

@@ -24,9 +24,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dispatcher 采纳适配器显式 `is_at_bot`**：v12 事件在无 `at_list` 时以事件自带的 `is_at_bot` 为准。QQ 官方群消息只在 @机器人 时推送、正文已被平台去掉 @ 前缀，此前若靠注入伪 `mention` 段来满足触发规则，会把 `@<内部ID>` 混进 `plain_text` 并进入 LLM 提示词
 - 实例管理：`SUPPORTED_PLATFORMS` 与平台覆盖表新增 `qq`；`/api/instances` 的 `adapters` 字段返回 `qq` 启用状态
 
+### 发布产物命名规整化
+
+统一为「小写包名 + 版本 + 架构」，各格式沿用其生态分隔符约定；此前桌面版是大写产品名 + 混合架构名（`Qingci-Bot-CE-1.21.0-amd64.deb` / `Qingci-Bot.CE-1.21.0-win.zip`），与服务端包（`qingci-bot-ce-server_...`）风格割裂：
+
+| 产物 | 旧名 | 新名 |
+| --- | --- | --- |
+| 桌面 deb | `Qingci-Bot-CE-<ver>-amd64.deb` | `qingci-bot-ce_<ver>_amd64.deb` |
+| 桌面 rpm | `Qingci-Bot-CE-<ver>-x86_64.rpm` | `qingci-bot-ce-<ver>-1.x86_64.rpm` |
+| Windows 安装向导 | `Qingci-Bot-CE-<ver>-Setup-x64.exe` | `qingci-bot-ce-<ver>-x64-setup.exe` |
+| Windows 便携包 | `Qingci-Bot.CE-<ver>-win.zip` | `qingci-bot-ce-<ver>-x64-portable.zip` |
+| 服务端 deb / rpm | `qingci-bot-ce-server_...` / `...-1.<arch>.rpm` | 不变（原本已符合约定） |
+
+- `desktop/electron/package.json`：新增 `deb.packageName` / `rpm.packageName` / `linux.executableName`（均为 `qingci-bot-ce`），并给 `deb` / `rpm` / `nsis` / `win` 分别设置 `artifactName` 模板——包内 `Package`/`Name` 与文件名从此一致，Linux 可执行文件名不再带空格
+  - 桌面 deb/rpm 的**包名由 `qingci-bot-ce-desktop` 改为 `qingci-bot-ce`**（此前取自 npm 包名）。从 1.21.0 升级需先移除旧包，否则两者会争用同一安装目录：`sudo apt remove qingci-bot-ce-desktop`（或 `sudo dnf remove qingci-bot-ce-desktop`）后再装新包
+  - `linux.executableName` 设为 `qingci-bot-ce`：可执行文件从 `/opt/Qingci-Bot CE/Qingci-Bot CE` 变为 `/opt/Qingci-Bot CE/qingci-bot-ce`，桌面项随之更新为 `qingci-bot-ce.desktop`（安装目录与数据目录不变）
+- `ci-desktop.yml`：断言从「目标为 deb + rpm」扩展到「命名模板 + packageName + 可执行名」，并禁止旧的大写命名回归
+- `release.yml` 新增 `Verify package metadata & filenames`：用 `dpkg-deb -f` / `rpm -qp` 读回包元数据，断言文件名与 `Name`/`Version`/`Arch` 一致、恰好 4 个 Linux 产物，并打印实际安装路径
+
+### Added（发布校验）
+
+- **`SHA256SUMS.txt`**：新增 `checksums` job，等 Windows 与 Linux 两个构建 job 都成功后，从 Release 下载全部 6 个分发包统一计算 SHA256（`sha256sum -c SHA256SUMS.txt` 可直接校验）。此前 Release 上的 `qingci-bot-ce.sha256` 其实是**后端构建清单**（冻结可执行文件 + Web UI 入口的哈希），名字容易被误读为分发包校验和
+- `build.bat` / `build-linux.sh` 产出的后端清单改名为 `dist/backend-manifest.sha256`，不再作为 Release 资源上传
+
 ### Docs
 
-- README 特性与合规声明补充官方机器人接入路径；ARCHITECTURE 新增 `qq.py` 设计说明；CONFIGURATION 补 `platforms.qq` 字段与对照表；TROUBLESHOOTING 新增「QQ 官方机器人」排查章节（IP 白名单、被动回复时限与条数、富媒体要求、intents 权限）
+- **全量文档更新**：README 新增「下载与分发形态」表（6 个产物 + 校验和 + Docker 镜像）；CONFIGURATION 章节由「OneBot 协议端」扩为「消息平台」，补 Telegram / QQ 官方机器人的分步接入说明与平台限制；PACKAGING 新增「产物命名与校验」章节，修正此前错误的桌面版文件名（`-x64.deb`）与服务端包名（`Qingci-Bot-CE-server`）；SETUP 安装命令改用新包名并补校验和说明；ARCHITECTURE 数据流补齐 OneBot 12 / QQ；DEPLOYMENT 重连章节补齐 QQ 的 Resume 语义；SECURITY 补平台凭据（AppSecret/IP 白名单）管理；CODING_STANDARDS 新增「新增平台适配器（检查清单）」；CONTRIBUTING 发版说明补命名校验与「不要手工上传产物」
 
 ## \[1.21.0] - 2026-11-17（Linux 分发改为 deb / rpm：新增 headless 服务端包，修复三处 Linux 阻断缺陷）
 

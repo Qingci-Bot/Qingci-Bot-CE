@@ -77,7 +77,28 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
 | 插件名 | 小写单词 | `chat`, `imagegen` |
 | 插件模板 | `_` 前缀（不参与加载） | `plugins/_template/` |
 
-## 5. 插件开发约定
+## 5. 新增平台适配器（检查清单）
+
+平台适配器把平台协议翻译成统一的 v12 事件与发送接口，改动面横跨框架、配置、实例与文档，按序改完这 8 处才算接完（以 `qq` 为例）：
+
+1. `bot/core/platforms/<name>.py`：继承 `PlatformAdapter`，实现 `start`/`stop`/`send_msg`/`call_api`/`status_info`，事件经 `emit_event` 上报；
+2. `bot/core/platforms/__init__.py`：导出适配器类；
+3. `bot/core/platforms/base.py` 的 `make_platform()`：按配置构造；
+4. `bot/config.py`：新增 `<Name>Config` 并挂到 `PlatformsConfig`（Web 表单与 JSON Schema 自动生成，敏感字段名含 `secret`/`token` 会自动脱敏）；
+5. `bot/core/composition.py`：加入 `for _attr in (...)` 装配列表；
+6. `bot/instances.py`：`SUPPORTED_PLATFORMS` + `PLATFORM_DEFAULT_OVERLAY` + `_read_platforms()`（实例向导与实例列表的适配器摘要）；
+7. `web/src/views/Instances.vue`（主平台选项 / 适配器标签）与 `Settings.vue`（该平台的配置卡片）；
+8. 文档：README 平台列表、`ARCHITECTURE.md` 适配器章节、`CONFIGURATION.md` 平台表与接入步骤、`TROUBLESHOOTING.md` 排查项。
+
+约定：
+
+- **不按平台名分支**：能力差异用 `PlatformAdapter` 的 `supports_*` 能力位表达，核心代码读能力位而非 `if platform == "x"`。
+- **ID 语义**：核心以整数组织会话与数据表；平台只给不透明字符串 ID 时（如 QQ openid），在适配器内做**稳定哈希映射**（纯函数、带类型前缀），并保留反向表用于回发，不要改数据库 schema。
+- **ID 不可推导时显式声明**：若某类事件天然是对机器人触发但事件里没有 @ 信息（如 QQ 群消息），在事件 dict 里显式给 `is_at_bot`，不要注入伪 `mention` 段污染正文。
+- **平台错误分类**：按平台错误码拆出可区分语义的异常子类（鉴权 / 权限 / 重试窗口 / 判重），让上层能决定「重试」还是「等用户再操作」。
+- **入站去重**：平台可能重复推送同一条消息，按消息 ID 做有界去重。
+
+## 6. 插件开发约定
 
 - 插件入口：模块级 `@on_command(...)` / `@llm_tool(...)` 装饰器，或 `PluginBase` 子类覆写生命周期。
 - 依赖注入：handler 参数按签名自动注入（`MatcherContext`、`Bot`、DI 服务），必要时用 `Depends(...)`。
@@ -87,14 +108,14 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
 - 插件级指标：框架自动记录 Matcher 耗时/错误，无需手动埋点。
 - 旧式回调 `on_message`/`on_notice`/`on_request` 已弃用，新代码一律使用 Matcher。
 
-## 6. 前端约定（`web/`）
+## 7. 前端约定（`web/`）
 
 - Vue 3 组合式 API（`<script setup>`）+ Pinia + Vue Router。
 - 遵守 ESLint + Prettier 规则（`npm run lint` / `npm run format`）。
 - 目录：`views/`（页面）、`components/`（通用组件）、`stores/`（状态）、`router/`（路由）、`composables/`（复用逻辑）、`styles/`（全局样式）。
 - 组件命名：PascalCase 文件或语义化 kebab-case，与目录职责一致。
 
-## 7. Git 约定
+## 8. Git 约定
 
 - 提交信息使用 [Conventional Commits](https://www.conventionalcommits.org/)：
   `feat:` / `fix:` / `docs:` / `refactor:` / `test:` / `chore:` / `perf:` / `build:`。

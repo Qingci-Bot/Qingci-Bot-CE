@@ -55,7 +55,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 >
 > **数据都放在哪**：数据目录（安装时选定）下有 `instances/<实例>/`（配置、数据库、日志）与 `backend/`（后端解压产物）；`%APPDATA%\Qingci-Bot CE\` 只留 Electron 自身的浏览器缓存，`%APPDATA%\Qingci-Bot CE\datadir.txt` 记录你选的数据目录。
 >
-> **Linux 桌面（deb / rpm）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.bat` 的对应脚本）产出 onedir，再经 `electron-builder --linux deb rpm` 打成 deb / rpm 安装包；另有 headless 服务端包（`Qingci-Bot-CE-server`，含 systemd 单元），由 `scripts/pack_linux_server.sh` 产出。**本项目不提供 AppImage**。桌面版数据按 XDG 规范落在 `$XDG_DATA_HOME/Qingci-Bot CE`（默认 `~/.local/share`），可用 `QINGCI_DATA_HOME` 覆盖。详见 [docs/PACKAGING.md](./PACKAGING.md)。
+> **Linux 桌面（deb / rpm）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.bat` 的对应脚本）产出 onedir，再经 `electron-builder --linux deb rpm` 打成 deb / rpm 安装包；另有 headless 服务端包（`qingci-bot-ce-server`，含 systemd 单元），由 `scripts/pack_linux_server.sh` 产出。**本项目不提供 AppImage**。桌面版数据按 XDG 规范落在 `$XDG_DATA_HOME/Qingci-Bot CE`（默认 `~/.local/share`），可用 `QINGCI_DATA_HOME` 覆盖。详见 [docs/PACKAGING.md](./PACKAGING.md)。
 >
 > **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.bat`/`build-linux.sh` 分别出后端、`build-electron.bat`/`electron-builder --linux deb rpm` 出 EXE / deb / rpm，`scripts/pack_linux_server.sh` 另出 headless 服务端 deb / rpm，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](../.github/workflows/release.yml)。
 >
@@ -89,7 +89,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 
 > 桌面 GUI 通过 **Electron 壳**（`desktop/electron`，打包见 `build-electron.bat`）运行：壳 spawn Python 后端（`main.py --backend`）并加载其 Web UI，系统托盘/单实例/启动画面均由 Electron 承担，不再使用 `--desktop`/pywebview。
 
-启动必须绑定一个实例（无全局模式）：未指定 `--instance` 时自动选择默认实例（`default` 优先，其次名称排序第一个）；若实例数为 0 则自动创建 `default` 实例。每个实例是 `instances/<name>/` 下的自包含目录，独立「实例管理」页（`/instances`）支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）；切换会以目标实例重启进程。**创建实例时可绑定主平台**（OneBot / OneBot 12 / Telegram）：创建后系统设置即针对该平台语义落位——OneBot 主平台实例启动反向 WS 服务端（`onebot.enabled`），Telegram 主平台实例自动关闭反向 WS 并启用 Telegram 适配器，`super_admin` / 管理员 / 黑白名单均以平台无关字符串 ID 配置。
+启动必须绑定一个实例（无全局模式）：未指定 `--instance` 时自动选择默认实例（`default` 优先，其次名称排序第一个）；若实例数为 0 则自动创建 `default` 实例。每个实例是 `instances/<name>/` 下的自包含目录，独立「实例管理」页（`/instances`）支持新建/删除/切换/重命名实例（含端口、启用的适配器、数据占用等信息）；切换会以目标实例重启进程。**创建实例时可绑定主平台**（OneBot 11 / OneBot 12 / Telegram / QQ 官方机器人）：创建后系统设置即针对该平台语义落位——OneBot 主平台实例启动反向 WS 服务端（`onebot.enabled`），OneBot 12 / Telegram / QQ 主平台实例自动关闭反向 WS 并启用对应适配器，`super_admin` / 管理员 / 黑白名单均以平台无关字符串 ID 配置（QQ 官方机器人见 [CONFIGURATION.md](./CONFIGURATION.md#qq-官方机器人) 关于 openid 映射的说明）。
 
 启动后访问 `http://127.0.0.1:8080/ui` 进入管理界面。
 
@@ -149,15 +149,15 @@ chmod +x install.sh
 
 ### Linux 发行版包（deb / rpm）
 
-发布页提供两款 Linux 安装包，按发行版选择 `.deb`（Debian / Ubuntu）或 `.rpm`（Fedora / RHEL / openSUSE）：
+发布页提供两款 Linux 安装包，按发行版选择 `.deb`（Debian / Ubuntu）或 `.rpm`（Fedora / RHEL / openSUSE）。文件名形如 `qingci-bot-ce_<ver>_amd64.deb`（桌面版）、`qingci-bot-ce-server_<ver>_amd64.deb`（服务端版），rpm 对应 `qingci-bot-ce-<ver>-1.x86_64.rpm` 与 `qingci-bot-ce-server-<ver>-1.x86_64.rpm`；同页面 `SHA256SUMS.txt` 可用于校验下载完整性（`sha256sum -c SHA256SUMS.txt`）。
 
 **服务端版**（无桌面环境，由 systemd 托管）：
 
 ```bash
 # Debian / Ubuntu
-sudo apt install ./Qingci-Bot-CE-server_<ver>_amd64.deb
+sudo apt install ./qingci-bot-ce-server_<ver>_amd64.deb
 # Fedora / RHEL
-sudo dnf install ./Qingci-Bot-CE-server-<ver>-1.x86_64.rpm
+sudo dnf install ./qingci-bot-ce-server-<ver>-1.x86_64.rpm
 
 sudo systemctl enable --now qingci-bot-ce     # 启动服务
 sudo systemctl status qingci-bot-ce
@@ -172,11 +172,15 @@ sudo journalctl -u qingci-bot-ce -f           # 查看日志
 **桌面版**（图形环境，Electron 壳）：
 
 ```bash
-sudo apt install ./Qingci-Bot-CE-<ver>-x64.deb     # 或 sudo dnf install ./....rpm
+# Debian / Ubuntu
+sudo apt install ./qingci-bot-ce_<ver>_amd64.deb
+# Fedora / RHEL
+sudo dnf install ./qingci-bot-ce-<ver>-1.x86_64.rpm
 ```
 
-- 安装后从应用菜单启动「Qingci-Bot CE」；数据落在 `~/.local/share/Qingci-Bot CE`（XDG 规范，`QINGCI_DATA_HOME` 可覆盖）
+- 安装后从应用菜单启动「Qingci-Bot CE」；程序目录 `/opt/Qingci-Bot CE`（可执行文件 `qingci-bot-ce`），数据落在 `~/.local/share/Qingci-Bot CE`（XDG 规范，`QINGCI_DATA_HOME` 可覆盖）
 - 桌面版依赖 GTK3 / NSS / libnotify 等 Electron 运行时库，安装时会由包管理器自动解析
+- **从 1.21.0 升级**（该版包名为 `qingci-bot-ce-desktop`，1.22.0 起改为 `qingci-bot-ce`）：先移除旧包再装新包，否则两者会争用同一安装目录 —— `sudo apt remove qingci-bot-ce-desktop` / `sudo dnf remove qingci-bot-ce-desktop`；实例数据在 `~/.local/share` 下，不受影响
 
 ## 命令行参数
 

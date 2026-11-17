@@ -142,10 +142,12 @@ fi
 echo "==> [3.4/3] packing backend into single archive..."
 "$PY" scripts/pack_backend.py
 
-# ---------- [3.5/3] SHA256 校验清单 ----------
-echo "==> [3.5/3] generating SHA256 checksums..."
+# ---------- [3.5/3] 后端 SHA256 清单 ----------
+# 这是「后端构建清单」（冻结后的可执行文件 + Web UI 入口），不是发布包校验和；
+# 发布包的 SHA256SUMS.txt 由 release.yml 的 checksums job 对上传产物计算生成。
+echo "==> [3.5/3] generating backend SHA256 manifest..."
 ExeFile="$AppDir/qingci-bot-ce"
-Manifest="$DistDir/qingci-bot-ce.sha256"
+Manifest="$DistDir/backend-manifest.sha256"
 if [ -f "$ExeFile" ]; then
   : > "$Manifest"
   exeHash="$(sha256sum "$ExeFile" | awk '{print $1}')"

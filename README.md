@@ -66,6 +66,24 @@ uv run python main.py --host 127.0.0.1
 > 插件开发、API 接口、前端开发与打包详见 [PLUGIN_DEV.md](./PLUGIN_DEV.md)；独立插件开发
 > SDK：[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) — 零依赖插件开发工具包。
 
+## 下载与分发形态
+
+每个版本发布到 [GitHub Releases](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases)，产物命名统一为「包名 + 版本 + 架构」，各格式沿用其生态的分隔符约定：
+
+| 场景 | 文件 | 说明 |
+| --- | --- | --- |
+| Windows 桌面（推荐） | `qingci-bot-ce-<ver>-x64-setup.exe` | NSIS 安装向导，可选安装目录与数据目录 |
+| Windows 桌面（免安装） | `qingci-bot-ce-<ver>-x64-portable.zip` | 解压即用，解压后运行 `Qingci-Bot CE.exe` |
+| Debian / Ubuntu 桌面 | `qingci-bot-ce_<ver>_amd64.deb` | 应用菜单启动，数据在 `~/.local/share/Qingci-Bot CE` |
+| Fedora / RHEL 桌面 | `qingci-bot-ce-<ver>-1.x86_64.rpm` | 同上 |
+| Debian / Ubuntu 服务端 | `qingci-bot-ce-server_<ver>_amd64.deb` | headless + systemd，装完 `systemctl start qingci-bot-ce` |
+| Fedora / RHEL 服务端 | `qingci-bot-ce-server-<ver>-1.x86_64.rpm` | 同上 |
+| 校验和 | `SHA256SUMS.txt` | `sha256sum -c SHA256SUMS.txt` 校验上述 6 个包 |
+
+Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。安装步骤见 [docs/SETUP.md](./docs/SETUP.md#linux-发行版包deb--rpm)，命名与校验规则见 [docs/PACKAGING.md](./docs/PACKAGING.md#产物命名与校验)。
+
+Docker 镜像同版本发布到 `ghcr.io/qingci-bot/qingci-bot-ce`（tag：`vX.Y.Z` / `X.Y` / `X` / `latest`）。
+
 ***
 
 ## 文档

@@ -25,11 +25,11 @@
 
 ### 数据流
 
-1. **OneBot 11 协议端**（如 LLBot / NapCat / go-cqhttp）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot CE；Telegram 由 `telegram.py` 适配器以 Bot API 长轮询接入
-2. **aiocqhttp** 收到 OneBot 11 事件，经 **v11\_compat**（`bot/core/v11_compat.py`）翻译为 **OneBot 12** 事件（`type`/`detail_type`/`message[]`）；**telegram 适配器**直接将原生更新归一化为 OneBot 12 事件（注入 `platform` 字段），统一分发至 **Dispatcher**
+1. **OneBot 11 协议端**（如 LLBot / NapCat / go-cqhttp）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot CE；**OneBot 12 协议端**（NapCat / Lagrange.OneBot）走独立端口的原生反向 WebSocket；**Telegram** 由 `telegram.py` 以 Bot API 长轮询接入；**QQ 官方机器人**由 `qq.py` 连 QQ 开放平台的 WebSocket 网关
+2. **aiocqhttp** 收到 OneBot 11 事件，经 **v11\_compat**（`bot/core/v11_compat.py`）翻译为 **OneBot 12** 事件（`type`/`detail_type`/`message[]`）；**telegram / onebot12 / qq 适配器**直接将各自原生事件归一化为 OneBot 12 事件（注入 `platform` 字段），统一分发至 **Dispatcher**
 3. **Dispatcher** 以 OneBot 12 事件模型解析出 `MessageContext`（`Message.from_raw` 自动归一化 v11/v12 消息段），按 priority 调度 **PluginManager** 中的 Matcher，匹配 Rule/Permission 后执行 handler
 4. 未匹配则回退到旧式 `on_message`；内置 chat 插件调用 **LLMManager** 生成回复
-5. 回复按 **MessageContext.platform** 路由到对应 **PlatformAdapter**，最终发送回 OneBot 协议端（QQ 用户）或 Telegram 对话；发送层消费 OneBot 12 标准消息段（`send_message` 动作的 `message` 参数），由各适配器映射为平台私有格式
+5. 回复按 **MessageContext.platform** 路由到对应 **PlatformAdapter**，最终发送回 OneBot 协议端（QQ 用户）、Telegram 对话或 QQ 官方机器人（群 / 单聊 openid）；发送层消费 OneBot 12 标准消息段（`send_message` 动作的 `message` 参数），由各适配器映射为平台私有格式
 6. **Web UI** 通过 HTTP/WebSocket 与 API 服务通信，管理配置、插件、日志等（侧边栏展示各平台实时连接状态）
 
 > **多平台原则**：事件在入口归一化为 OneBot 12、回复在出口路由回平台，插件/命令对来源平台完全无感知——一套 Matcher/Rule/Permission 逻辑基于统一事件模型天然支持所有已接入平台。
@@ -97,7 +97,7 @@ Qingci-Bot-CE/
 │   │   ├── bot.py             # Bot 主类（生命周期、事件调度、全局钩子）
 │   │   ├── composition.py     # 组合根（assemble_bot：组件装配 + DI 注册）
 │   │   ├── v11_compat.py      # OneBot 11 事件 → OneBot 12 事件翻译层（双模归一化入口）
-│   │   ├── platforms/         # 多平台适配器（base.py PlatformAdapter 契约 + onebot11.py + onebot12.py + telegram.py）
+│   │   ├── platforms/         # 多平台适配器（base.py PlatformAdapter 契约 + onebot11.py + onebot12.py + telegram.py + qq.py）
 │   │   ├── connection.py      # 兼容再导出（实际实现在 platforms/onebot11.py）
 │   │   ├── dispatcher.py      # 消息分发 + Matcher 调度（MessageContext 引 protocol.context）
 │   │   ├── message.py         # 类型化消息构造器（Message/MessageSegment，仅 OneBot-11 平台兼容用；v12 消息段由 SDK segments 承担）

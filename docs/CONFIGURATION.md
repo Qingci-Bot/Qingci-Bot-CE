@@ -1,10 +1,20 @@
 # 配置参考
 
-> 面向配置：OneBot 11 / 12 协议端接入、LLM 提供商、完整 `config.yaml` 字段说明、
-> 环境变量与进阶功能开关。安装与启动见 [SETUP.md](./SETUP.md)；模板文件
-> [config.example.yaml](../config.example.yaml) 带字段注释，复制为 `config.yaml` 后按需修改。
+> 面向配置：消息平台接入（OneBot 11 / 12、Telegram、QQ 官方机器人）、LLM 提供商、
+> 完整 `config.yaml` 字段说明、环境变量与进阶功能开关。安装与启动见
+> [SETUP.md](./SETUP.md)；模板文件 [config.example.yaml](../config.example.yaml)
+> 带字段注释，复制为 `config.yaml` 后按需修改。
 
-## 配置 OneBot 协议端
+## 配置消息平台
+
+四种平台可并存（各自独立开关），事件统一归一化为 OneBot 12 内部模型，插件对来源平台无感知；回复按事件来源自动路由回对应平台。
+
+| 平台 | 接入方式 | 连接方向 | 配置节 |
+| --- | --- | --- | --- |
+| OneBot 11 | 反向 WebSocket（协议端连本项目） | 入站 | `onebot` |
+| OneBot 12 | 反向 WebSocket（协议端连本项目） | 入站 | `platforms.onebot12` |
+| Telegram | Bot API 长轮询 | 出站 | `platforms.telegram` |
+| QQ 官方机器人 | 开放平台 WebSocket 网关 | 出站 | `platforms.qq` |
 
 ### OneBot 11（默认）
 
@@ -27,6 +37,28 @@
 事件以 OneBot 12 标准格式（`type`/`detail_type`/`message[]`）直接进入核心调度，动作以 JSON-RPC（`send_message` 等）调用——与 v11 相比省去翻译层，回复段原生 v12 表达。群管动作（`set_group_kick` 等 v11 便捷名）由 `_api_action` 映射为 `group.*` 点分命名空间（如 `group.kick`/`group.ban`）——依赖实现端支持此点分扩展约定（NapCat / Lagrange.OneBot 均支持）。
 
 > OneBot 12 机器人在事件的 `self_id`（扁平字段）可能缺失：官方 v12 标准事件携带 `self` 对象（`{platform, user_id}`），本项目优先读取 `self_id`、缺失时回退读 `self.user_id`，无需你额外配置。
+
+### Telegram
+
+创建实例时选择 `Telegram` 主平台（或手动设置 `platforms.telegram.enabled: true`），并在 `platforms.telegram.token` 填入 [@BotFather](https://t.me/BotFather) 发放的 token。本项目以长轮询（`getUpdates`）主动拉取，**不需要公网地址、不需要配置 Webhook**；群聊里需把机器人拉进群并 @ 它，或给机器人管理员权限以接收全部消息（受 Telegram 隐私模式限制）。
+
+### QQ 官方机器人
+
+走 QQ 开放平台（[q.qq.com](https://q.qq.com)）面向开发者的官方机器人接口，与 OneBot 协议端方案并列——不需要部署 NapCat 之类的协议端，也不需要公网回调地址（本项目用 WebSocket 网关主动连出）。
+
+1. 在开放平台创建机器人，进入「开发管理」抄下 **AppID** 与 **AppSecret**（AppSecret 只显示一次）。
+2. 在「开发设置 → IP 白名单」填入部署机的**公网出口 IP**（新增机器人默认开启白名单，不填连不上网关）。
+3. 把 AppID / AppSecret 填到 `platforms.qq`（Web UI「系统设置」或 `config.yaml`），`enabled: true`。
+4. 群聊需先把机器人拉进群；单聊需用户先给机器人发一条消息（官方接口没有好友/群列表，只能被动回复）。
+5. 首次联调建议先开 `sandbox: true`：沙箱环境只收开放平台「沙箱配置」里指定群/单聊的事件，不打扰真实用户。
+
+需要注意的平台限制（不是本项目的行为）：
+
+- **群聊只在 @机器人 时收到消息**，普通聊天不会下发；
+- 被动回复有时效与条数上限：群聊 **5 分钟 / 5 条**、单聊 **60 分钟 / 4 条**，超限后需用户再次发消息；
+- 开放平台下发的是不透明 **openid**，不暴露 QQ 号。本项目把它稳定映射为内部整数 ID，首次出现会打一条 INFO 日志（`QQ 用户首次出现：id=<内部ID>（openid=xxx） 昵称=…`），`super_admin` / 管理员 / 黑白名单按其中的 `id` 填；
+- 附件（图片/语音/视频/文件）以 URL 形式下发，本项目直接作为 v12 媒体段的 `file_id`/`url`，多模态与图片发送可直接使用；
+- 频道（guild）场景使用另一套事件与接口，本适配器未实现。
 
 ## 配置 LLM
 
