@@ -253,7 +253,9 @@ Qingci-Bot-CE/
 
 - **`onebot12.py`**：OneBot 12 平台实现——aiohttp 反向 WebSocket 服务端（`platforms.onebot12.enabled/host/port/access_token` 控制），支持 OneBot 12 实现端（NapCat / Lagrange.OneBot 等）原生接入；事件以 v12 标准格式直通 Dispatcher（注入 `platform: "onebot12"`），动作以 JSON-RPC（`{action, params, echo}`）请求并通过 echo 匹配响应，`send_message` 动作消费 v12 段数组原生表达，与 v11 相比省去翻译层
 
-- 附加平台（Telegram / OneBot 12）启动失败仅记录日志，不阻断主平台（OneBot）可用性
+- **`qq.py`**：QQ 官方机器人实现——走 QQ 开放平台公开接口（`platforms.qq.enabled/app_id/app_secret/sandbox/intents` 控制），AppID + AppSecret 换取 `access_token`（默认 7200 秒，提前 60 秒刷新，`Authorization: QQBot <token>`），经 WebSocket 网关（Hello→Identify/Resume→心跳→Dispatch）收事件、经 OpenAPI v2 发消息。关键设计：① 开放平台下发的是不透明 openid 字符串，而核心以整数 ID 组织会话与数据表，故用 `blake2b("g:"|"u:" + openid)` 映射为 63 位正整数——纯函数计算，重启后同一 openid 仍得同一 ID，会话与统计不漂移；反向表供回发消息还原 openid；② 群消息只在 `@机器人` 时推送且正文已被平台去掉 @ 前缀，事件显式携带 `is_at_bot=True`（Dispatcher 对无 `at_list` 的 v12 事件采纳该字段），避免为触发规则注入伪 `mention` 段污染 `plain_text`；③ 被动回复以事件 `d.id` 作 `msg_id` 并递增 `msg_seq`（平台按 msg_id+msg_seq 判重），群聊 5 分钟/5 条、单聊 60 分钟/4 条，超限抛 `QQPassiveWindowError` 而非硬碰平台；④ 富媒体先 `POST /files` 取 `file_info` 再以 `msg_type=7` 发送，单条消息只承载一个媒体故多图拆条；⑤ 同一消息可能重复推送，按 `d.id` 有界去重；⑥ 错误按鉴权/权限/被动窗口/判重分类
+
+- 附加平台（Telegram / OneBot 12 / QQ 官方机器人）启动失败仅记录日志，不阻断主平台（OneBot）可用性
 
 ### 事件模型（OneBot 12 内核）
 

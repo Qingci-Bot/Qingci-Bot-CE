@@ -19,6 +19,7 @@ const form = reactive({
   platforms: {
     telegram: { name: 'telegram', enabled: false, token: '', poll_interval: 1.0 },
     onebot12: { name: 'onebot12', enabled: false, host: '127.0.0.1', port: 3002, access_token: '' },
+    qq: { name: 'qq', enabled: false, app_id: '', app_secret: '', sandbox: false },
   },
   api_key: '',
 });
@@ -27,6 +28,7 @@ const saving = ref(false);
 const showServerKey = ref(false);
 const showLocalKey = ref(false);
 const showTelegramToken = ref(false);
+const showQqSecret = ref(false);
 const runLogEnabled = ref(true);
 
 // "有未保存更改"提示：开关/表单拨动后与已保存快照不一致即置脏标记，
@@ -67,6 +69,7 @@ function resetForm() {
   const onebot = store.config.onebot || {};
   const telegram = (store.config.platforms || {}).telegram || {};
   const onebot12 = (store.config.platforms || {}).onebot12 || {};
+  const qq = (store.config.platforms || {}).qq || {};
   Object.assign(form, {
     bot: {
       name: bot.name || 'Qingci-Bot CE',
@@ -96,6 +99,13 @@ function resetForm() {
         host: onebot12.host || '127.0.0.1',
         port: onebot12.port || 3002,
         access_token: onebot12.access_token || '',
+      },
+      qq: {
+        name: 'qq',
+        enabled: qq.enabled || false,
+        app_id: qq.app_id || '',
+        app_secret: qq.app_secret || '',
+        sandbox: qq.sandbox || false,
       },
     },
     api_key: store.config.api_key || '',
@@ -128,7 +138,8 @@ async function saveConfig() {
     return;
   }
   // 端口校验：填写了非法端口时明确提示，而不是静默回退默认值
-  if (currentPlatform.value !== 'telegram') {
+  // （Telegram / QQ 官方机器人走外连，不监听本地端口，无需校验）
+  if (!['telegram', 'qq'].includes(currentPlatform.value)) {
     const rawPort =
       currentPlatform.value === 'onebot' ? form.onebot.port : form.platforms.onebot12.port;
     if (rawPort !== '' && rawPort != null) {
@@ -372,6 +383,67 @@ async function saveConfigJson() {
         启用后以 Telegram Bot API 长轮询接入，现有插件/命令零改动可用；回复自动路由到对应平台。
         <strong>修改后需要重启 Bot 才能生效。</strong>Token 已配置时显示为
         <code>***</code>，留空保存不会清空原值。
+      </div>
+    </div>
+
+    <div v-else-if="currentPlatform === 'qq'" class="card fade-in">
+      <div class="card-header">
+        <div class="card-title">QQ 官方机器人连接</div>
+      </div>
+      <div class="platform-cfg">
+        <div class="platform-cfg-head">
+          <div class="form-group" style="margin: 0; flex: 1">
+            <label>QQ 官方机器人（开放平台 Bot API v2）</label>
+            <div class="switch-row">
+              <label class="switch">
+                <input v-model="form.platforms.qq.enabled" type="checkbox" />
+                <span class="slider" />
+              </label>
+              <span class="text-muted" style="font-size: 13px">
+                {{ form.platforms.qq.enabled ? '已启用' : '已停用' }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>AppID</label>
+            <input
+              v-model="form.platforms.qq.app_id"
+              type="text"
+              placeholder="开放平台「开发管理」页获取"
+            />
+          </div>
+          <div class="form-group">
+            <label>AppSecret</label>
+            <input
+              v-model="form.platforms.qq.app_secret"
+              :type="showQqSecret ? 'text' : 'password'"
+              placeholder="仅显示一次，请妥善保存"
+            />
+          </div>
+          <div class="form-group">
+            <label>沙箱环境</label>
+            <label class="switch">
+              <input v-model="form.platforms.qq.sandbox" type="checkbox" />
+              <span class="slider" />
+            </label>
+          </div>
+        </div>
+        <div class="form-group" style="margin-top: 8px">
+          <button class="btn btn-secondary btn-sm" @click="showQqSecret = !showQqSecret">
+            {{ showQqSecret ? '隐藏' : '显示' }} AppSecret
+          </button>
+        </div>
+      </div>
+      <div class="hint-text" style="margin-top: 16px">
+        在
+        <a href="https://q.qq.com" target="_blank" rel="noopener">QQ 开放平台</a> 创建机器人后获取
+        AppID / AppSecret；群聊需把机器人拉进群，单聊需用户先发起会话。 官方机器人<strong
+          >没有好友 / 群列表接口</strong
+        >，且被动回复有时效与条数限制 （群聊 5 分钟 / 5 条，单聊 60 分钟 / 4
+        条），超出后需用户再次发消息。 <strong>修改后需要重启 Bot 才能生效。</strong>AppSecret
+        已配置时显示为 <code>***</code>，留空保存不会清空原值。
       </div>
     </div>
 

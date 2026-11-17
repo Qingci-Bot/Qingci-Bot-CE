@@ -35,6 +35,15 @@ platforms:
     host: 127.0.0.1            # 监听地址
     port: 3002                 # 监听端口（与 onebot.port 区分）
     access_token: ''           # 可选；实现端以 Authorization: Bearer 或 ?access_token= 携带
+  qq:                          # QQ 官方机器人（QQ 开放平台 Bot API v2，默认关闭）
+    enabled: false             # true 启用后经 WebSocket 网关接收群/单聊消息
+    app_id: ''                 # 开放平台 AppID（q.qq.com 创建机器人后获取）
+    app_secret: ''             # 开放平台 AppSecret（仅显示一次，勿泄露）
+    sandbox: false             # true 连接沙箱环境（只收沙箱配置的群/单聊事件）
+    intents: 33554432          # 事件订阅位（默认 1<<25：群消息 + 单聊消息）
+    api_base: ''               # 留空按 sandbox 自动选择正式/沙箱 OpenAPI 地址
+    request_timeout: 30.0      # HTTP 请求超时（秒）
+    max_retries: 2             # 网络传输错误最多重试次数
 market:
   url: https://gitee.com/qingci-bot/Plugin-Market.git  # 插件市场索引仓库（默认指 Gitee 国内镜像，拉取更快；可改 https://github.com/Qingci-Bot/Plugin-Market.git 切换 GitHub 主仓库）
   mirror_url: https://github.com/Qingci-Bot/Plugin-Market.git  # 备用市场源（可选）：主源拉取失败时自动回退（如切回 GitHub 主仓库）

@@ -130,4 +130,4 @@ Qingci-Bot CE 在 OneBot 11 / OneBot 12 两种接入方式下都是**反向 WebS
 
 - **主动重连（仅 Telegram）**：Telegram 是长轮询客户端角色，失败时由本项目按指数退避重试（起始 1.5s，上限 60s，连续失败累加、成功即复位）
 
-断连监控与重连回调内置于 `bot/core/platforms/onebot11.py` / `onebot12.py` / `telegram.py`，无需额外配置。
+断连监控与重连回调内置于 `bot/core/platforms/onebot11.py` / `onebot12.py` / `telegram.py` / `qq.py`，无需额外配置。

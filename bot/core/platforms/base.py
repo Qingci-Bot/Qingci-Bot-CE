@@ -323,6 +323,18 @@ def make_platform(platform_cfg: Any) -> PlatformAdapter | None:
             access_token=str(getattr(platform_cfg, "access_token", "") or ""),
             enabled=enabled,
         )
+    if name == "qq":
+        from .qq import QQAdapter
+
+        return QQAdapter(
+            app_id=str(getattr(platform_cfg, "app_id", "") or ""),
+            app_secret=str(getattr(platform_cfg, "app_secret", "") or ""),
+            sandbox=bool(getattr(platform_cfg, "sandbox", False)),
+            intents=int(getattr(platform_cfg, "intents", 1 << 25) or (1 << 25)),
+            api_base=str(getattr(platform_cfg, "api_base", "") or ""),
+            request_timeout=float(getattr(platform_cfg, "request_timeout", 30.0) or 30.0),
+            max_retries=int(getattr(platform_cfg, "max_retries", 2) or 0),
+        )
     logger.warning(f"未知的平台适配器: {name}")
     return None
 

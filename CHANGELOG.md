@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.22.0] - 2026-11-17（QQ 机器人官方接入：走开放平台公开接口，非协议端方案）
+
+### Added
+
+- **QQ 官方机器人适配器**（`platforms.qq`）：接入 QQ 开放平台（q.qq.com）面向开发者的官方机器人接口，与 OneBot 协议端方案并列，同样不涉及任何逆向或非公开接口
+  - 鉴权与网关：AppID + AppSecret 换取 `access_token`（默认 7200 秒，提前 60 秒刷新），WebSocket 网关 `Hello → Identify/Resume → 心跳 → Dispatch`，断连指数退避并优先 `Resume` 补发遗漏事件；`op=9` 会话失效、关闭码 4004（token 失效）/4900+（会话失效）分别处理
+  - 事件归一化：`GROUP_AT_MESSAGE_CREATE` → `detail_type=group`、`C2C_MESSAGE_CREATE` → `detail_type=private`，附件按 `content_type` 映射为 `image` / `voice` / `video` / `file` 段（URL 同时写入 `file_id` 与 `url`，多模态解析可直接透传）；其余平台事件（好友增删、机器人进出群等）以 meta 事件上报
+  - 发送：文本与富媒体（图片/视频/语音/文件）；富媒体先 `POST /files` 取 `file_info` 再以 `msg_type=7` 发送，公网 URL 直传、本地文件走 base64；被动回复携带事件 `d.id` 作 `msg_id` 并递增 `msg_seq`
+  - 可靠性与可观测性：同一消息按 `d.id` 有界去重（平台可能重复推送）、token 单飞刷新、错误按「鉴权 / 权限 / 被动回复窗口 / 判重」分类为可区分的异常类型，`status_info` 暴露连接状态、连续错误、退避、token 到期、已知会话数
+  - 配置：`platforms.qq.{enabled, app_id, app_secret, sandbox, intents, api_base, request_timeout, max_retries}`；Web UI 实例向导新增「QQ 官方机器人」主平台，系统设置新增对应配置卡片（AppSecret 按敏感字段脱敏显示）
+- **标识映射**：开放平台下发的是不透明 openid 字符串，适配器以 `blake2b("g:"|"u:" + openid)` 稳定映射为 63 位正整数呈现给核心，使会话键、数据表与统计逻辑无需改动即可复用；纯函数计算，重启后同一 openid 仍得同一 ID，会话不漂移
+
+### Changed
+
+- **Dispatcher 采纳适配器显式 `is_at_bot`**：v12 事件在无 `at_list` 时以事件自带的 `is_at_bot` 为准。QQ 官方群消息只在 @机器人 时推送、正文已被平台去掉 @ 前缀，此前若靠注入伪 `mention` 段来满足触发规则，会把 `@<内部ID>` 混进 `plain_text` 并进入 LLM 提示词
+- 实例管理：`SUPPORTED_PLATFORMS` 与平台覆盖表新增 `qq`；`/api/instances` 的 `adapters` 字段返回 `qq` 启用状态
+
+### Docs
+
+- README 特性与合规声明补充官方机器人接入路径；ARCHITECTURE 新增 `qq.py` 设计说明；CONFIGURATION 补 `platforms.qq` 字段与对照表；TROUBLESHOOTING 新增「QQ 官方机器人」排查章节（IP 白名单、被动回复时限与条数、富媒体要求、intents 权限）
+
 ## \[1.21.0] - 2026-11-17（Linux 分发改为 deb / rpm：新增 headless 服务端包，修复三处 Linux 阻断缺陷）
 
 **破坏性变更**：Linux 不再提供 AppImage，改为原生包管理的 **deb**（Debian / Ubuntu）与 **rpm**（Fedora / RHEL / openSUSE）。运行时协议与配置完全不变，仅分发形态变更。
