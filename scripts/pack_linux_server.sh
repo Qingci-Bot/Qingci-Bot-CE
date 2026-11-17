@@ -16,7 +16,9 @@
 #   bash scripts/pack_linux_server.sh --version 1.20.0 --only deb   # 只出 deb
 #   bash scripts/pack_linux_server.sh --prefix /usr/lib/qingci-bot-ce-server
 #
-# 产物：dist/linux/Qingci-Bot-CE-server-<version>-<arch>.deb / .rpm
+# 产物（统一落在 dist/linux/，与桌面版归集后一起上传）：
+#   qingci-bot-ce-server_<version>_<debarch>.deb   如 qingci-bot-ce-server_1.21.0_amd64.deb
+#   qingci-bot-ce-server-<version>-<rel>.<arch>.rpm  如 qingci-bot-ce-server-1.21.0-1.x86_64.rpm
 #
 # 实现说明：不引入 fpm，直接用 dpkg-deb / rpmbuild 原生打包，减少构建机依赖。
 # 构建机缺哪个工具就跳过哪种格式（除非用 --only 显式指定）。

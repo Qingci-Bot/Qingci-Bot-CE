@@ -3,7 +3,12 @@
   "version": "1.21.0",
   "description": "Qingci-Bot CE Electron 桌面壳（Electron + Python 混合架构）",
   "main": "src/main.js",
-  "author": "Qingci-Bot",
+  "homepage": "https://github.com/Qingci-Bot/Qingci-Bot-CE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Qingci-Bot/Qingci-Bot-CE.git"
+  },
+  "author": "Qingci-Bot <https://github.com/Qingci-Bot>",
   "license": "GPL-3.0-or-later",
   "private": true,
   "scripts": {
