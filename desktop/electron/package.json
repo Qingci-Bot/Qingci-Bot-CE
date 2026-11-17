@@ -55,12 +55,13 @@
           ]
         }
       ],
-      "icon": "icon.ico"
+      "icon": "icon.ico",
+      "artifactName": "qingci-bot-ce-${version}-${arch}-portable.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "Qingci-Bot-CE-${version}-Setup-${arch}.exe",
+      "artifactName": "qingci-bot-ce-${version}-${arch}-setup.${ext}",
       "include": "build/installer.nsh"
     },
     "linux": {
@@ -84,7 +85,8 @@
       "description": "Qingci-Bot CE desktop application: Electron shell with embedded Python backend, providing Web UI for bot / LLM configuration and monitoring.",
       "maintainer": "Qingci-Bot <https://github.com/Qingci-Bot>",
       "vendor": "Qingci-Bot",
-      "artifactName": "Qingci-Bot-CE-${version}-${arch}.${ext}"
+      "executableName": "qingci-bot-ce",
+      "artifactName": "qingci-bot-ce_${version}_${arch}.${ext}"
     },
     "deb": {
       "depends": [
@@ -99,7 +101,9 @@
       ],
       "recommends": [
         "libayatana-appindicator3-1"
-      ]
+      ],
+      "packageName": "qingci-bot-ce",
+      "artifactName": "qingci-bot-ce_${version}_${arch}.${ext}"
     },
     "rpm": {
       "depends": [
@@ -115,7 +119,9 @@
       "fpm": [
         "--rpm-rpmbuild-define",
         "_build_id_links none"
-      ]
+      ],
+      "packageName": "qingci-bot-ce",
+      "artifactName": "qingci-bot-ce-${version}-1.${arch}.${ext}"
     }
   },
   "devDependencies": {

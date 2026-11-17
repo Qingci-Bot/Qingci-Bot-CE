@@ -128,6 +128,6 @@ Qingci-Bot CE 在 OneBot 11 / OneBot 12 两种接入方式下都是**反向 WebS
 
 - **重连恢复**：协议端重新连入时触发 `on_reconnect` / `on_connect`（插件级 `on_bot_connect`），自动恢复消息收发
 
-- **主动重连（仅 Telegram）**：Telegram 是长轮询客户端角色，失败时由本项目按指数退避重试（起始 1.5s，上限 60s，连续失败累加、成功即复位）
+- **主动重连（Telegram / QQ 官方机器人）**：这两者是客户端角色（长轮询 / WebSocket 网关），失败时由本项目按指数退避重试（起始 1.5~2s，上限 60s，连续失败累加、成功即复位）；QQ 还会在重连时用 `Resume` 补发断连期间遗漏的事件，`/api/bot/status` 的 `platforms[].session_resumable` 可查会话是否可续
 
 断连监控与重连回调内置于 `bot/core/platforms/onebot11.py` / `onebot12.py` / `telegram.py` / `qq.py`，无需额外配置。

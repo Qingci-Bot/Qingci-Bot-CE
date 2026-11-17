@@ -164,12 +164,13 @@ if not exist "%AppDir%\." (
     exit /b 1
 )
 
-rem ---- [3.5/3] SHA256 checksums ----
-rem For end users to verify distribution integrity / tampering; covers the Web
-rem UI and the EXE itself.
-echo ==^> [3.5/3] generating SHA256 checksums...
+rem ---- [3.5/3] backend SHA256 manifest ----
+rem For end users to verify the frozen backend (EXE + Web UI) inside the package.
+rem 注意：这是「后端构建清单」，不是发布包的校验和；发布包的 SHA256SUMS.txt
+rem 由 release.yml 的 checksums job 对上传产物计算生成。
+echo ==^> [3.5/3] generating backend SHA256 manifest...
 set "ExeFile=%AppDir%\qingci-bot-ce.exe"
-set "Manifest=%DistDir%\qingci-bot-ce.sha256"
+set "Manifest=%DistDir%\backend-manifest.sha256"
 if exist "%ExeFile%" (
     set "EXE_HASH=x"
     for /f "skip=1 delims= tokens=*" %%h in ('certutil -hashfile "%ExeFile%" SHA256') do (
