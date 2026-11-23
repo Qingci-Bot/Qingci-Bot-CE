@@ -29,11 +29,10 @@ updates:
       # 主版本需人工放宽 pyproject 上界并跑完整回归（见 pyproject 依赖注释）
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-      # litellm 的版本窗口是手工维护的安全钉子（见 pyproject 依赖注释），
-      # 自动 PR 只会盲目放宽上界，且会踩到 filelock 冲突：
-      #   1.104.0 ~ 1.109.x  要求 filelock<4.0  ← 与我们的 filelock>=4.2.1 互斥
-      #   ≥ 1.110.0          已放宽为 filelock<5 ← 可升级，但需人工评估并跑回归
-      # 因此交给人工升级；若 litellm 出现 CVE，pip-audit 会在 CI 上直接报警，不会漏。
+      # litellm 的版本窗口手工维护（它属高频 breaking；且历史上被 filelock 约束卡过：
+      # 1.104.0~1.109.x 要求 filelock<4.0，与本项目的 filelock>=4.2.1 互斥）。
+      # 现已升到 1.110（filelock<5），后续仍按 minor 窗口人工升级并跑回归。
+      # 若 litellm 出现 CVE，pip-audit 会在 CI 上直接报警，不会被这条忽略漏掉。
       - dependency-name: "litellm"
 
   # Web UI 前端依赖
