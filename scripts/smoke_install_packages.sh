@@ -210,6 +210,13 @@ else
     || { echo "    [FAIL] 内嵌后端归档缺失"; exit 1; }
   say "内嵌 backend.zip OK"
 
+  # 窗口/托盘图标：electron-builder 的 build/ 是 buildResources，不会进 asar，
+  # 必须靠 extraResources 落到 resources/ 下，否则运行期取不到图标（曾退化
+  # 成系统默认齿轮）。这里直接断产物，防止再次漏打包。
+  test -f "/opt/Qingci-Bot CE/resources/icon.png" \
+    || { echo "    [FAIL] 应用图标未打入 resources/icon.png（窗口/托盘会显示系统默认图标）"; exit 1; }
+  say "窗口/托盘图标 OK"
+
   # 桌面壳本身在容器里起不来（无 X server），但它内嵌的后端是纯 CLI：
   # 解压后跑 --help 能验证「冻结产物在该发行版上可加载」——这正是 glibc
   # 版本错配（如 libstdc++ 需要 GLIBC_2.38）最早暴露的地方。不测这一步，

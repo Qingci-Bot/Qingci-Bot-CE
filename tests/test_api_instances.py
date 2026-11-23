@@ -282,3 +282,23 @@ class TestBuildStartArgs:
         args = _build_start_args("beta")
         assert "--data-dir" not in args
         assert "--config" not in args
+
+
+class TestInstancesRoot:
+    """实例根目录查询：用户装完包最常问「实例存在哪」"""
+
+    def test_returns_absolute_root(self, client, monkeypatch):
+        import api.routes.instances as routes
+
+        monkeypatch.setattr(routes, "instances_dir", lambda: Path("/tmp/qingci-instances-probe"))
+        resp = client.get("/api/instances/root", headers=_headers())
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["path"] == "/tmp/qingci-instances-probe"
+        # 目录不存在时 exists/writable 都应为 False，而不是抛错
+        assert body["exists"] is False
+        assert body["writable"] is False
+
+    def test_requires_auth(self, client):
+        resp = client.get("/api/instances/root")
+        assert resp.status_code == 401
