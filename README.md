@@ -82,7 +82,7 @@ uv run python main.py --host 127.0.0.1
 
 Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。
 
-> **发行版要求**：Linux 包自带 Python 运行时，要求 **glibc ≥ 2.38**（Ubuntu 24.04+ / Fedora 39+）。Ubuntu 22.04（2.35）与 Debian 12（2.36）目前启动会报 `GLIBC_2.38' not found`，请暂用 Docker 镜像或源码运行，详见 [docs/PACKAGING.md](./docs/PACKAGING.md#已知构建机的-glibc-决定运行时下限)。
+> **发行版要求**：Linux 包自带 Python 运行时，要求 **glibc ≥ 2.35**（Ubuntu 22.04+ / Debian 12+ / Fedora 36+）。早期 1.22.0 在 24.04 上构建，导致 22.04 / Debian 12 启动报 `GLIBC_2.38' not found`，1.22.1 已修复；详见 [docs/PACKAGING.md](./docs/PACKAGING.md#构建机的-glibc-决定运行时下限)。
 
 安装步骤见 [docs/SETUP.md](./docs/SETUP.md#linux-发行版包deb--rpm)，命名与校验规则见 [docs/PACKAGING.md](./docs/PACKAGING.md#产物命名与校验)。
 

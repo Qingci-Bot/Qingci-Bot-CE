@@ -61,10 +61,11 @@
 
 ## Linux 安装包
 
-- **装上但启动报 `version \`GLIBC_2.38' not found`**：包内 `_internal/libstdc++.so.6` 来自构建机
-  （ubuntu-24.04），要求 glibc ≥ 2.38。Ubuntu 24.04 / Fedora 41 可用；Ubuntu 22.04、Debian 12
-  会在启动时失败。临时方案：改用 Docker 镜像或源码运行；根因与修复方向见
-  [PACKAGING.md](PACKAGING.md#已知构建机的-glibc-决定运行时下限)。
+- **装上但启动报 `version \`GLIBC_2.38' not found`**：**1.22.0 的已知缺陷**——包内
+  `_internal/libstdc++.so.6` 由构建机（ubuntu-24.04）带入，要求 glibc ≥ 2.38，而 Ubuntu 22.04
+  （2.35）/ Debian 12（2.36）达不到。**升级到 1.22.1 即可**（构建基线已降到 ubuntu-22.04）；
+  无法升级时用 Docker 镜像或源码运行。背景见
+  [PACKAGING.md](PACKAGING.md#构建机的-glibc-决定运行时下限)。
 - **从 1.21.0 升级装不上（文件冲突）**：1.21.0 的桌面包名是 `qingci-bot-ce-desktop`，1.22.0 起改为
   `qingci-bot-ce`，两者争用 `/opt/Qingci-Bot CE`。先 `sudo apt remove qingci-bot-ce-desktop`
   （或 `dnf remove`）再装新包，实例数据在 `~/.local/share/Qingci-Bot CE`，不受影响。

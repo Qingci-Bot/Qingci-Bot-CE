@@ -177,7 +177,7 @@ SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux --only rpm
 UBUNTU_IMAGE=debian:12 SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux --only deb
 ```
 
-### 已知：构建机的 glibc 决定运行时下限
+### 构建机的 glibc 决定运行时下限
 
 PyInstaller 会把**构建机**的 `libstdc++.so.6` / `libgcc_s.so.1` 打进 `_internal/`。在较新的发行版上构建、到较老的发行版运行，会以这种方式失败：
 
@@ -186,16 +186,22 @@ ImportError: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found
   (required by /opt/qingci-bot-ce-server/_internal/libstdc++.so.6)
 ```
 
-1.22.0 的产物由 CI 在 `ubuntu-24.04`（glibc 2.39）构建，实测兼容性：
+因此 Linux 构建基线固定为**最老的受支持发行版** `ubuntu-22.04`（glibc 2.35）：在老系统上构建，产物在新系统上照样能跑，反之不成立——这是 manylinux 的基本规则。
+
+> **1.22.0 的事故记录**：该版在 `ubuntu-latest`（24.04，glibc 2.39）上构建，产物要求 glibc ≥ 2.38，
+> 导致 Ubuntu 22.04（2.35）与 Debian 12（2.36）**装得上但启动即崩**。1.22.1 起基线降到 22.04 修复。
+> 该问题是在引入安装冒烟后才被发现的——硬编码的元数据断言看不出来。
+
+当前兼容矩阵（1.22.1 起，构建基线 glibc 2.35）：
 
 | 目标系统 | glibc | 结果 |
 | --- | --- | --- |
-| Ubuntu 24.04 | 2.39 | ✅ 全部断言通过（含启动与健康检查） |
-| Fedora 41 | 2.40 | ✅ 同上 |
-| Ubuntu 22.04 | 2.35 | ❌ `GLIBC_2.38' not found` |
-| Debian 12 | 2.36 | ❌ 同上 |
+| Ubuntu 22.04 | 2.35 | ✅ 构建基线，CI 每次打包改动都会实测 |
+| Debian 12 | 2.36 | ✅ |
+| Ubuntu 24.04 | 2.39 | ✅ |
+| Fedora 41 | 2.40 | ✅ |
 
-结论：**本地打包请在与目标一致或更老的发行版上进行**。要把支持面下探到 22.04 / Debian 12，需把构建基线降到 `ubuntu-22.04` 并重发版本（构建产物会要求更老的 glibc）。
+改构建基线时的**三处联动**（漏一处就会出现"测的系统与发的产物不匹配"）：`release.yml` 的 `linux-deb-rpm.runner`、`ci.yml` 的 `package-smoke.runner`、`scripts/smoke_install_packages.sh` 的 `UBUNTU_IMAGE` 默认值。
 
 ## 自动发布（GitHub Actions）
 
