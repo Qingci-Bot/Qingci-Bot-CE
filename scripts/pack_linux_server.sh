@@ -54,9 +54,16 @@ if [ -z "$VERSION" ]; then
 fi
 [ -n "$VERSION" ] || { echo "ERROR: 无法确定版本号，请用 --version 指定" >&2; exit 1; }
 
-# deb / rpm 的预发布写法是 `~`（排序在正式版之前）：1.23.0-rc1 → 1.23.0~rc1。
-# 项目内的版本号用 semver / PEP 440 兼容的 `-rcN`（electron-builder 对 deb/rpm
-# 也做同样的 `-` → `~` 转换，见 LinuxTargetHelper.getSanitizedVersion）。
+# 预发布版本有两种写法，分工不同：
+#
+#  - 包元数据（deb 的 Version / rpm 的 Version 字段）必须是 `~`：1.23.0-rc1 → 1.23.0~rc1。
+#    因为 dpkg/apt 的比较规则里 `1.23.0~rc1 < 1.23.0`，而 `1.23.0-rc1 > 1.23.0`
+#    （连字符是 revision 分隔符，会把 rc 排到正式版之后，升级方向就反了）。
+#  - 文件名保持 `-`（即原始 VERSION）：`~` 会被 GitHub 在 release asset 名里
+#    替换成 `.`，于是同一批产物出现 `-rc1`(桌面) 与 `.rc1`(服务端) 两种写法。
+#    文件名不参与版本比较，统一用 `-` 即可。
+#
+# electron-builder 对桌面包内建同样的 `-` → `~` 转换（LinuxTargetHelper.getSanitizedVersion）。
 PKG_VERSION="${VERSION//-rc/~rc}"
 
 [ -d "$BUNDLE_DIR" ] || {
@@ -213,7 +220,7 @@ EOF
 # ── deb ───────────────────────────────────────────────────
 build_deb() {
   local stage="$1"
-  local out="$OUT_DIR/${PKG_NAME}_${PKG_VERSION}_${DEB_ARCH}.deb"
+  local out="$OUT_DIR/${PKG_NAME}_${VERSION}_${DEB_ARCH}.deb"
 
   mkdir -p "$stage/DEBIAN"
   cat > "$stage/DEBIAN/control" <<EOF
@@ -291,7 +298,7 @@ build_rpm() {
   cp -a --no-preserve=timestamps "$stage/." "$srcdir/"
 
   local out
-  out="${PKG_NAME}-${PKG_VERSION}-1.${RPM_ARCH}.rpm"
+  out="${PKG_NAME}-${VERSION}-1.${RPM_ARCH}.rpm"
 
   # 目录归属：程序目录与单元文件归 root；数据/日志目录归服务用户
   # （%files 里单独声明 %attr，避免 rpm 校验属性不一致）
