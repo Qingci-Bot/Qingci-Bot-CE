@@ -197,7 +197,14 @@ jobs:
   linux-deb-rpm:
     name: Linux deb / rpm
     needs: prepare
-    runs-on: ubuntu-latest
+    # 构建基线固定在「最老的受支持发行版」ubuntu-22.04（glibc 2.35），而不是
+    # ubuntu-latest。原因：PyInstaller 会把构建机的 libstdc++/libgcc 打进
+    # _internal/，在 24.04 上构建的产物要求 glibc >= 2.38，导致 Ubuntu 22.04
+    # (2.35) 与 Debian 12 (2.36) 装得上却启动不了。在老系统上构建，产物在新
+    # 系统上照样能跑，反之不成立。
+    # 调整该值时，必须同步 scripts/smoke_install_packages.sh 的 UBUNTU_IMAGE
+    # 与 ci.yml 的 package-smoke runner，否则冒烟测的系统与产物不匹配。
+    runs-on: ubuntu-22.04
     timeout-minutes: 60
     permissions:
       contents: write

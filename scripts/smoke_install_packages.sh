@@ -16,12 +16,14 @@
 #
 # 环境变量：
 #   SMOKE_ENGINE   docker（默认）或 podman
-#   UBUNTU_IMAGE   默认 ubuntu:24.04（与 CI 构建基线同代）
-#   FEDORA_IMAGE   默认 fedora:41
+#   UBUNTU_IMAGE   默认 ubuntu:22.04——构建基线，也是 deb 的目标下限
+#   FEDORA_IMAGE   默认 fedora:41（rpm 侧取在用版本；更老的 Fedora 已 EOL，
+#                  dnf 源不可用，会因基础设施而非兼容性失败）
 #
-# 镜像应始终「不低于构建基线」，否则测的是新系统、发出去的是老包。反过来说，
-# 若把构建基线下调到更老的发行版（例如 ubuntu-22.04），这里也要同步下调，才能
-# 真正覆盖目标用户。两者的对应关系与已知下限见 docs/PACKAGING.md。
+# 镜像应与构建基线**同代**：构建在 ubuntu-22.04 上做，这里就测 22.04。
+# 测系统比构建系统新，等于放过"在老系统上跑不起来"的问题（1.22.0 就是这么
+# 漏掉的：在 24.04 构建、只在 24.04 验证，22.04/Debian 12 全挂）。
+# 详见 docs/PACKAGING.md 的「构建机 glibc 决定运行时下限」。
 #
 # 覆盖的断言：
 #   服务端包：/opt 下的冻结二进制可执行、系统用户已创建、systemd 单元就位、
@@ -53,7 +55,7 @@ while [ $# -gt 0 ]; do
 done
 
 ENGINE="${SMOKE_ENGINE:-docker}"
-UBUNTU_IMAGE="${UBUNTU_IMAGE:-ubuntu:24.04}"
+UBUNTU_IMAGE="${UBUNTU_IMAGE:-ubuntu:22.04}"
 FEDORA_IMAGE="${FEDORA_IMAGE:-fedora:41}"
 SERVER_PKG="qingci-bot-ce-server"
 DESKTOP_PKG="qingci-bot-ce"

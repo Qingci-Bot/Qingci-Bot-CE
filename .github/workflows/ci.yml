@@ -345,7 +345,9 @@ jobs:
     name: Package install smoke (deb / rpm)
     needs: changes
     if: needs.changes.outputs.packaging == 'true'
-    runs-on: ubuntu-latest
+    # 必须与 release.yml 的 linux-deb-rpm 同代（ubuntu-22.04）：这里构建的产物
+    # 要代表真正发出去的东西，否则冒烟测的是另一套构建结果。
+    runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
