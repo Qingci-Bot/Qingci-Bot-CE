@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Linux 桌面版窗口/托盘图标不显示**：`main.js` 从 `__dirname/../build/icon.png` 取图标，而 `build/` 是 electron-builder 的 buildResources，不会打进 asar，打包后路径不存在 → 退化成系统默认图标。改为由 `extraResources` 复制到 `resources/icon.png`，运行时按 `process.resourcesPath` 解析
+- **QQ / Telegram 适配器未配置时被当成故障**：未填 AppID/AppSecret（或 Bot Token）时 `start()` 抛异常，`bot.py` 用 `logger.exception` 记 ERROR 并提示「该平台将不可用」，看起来像崩溃。新增 `PlatformNotConfigured` 区分「未配置」与「真实故障」：前者记 WARNING + 配置指引，`/api/bot/status` 的 `platforms[].reason` 上报原因，侧边栏显示「未配置」而非「离线」
+- **实例管理表格错位**：平台列过窄使「QQ 官方机器人」竖排换行，撑高整行导致操作列不齐；平台/适配器徽章改为 `nowrap` 并给列显式宽度
+- **「关于实例与平台」未包含 QQ**：补上 QQ 官方机器人条目与「未配置」的说明
+- **系统设置「数据管理」排版**：原生 `<input type="file">`（各平台渲染不一致）换成统一按钮 + 文件名展示，恢复行与上方操作按钮对齐，提示文案分段
+
+### Added
+
+- **实例目录可见**：`GET /api/instances/root` 返回实例根目录绝对路径，「实例管理」页顶部直接展示并支持复制；`docs/SETUP.md` 新增「数据与实例存在哪」对照表（源码 / Linux 桌面 / 服务端 / Windows / Docker）
+- **rc 版本走预发布**：tag 含 `rc` 时 Release 自动标记 Pre-release 且不替换 Latest，正式版本照常；deb/rpm 的预发布版本按 `~` 写法（`1.23.0-rc1` → `1.23.0~rc1`），排序在正式版之前，`apt`/`dnf` 升级方向正确。见 CONTRIBUTING「预发布（rc）与正式发布」
+
+### Changed
+
+- 安装冒烟增加**硬超时**（单用例 900s）与包管理器网络上限（apt/dnf 25s 超时、2 次重试）：镜像源不可达时快速失败并给出原因，而不是让 job 挂几十分钟
+
 - **服务端 rpm 的 payload 压缩固定为 zstd-19**：构建基线在 1.22.1 降到 ubuntu-22.04 后，rpmbuild 的默认压缩从 zstd-19 变成 gzip-9，导致同一份内容 server rpm 315 MB、deb 239 MB（1.22.0 时两者基本持平）。现显式指定 `_binary_payload w19.zstdio`（可用 `RPM_PAYLOAD` 覆盖）。同 payload 实测 125.5 MiB → 107.8 MiB（−14.1%）
 
 ### Added

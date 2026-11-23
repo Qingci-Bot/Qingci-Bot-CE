@@ -799,3 +799,19 @@ async def test_dispatcher_ignores_is_at_bot_when_mentions_present(bot):
     }
     ctx = bot.dispatcher.dispatch(event)
     assert ctx.is_at_bot is False
+
+
+# ============ 未配置凭据 ≠ 故障 ============
+
+
+@pytest.mark.asyncio
+async def test_start_without_credentials_raises_not_configured():
+    """未填 AppID/AppSecret 时应抛 PlatformNotConfigured（面板显示「未配置」，不是「启动失败」）"""
+    from bot.core.platforms.base import PlatformNotConfigured
+
+    adapter = QQAdapter(app_id="", app_secret="")
+    with pytest.raises(PlatformNotConfigured) as exc:
+        await adapter.start()
+    # 提示里要给出可操作的指引，而不是只说失败
+    assert "AppID" in str(exc.value)
+    assert adapter.is_connected is False

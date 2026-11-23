@@ -87,6 +87,23 @@ scripts/relock_dependabot_pr.sh <PR号> --yes    # 确认后提交并推送
 > 要让自动修复后 CI 自动重跑，需要一个 PAT 或 GitHub App token 存为 secret——
 > 在补齐该 secret 之前，本地脚本是可靠的那一半。
 
+### 预发布（rc）与正式发布
+
+版本号里带 `rc` 就是预发布，不带就是正式发布——**由 tag 决定，不需要改 workflow**：
+
+```bash
+python scripts/bump_version.py 1.23.0-rc1   # 各文件版本同步为 1.23.0-rc1
+git tag -a v1.23.0-rc1 -m "v1.23.0-rc1"
+git push origin v1.23.0-rc1                  # → GitHub Release 标记为 Pre-release
+```
+
+- `rc` 版本：GitHub Release 标记 **Pre-release**，且**不替换 Latest**（正式版下载入口仍指向稳定版）
+- 正式版本：正常 Release，自动成为 Latest
+- 打包侧：deb / rpm 的预发布写法是 `~`，因此 `1.23.0-rc1` 在包元数据与文件名里会写成
+  `1.23.0~rc1`（排序在 `1.23.0` 之前，`apt` / `dnf` 升级方向正确）。electron-builder 对
+  deb/rpm 内建同样的 `-` → `~` 转换，`scripts/pack_linux_server.sh` 用同样规则处理服务端包
+- rc 的 CHANGELOG 段落照常写在 `[1.23.0-rc1]` 下；正式发布时再补 `[1.23.0]`
+
 ## 开发环境
 
 ### 后端

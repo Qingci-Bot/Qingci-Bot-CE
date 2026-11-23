@@ -365,6 +365,15 @@ function backendEnv() {
   return env;
 }
 
+// 图标解析：electron-builder 把 build/ 当作 buildResources，不会打进 asar，
+// 所以打包后 __dirname/../build/icon.png 并不存在（窗口与托盘会退化成系统默认图标）。
+// 图标改由 extraResources 复制到 resources/icon.png，这里按运行环境择一。
+function resolveIconPath() {
+  const packaged = path.join(process.resourcesPath, "icon.png");
+  if (fs.existsSync(packaged)) return packaged;
+  return path.join(__dirname, "..", "build", "icon.png");
+}
+
 function makeWindow({ error = false } = {}) {
   const win = new BrowserWindow({
     width: error ? 640 : 1100,
@@ -373,7 +382,7 @@ function makeWindow({ error = false } = {}) {
     minHeight: error ? 300 : 600,
     title: "Qingci-Bot CE",
     autoHideMenuBar: true,
-    icon: path.join(__dirname, "..", "build", "icon.png"),
+    icon: resolveIconPath(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -569,7 +578,7 @@ function launchError(msg) {
 }
 
 function showTray() {
-  const iconPath = path.join(__dirname, "..", "build", "icon.png");
+  const iconPath = resolveIconPath();
   const icon = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
   tray = new Tray(icon);
   tray.setToolTip("Qingci-Bot CE");

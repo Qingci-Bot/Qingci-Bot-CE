@@ -54,6 +54,11 @@ if [ -z "$VERSION" ]; then
 fi
 [ -n "$VERSION" ] || { echo "ERROR: 无法确定版本号，请用 --version 指定" >&2; exit 1; }
 
+# deb / rpm 的预发布写法是 `~`（排序在正式版之前）：1.23.0-rc1 → 1.23.0~rc1。
+# 项目内的版本号用 semver / PEP 440 兼容的 `-rcN`（electron-builder 对 deb/rpm
+# 也做同样的 `-` → `~` 转换，见 LinuxTargetHelper.getSanitizedVersion）。
+PKG_VERSION="${VERSION//-rc/~rc}"
+
 [ -d "$BUNDLE_DIR" ] || {
   echo "ERROR: 后端 onedir 不存在: $BUNDLE_DIR" >&2
   echo "       先执行 ./build-linux.sh 产出后端" >&2
@@ -208,12 +213,12 @@ EOF
 # ── deb ───────────────────────────────────────────────────
 build_deb() {
   local stage="$1"
-  local out="$OUT_DIR/${PKG_NAME}_${VERSION}_${DEB_ARCH}.deb"
+  local out="$OUT_DIR/${PKG_NAME}_${PKG_VERSION}_${DEB_ARCH}.deb"
 
   mkdir -p "$stage/DEBIAN"
   cat > "$stage/DEBIAN/control" <<EOF
 Package: $PKG_NAME
-Version: $VERSION
+Version: $PKG_VERSION
 Section: net
 Priority: optional
 Architecture: $DEB_ARCH
@@ -286,13 +291,13 @@ build_rpm() {
   cp -a --no-preserve=timestamps "$stage/." "$srcdir/"
 
   local out
-  out="${PKG_NAME}-${VERSION}-1.${RPM_ARCH}.rpm"
+  out="${PKG_NAME}-${PKG_VERSION}-1.${RPM_ARCH}.rpm"
 
   # 目录归属：程序目录与单元文件归 root；数据/日志目录归服务用户
   # （%files 里单独声明 %attr，避免 rpm 校验属性不一致）
   cat > "$topdir/SPECS/${PKG_NAME}.spec" <<EOF
 Name:           $PKG_NAME
-Version:        $VERSION
+Version:        $PKG_VERSION
 Release:        1%{?dist}
 Summary:        Qingci-Bot CE server (headless bot framework)
 License:        GPL-3.0-or-later

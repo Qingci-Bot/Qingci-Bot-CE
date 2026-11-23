@@ -91,11 +91,14 @@ say() { echo "    [$kind] $*"; }
 install_pkg() {
   if [ "$fmt" = "deb" ]; then
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq
+    # 超时/重试显式收紧：默认值遇到不可达镜像会挂很久，看起来就像卡死
+    APT_OPTS=(-o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=2)
+    apt-get "${APT_OPTS[@]}" update -qq
     # 用 apt 而非 dpkg -i：让依赖解析真正走一遍（缺依赖就是要在这里失败）
-    apt-get install -y -qq "$pkg"
+    apt-get "${APT_OPTS[@]}" install -y -qq "$pkg"
   else
-    dnf install -y -q "$pkg"
+    # 同上：Fedora 镜像不可达时 dnf 会反复重试，必须设上限才能快速暴露问题
+    dnf install -y -q --setopt=timeout=25 --setopt=retries=2 --setopt=install_weak_deps=False "$pkg"
   fi
 }
 
@@ -241,12 +244,18 @@ run_case() {
   pkgdir="$(cd "$(dirname "$pkg")" && pwd)"
   echo ""
   echo "==> [$fmt/$kind] $name  ($image)"
-  "$ENGINE" run --rm "${SEC_ARGS[@]}" \
+  # 硬上限：单个用例 15 分钟。宁可失败并打印到哪一步，也不要让 job 挂几十分钟。
+  timeout 900 "$ENGINE" run --rm "${SEC_ARGS[@]}" \
     -v "${pkgdir}:/pkgs:ro" \
     "$image" \
     bash -c "$INNER" _ "/pkgs/${name}" "$fmt" "$kind" \
     || {
-      echo "[FAIL] $name 冒烟未通过" >&2
+      rc=$?
+      if [ "$rc" -eq 124 ]; then
+        echo "[FAIL] $name 冒烟超时（900s）——通常是容器内包管理器访问镜像源超时" >&2
+      else
+        echo "[FAIL] $name 冒烟未通过" >&2
+      fi
       exit 1
     }
   echo "    OK: $name"

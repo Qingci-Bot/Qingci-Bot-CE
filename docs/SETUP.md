@@ -186,6 +186,21 @@ sudo dnf install ./qingci-bot-ce-<ver>-1.x86_64.rpm
 - 桌面版依赖 GTK3 / NSS / libnotify 等 Electron 运行时库，安装时会由包管理器自动解析
 - **从 1.21.0 升级**（该版包名为 `qingci-bot-ce-desktop`，1.22.0 起改为 `qingci-bot-ce`）：先移除旧包再装新包，否则两者会争用同一安装目录 —— `sudo apt remove qingci-bot-ce-desktop` / `sudo dnf remove qingci-bot-ce-desktop`；实例数据在 `~/.local/share` 下，不受影响
 
+## 数据与实例存在哪
+
+实例（`instances/<name>/`，含 config.yaml、plugins、data）**不在安装目录里**，按运行方式落在不同位置：
+
+| 运行方式 | 实例根目录 |
+| --- | --- |
+| 源码运行（`uv run python main.py`） | 仓库根目录下的 `instances/` |
+| Linux 桌面版（deb / rpm） | `~/.local/share/Qingci-Bot CE/instances`（遵循 `XDG_DATA_HOME`） |
+| Linux 服务端版（deb / rpm） | `/var/lib/qingci-bot-ce-server/instances`（systemd 单元固定 `QINGCI_DATA_HOME`） |
+| Windows 安装版 | 安装向导里选定的数据目录下 `instances/`（默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`） |
+| Docker | 容器内 `/data/instances`，由 volume 挂载 |
+| 任意 | 设置了 `QINGCI_DATA_HOME` 时以它为准 |
+
+Web UI 的「实例管理」页顶部会直接显示当前的实例根目录路径（带复制按钮），不必再靠猜。
+
 ## 命令行参数
 
 | 参数                   | 说明                                                 | 默认值                     |
