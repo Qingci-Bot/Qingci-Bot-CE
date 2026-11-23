@@ -7,10 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.22.3-rc2] - 2026-11-23（修复 rc1 的启动崩溃；首个可用的 1.22.3 预发布）
+
+**rc1 请勿使用**：桌面版装完直接显示「启动失败」。本版修复该问题，并同时带上 rc1 之后合入的两处发布链修复。
+
 ### Fixed
 
-- **rc 预发布判定失效**：`prepare` job 里引用了 `needs.prepare.outputs.prerelease`，而 `needs` 上下文不含当前 job 自身 → 表达式恒为空、判断恒假，导致 v1.22.3-rc1 被创建成正式版并抢走 Latest。改为就地由版本号判定，`--prerelease --latest=false` 才真正生效
-- **rc 产物文件名写法不一致**：服务端包文件名带 `~rc1`，上传时被 GitHub 替换为 `.rc1`，与桌面端的 `-rc1` 不统一。文件名改用原始版本号（`-rc1`），包元数据仍保留 `~rc1`（`1.22.3~rc1 < 1.22.3`，排序与升级方向正确）
+- **未配置 QQ / Telegram 时后端起崩（rc1 的阻塞缺陷）**：`PlatformNotConfigured` 被放进了 `if TYPE_CHECKING:` 块（类型检查专用导入），运行时不存在，于是「未配置」这个默认状态在 `except` 子句求值时抛 `NameError`，后端退出 1、桌面壳显示「启动失败」。改为模块级运行时导入；现在未配置时按设计降级——`/api/bot/status` 的 `platforms[].reason` 上报原因、`connected=false`、后端继续运行。新增回归测试（已做变异验证），并对全仓 AST 扫描确认无同类隐患
+- **rc 预发布判定失效**：release 流程在 `prepare` job 内部引用了 `needs.prepare` 的输出，而 `needs` 上下文不含当前 job 自身 → 判断恒假，导致 rc 被创建成正式版并抢走 Latest。改为就地由版本号判定
+- **rc 产物文件名写法不一致**：服务端包文件名带 `~rc1`，上传时被 GitHub 改写为 `.rc1`，与桌面端 `-rc1` 不统一。文件名改用原始版本号，包元数据仍保留 `~rc1`（`1.22.3~rc1 < 1.22.3`，排序与升级方向正确）
+
+## \[1.22.3-rc2] - 2026-11-23（修复 rc1 的启动崩溃）
+
+**rc1 请勿使用**：桌面版装完直接显示「启动失败」。根因是 `PlatformNotConfigured` 被放进了
+`if TYPE_CHECKING:` 块（类型检查专用导入），运行时不存在，于是「QQ 未配置」这个默认状态
+在 `except` 子句求值时抛 `NameError`，整个后端退出（exit 1）。
+
+### Fixed
+
+- `bot/core/bot.py` 改为模块级运行时导入 `PlatformNotConfigured`；未配置 QQ / Telegram 时按设计降级——`/api/bot/status` 的 `platforms[].reason` 上报原因、`connected=false`、后端继续运行
+- 新增回归测试：断言该异常类在 `bot.core.bot` 中运行时可取（已做变异验证：移回 `TYPE_CHECKING` 则测试失败）；并对全仓做 AST 扫描，确认没有其他 `except` 使用仅存在于 `TYPE_CHECKING` 的名字
 
 ## \[1.22.3-rc1] - 2026-11-23（Linux 桌面版实测反馈修复；发布流程支持 rc 预发布）
 
