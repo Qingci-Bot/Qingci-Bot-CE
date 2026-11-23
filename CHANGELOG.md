@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 安装冒烟增加**硬超时**（单用例 900s）与包管理器网络上限（apt/dnf 25s 超时、2 次重试）：镜像源不可达时快速失败并给出原因，而不是让 job 挂几十分钟
+- **安装冒烟改为并行执行 4 个用例**：此前 server/desktop × deb/rpm 串行，每个都要在干净容器里装 240~355MB 包再冷启动一次后端，累计 20 分钟以上——表现为「job 一直 in_progress」，容易被误判成卡死。并行后墙钟 ≈ 最慢的那个用例；每条断言再带「用例内已耗时」前缀，卡住时能直接看出停在哪个断言
+- **CI 加入并发取消**：`ci.yml` / `ci-desktop.yml` / `ci-web.yml` 均设 `concurrency`（同一 PR 的新推送取消旧运行，main 上的推送不取消）。此前一次修复连推 4 次就会并行 4 条完整 CI，浪费 runner 且状态难判读
 
 - **服务端 rpm 的 payload 压缩固定为 zstd-19**：构建基线在 1.22.1 降到 ubuntu-22.04 后，rpmbuild 的默认压缩从 zstd-19 变成 gzip-9，导致同一份内容 server rpm 315 MB、deb 239 MB（1.22.0 时两者基本持平）。现显式指定 `_binary_payload w19.zstdio`（可用 `RPM_PAYLOAD` 覆盖）。同 payload 实测 125.5 MiB → 107.8 MiB（−14.1%）
 

@@ -31,6 +31,13 @@ on:
     # 改用 changes job + 条件执行：未命中路径的 job 输出 Skipped 状态——
     # 分支保护将 Skipped 计为通过，既上报了必需检查又免跑无关全量构建。
 
+# 同一 PR 的新推送取消旧运行：此前一次修复连推 4 次，就有 4 条 CI 并行跑
+# （每条都要 20 分钟以上的安装冒烟），既浪费 runner 又让状态难判断。
+# main 上的推送不取消——那可能是发版前的最后验证，取消会留下半截记录。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   changes:
     name: Detect changed paths
