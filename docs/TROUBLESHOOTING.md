@@ -59,6 +59,20 @@
 - 数据目录：安装版由向导选定；Linux 桌面版（deb/rpm）落在 `~/.local/share/Qingci-Bot CE`；服务端包固定在 `/var/lib/qingci-bot-ce-server`；容器用 `QINGCI_DATA_HOME` 指向可写位置；
 - 一键部署、CLI 参数与实例目录布局见 [SETUP.md](./SETUP.md)。
 
+## Linux 安装包
+
+- **装上但启动报 `version \`GLIBC_2.38' not found`**：包内 `_internal/libstdc++.so.6` 来自构建机
+  （ubuntu-24.04），要求 glibc ≥ 2.38。Ubuntu 24.04 / Fedora 41 可用；Ubuntu 22.04、Debian 12
+  会在启动时失败。临时方案：改用 Docker 镜像或源码运行；根因与修复方向见
+  [PACKAGING.md](PACKAGING.md#已知构建机的-glibc-决定运行时下限)。
+- **从 1.21.0 升级装不上（文件冲突）**：1.21.0 的桌面包名是 `qingci-bot-ce-desktop`，1.22.0 起改为
+  `qingci-bot-ce`，两者争用 `/opt/Qingci-Bot CE`。先 `sudo apt remove qingci-bot-ce-desktop`
+  （或 `dnf remove`）再装新包，实例数据在 `~/.local/share/Qingci-Bot CE`，不受影响。
+- **桌面图标/命令找不到**：桌面包会建 `/usr/bin/qingci-bot-ce` 软链与
+  `/usr/share/applications/qingci-bot-ce.desktop`；若菜单未刷新，执行 `update-desktop-database`。
+- **服务端装完没有自动启动**：设计如此——安装只 `enable` 单元，首次启动前请确认
+  `/var/lib/qingci-bot-ce-server/instances/default/config.yaml`，再 `sudo systemctl start qingci-bot-ce`。
+
 ## 能力自动降级
 
 | 现象 | 原因与处理 |

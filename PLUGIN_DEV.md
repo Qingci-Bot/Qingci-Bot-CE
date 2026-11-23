@@ -166,6 +166,26 @@ plugin.enabled  # bool，向后兼容：LOADING/LOADED 为 True
 | `self.i18n`            | `I18n`                | 国际化翻译器（`self._ = self.i18n.t`） |
 | `self.data_dir`        | `Path`                | 插件专属数据目录（自动创建）                 |
 
+### 平台差异（写跨平台插件必读）
+
+事件模型是统一的（OneBot 12），但**各平台的能力与 ID 语义并不等价**。以下是接入 OneBot 之外的平台时容易踩的点：
+
+| 维度 | OneBot 11 / 12（协议端） | Telegram | QQ 官方机器人 |
+| --- | --- | --- | --- |
+| `ctx.user_id` / `ctx.group_id` | 真实 QQ 号 / 群号（整数） | Telegram 数字 ID | **由 openid 稳定哈希得到的整数**，不是 QQ 号 |
+| 群聊触发 | 按 `bot.trigger_mode`（默认需 @） | 需 @Bot（或给管理员权限） | **天然只在 @机器人 时收到消息**，正文已去掉 @ 前缀 |
+| 群管 API | 完整（踢人/禁言/名片等） | 无 | **无**（`call_api` 对群管动作抛 `NotImplementedError`） |
+| 主动发消息 | 任意会话 | 需已有 chat_id | 仅能回复**来过消息**的会话，且受被动回复窗口限制（群 5 分钟/5 条，单聊 60 分钟/4 条） |
+| 消息 ID | 整数 | 整数 | 字符串（`ROBOT1.0_...`），`reply` 段可用 |
+| 重复推送 | 少见 | 无 | 常见，适配器已按消息 ID 去重 |
+
+实践建议：
+
+- **不要假设 ID 可读或可枚举**。QQ 官方机器人拿不到 QQ 号，`ctx.user_id` 是哈希值；要持久化用户标识就用 `ctx.user_id`（同一用户稳定），需要与开放平台对齐时读 `ctx.sender["openid"]`。
+- **不要假定群管能力存在**。调用前判断 `self.bot.platforms[ctx.platform].supports_request_approval` 等能力位，或捕获 `NotImplementedError` 给出友好提示。
+- **主动推送不要写死在业务逻辑里**。QQ 侧被动回复窗口过期后可能直接失败，应捕获 `QQPassiveWindowError`（`bot.core.platforms.qq`）并向用户提示"再发一条消息"。
+- 平台特有事件（Telegram 的 `message_edited` / `callback_query`，QQ 的群机器人增删等）都以扩展 `notice` / meta 事件上报，用 `on_notice()` 消费即可，不会污染消息链路。
+
 ## 依赖注入容器（DI Container）
 
 框架内置轻量级 DI 容器 `bot.core.di`，按类型自动注入服务。插件只需声明类型注解即可：

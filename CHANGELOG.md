@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Added
+
+- **分发包安装冒烟**（`scripts/smoke_install_packages.sh`）：把 deb / rpm 真正装进目标发行版容器（Ubuntu / Fedora），断言"装得上 → 布局对 → 跑得起来 → 卸得干净"——服务端包含 systemd 单元路径、系统用户、headless 启动后 `/api/bot/health` 返回 200、`remove` 保留实例数据而 `purge` 才清 `/var/lib`；桌面包含 `/usr/bin` 软链、`.desktop` 条目、内嵌 `backend.zip` 解压后主程序**可运行**
+  - `ci.yml` 新增 `package-smoke` job（仅在打包链路输入变化时运行，约 12 分钟），`release.yml` 在**上传前**强制执行，装不上的包不再可能发出去
+  - 此前只有 `dpkg-deb -f` / `rpm -qp` 的元数据断言，证明的是"包名版本写对了"，证明不了"用户装得上"
+
+### Known issues
+
+- **Ubuntu 22.04 / Debian 12 无法运行 1.22.0 的安装包**：包内 `_internal/libstdc++.so.6` 由构建机（ubuntu-24.04）带入，要求 **glibc ≥ 2.38**，上述系统（2.35 / 2.36）在启动时抛 `ImportError: version 'GLIBC_2.38' not found`。已在 README / SETUP / TROUBLESHOOTING / PACKAGING 如实标注并给出 Docker 兜底；修复方向是把构建基线降到 `ubuntu-22.04` 后重发补丁版
+  - 实测矩阵（1.22.0 产物）：Ubuntu 24.04 ✅ / Fedora 41 ✅ / Ubuntu 22.04 ❌ / Debian 12 ❌
+
+### Docs
+
+- 新增「安装冒烟」与「构建机 glibc 决定运行时下限」章节（PACKAGING）；SETUP 补发行版兼容性提示；TROUBLESHOOTING 新增「Linux 安装包」排查段（GLIBC 报错、1.21.0 升级冲突、图标/命令缺失、服务未自启）；README 下载表补 glibc 要求
+
 ## \[1.22.0] - 2026-11-17（QQ 机器人官方接入：走开放平台公开接口，非协议端方案）
 
 ### Added
