@@ -79,7 +79,7 @@ build = [
 ]
 dev = [
     "qingci-bot-ce[test,build,vector,render]",
-    "ruff==0.17.5",
+    "ruff==0.17.6",
     "mypy>=1.0",
 ]
 
