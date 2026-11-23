@@ -1621,3 +1621,24 @@ def test_status_info_fields():
 
 def _telegram_404() -> TelegramAPIError:
     return TelegramNotFoundError("Telegram API 错误 (m): 404", error_code=404, description="404")
+
+
+# ============ 「未配置」必须是运行时可见的异常类 ============
+
+
+def test_bot_module_resolves_platform_not_configured_at_runtime():
+    """Bot.start 的 `except PlatformNotConfigured` 必须能在运行时解析。
+
+    v1.22.3-rc1 的教训：该名字被放进了 `if TYPE_CHECKING:` 块，运行时不存
+    在，于是「QQ 未配置」这一默认状态触发 except 求值时抛 NameError，整个后
+    端起崩、桌面壳报「启动失败」。这里直接锁定运行时可见性——比只测适配器
+    自身抛异常更能抓住这类问题。
+    """
+    import bot.core.bot as bot_module
+    from bot.core.platforms.base import PlatformNotConfigured as base_exc
+
+    assert hasattr(bot_module, "PlatformNotConfigured"), (
+        "bot.core.bot 运行时取不到 PlatformNotConfigured——"
+        "若它被移回 TYPE_CHECKING 块，except 子句会在求值时抛 NameError"
+    )
+    assert bot_module.PlatformNotConfigured is base_exc

@@ -23,6 +23,11 @@ from ..plugin.protocol.events import parse_event
 from ..plugin.watcher import PluginWatcher
 from .di import DIContainer
 from .dispatcher import MessageDispatcher
+
+# 用在 except 子句里，必须是运行时导入——放进 TYPE_CHECKING 会让
+# `except PlatformNotConfigured` 求值时抛 NameError，把「未配置 QQ」这个
+# 正常状态变成整个后端起崩（v1.22.3-rc1 实测）。
+from .platforms.base import PlatformNotConfigured
 from .scope import get_scope
 from .tasks import spawn_background_task
 
@@ -35,7 +40,7 @@ if TYPE_CHECKING:
     from ..plugin.protocol.ratelimit import RateLimiter
     from ..rag import KnowledgeStore
     from .event_bus import EventBus
-    from .platforms.base import PlatformAdapter, PlatformNotConfigured
+    from .platforms.base import PlatformAdapter
     from .platforms.onebot11 import OneBotConnection
     from .scheduler import BotScheduler
     from .session_state import SessionStateManager
