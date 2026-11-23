@@ -7,13 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.22.2] - 2026-11-23（依赖维护：litellm 解除 1.103 锁定，桌面/前端/构建链跟随升级）
+
+本版无功能变更，只有依赖升级。所有升级都跑了全量测试，改动桌面壳的还过了补丁包安装冒烟。
+
 ### Changed
 
 - **litellm 1.103.10 → 1.110.2**：解除此前「锁死 1.103」的限制——1.104.0~1.109.x 会把 `filelock` 钉成 `<4.0`，与本项目 `filelock>=4.2.1,<5`（4.2.1 修了 3 个 CVE）互斥；**1.110.0 起改为 `filelock<5`**，冲突消失
   - 用到的 7 个 API 逐个核验存在且可用：`acompletion` / `aembedding` / `aimage_generation` / `token_counter` / `get_model_info` / `suppress_debug_info` / `set_verbose`
-  - `get_model_info` 的 `supports_function_calling`、`max_input_tokens` 对 gpt-4o-mini / deepseek-chat / claude-sonnet 返回值与升级前一致（tool-calling 能力探测不受影响）
-  - 全量测试 804 passed；`pydantic` 仍解析为 2.13.4（锁文件按 Python 版本分段，3.12 取该版本）
-  - `dependabot.yml` 对 litellm 的忽略规则保留（版本窗口继续人工维护），理由改为「高频 breaking + 按 minor 窗口人工升级」
+  - `get_model_info` 的 `supports_function_calling` / `max_input_tokens` 对 gpt-4o-mini / deepseek-chat / claude-sonnet 取值与升级前一致（tool-calling 能力探测不受影响）
+  - `dependabot.yml` 对 litellm 的忽略规则保留（窗口继续人工维护），理由改为「高频 breaking + 按 minor 窗口人工升级」
+
+### 依赖升级
+
+| 依赖 | 旧 → 新 | 影响面 | 验证 |
+| --- | --- | --- | --- |
+| `litellm` | 1.103.10 → **1.110.2** | LLM 调用层 | 7 个 API + 能力字段 + 804 测试 + pip-audit |
+| `electron` | 45.2.3 → **45.4.1** | 桌面壳 | Electron 校验 + deb/rpm 安装冒烟（能装能启动后端） |
+| `ruff` | 0.17.3 → **0.17.6** | 开发/CI | `ruff check` / `format --check` 无差异 |
+| `vue-router` | 5.4.0 → 5.5.1 | Web 路由 | 前端 lint/test/build |
+| `@vitejs/plugin-vue` | 6.0.10 → 6.0.11 | 前端构建 | 同上 |
+| `eslint` | 10.14.0 → 10.15.0 | 前端 Lint | 同上 |
+| `jsdom` | 31.0.0 → 31.0.1 | 前端测试 | 同上 |
+| `prettier` | 3.9.10 → 3.10.1 | 前端格式 | 同上 |
+| `vitest` | 5.1.0 → 5.1.1 | 前端测试 | 同上 |
+| `dorny/paths-filter` | v3 → **v4** | CI 路径过滤 | 唯一变更是 action runtime 升到 node24；各 job 的路径判定与产物均正常 |
+
+### Docs
+
+- `pyproject.toml`：litellm 约束注释重写（保留 filelock 的历史脉络与放开依据）；`dependabot.yml` 的忽略理由同步更新
 
 ## \[1.22.1] - 2026-11-23（修复 Linux 分发包的 glibc 下限：构建基线降到 ubuntu-22.04）
 
