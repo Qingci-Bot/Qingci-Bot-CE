@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Changed
+
+- **litellm 1.103.10 → 1.110.2**：解除此前「锁死 1.103」的限制——1.104.0~1.109.x 会把 `filelock` 钉成 `<4.0`，与本项目 `filelock>=4.2.1,<5`（4.2.1 修了 3 个 CVE）互斥；**1.110.0 起改为 `filelock<5`**，冲突消失
+  - 用到的 7 个 API 逐个核验存在且可用：`acompletion` / `aembedding` / `aimage_generation` / `token_counter` / `get_model_info` / `suppress_debug_info` / `set_verbose`
+  - `get_model_info` 的 `supports_function_calling`、`max_input_tokens` 对 gpt-4o-mini / deepseek-chat / claude-sonnet 返回值与升级前一致（tool-calling 能力探测不受影响）
+  - 全量测试 804 passed；`pydantic` 仍解析为 2.13.4（锁文件按 Python 版本分段，3.12 取该版本）
+  - `dependabot.yml` 对 litellm 的忽略规则保留（版本窗口继续人工维护），理由改为「高频 breaking + 按 minor 窗口人工升级」
+
 ## \[1.22.1] - 2026-11-23（修复 Linux 分发包的 glibc 下限：构建基线降到 ubuntu-22.04）
 
 **修复**：1.22.0 的 deb / rpm 在 **Ubuntu 22.04 与 Debian 12 上装得上但启动即崩**：
