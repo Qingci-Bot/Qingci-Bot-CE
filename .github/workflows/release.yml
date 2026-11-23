@@ -105,12 +105,17 @@ jobs:
               echo "::warning::CHANGELOG 中未找到 $vnum 的段落，回退为自动生成说明"
             fi
 
-            # rc 版本发预发布：GitHub 上标记 Pre-release 且不替换 Latest
+            # rc 版本发预发布：GitHub 上标记 Pre-release 且不替换 Latest。
+            # 注意这里必须就地由 ver 判定，不能引用 needs.prepare 的输出（跨 job 才可用）——
+            # 本 step 属于 prepare job 自身，needs 上下文不含自身，表达式恒为空，
+            # 会导致 rc 被判成正式版并抢走 Latest（v1.22.3-rc1 首次就踩了这个坑）。
             pre_args=()
-            if [ "${{ needs.prepare.outputs.prerelease }}" = "true" ]; then
-              pre_args=(--prerelease --latest=false)
-              echo "Pre-release (rc) 版本：$ver"
-            fi
+            case "$ver" in
+              *-rc*|*.rc*)
+                pre_args=(--prerelease --latest=false)
+                echo "Pre-release (rc) 版本：$ver（不替换 Latest）"
+                ;;
+            esac
             if [[ "$GITHUB_REF" == refs/tags/* ]]; then
               gh release create "$ver" --title "$ver" "${notes_args[@]}" "${pre_args[@]}"
             else
@@ -121,9 +126,9 @@ jobs:
           else
             echo "Release $ver already exists, will upload assets"
             gh release view "$ver" --json isDraft -q .isDraft | grep -q false || gh release edit "$ver" --draft=false
-            if [ "${{ needs.prepare.outputs.prerelease }}" = "true" ]; then
-              gh release edit "$ver" --prerelease --latest=false
-            fi
+            case "$ver" in
+              *-rc*|*.rc*) gh release edit "$ver" --prerelease --latest=false ;;
+            esac
           fi
 
   windows-exe:
