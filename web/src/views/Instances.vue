@@ -363,8 +363,9 @@ function onRename(inst) {
           </li>
           <li><strong>Telegram</strong> — Bot API 长轮询，创建后在系统设置中填写 Bot Token</li>
           <li>
-            <strong>QQ 官方机器人</strong> — 开放平台 Bot API v2（WebSocket 网关），创建后在系统设置中填写
-            AppID / AppSecret；未填写时该平台显示为「未配置」，不影响其他平台运行
+            <strong>QQ 官方机器人</strong> — 开放平台 Bot API v2（WebSocket
+            网关），创建后在系统设置中填写 AppID /
+            AppSecret；未填写时该平台显示为「未配置」，不影响其他平台运行
           </li>
         </ul>
         <p style="line-height: 1.8">
