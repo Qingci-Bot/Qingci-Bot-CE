@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Fixed
+
+- **服务端 rpm 的 payload 压缩固定为 zstd-19**：构建基线在 1.22.1 降到 ubuntu-22.04 后，rpmbuild 的默认压缩从 zstd-19 变成 gzip-9，导致同一份内容 server rpm 315 MB、deb 239 MB（1.22.0 时两者基本持平）。现显式指定 `_binary_payload w19.zstdio`（可用 `RPM_PAYLOAD` 覆盖）。同 payload 实测 125.5 MiB → 107.8 MiB（−14.1%）
+
+### Added
+
+- `scripts/relock_dependabot_pr.sh`：接管 dependabot 的 Python 依赖 PR，补上它从不更新的 `uv.lock`（默认预览，`--yes` 才推送；并入 main、按官方源重锁、`uv lock --check`、必要时用目标 ruff 版本跑格式检查）
+
+### Docs
+
+- PACKAGING：修正「按需安装浏览器」的适用范围——`playwright install chromium` 只适用于源码部署与 onedir 产物；deb / rpm 装完后 `/opt` 只读且包内无 CLI，无法补装
+- CONTRIBUTING：新增「Dependabot 的 Python 依赖 PR 需要接管」，含脚本用法与「为什么不做成 Action」的说明
+
 ## \[1.22.2] - 2026-11-23（依赖维护：litellm 解除 1.103 锁定，桌面/前端/构建链跟随升级）
 
 本版无功能变更，只有依赖升级。所有升级都跑了全量测试，改动桌面壳的还过了补丁包安装冒烟。
