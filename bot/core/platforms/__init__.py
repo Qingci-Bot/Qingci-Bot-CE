@@ -19,10 +19,12 @@
 - OneBotConnection（bot/core/connection.py）：OneBot 11 反向 WebSocket
 - OneBot12Adapter（onebot12.py）：OneBot 12 原生反向 WebSocket
 - TelegramAdapter（telegram.py）：Telegram Bot API 长轮询
+- QQAdapter（qq.py）：QQ 官方机器人（开放平台 Bot API v2，WebSocket 网关）
 """
 
 from .base import PlatformAdapter
 from .onebot12 import OneBot12Adapter
+from .qq import QQAdapter
 from .telegram import TelegramAdapter
 
-__all__ = ["PlatformAdapter", "OneBot12Adapter", "TelegramAdapter"]
+__all__ = ["PlatformAdapter", "OneBot12Adapter", "QQAdapter", "TelegramAdapter"]

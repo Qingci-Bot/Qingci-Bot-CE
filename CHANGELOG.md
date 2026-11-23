@@ -7,6 +7,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.22.1] - 2026-11-23（修复 Linux 分发包的 glibc 下限：构建基线降到 ubuntu-22.04）
+
+**修复**：1.22.0 的 deb / rpm 在 **Ubuntu 22.04 与 Debian 12 上装得上但启动即崩**：
+
+```
+ImportError: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found
+  (required by /opt/qingci-bot-ce-server/_internal/libstdc++.so.6)
+```
+
+根因是 PyInstaller 把构建机（ubuntu-24.04，glibc 2.39）的 `libstdc++.so.6` 打进 `_internal/`，其符号要求高于目标系统。manylinux 的基本规则是「在最老的受支持系统上构建」——1.22.0 违反了它。
+
+### Fixed
+
+- Linux 构建基线由 `ubuntu-latest`（24.04）改为 **`ubuntu-22.04`**（glibc 2.35）；Artifact 兼容下探到 Ubuntu 22.04+ / Debian 12+ / Fedora 36+
+- 三处联动同步修改并写入注释，避免再次漂移：`release.yml` 的 `linux-deb-rpm.runner`、`ci.yml` 的 `package-smoke.runner`、`scripts/smoke_install_packages.sh` 的默认 `UBUNTU_IMAGE`
+
+### Added
+
+- **分发包安装冒烟**（`scripts/smoke_install_packages.sh`）：把 deb / rpm 真正装进目标发行版容器（Ubuntu / Fedora），断言"装得上 → 布局对 → 跑得起来 → 卸得干净"——服务端含 systemd 单元路径、系统用户、headless 启动后 `/api/bot/health` 返回 200、`remove` 保留实例数据而 `purge` 才清 `/var/lib`；桌面含 `/usr/bin` 软链、`.desktop` 条目、内嵌 `backend.zip` 解压后主程序**可运行**
+  - `ci.yml` 新增 `package-smoke` job（仅在打包链路输入变化时运行），`release.yml` 在**上传前**强制执行，装不上的包不再可能发出去
+  - 上述 glibc 缺陷正是被它发现的：此前只有 `dpkg-deb -f` / `rpm -qp` 的元数据断言，证明的是"包名版本写对了"，证明不了"用户装得上、装得上能跑"
+
+### Docs
+
+- PACKAGING 新增「安装冒烟」与「构建机的 glibc 决定运行时下限」两节（含 1.22.0 事故记录与当前兼容矩阵）；SETUP / README 改为如实的 glibc ≥ 2.35 要求；TROUBLESHOOTING 新增「Linux 安装包」排查段（GLIBC 报错、1.21.0 升级冲突、图标/命令缺失、服务未自启）；API.md 补 `/api/bot/status` 响应字段（含 QQ 的 `session_resumable` / `token_expire_at` / `known_sessions`）；PLUGIN_DEV 新增「平台差异」表（QQ 的 openid 哈希 ID、无群管 API、被动回复窗口）
+
+## \[1.22.0] - 2026-11-17（QQ 机器人官方接入：走开放平台公开接口，非协议端方案）
+
+### Added
+
+- **QQ 官方机器人适配器**（`platforms.qq`）：接入 QQ 开放平台（q.qq.com）面向开发者的官方机器人接口，与 OneBot 协议端方案并列，同样不涉及任何逆向或非公开接口
+  - 鉴权与网关：AppID + AppSecret 换取 `access_token`（默认 7200 秒，提前 60 秒刷新），WebSocket 网关 `Hello → Identify/Resume → 心跳 → Dispatch`，断连指数退避并优先 `Resume` 补发遗漏事件；`op=9` 会话失效、关闭码 4004（token 失效）/4900+（会话失效）分别处理
+  - 事件归一化：`GROUP_AT_MESSAGE_CREATE` → `detail_type=group`、`C2C_MESSAGE_CREATE` → `detail_type=private`，附件按 `content_type` 映射为 `image` / `voice` / `video` / `file` 段（URL 同时写入 `file_id` 与 `url`，多模态解析可直接透传）；其余平台事件（好友增删、机器人进出群等）以 meta 事件上报
+  - 发送：文本与富媒体（图片/视频/语音/文件）；富媒体先 `POST /files` 取 `file_info` 再以 `msg_type=7` 发送，公网 URL 直传、本地文件走 base64；被动回复携带事件 `d.id` 作 `msg_id` 并递增 `msg_seq`
+  - 可靠性与可观测性：同一消息按 `d.id` 有界去重（平台可能重复推送）、token 单飞刷新、错误按「鉴权 / 权限 / 被动回复窗口 / 判重」分类为可区分的异常类型，`status_info` 暴露连接状态、连续错误、退避、token 到期、已知会话数
+  - 配置：`platforms.qq.{enabled, app_id, app_secret, sandbox, intents, api_base, request_timeout, max_retries}`；Web UI 实例向导新增「QQ 官方机器人」主平台，系统设置新增对应配置卡片（AppSecret 按敏感字段脱敏显示）
+- **标识映射**：开放平台下发的是不透明 openid 字符串，适配器以 `blake2b("g:"|"u:" + openid)` 稳定映射为 63 位正整数呈现给核心，使会话键、数据表与统计逻辑无需改动即可复用；纯函数计算，重启后同一 openid 仍得同一 ID，会话不漂移
+
+### Changed
+
+- **Dispatcher 采纳适配器显式 `is_at_bot`**：v12 事件在无 `at_list` 时以事件自带的 `is_at_bot` 为准。QQ 官方群消息只在 @机器人 时推送、正文已被平台去掉 @ 前缀，此前若靠注入伪 `mention` 段来满足触发规则，会把 `@<内部ID>` 混进 `plain_text` 并进入 LLM 提示词
+- 实例管理：`SUPPORTED_PLATFORMS` 与平台覆盖表新增 `qq`；`/api/instances` 的 `adapters` 字段返回 `qq` 启用状态
+
+### 发布产物命名规整化
+
+统一为「小写包名 + 版本 + 架构」，各格式沿用其生态分隔符约定；此前桌面版是大写产品名 + 混合架构名（`Qingci-Bot-CE-1.21.0-amd64.deb` / `Qingci-Bot.CE-1.21.0-win.zip`），与服务端包（`qingci-bot-ce-server_...`）风格割裂：
+
+| 产物 | 旧名 | 新名 |
+| --- | --- | --- |
+| 桌面 deb | `Qingci-Bot-CE-<ver>-amd64.deb` | `qingci-bot-ce_<ver>_amd64.deb` |
+| 桌面 rpm | `Qingci-Bot-CE-<ver>-x86_64.rpm` | `qingci-bot-ce-<ver>-1.x86_64.rpm` |
+| Windows 安装向导 | `Qingci-Bot-CE-<ver>-Setup-x64.exe` | `qingci-bot-ce-<ver>-x64-setup.exe` |
+| Windows 便携包 | `Qingci-Bot.CE-<ver>-win.zip` | `qingci-bot-ce-<ver>-x64-portable.zip` |
+| 服务端 deb / rpm | `qingci-bot-ce-server_...` / `...-1.<arch>.rpm` | 不变（原本已符合约定） |
+
+- `desktop/electron/package.json`：新增 `deb.packageName` / `rpm.packageName` / `linux.executableName`（均为 `qingci-bot-ce`），并给 `deb` / `rpm` / `nsis` / `win` 分别设置 `artifactName` 模板——包内 `Package`/`Name` 与文件名从此一致，Linux 可执行文件名不再带空格
+  - 桌面 deb/rpm 的**包名由 `qingci-bot-ce-desktop` 改为 `qingci-bot-ce`**（此前取自 npm 包名）。从 1.21.0 升级需先移除旧包，否则两者会争用同一安装目录：`sudo apt remove qingci-bot-ce-desktop`（或 `sudo dnf remove qingci-bot-ce-desktop`）后再装新包
+  - `linux.executableName` 设为 `qingci-bot-ce`：可执行文件从 `/opt/Qingci-Bot CE/Qingci-Bot CE` 变为 `/opt/Qingci-Bot CE/qingci-bot-ce`，桌面项随之更新为 `qingci-bot-ce.desktop`（安装目录与数据目录不变）
+- `ci-desktop.yml`：断言从「目标为 deb + rpm」扩展到「命名模板 + packageName + 可执行名」，并禁止旧的大写命名回归
+- `release.yml` 新增 `Verify package metadata & filenames`：用 `dpkg-deb -f` / `rpm -qp` 读回包元数据，断言文件名与 `Name`/`Version`/`Arch` 一致、恰好 4 个 Linux 产物，并打印实际安装路径
+
+### Added（发布校验）
+
+- **`SHA256SUMS.txt`**：新增 `checksums` job，等 Windows 与 Linux 两个构建 job 都成功后，从 Release 下载全部 6 个分发包统一计算 SHA256（`sha256sum -c SHA256SUMS.txt` 可直接校验）。此前 Release 上的 `qingci-bot-ce.sha256` 其实是**后端构建清单**（冻结可执行文件 + Web UI 入口的哈希），名字容易被误读为分发包校验和
+- `build.bat` / `build-linux.sh` 产出的后端清单改名为 `dist/backend-manifest.sha256`，不再作为 Release 资源上传
+
+### Docs
+
+- **全量文档更新**：README 新增「下载与分发形态」表（6 个产物 + 校验和 + Docker 镜像）；CONFIGURATION 章节由「OneBot 协议端」扩为「消息平台」，补 Telegram / QQ 官方机器人的分步接入说明与平台限制；PACKAGING 新增「产物命名与校验」章节，修正此前错误的桌面版文件名（`-x64.deb`）与服务端包名（`Qingci-Bot-CE-server`）；SETUP 安装命令改用新包名并补校验和说明；ARCHITECTURE 数据流补齐 OneBot 12 / QQ；DEPLOYMENT 重连章节补齐 QQ 的 Resume 语义；SECURITY 补平台凭据（AppSecret/IP 白名单）管理；CODING_STANDARDS 新增「新增平台适配器（检查清单）」；CONTRIBUTING 发版说明补命名校验与「不要手工上传产物」
+
+## \[1.21.0] - 2026-11-17（Linux 分发改为 deb / rpm：新增 headless 服务端包，修复三处 Linux 阻断缺陷）
+
+**破坏性变更**：Linux 不再提供 AppImage，改为原生包管理的 **deb**（Debian / Ubuntu）与 **rpm**（Fedora / RHEL / openSUSE）。运行时协议与配置完全不变，仅分发形态变更。
+
+### Added
+
+- **Linux 服务端包（headless + systemd）**：新增 `scripts/pack_linux_server.sh`，用 `dpkg-deb` / `rpmbuild` 原生打 `qingci-bot-ce-server` 包（不引入 fpm），产出 deb 与 rpm。不打包 Electron 壳，纯 Python 冻结产物 + systemd 单元，适配无桌面服务器。布局遵循 FHS：程序 `/opt/qingci-bot-ce-server`、实例数据 `/var/lib/qingci-bot-ce-server/instances/<name>`、日志 `/var/log/qingci-bot-ce-server/`；安装即创建系统用户 `qingci-bot` 并注册 / `enable` 单元 `qingci-bot-ce.service`（首次安装不自动 `start`，确认配置后手动启动）；卸载保留实例数据，`apt purge` 才清除。服务单元含基础加固（`ProtectSystem=full`、`ProtectHome=true`、`NoNewPrivileges`、显式 `ReadWritePaths`）
+- **桌面版 deb / rpm**：`desktop/electron/package.json` 的 `build.linux.target` 由 AppImage 改为 deb + rpm，补齐 `deb.depends` / `rpm.depends`（GTK3 / NSS / libnotify / libXtst 等 Electron 运行时库）、`maintainer`、`synopsis` 与 `description`
+
+### Changed
+
+- **发布流水线**：`release.yml` 的 `linux-appimage` job 替换为 `linux-deb-rpm`，前置安装 `rpm` / `fakeroot` / `xz-utils` / `file`（electron-builder 的 rpm 目标经 fpm 调 rpmbuild）；一次产出 4 个 Linux 包（桌面版 + 服务端版，各 deb / rpm）。Release 说明同步更新
+- **`ci-desktop.yml` 配置断言加固**：锁定 Linux 目标必须同时包含 deb 与 rpm、禁止回退到 AppImage，并校验两类 `depends` 非空
+- **Linux 桌面版数据目录改按 XDG 规范**：由 `~/.config/Qingci-Bot CE` 改为 `$XDG_DATA_HOME/Qingci-Bot CE`（默认 `~/.local/share/Qingci-Bot CE`）。数百 MB 的后端与实例数据不应放在配置目录，也避免被「清理配置目录」误删；`QINGCI_DATA_HOME` 仍可覆盖
+- **`build-linux.sh` / `build.bat` 补分发 `config.example.yaml`**：首次启动创建实例时以其为模板，此前未随产物复制，frozen 模式下新实例只能得到仅含平台字段的精简配置
+- 文档同步：PACKAGING（新增 Linux 打包章节，含两款包对照表与「为何不用 AppImage」）、SETUP（发行版包安装与 systemd 运维）、CONFIGURATION / TROUBLESHOOTING（数据目录说明）、CONTRIBUTING / README
+
+### Fixed
+
+- **Linux 下后端无法启动（权限位丢失）**：adm-zip 在非 Windows 平台解压时不还原 zip 内的 Unix 权限位，一律按 `0o666` 落盘，PyInstaller 主程序丢失可执行位后 spawn 报 EACCES，表现为「后端进程启动失败」且日志无权限线索。新增 `ensureBackendExecutable()` 按 zip 清单逐项还原 mode，清单缺失权限信息时兜底为主程序补 `0755`
+- **Linux 下内置 uv 永远定位不到**：`bot/plugin/deps.py` 的 `_bundled_uv()` 写死 `uv.exe`，而 Linux/macOS 的 uv 无扩展名，导致插件依赖安装退化为较慢的内嵌 pip。改为按 `uv.exe` → `uv` 依次探测
+- **`desktop/py/relaunch.py` 在 POSIX 下未真正脱离父会话**：此前仅设置 Windows 专属的 `DETACHED_PROCESS` / `CREATE_NEW_PROCESS_GROUP`（POSIX 上取 0，等于无操作），主进程退出时同会话的助手可能收到 SIGHUP 被终止，切换实例 / 重启流程半途而废。新增 `_spawn_detached()`，POSIX 改用 `start_new_session=True`
+- **Electron 开发模式在 Linux 找不到 venv 解释器**：`resolvePython()` 只查找 `Scripts/python.exe`，改为同时探测 `.venv/bin/python`
+- **electron-builder 打 deb / rpm 时报 `Please specify project homepage`**：`desktop/electron/package.json` 原缺 `homepage` / `repository` 字段。AppImage 走的是另一条打包路径、不校验该项，切到 deb / rpm 后 `FpmTarget` 强制要求，首轮 CI 构建即在此失败。补齐 `homepage`、`repository`，并把 `author` 规范为 `名字 <URL>` 形式
+- **发布流水线漏收桌面版安装包**：electron-builder 按 `build.directories.output` 输出到 `dist/electron`，而上传步骤只 glob `dist/linux`，桌面版 deb / rpm 永远不会被上传。新增归集步骤把 `dist/electron/*.deb|*.rpm` 复制到 `dist/linux`，复制不到时直接报错而不是静默跳过
+- **Windows 打包在产物就绪后仍判失败**：`build-electron.bat` 调用 `electron-builder --win` 未关闭自动发布，tag 触发时它会尝试把 nsis 产物直接发布到 GitHub，缺 `GH_TOKEN` 便报错退出——而此时 `Setup-x64.exe` 与 blockmap 其实都已生成。`package.json` 增加 `"publish": null`、bat 补 `--publish never`，发布统一交给 `release.yml` 的 `gh release upload`
+
 ## \[1.20.0] - 2026-11-12（P1 架构分层与能力开放：错误模型、ABI 探测、配置 schema、大组件拆分与 CI 分级）
 
 P1 路线图全部完成。插件 / 平台 / Web API 等对外行为向后兼容，内部架构分层与扩展能力显著增强。全量 757 项测试，覆盖率 64.32%。

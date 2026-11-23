@@ -446,11 +446,30 @@ class OneBot12Config(BaseModel):
     access_token: str = ""
 
 
+class QQConfig(BaseModel):
+    """QQ 官方机器人（QQ 开放平台 Bot API v2）适配器配置
+
+    与 OneBot 路线（NapCat / LLBot 等协议端）互不影响：本配置走开放平台
+    官方接口，需在 q.qq.com 创建机器人并获取 AppID / AppSecret。
+    """
+
+    name: str = "qq"
+    enabled: bool = False
+    app_id: str = ""  # 开放平台 AppID
+    app_secret: str = ""  # 开放平台 AppSecret（勿泄露；仅显示一次）
+    sandbox: bool = False  # true 连接沙箱环境（只收沙箱配置的群/单聊）
+    intents: int = 1 << 25  # 默认仅群聊与单聊消息（GROUP_AND_C2C_EVENT）
+    api_base: str = ""  # 留空按 sandbox 自动选择正式/沙箱地址
+    request_timeout: float = 30.0  # HTTP 请求超时（秒）
+    max_retries: int = 2  # 网络传输错误最多重试次数
+
+
 class PlatformsConfig(BaseModel):
     """多平台适配器配置（onebot 为内置默认平台，走 onebot.* 配置）"""
 
     telegram: TelegramConfig = TelegramConfig()
     onebot12: OneBot12Config = OneBot12Config()
+    qq: QQConfig = QQConfig()
 
 
 class ApiConfig(BaseModel):

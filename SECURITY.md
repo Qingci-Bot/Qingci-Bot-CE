@@ -35,11 +35,13 @@
 
 ## 安全最佳实践
 
-### API Key 管理
+### API Key 与平台凭据管理
 
-- 请勿将 `config.yaml` 中的 `api_key` 提交到版本控制
-- 定期更换 API Key
+- 请勿将 `config.yaml` 中的 `api_key`、`platforms.telegram.token`、`platforms.qq.app_secret` 提交到版本控制
+- 定期更换 API Key；平台凭据按各平台流程重置（QQ 开放平台的 AppSecret 二次查看会强制重置，旧值立即失效）
 - 使用强随机密钥（建议 32 位以上）
+- Web UI 会把 `api_key` / `token` / `secret` 等字段按敏感字段处理（表单脱敏显示，提交空值不覆盖原值）；即便如此，截图与录屏仍应避开这些字段
+- QQ 官方机器人另建议开启开放平台的 IP 白名单，只允许部署机出口 IP 连接网关
 
 ### 网络部署
 

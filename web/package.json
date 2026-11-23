@@ -1,6 +1,6 @@
 {
   "name": "qingci-bot-web",
-  "version": "1.20.0",
+  "version": "1.22.1",
   "private": true,
   "license": "GPL-3.0-or-later",
   "type": "module",
@@ -17,16 +17,16 @@
   "dependencies": {
     "pinia": "^4.1.0",
     "vue": "^3.5.45",
-    "vue-router": "^5.4.0"
+    "vue-router": "^5.5.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@vitejs/plugin-vue": "^6.0.10",
+    "@vitejs/plugin-vue": "^6.0.11",
     "eslint": "^10.14.0",
     "eslint-plugin-vue": "^10.12.0",
     "globals": "^17.14.0",
-    "jsdom": "^31.0.0",
-    "prettier": "^3.9.10",
+    "jsdom": "^31.0.1",
+    "prettier": "^3.10.1",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"
   }

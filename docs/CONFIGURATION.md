@@ -1,10 +1,20 @@
 # 配置参考
 
-> 面向配置：OneBot 11 / 12 协议端接入、LLM 提供商、完整 `config.yaml` 字段说明、
-> 环境变量与进阶功能开关。安装与启动见 [SETUP.md](./SETUP.md)；模板文件
-> [config.example.yaml](../config.example.yaml) 带字段注释，复制为 `config.yaml` 后按需修改。
+> 面向配置：消息平台接入（OneBot 11 / 12、Telegram、QQ 官方机器人）、LLM 提供商、
+> 完整 `config.yaml` 字段说明、环境变量与进阶功能开关。安装与启动见
+> [SETUP.md](./SETUP.md)；模板文件 [config.example.yaml](../config.example.yaml)
+> 带字段注释，复制为 `config.yaml` 后按需修改。
 
-## 配置 OneBot 协议端
+## 配置消息平台
+
+四种平台可并存（各自独立开关），事件统一归一化为 OneBot 12 内部模型，插件对来源平台无感知；回复按事件来源自动路由回对应平台。
+
+| 平台 | 接入方式 | 连接方向 | 配置节 |
+| --- | --- | --- | --- |
+| OneBot 11 | 反向 WebSocket（协议端连本项目） | 入站 | `onebot` |
+| OneBot 12 | 反向 WebSocket（协议端连本项目） | 入站 | `platforms.onebot12` |
+| Telegram | Bot API 长轮询 | 出站 | `platforms.telegram` |
+| QQ 官方机器人 | 开放平台 WebSocket 网关 | 出站 | `platforms.qq` |
 
 ### OneBot 11（默认）
 
@@ -27,6 +37,28 @@
 事件以 OneBot 12 标准格式（`type`/`detail_type`/`message[]`）直接进入核心调度，动作以 JSON-RPC（`send_message` 等）调用——与 v11 相比省去翻译层，回复段原生 v12 表达。群管动作（`set_group_kick` 等 v11 便捷名）由 `_api_action` 映射为 `group.*` 点分命名空间（如 `group.kick`/`group.ban`）——依赖实现端支持此点分扩展约定（NapCat / Lagrange.OneBot 均支持）。
 
 > OneBot 12 机器人在事件的 `self_id`（扁平字段）可能缺失：官方 v12 标准事件携带 `self` 对象（`{platform, user_id}`），本项目优先读取 `self_id`、缺失时回退读 `self.user_id`，无需你额外配置。
+
+### Telegram
+
+创建实例时选择 `Telegram` 主平台（或手动设置 `platforms.telegram.enabled: true`），并在 `platforms.telegram.token` 填入 [@BotFather](https://t.me/BotFather) 发放的 token。本项目以长轮询（`getUpdates`）主动拉取，**不需要公网地址、不需要配置 Webhook**；群聊里需把机器人拉进群并 @ 它，或给机器人管理员权限以接收全部消息（受 Telegram 隐私模式限制）。
+
+### QQ 官方机器人
+
+走 QQ 开放平台（[q.qq.com](https://q.qq.com)）面向开发者的官方机器人接口，与 OneBot 协议端方案并列——不需要部署 NapCat 之类的协议端，也不需要公网回调地址（本项目用 WebSocket 网关主动连出）。
+
+1. 在开放平台创建机器人，进入「开发管理」抄下 **AppID** 与 **AppSecret**（AppSecret 只显示一次）。
+2. 在「开发设置 → IP 白名单」填入部署机的**公网出口 IP**（新增机器人默认开启白名单，不填连不上网关）。
+3. 把 AppID / AppSecret 填到 `platforms.qq`（Web UI「系统设置」或 `config.yaml`），`enabled: true`。
+4. 群聊需先把机器人拉进群；单聊需用户先给机器人发一条消息（官方接口没有好友/群列表，只能被动回复）。
+5. 首次联调建议先开 `sandbox: true`：沙箱环境只收开放平台「沙箱配置」里指定群/单聊的事件，不打扰真实用户。
+
+需要注意的平台限制（不是本项目的行为）：
+
+- **群聊只在 @机器人 时收到消息**，普通聊天不会下发；
+- 被动回复有时效与条数上限：群聊 **5 分钟 / 5 条**、单聊 **60 分钟 / 4 条**，超限后需用户再次发消息；
+- 开放平台下发的是不透明 **openid**，不暴露 QQ 号。本项目把它稳定映射为内部整数 ID，首次出现会打一条 INFO 日志（`QQ 用户首次出现：id=<内部ID>（openid=xxx） 昵称=…`），`super_admin` / 管理员 / 黑白名单按其中的 `id` 填；
+- 附件（图片/语音/视频/文件）以 URL 形式下发，本项目直接作为 v12 媒体段的 `file_id`/`url`，多模态与图片发送可直接使用；
+- 频道（guild）场景使用另一套事件与接口，本适配器未实现。
 
 ## 配置 LLM
 
@@ -115,6 +147,15 @@ platforms:
     enabled: false
     token: ''
     poll_interval: 1.0
+  qq:                              # QQ 官方机器人（QQ 开放平台，默认关闭）
+    enabled: false
+    app_id: ''                     # 开放平台 AppID
+    app_secret: ''                 # 开放平台 AppSecret（仅显示一次）
+    sandbox: false                 # true 连接沙箱环境
+    intents: 33554432              # 1<<25：群消息 + 单聊消息
+    api_base: ''                   # 留空按 sandbox 自动选择正式/沙箱地址
+    request_timeout: 30.0
+    max_retries: 2
 llm:
   provider: openai                 # openai / deepseek / ollama / siliconflow / claude / gemini / custom
   api_url: https://api.openai.com/v1  # 留空则按 provider 直连官方
@@ -209,7 +250,7 @@ lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 | `QINGCI_DB_POOL_SIZE` | `5` | SQLite 连接池大小；高并发读写争用时可调大 |
 | `QINGCI_DB_MAX_OVERFLOW` | `10` | 连接池溢出上限 |
 | `QINGCI_SKIP_MIGRATION_CHECK` | 未设置 | 设为 `1` 跳过启动期的迁移漂移检测（每次启动约省 1 秒）。打包分发 / 容器冷启动可开启，代价是模型与迁移脚本不一致时不再告警 |
-| `QINGCI_DATA_HOME` | 未设置 | 可写数据根目录（`instances/`、`backend/` 的父目录）。安装版由安装向导写入，AppImage / 容器可用它把数据放到可写卷；未设置时按 `QINGCI_APP_DIR` → 源码根目录回退 |
+| `QINGCI_DATA_HOME` | 未设置 | 可写数据根目录（`instances/`、`backend/` 的父目录）。安装版由安装向导写入；Linux 桌面版（deb/rpm）默认按 XDG 落在 `~/.local/share/Qingci-Bot CE`；服务端包（deb/rpm）由 systemd 单元固化为 `/var/lib/qingci-bot-ce-server`；容器可用它把数据放到可写卷；未设置时按 `QINGCI_APP_DIR` → 源码根目录回退 |
 | `QINGCI_APP_DIR` | 自动推断 | 由 Electron 壳注入，指向桌面 EXE 所在目录；源码 / Docker 部署无需设置 |
 
 > 与 `config.yaml` 不同，环境变量在进程启动时读取，修改后需重启。
@@ -235,4 +276,5 @@ lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 | `llm.timeout` / `llm.num_retries` | 请求超时与重试          | `60` / `2`                                                                                                                                                  | 单次 LLM 请求超时秒数与失败重试次数                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `market`                          | 插件市场             | `url` 默认指向 Gitee 镜像（`https://gitee.com/qingci-bot/Plugin-Market.git`，GitHub 主仓库的国内自动同步镜像，拉取更快更稳；可用 `https://github.com/Qingci-Bot/Plugin-Market.git` 切换主仓库） | WebUI「插件管理 → 插件市场」浏览/搜索/一键安装/更新/刷新；`url` 可指向自定义市场索引仓库，`mirror_url` 为索引备用源（主源拉取失败时回退），`refresh_interval` 为索引缓存 TTL（秒）；市场条目可声明 `python_requires` 版本约束，WebUI 对不兼容插件显示提示并禁用安装                                                                                                                                                                                                                                                                                                                                                          |
 | `platforms.telegram`              | Telegram 平台适配器   | `enabled: false`                                                                                                                                            | 启用后以 Bot API 长轮询接入 Telegram（`token` 由 @BotFather 获取）；事件归一化为 OneBot 12 内部模型（`type`/`detail_type`/v12 消息段），插件/命令零改动可用；回复自动路由到 Telegram；群聊 `@Bot` 可触发（支持 at 触发模式）；收发支持 v12 `image`/`voice`/`video` 段（photo → `image`、voice → `voice`、video → `video`；发送 `image`/`voice`/`video` 段分别走 `sendPhoto`/`sendVoice`/`sendVideo`，支持 file\_id / URL / base64 / 本地路径）与 `reply` 回复段；成员进出群/权限变更归一化为 OneBot `notice`（`group_member_increase` / `group_member_decrease` / `group_admin_set` / `group_admin_unset`），事件插件可响应；`poll_interval` 为轮询间隔（秒） |
+| `platforms.qq`                    | QQ 官方机器人适配器        | `enabled: false`                                                                                                                                            | 启用后连接 QQ 开放平台（`app_id` / `app_secret` 在 q.qq.com 创建机器人后获取），走官方 WebSocket 网关 + OpenAPI v2，非协议端方案；群聊 `@机器人` 与消息列表单聊事件归一化为 v12 消息事件（`detail_type` = `group` / `private`），附件按 `content_type` 映射为 `image` / `voice` / `video` / `file` 段；发送支持文本与富媒体（图片/视频/语音/文件，公网 URL 直传或本地文件 base64 上传）；`sandbox: true` 连沙箱环境，`intents` 默认 `33554432`（1<<25，群+单聊消息）。**平台限制**：无好友/群列表接口，只能回复来过消息的会话；被动回复群聊 5 分钟/5 条、单聊 60 分钟/4 条，超出需用户再次发消息 |
 | `bot.log_json`                    | 结构化 JSON 日志      | `false`                                                                                                                                                     | 面向机器可读的日志采集场景                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |

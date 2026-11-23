@@ -1,16 +1,28 @@
 # 发布流水线：打 v* tag 触发，全自动构建并上传分发包
 #
 # 触发：
-#   1) git tag v1.17.0 && git push origin v1.17.0   -> 构建 EXE/AppImage 并上传同名 Release，
+#   1) git tag v1.17.0 && git push origin v1.17.0   -> 构建 EXE / deb / rpm 并上传同名 Release，
 #      同时构建并推送 Docker 镜像到 ghcr.io
-#   2) workflow_dispatch（手动）-> 仅重建并上传 EXE/AppImage 到指定 Release（不推镜像）
+#   2) workflow_dispatch（手动）-> 仅重建并上传 EXE / deb / rpm 到指定 Release（不推镜像）
+#
+# 产物命名（统一为 <包名>_<版本>_<架构> 或 <包名>-<版本>-<release>.<架构>，
+# 各格式沿用其生态的分隔符约定；包名一律小写连字符，版本紧邻包名）：
+#   qingci-bot-ce_<ver>_amd64.deb              桌面版 deb（dpkg 约定：下划线）
+#   qingci-bot-ce-<ver>-1.x86_64.rpm           桌面版 rpm（rpm 约定：连字符 + release）
+#   qingci-bot-ce-<ver>-x64-setup.exe          桌面版 Windows 安装向导
+#   qingci-bot-ce-<ver>-x64-portable.zip       桌面版 Windows 便携包
+#   qingci-bot-ce-server_<ver>_amd64.deb       服务端 deb（headless + systemd）
+#   qingci-bot-ce-server-<ver>-1.x86_64.rpm    服务端 rpm
+#   SHA256SUMS.txt                             上传产物的校验和（checksums job 生成）
+# 桌面版由 electron-builder 输出到 dist/electron，构建后归集到 dist/linux，
+# 与服务端包统一由 Upload release assets 收口。
 #
 # 产物：
-#   - Windows 便携 EXE（PyInstaller 后端 onedir + electron-builder portable）
-#   - Linux AppImage（PyInstaller 后端 onedir + electron-builder AppImage）
+#   - Windows 安装版 / 便携版（PyInstaller 后端 onedir + electron-builder nsis/zip）
+#   - Linux deb / rpm（PyInstaller 后端 onedir + electron-builder deb/rpm），x86_64，两款包
 #   - Docker 镜像（ghcr.io，tag: vX.Y.Z / X.Y / X / latest）
 #
-# 每个平台先产后端 onedir，再让 electron-builder 打成便携/AppImage，
+# 每个平台先产后端 onedir，再让 electron-builder 打成安装包，
 # 与本地 build.ps1 + build-electron.ps1 / build-linux.sh 链路一致。
 
 name: Release
@@ -172,21 +184,43 @@ jobs:
         shell: powershell
         run: |
           $ver = "${{ needs.prepare.outputs.ver }}"
-          $setup = Get-ChildItem "dist\electron\*.exe" | Where-Object { $_.Name -like "*Setup*" -and $_.Name -notlike "*unpacked*" } | Select-Object -First 1
-          if (-not $setup) { throw "NSIS setup exe not found under dist\electron" }
-          $zip = Get-ChildItem "dist\electron\*.zip" | Select-Object -First 1
-          if (-not $zip) { throw "green zip not found under dist\electron" }
-          gh release upload "$ver" "$($setup.FullName)" "$($zip.FullName)" dist\qingci-bot-ce.sha256 --clobber
+          # 命名约定：qingci-bot-ce-<ver>-x64-setup.exe / -portable.zip
+          # （由 package.json 的 nsis.artifactName / win.artifactName 决定）
+          $setup = Get-ChildItem "dist\electron\*.exe" | Where-Object { $_.Name -like "*-setup.exe" } | Select-Object -First 1
+          if (-not $setup) { throw "setup exe not found (expected qingci-bot-ce-<ver>-x64-setup.exe)" }
+          $zip = Get-ChildItem "dist\electron\*.zip" | Where-Object { $_.Name -like "*-portable.zip" } | Select-Object -First 1
+          if (-not $zip) { throw "portable zip not found (expected qingci-bot-ce-<ver>-x64-portable.zip)" }
+          Write-Host "upload: $($setup.Name) / $($zip.Name)"
+          # 校验和由 checksums job 统一生成 SHA256SUMS.txt
+          gh release upload "$ver" "$($setup.FullName)" "$($zip.FullName)" --clobber
 
-  linux-appimage:
-    name: Linux AppImage
+  linux-deb-rpm:
+    name: Linux deb / rpm
     needs: prepare
-    runs-on: ubuntu-latest
+    # 构建基线固定在「最老的受支持发行版」ubuntu-22.04（glibc 2.35），而不是
+    # ubuntu-latest。原因：PyInstaller 会把构建机的 libstdc++/libgcc 打进
+    # _internal/，在 24.04 上构建的产物要求 glibc >= 2.38，导致 Ubuntu 22.04
+    # (2.35) 与 Debian 12 (2.36) 装得上却启动不了。在老系统上构建，产物在新
+    # 系统上照样能跑，反之不成立。
+    # 调整该值时，必须同步 scripts/smoke_install_packages.sh 的 UBUNTU_IMAGE
+    # 与 ci.yml 的 package-smoke runner，否则冒烟测的系统与产物不匹配。
+    runs-on: ubuntu-22.04
     timeout-minutes: 60
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
+
+      # electron-builder 生成 deb / rpm 依赖宿主工具链：
+      #   rpm      —— electron-builder 的 rpm 目标通过 fpm 调 rpmbuild 打包
+      #   fakeroot —— fpm 非 root 打包 deb 时需要
+      #   xz-utils —— rpm payload 压缩
+      # 缺任一项会让 --linux deb rpm 在「生成安装包」阶段才失败，故前置安装。
+      - name: Install packaging toolchain (rpm / fpm deps)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            rpm fakeroot xz-utils file
 
       - name: Set up Python + uv
         uses: astral-sh/setup-uv@v7
@@ -225,20 +259,106 @@ jobs:
         # 后端 onedir 数千个文件 → 单个 zip，安装/解压阶段只处理 1 个文件
         run: python3 scripts/pack_backend.py
 
-      - name: Package AppImage (electron-builder --linux)
+      - name: Package deb + rpm (electron-builder --linux)
         working-directory: desktop/electron
         run: |
           npm ci
-          npx electron-builder --linux --publish never
+          npx electron-builder --linux deb rpm --publish never
+
+      - name: Collect desktop packages into dist/linux
+        # electron-builder 按 build.directories.output 输出到 dist/electron，
+        # 与服务端包统一下沉到 dist/linux，便于下方一次 glob 收齐四个产物
+        run: |
+          mkdir -p dist/linux
+          found=0
+          for f in dist/electron/*.deb dist/electron/*.rpm; do
+            [ -e "$f" ] || continue
+            cp -f "$f" dist/linux/
+            found=$((found + 1))
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "::error::electron-builder produced no deb/rpm under dist/electron"
+            ls -R dist/electron 2>/dev/null || true
+            exit 1
+          fi
+          ls -l dist/linux
+
+      # 服务端（headless）包：同一份 PyInstaller 后端 onedir，装到 /opt 并注册 systemd 服务，
+      # 不依赖 Electron / X11，适配无桌面环境的服务器。
+      - name: Build server deb + rpm (headless + systemd)
+        run: |
+          ver="${{ needs.prepare.outputs.ver }}"
+          bash scripts/pack_linux_server.sh --version "${ver#v}"
+
+      - name: Verify package metadata & filenames
+        # 命名规整化后，文件名必须与包元数据一致，且恰好 4 个产物（2 deb + 2 rpm）。
+        # 改名/改模板后若产出偏差（如 packageName 漂回默认值、架构给错），这里直接失败，
+        # 而不是让用户下到一个名字与内容对不上的包。
+        run: |
+          set -euo pipefail
+          ver="${{ needs.prepare.outputs.ver }}"
+          ver="${ver#v}"
+          echo "== dist/linux =="
+          ls -l dist/linux
+
+          deb_count=$(ls dist/linux/*.deb 2>/dev/null | wc -l)
+          rpm_count=$(ls dist/linux/*.rpm 2>/dev/null | wc -l)
+          echo "deb=$deb_count rpm=$rpm_count"
+          [ "$deb_count" -eq 2 ] || { echo "::error::期望 2 个 deb，实际 $deb_count"; exit 1; }
+          [ "$rpm_count" -eq 2 ] || { echo "::error::期望 2 个 rpm，实际 $rpm_count"; exit 1; }
+
+          for deb in dist/linux/*.deb; do
+            base="$(basename "$deb")"
+            pkg="$(dpkg-deb -f "$deb" Package)"
+            dver="$(dpkg-deb -f "$deb" Version)"
+            darch="$(dpkg-deb -f "$deb" Architecture)"
+            echo "deb: $base -> Package=$pkg Version=$dver Arch=$darch"
+            echo "     安装路径: $(dpkg-deb -c "$deb" | grep -o '\./opt/[^/]*/' | sort -u | tr '\n' ' ')"
+            case "$base" in
+              "qingci-bot-ce_${ver}_${darch}.deb"|"qingci-bot-ce-server_${ver}_${darch}.deb") ;;
+              *) echo "::error::deb 文件名不符合 <包名>_<版本>_<架构>.deb 约定: $base"; exit 1 ;;
+            esac
+            [ "$dver" = "$ver" ] || { echo "::error::deb 版本与 tag 不一致: $base ($dver != $ver)"; exit 1; }
+            [ "$darch" = "amd64" ] || { echo "::error::deb 架构非 amd64: $base ($darch)"; exit 1; }
+          done
+
+          for rpm in dist/linux/*.rpm; do
+            base="$(basename "$rpm")"
+            name="$(rpm -qp --qf '%{NAME}' "$rpm")"
+            rver="$(rpm -qp --qf '%{VERSION}' "$rpm")"
+            rrel="$(rpm -qp --qf '%{RELEASE}' "$rpm")"
+            rarch="$(rpm -qp --qf '%{ARCH}' "$rpm")"
+            echo "rpm: $base -> Name=$name Version=$rver Release=$rrel Arch=$rarch"
+            case "$base" in
+              "qingci-bot-ce-${rver}-${rrel}.${rarch}.rpm"|"qingci-bot-ce-server-${rver}-${rrel}.${rarch}.rpm") ;;
+              *) echo "::error::rpm 文件名不符合 <包名>-<版本>-<release>.<架构>.rpm 约定: $base"; exit 1 ;;
+            esac
+            [ "$rver" = "$ver" ] || { echo "::error::rpm 版本与 tag 不一致: $base ($rver != $ver)"; exit 1; }
+            [ "$rarch" = "x86_64" ] || { echo "::error::rpm 架构非 x86_64: $base ($rarch)"; exit 1; }
+          done
+          echo "包名与元数据校验通过"
+
+      - name: Install smoke (deb / rpm in containers)
+        # 真装一遍再上传：布局/软链/systemd 单元/冻结二进制能否启动并响应
+        # /api/bot/health/卸载是否保留数据。只读元数据证明不了「用户装得上」。
+        # 脚本与 ci.yml 的 package-smoke 共用，避免两套断言漂移。
+        run: bash scripts/smoke_install_packages.sh dist/linux
 
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ver="${{ needs.prepare.outputs.ver }}"
-          appimage=$(ls dist/electron/*.AppImage 2>/dev/null | head -n1)
-          if [ -z "$appimage" ]; then echo "::error::AppImage not found under dist/electron"; exit 1; fi
-          gh release upload "$ver" "$appimage" dist/qingci-bot-ce.sha256 --clobber
+          # 桌面包（electron-builder）与服务端包（pack_linux_server.sh）包名不同，
+          # 一次 glob 收齐四个产物；校验和由 checksums job 统一生成 SHA256SUMS.txt。
+          debs=$(ls dist/linux/*.deb 2>/dev/null || true)
+          rpms=$(ls dist/linux/*.rpm 2>/dev/null || true)
+          if [ -z "$debs" ] || [ -z "$rpms" ]; then
+            echo "::error::linux packages missing under dist/linux (deb/rpm)"
+            ls -R dist/linux 2>/dev/null || true
+            exit 1
+          fi
+          gh release upload "$ver" $debs $rpms --clobber
 
   docker:
     name: Docker image (ghcr.io)
@@ -279,3 +399,56 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+  # 校验和收口：等两个构建 job 都成功后，产出 SHA256SUMS.txt
+  # （sha256sum 格式，用户可 `sha256sum -c SHA256SUMS.txt`）。
+  # 单独成 job 的原因：Windows / Linux 是两个并行 job，各自只能算自己那几个文件，
+  # 只有 Release 才是两者的合集。
+  #
+  # 实现上直接用 Release 资产的 `digest` 字段（GitHub 在接收上传时已算好的 sha256），
+  # 不把 ~1.8GB 产物下载回来重算——既省 CI 带宽/时间，也避免"算的是一份、用户下的是
+  # 另一份"的窗口。若某个资产没有 digest（老资产或平台未提供），直接失败而不是产出
+  # 残缺的校验文件。
+  checksums:
+    name: Release checksums
+    needs: [prepare, windows-exe, linux-deb-rpm]
+    if: >-
+      always() &&
+      needs.windows-exe.result == 'success' &&
+      needs.linux-deb-rpm.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Generate SHA256SUMS.txt from asset digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ver="${{ needs.prepare.outputs.ver }}"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$ver" \
+            --jq '.assets[] | select(.name != "SHA256SUMS.txt") | "\(.digest // "")  \(.name)"' \
+            > /tmp/assets.txt
+
+          echo "== Release 资产 =="
+          cat /tmp/assets.txt
+          # 期望 4 个 Linux 包 + Windows 安装版 + 便携版
+          count=$(wc -l < /tmp/assets.txt)
+          [ "$count" -eq 6 ] || { echo "::error::期望 6 个分发包，实际 $count"; exit 1; }
+
+          # 缺 digest 的行形如 "  <name>"（前缀是空串），据此判残缺
+          if grep -qE '^  ' /tmp/assets.txt; then
+            echo "::error::存在未提供 digest 的资产，拒绝生成残缺校验文件"; exit 1
+          fi
+
+          sed 's/^sha256://' /tmp/assets.txt | sort -k2 > SHA256SUMS.txt
+          echo "== SHA256SUMS.txt =="
+          cat SHA256SUMS.txt
+
+      - name: Upload SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${{ needs.prepare.outputs.ver }}"
+          # 本 job 不 checkout（无 .git），gh 无法推断仓库，必须显式 --repo；
+          # 否则报 fatal: not a git repository
+          gh release upload "$ver" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber

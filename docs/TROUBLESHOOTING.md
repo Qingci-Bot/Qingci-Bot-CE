@@ -19,7 +19,25 @@
 - OneBot 12 原生适配器是**独立端口**（`platforms.onebot12.port`，默认 3002），
   且要 `platforms.onebot12.enabled: true`，不要与 OneBot 11 的 3001 混用。
 - Telegram 是长轮询客户端，由本项目按指数退避重连；Token 无效时看 API 错误分类（401/403）。
+- QQ 官方机器人是 WebSocket 客户端，同样由本项目退避重连（带 `Resume` 补发）。连不上先按序排查：
+  `app_id` / `app_secret` 是否正确（错误凭据在启动阶段就报「鉴权未通过」）→ 开放平台是否配置了**IP 白名单**
+  （新增机器人默认开启，需填入部署机的公网出口 IP）→ 是否误开了 `sandbox: true`（沙箱只收沙箱环境配置的群/单聊）。
 - 断连期间 Web UI 与 API 仍可用，已加载插件与配置不变；恢复细节见 [DEPLOYMENT.md](./DEPLOYMENT.md#协议端断连恢复)。
+
+## QQ 官方机器人
+
+- **收不到群消息**：官方接口只在**群里 @机器人** 时才推送，普通群聊消息不会下发；确认机器人已在群内、且消息确实 @ 了它。
+- **回复不出去 / 报「被动回复次数已用尽」**：开放平台限制每条用户消息的回复条数（群聊 5 分钟 / 5 条，单聊 60 分钟 / 4 条），
+  且只能回复**收到过消息的会话**——没有好友 / 群列表接口，也无法凭空发起会话。触发上限后引导用户再发一条消息即可。
+- **提示「目标会话不在已知列表内」**：同上，属于平台限制。适配器只在收到过消息后记住该会话的 openid，
+  重启进程后需等用户再次发消息才会重新登记（被动回复场景不受影响）。
+- **发图报「富媒体信息转存失败」**：`url` 必须是公网可访问的 **https** 地址；本地路径会走 base64 上传（有大小上限）。
+  语音需要 SILK 格式，普通音频可能被拒，可改为按文件发送。
+- **`intents` 无权限导致连接被关闭**：默认值 `33554432`（1<<25，群 + 单聊消息）是基础能力；
+  自行调大（如订阅频道/互动事件）而机器人未获对应权限时，网关会直接断连。改回默认值即可。
+- **怎么配置管理员 / 黑名单**：官方接口只下发不透明 openid，不暴露 QQ 号，而框架内部用整数 ID 组织会话。
+  适配器会为每个首次出现的用户/群打一条 INFO：`QQ 用户首次出现：id=<内部ID>（openid=xxx） 昵称=…`，
+  按其中的 `id` 填 `bot.super_admin` / `bot.admin_users` / 黑名单即可（该 ID 由 openid 稳定哈希得出，重启不变）
 
 ## Web UI 与鉴权
 
@@ -38,8 +56,23 @@
 并从备份文件恢复。另外：
 
 - 环境变量只在**进程启动时**读取，修改后需重启；
-- 数据目录：安装版由向导选定，AppImage / 容器用 `QINGCI_DATA_HOME` 指向可写位置；
+- 数据目录：安装版由向导选定；Linux 桌面版（deb/rpm）落在 `~/.local/share/Qingci-Bot CE`；服务端包固定在 `/var/lib/qingci-bot-ce-server`；容器用 `QINGCI_DATA_HOME` 指向可写位置；
 - 一键部署、CLI 参数与实例目录布局见 [SETUP.md](./SETUP.md)。
+
+## Linux 安装包
+
+- **装上但启动报 `version \`GLIBC_2.38' not found`**：**1.22.0 的已知缺陷**——包内
+  `_internal/libstdc++.so.6` 由构建机（ubuntu-24.04）带入，要求 glibc ≥ 2.38，而 Ubuntu 22.04
+  （2.35）/ Debian 12（2.36）达不到。**升级到 1.22.1 即可**（构建基线已降到 ubuntu-22.04）；
+  无法升级时用 Docker 镜像或源码运行。背景见
+  [PACKAGING.md](PACKAGING.md#构建机的-glibc-决定运行时下限)。
+- **从 1.21.0 升级装不上（文件冲突）**：1.21.0 的桌面包名是 `qingci-bot-ce-desktop`，1.22.0 起改为
+  `qingci-bot-ce`，两者争用 `/opt/Qingci-Bot CE`。先 `sudo apt remove qingci-bot-ce-desktop`
+  （或 `dnf remove`）再装新包，实例数据在 `~/.local/share/Qingci-Bot CE`，不受影响。
+- **桌面图标/命令找不到**：桌面包会建 `/usr/bin/qingci-bot-ce` 软链与
+  `/usr/share/applications/qingci-bot-ce.desktop`；若菜单未刷新，执行 `update-desktop-database`。
+- **服务端装完没有自动启动**：设计如此——安装只 `enable` 单元，首次启动前请确认
+  `/var/lib/qingci-bot-ce-server/instances/default/config.yaml`，再 `sudo systemctl start qingci-bot-ce`。
 
 ## 能力自动降级
 

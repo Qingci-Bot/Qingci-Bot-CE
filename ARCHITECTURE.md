@@ -25,11 +25,11 @@
 
 ### 数据流
 
-1. **OneBot 11 协议端**（如 LLBot / NapCat / go-cqhttp）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot CE；Telegram 由 `telegram.py` 适配器以 Bot API 长轮询接入
-2. **aiocqhttp** 收到 OneBot 11 事件，经 **v11\_compat**（`bot/core/v11_compat.py`）翻译为 **OneBot 12** 事件（`type`/`detail_type`/`message[]`）；**telegram 适配器**直接将原生更新归一化为 OneBot 12 事件（注入 `platform` 字段），统一分发至 **Dispatcher**
+1. **OneBot 11 协议端**（如 LLBot / NapCat / go-cqhttp）通过 OneBot 11 反向 WebSocket 连接至 Qingci-Bot CE；**OneBot 12 协议端**（NapCat / Lagrange.OneBot）走独立端口的原生反向 WebSocket；**Telegram** 由 `telegram.py` 以 Bot API 长轮询接入；**QQ 官方机器人**由 `qq.py` 连 QQ 开放平台的 WebSocket 网关
+2. **aiocqhttp** 收到 OneBot 11 事件，经 **v11\_compat**（`bot/core/v11_compat.py`）翻译为 **OneBot 12** 事件（`type`/`detail_type`/`message[]`）；**telegram / onebot12 / qq 适配器**直接将各自原生事件归一化为 OneBot 12 事件（注入 `platform` 字段），统一分发至 **Dispatcher**
 3. **Dispatcher** 以 OneBot 12 事件模型解析出 `MessageContext`（`Message.from_raw` 自动归一化 v11/v12 消息段），按 priority 调度 **PluginManager** 中的 Matcher，匹配 Rule/Permission 后执行 handler
 4. 未匹配则回退到旧式 `on_message`；内置 chat 插件调用 **LLMManager** 生成回复
-5. 回复按 **MessageContext.platform** 路由到对应 **PlatformAdapter**，最终发送回 OneBot 协议端（QQ 用户）或 Telegram 对话；发送层消费 OneBot 12 标准消息段（`send_message` 动作的 `message` 参数），由各适配器映射为平台私有格式
+5. 回复按 **MessageContext.platform** 路由到对应 **PlatformAdapter**，最终发送回 OneBot 协议端（QQ 用户）、Telegram 对话或 QQ 官方机器人（群 / 单聊 openid）；发送层消费 OneBot 12 标准消息段（`send_message` 动作的 `message` 参数），由各适配器映射为平台私有格式
 6. **Web UI** 通过 HTTP/WebSocket 与 API 服务通信，管理配置、插件、日志等（侧边栏展示各平台实时连接状态）
 
 > **多平台原则**：事件在入口归一化为 OneBot 12、回复在出口路由回平台，插件/命令对来源平台完全无感知——一套 Matcher/Rule/Permission 逻辑基于统一事件模型天然支持所有已接入平台。
@@ -97,7 +97,7 @@ Qingci-Bot-CE/
 │   │   ├── bot.py             # Bot 主类（生命周期、事件调度、全局钩子）
 │   │   ├── composition.py     # 组合根（assemble_bot：组件装配 + DI 注册）
 │   │   ├── v11_compat.py      # OneBot 11 事件 → OneBot 12 事件翻译层（双模归一化入口）
-│   │   ├── platforms/         # 多平台适配器（base.py PlatformAdapter 契约 + onebot11.py + onebot12.py + telegram.py）
+│   │   ├── platforms/         # 多平台适配器（base.py PlatformAdapter 契约 + onebot11.py + onebot12.py + telegram.py + qq.py）
 │   │   ├── connection.py      # 兼容再导出（实际实现在 platforms/onebot11.py）
 │   │   ├── dispatcher.py      # 消息分发 + Matcher 调度（MessageContext 引 protocol.context）
 │   │   ├── message.py         # 类型化消息构造器（Message/MessageSegment，仅 OneBot-11 平台兼容用；v12 消息段由 SDK segments 承担）
@@ -253,7 +253,9 @@ Qingci-Bot-CE/
 
 - **`onebot12.py`**：OneBot 12 平台实现——aiohttp 反向 WebSocket 服务端（`platforms.onebot12.enabled/host/port/access_token` 控制），支持 OneBot 12 实现端（NapCat / Lagrange.OneBot 等）原生接入；事件以 v12 标准格式直通 Dispatcher（注入 `platform: "onebot12"`），动作以 JSON-RPC（`{action, params, echo}`）请求并通过 echo 匹配响应，`send_message` 动作消费 v12 段数组原生表达，与 v11 相比省去翻译层
 
-- 附加平台（Telegram / OneBot 12）启动失败仅记录日志，不阻断主平台（OneBot）可用性
+- **`qq.py`**：QQ 官方机器人实现——走 QQ 开放平台公开接口（`platforms.qq.enabled/app_id/app_secret/sandbox/intents` 控制），AppID + AppSecret 换取 `access_token`（默认 7200 秒，提前 60 秒刷新，`Authorization: QQBot <token>`），经 WebSocket 网关（Hello→Identify/Resume→心跳→Dispatch）收事件、经 OpenAPI v2 发消息。关键设计：① 开放平台下发的是不透明 openid 字符串，而核心以整数 ID 组织会话与数据表，故用 `blake2b("g:"|"u:" + openid)` 映射为 63 位正整数——纯函数计算，重启后同一 openid 仍得同一 ID，会话与统计不漂移；反向表供回发消息还原 openid；② 群消息只在 `@机器人` 时推送且正文已被平台去掉 @ 前缀，事件显式携带 `is_at_bot=True`（Dispatcher 对无 `at_list` 的 v12 事件采纳该字段），避免为触发规则注入伪 `mention` 段污染 `plain_text`；③ 被动回复以事件 `d.id` 作 `msg_id` 并递增 `msg_seq`（平台按 msg_id+msg_seq 判重），群聊 5 分钟/5 条、单聊 60 分钟/4 条，超限抛 `QQPassiveWindowError` 而非硬碰平台；④ 富媒体先 `POST /files` 取 `file_info` 再以 `msg_type=7` 发送，单条消息只承载一个媒体故多图拆条；⑤ 同一消息可能重复推送，按 `d.id` 有界去重；⑥ 错误按鉴权/权限/被动窗口/判重分类
+
+- 附加平台（Telegram / OneBot 12 / QQ 官方机器人）启动失败仅记录日志，不阻断主平台（OneBot）可用性
 
 ### 事件模型（OneBot 12 内核）
 

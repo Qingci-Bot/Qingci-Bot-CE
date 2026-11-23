@@ -41,21 +41,41 @@ DEFAULT_PLATFORM = "onebot"
 _PORT_ALLOC_LOCK = threading.Lock()
 
 # 实例可绑定的主平台（创建实例时选定，驱动该实例默认启用的适配器）
-SUPPORTED_PLATFORMS = ("onebot", "onebot12", "telegram")
+SUPPORTED_PLATFORMS = ("onebot", "onebot12", "telegram", "qq")
 
 # 平台 → 创建实例时对 config.yaml 应用的最小覆盖（仅设启用开关，其余走模板默认）
 PLATFORM_DEFAULT_OVERLAY: dict[str, dict] = {
     "onebot": {
         "onebot": {"enabled": True},
-        "platforms": {"telegram": {"enabled": False}, "onebot12": {"enabled": False}},
+        "platforms": {
+            "telegram": {"enabled": False},
+            "onebot12": {"enabled": False},
+            "qq": {"enabled": False},
+        },
     },
     "onebot12": {
         "onebot": {"enabled": False},
-        "platforms": {"telegram": {"enabled": False}, "onebot12": {"enabled": True}},
+        "platforms": {
+            "telegram": {"enabled": False},
+            "onebot12": {"enabled": True},
+            "qq": {"enabled": False},
+        },
     },
     "telegram": {
         "onebot": {"enabled": False},
-        "platforms": {"telegram": {"enabled": True}, "onebot12": {"enabled": False}},
+        "platforms": {
+            "telegram": {"enabled": True},
+            "onebot12": {"enabled": False},
+            "qq": {"enabled": False},
+        },
+    },
+    "qq": {
+        "onebot": {"enabled": False},
+        "platforms": {
+            "telegram": {"enabled": False},
+            "onebot12": {"enabled": False},
+            "qq": {"enabled": True},
+        },
     },
 }
 
@@ -196,6 +216,7 @@ def instance_adapters(name: str) -> dict[str, bool]:
         "onebot": bool(onebot.get("enabled", True)),
         "onebot12": bool((platforms.get("onebot12") or {}).get("enabled", False)),
         "telegram": bool((platforms.get("telegram") or {}).get("enabled", False)),
+        "qq": bool((platforms.get("qq") or {}).get("enabled", False)),
     }
 
 
@@ -225,7 +246,7 @@ def create_instance(
         description: 描述
         port: 端口；缺省自动分配（≥8081）
         template: config.yaml 模板来源；缺省用 app_root()/config.example.yaml
-        platform: 主平台（onebot / telegram），驱动该实例默认启用的适配器
+        platform: 主平台（onebot / onebot12 / telegram / qq），驱动该实例默认启用的适配器
 
     Returns:
         新建的实例信息

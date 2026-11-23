@@ -34,7 +34,10 @@ if errorlevel 1 goto fail
 echo P11 bundle check
 if not exist "%ElectronOut%\win-unpacked\resources\backend.zip" goto fail
 echo P12 win build
-call npx electron-builder --win
+rem --publish never：只构建，不上传。electron-builder 生成 nsis 的 blockmap 后
+rem 默认会尝试自动发布到 GitHub，缺 GH_TOKEN 时整个构建以失败告终
+rem （产物其实已就绪）。发布统一由 release.yml 的 gh release upload 负责。
+call npx electron-builder --win --publish never
 echo P13 win_err=%errorlevel%
 if errorlevel 1 goto fail
 echo P14 done

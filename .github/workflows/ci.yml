@@ -40,6 +40,7 @@ jobs:
       audit: ${{ steps.filter.outputs.audit }}
       docker: ${{ steps.filter.outputs.docker }}
       install: ${{ steps.filter.outputs.install }}
+      packaging: ${{ steps.filter.outputs.packaging }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
@@ -80,6 +81,16 @@ jobs:
               - 'pyproject.toml'
               - 'uv.lock'
               - 'config.example.yaml'
+              - '.github/workflows/ci.yml'
+            # 只覆盖「会改变安装包内容/布局」的输入：桌面壳、PyInstaller spec、
+            # 打包脚本与冒烟脚本自身。改业务代码不需重打包（Docker 作业已覆盖运行）。
+            packaging:
+              - 'desktop/electron/**'
+              - 'qingci-bot-ce.spec'
+              - 'build-linux.sh'
+              - 'scripts/pack_backend.py'
+              - 'scripts/pack_linux_server.sh'
+              - 'scripts/smoke_install_packages.sh'
               - '.github/workflows/ci.yml'
 
   quality:
@@ -323,3 +334,70 @@ jobs:
             echo "::error::main.py 未在 60s 内就绪"
             exit 1
           fi
+  # 安装包冒烟：真正把 deb / rpm 装进目标发行版容器，验证「装得上、能跑起来、
+  # 卸得干净」。python 侧断言（包名/版本/架构）在 release.yml 里，这里补的是
+  # 此前完全空白的「安装行为」——缺依赖、postinst 失败、onedir 权限位丢失、
+  # systemd 单元路径写错，都只有 install 之后才暴露。
+  #
+  # 成本控制：只在打包链路输入变化时运行（见 changes 的 packaging 过滤），
+  # 且构建步骤与 release.yml 的 linux-deb-rpm 保持一致——改一处记得改两处。
+  package-smoke:
+    name: Package install smoke (deb / rpm)
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
+    # 必须与 release.yml 的 linux-deb-rpm 同代（ubuntu-22.04）：这里构建的产物
+    # 要代表真正发出去的东西，否则冒烟测的是另一套构建结果。
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install packaging toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm fakeroot xz-utils file
+
+      - name: Set up Python + uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Create venv + install deps
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -e ".[build]"
+
+      - name: Set up Node.js (for Web UI build)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web UI build
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build backend onedir
+        run: bash build-linux.sh --no-browser
+
+      - name: Pack backend + desktop packages
+        run: |
+          python3 scripts/pack_backend.py
+          cd desktop/electron
+          npm ci
+          npx electron-builder --linux deb rpm --publish never
+          cd ../..
+          mkdir -p dist/linux
+          cp -f dist/electron/*.deb dist/electron/*.rpm dist/linux/
+
+      - name: Build server packages
+        run: |
+          ver="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
+          bash scripts/pack_linux_server.sh --version "$ver"
+
+      - name: Install smoke (deb in ubuntu, rpm in fedora)
+        run: bash scripts/smoke_install_packages.sh dist/linux

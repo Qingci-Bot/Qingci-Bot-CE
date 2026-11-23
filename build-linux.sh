@@ -4,8 +4,8 @@
 # Output: dist/qingci-bot-ce/qingci-bot-ce
 #
 # 与 build.bat（Windows）对应的 Linux 版本。产出 Python 后端 onedir，
-# 供 release 流水线（.github/workflows/ci.yml 的 release job）随后用
-# electron-builder 打 Linux AppImage。
+# 供 release 流水线随后用 electron-builder 打 deb / rpm（桌面版），
+# 并由 scripts/pack_linux_server.sh 打 headless 服务端 deb / rpm。
 #
 # 自 v1.6 起配置/插件/数据已收敛到 instances/<name>/ 自包含目录，
 # 构建产物不再生成根级 config.yaml 或 data/（用户数据按实例隔离，随实例目录分发）。
@@ -79,6 +79,17 @@ else
   echo "    WARNING: web/dist/index.html not found; run 'npm run build' in web/ first, /ui will be unavailable" >&2
 fi
 
+# 配置模板：首次启动创建 default 实例时，create_instance() 以
+# app_root()/config.example.yaml 为模板生成实例 config.yaml。
+# frozen 模式下 app_root() 是产物目录，模板不在包里就只能退化成一个
+# 只含平台字段的精简配置——用户会缺掉绝大部分注释与可选项，故必须随产物分发。
+if [ -f "$Root/config.example.yaml" ]; then
+  cp "$Root/config.example.yaml" "$AppDir/config.example.yaml"
+  echo "    copied config.example.yaml into output folder"
+else
+  echo "    WARNING: config.example.yaml not found; new instances will get a minimal default config" >&2
+fi
+
 # ---------- [2.5/3] bundle Playwright browser ----------
 # 内置一个 Chromium 到 dist/ms-playwright/，让 EXE 开箱即可渲染 HTML（签到卡），
 # 无需最终用户再 `playwright install chromium`。运行时经 PLAYWRIGHT_BROWSERS_PATH
@@ -131,10 +142,12 @@ fi
 echo "==> [3.4/3] packing backend into single archive..."
 "$PY" scripts/pack_backend.py
 
-# ---------- [3.5/3] SHA256 校验清单 ----------
-echo "==> [3.5/3] generating SHA256 checksums..."
+# ---------- [3.5/3] 后端 SHA256 清单 ----------
+# 这是「后端构建清单」（冻结后的可执行文件 + Web UI 入口），不是发布包校验和；
+# 发布包的 SHA256SUMS.txt 由 release.yml 的 checksums job 对上传产物计算生成。
+echo "==> [3.5/3] generating backend SHA256 manifest..."
 ExeFile="$AppDir/qingci-bot-ce"
-Manifest="$DistDir/qingci-bot-ce.sha256"
+Manifest="$DistDir/backend-manifest.sha256"
 if [ -f "$ExeFile" ]; then
   : > "$Manifest"
   exeHash="$(sha256sum "$ExeFile" | awk '{print $1}')"

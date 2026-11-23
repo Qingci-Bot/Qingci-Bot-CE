@@ -102,7 +102,13 @@ class MessageDispatcher:
         # 传给 SDK / 插件的仍是原始 event 对象，零拷贝、行为不变
         view = EventView(event)
         if view.is_v12:
-            return MessageContext.from_v12_event(event)
+            ctx = MessageContext.from_v12_event(event)
+            # 适配器可显式声明「本条即对机器人触发」：QQ 官方群消息仅在 @机器人
+            # 时才推送，且正文已被平台去掉 @ 前缀，事件里没有 mention 段可供推导。
+            # 仅在无 mention 段时采纳，避免与真实 @ 列表判定冲突。
+            if not ctx.at_list and event.get("is_at_bot") is not None:
+                ctx.is_at_bot = bool(event["is_at_bot"])
+            return ctx
 
         post_type = view.post_type
 

@@ -52,7 +52,44 @@ jobs:
 
       - name: Validate package.json build config
         working-directory: desktop/electron
-        run: node -e "const b=require('./package.json').build; if(!b||!b.win||!b.extraResources) throw new Error('build config missing'); console.log('build config OK')"
+        # 锁定两件事：
+        # 1) Linux 分发目标为 deb + rpm（本项目不发 AppImage），两类 depends 非空；
+        # 2) 产物命名约定（<包名>_<版本>_<架构> / <包名>-<版本>-<release>.<架构>），
+        #    以及 deb/rpm 的 packageName 与 linux 可执行名，防止改名后元数据与文件名漂移。
+        # 用 heredoc 而非 node -e "..."：模板里的 ${version} 会被 shell 展开成空串。
+        run: |
+          node <<'JS'
+          const b = require('./package.json').build;
+          if (!b || !b.win || !b.extraResources) throw new Error('build config missing');
+
+          const targets = ((b.linux && b.linux.target) || []).map(t => (typeof t === 'string' ? t : t.target));
+          for (const want of ['deb', 'rpm']) {
+            if (!targets.includes(want)) {
+              throw new Error('linux target missing: ' + want + ' (got ' + targets.join(',') + ')');
+            }
+          }
+          if (targets.includes('AppImage')) throw new Error('AppImage target must not be used');
+          if (!b.deb || !b.deb.depends || !b.deb.depends.length) throw new Error('deb depends missing');
+          if (!b.rpm || !b.rpm.depends || !b.rpm.depends.length) throw new Error('rpm depends missing');
+
+          // 命名约定（与 release.yml 的 Verify package metadata 一致）
+          const naming = [
+            ['deb.artifactName', b.deb.artifactName, 'qingci-bot-ce_${version}_${arch}.${ext}'],
+            ['rpm.artifactName', b.rpm.artifactName, 'qingci-bot-ce-${version}-1.${arch}.${ext}'],
+            ['linux.artifactName', b.linux.artifactName, 'qingci-bot-ce_${version}_${arch}.${ext}'],
+            ['nsis.artifactName', (b.nsis || {}).artifactName, 'qingci-bot-ce-${version}-${arch}-setup.${ext}'],
+            ['win.artifactName', b.win.artifactName, 'qingci-bot-ce-${version}-${arch}-portable.${ext}'],
+          ];
+          for (const [key, got, expected] of naming) {
+            if (got !== expected) throw new Error(key + ' 不符合命名约定: ' + got + ' != ' + expected);
+            if (/Qingci-Bot/.test(got)) throw new Error(key + ' 仍使用旧的大写产品名: ' + got);
+          }
+          if (b.deb.packageName !== 'qingci-bot-ce') throw new Error('deb.packageName 必须为 qingci-bot-ce');
+          if (b.rpm.packageName !== 'qingci-bot-ce') throw new Error('rpm.packageName 必须为 qingci-bot-ce');
+          if (b.linux.executableName !== 'qingci-bot-ce') throw new Error('linux.executableName 必须为 qingci-bot-ce');
+
+          console.log('build config OK: linux=' + targets.join(',') + ' naming=ok');
+          JS
 
       # 注意：Windows 便携版完整打包（Python 后端 onedir + electron-builder portable）
       # 走 build.bat + build-electron.bat（需 Windows + PyInstaller），不在本 job 复现。

@@ -4,7 +4,7 @@
 
 > **版权与授权**：本项目（含 [Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK)）原为 **[Zhou Zhe (aka luoqingci)](https://github.com/luoqingciya)** 的个人项目，版权完整、排他地归其个人所有；[Qingci-Bot](https://github.com/Qingci-Bot) 组织获永久、不可撤销的 GPLv3 使用 / 修改 / 分发许可及维权授权，负责持续维护，**不是共同版权人**。完整授权文本见 [NOTICE](./NOTICE)。
 
-> **合规声明**：本项目不含任何对 QQ / 腾讯客户端或通信协议的逆向工程、破解或模拟登录，仅通过公开的 OneBot 11/12 标准接口与 Telegram Bot API 接入，详见 [合规声明](#合规声明)。
+> **合规声明**：本项目不含任何对 QQ / 腾讯客户端或通信协议的逆向工程、破解或模拟登录，仅通过公开的 OneBot 11/12 标准接口、QQ 开放平台官方机器人接口与 Telegram Bot API 接入，详见 [合规声明](#合规声明)。
 
 基于 Python 的多平台机器人框架，内部统一采用 **OneBot 12 事件模型**（`type` / `detail_type` / `message[]` 消息段），基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接任意 OneBot 11 反向 WebSocket 协议端（如 [LLBot](https://github.com/LLOneBot/LuckyLilliaBot) / NapCat / go-cqhttp，作为兼容输入层自动翻译为 v12 事件），支持 LLM 智能对话、Web UI 和桌面应用。适配器将各平台归一化为 OneBot 12 内部模型，插件对来源平台完全无感知。
 
@@ -18,7 +18,9 @@
 
 - **OneBot 12 内核**：内部统一采用 OneBot 12 事件模型（`type` / `detail_type` / 标准 `{type,data}` 消息段，媒体以 `file_id` 引用）；基于 [aiocqhttp](https://github.com/nonebot/aiocqhttp) 对接任意 OneBot 11 反向 WebSocket 协议端（如 LLBot / NapCat / go-cqhttp），v11 事件在入口由 `v11_compat` 翻译层自动归一化为 v12 事件，并对存量插件保留 v11 兼容字段（`post_type` / `message_type` / `raw_message`）——OneBot 11 只是"众多平台之一"
 
-- **多平台适配器**：平台协议归一化为 OneBot 12 内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot 11（v11 反向 WS + `v11_compat` 翻译）+ **OneBot 12（原生反向 WS，事件直通无需翻译，动作 JSON-RPC；扩展通知如红包运气王/荣誉变更/名片变更/精华消息/群签到/好友戳一戳已类型化，插件可** **`on_notice`** **+ 类型注解消费）** + Telegram（Bot API 长轮询，`platforms.telegram` 配置启用），回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `voice`、video → `video` v12 段；发送将 v12 `image`/`voice`/`video` 段映射到 `sendPhoto`/`sendVoice`/`sendVideo`）、回复段与成员变动通知（成员进出群/权限变更归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_*` notice）；长轮询采用有限并发消费（慢更新不阻塞同批）且失败更新自动确认跳过避免重放，连接失败指数退避并自动重连，Bot Token 支持运行时热更新（自动重验身份），HTTP 超时/重试可配置，API 调用错误按 401/403/404 分类，平台状态接口暴露连接健康指标（连续错误数/最近错误与断连时间/退避状态）
+- **多平台适配器**：平台协议归一化为 OneBot 12 内部事件模型（`PlatformAdapter` 契约），插件对平台无感知；内置 OneBot 11（v11 反向 WS + `v11_compat` 翻译）+ **OneBot 12（原生反向 WS，事件直通无需翻译，动作 JSON-RPC；扩展通知如红包运气王/荣誉变更/名片变更/精华消息/群签到/好友戳一戳已类型化，插件可** **`on_notice`** **+ 类型注解消费）** + Telegram（Bot API 长轮询，`platforms.telegram` 配置启用）+ **QQ 官方机器人（QQ 开放平台 Bot API v2，`platforms.qq` 配置启用）**，回复按事件来源平台自动路由；Telegram 适配器支持群聊 `@Bot` 提及触发（at 触发模式）、图片/语音/视频收发（收到 photo → `image`、voice → `voice`、video → `video` v12 段；发送将 v12 `image`/`voice`/`video` 段映射到 `sendPhoto`/`sendVoice`/`sendVideo`）、回复段与成员变动通知（成员进出群/权限变更归一化为 `group_member_increase`/`group_member_decrease`/`group_admin_*` notice）；长轮询采用有限并发消费（慢更新不阻塞同批）且失败更新自动确认跳过避免重放，连接失败指数退避并自动重连，Bot Token 支持运行时热更新（自动重验身份），HTTP 超时/重试可配置，API 调用错误按 401/403/404 分类，平台状态接口暴露连接健康指标（连续错误数/最近错误与断连时间/退避状态）
+
+- **QQ 官方机器人接入**：走 QQ 开放平台公开的机器人接口（AppID + AppSecret 鉴权，WebSocket 网关 + OpenAPI v2），非协议端方案；群聊 `@机器人` 与消息列表单聊事件归一化为 v12 消息事件，附件按 `content_type` 映射为 `image`/`voice`/`video`/`file` 段；支持文本与富媒体回复（图片/视频/语音/文件先上传再发送）、`Resume` 断连补发与会话恢复、token 自动刷新、入站消息按 `d.id` 去重、平台错误按「鉴权 / 权限 / 被动回复窗口 / 判重」分类；<strong>受平台限制</strong>：开放平台没有好友 / 群列表接口，且被动回复有时效与条数上限（群聊 5 分钟 / 5 条，单聊 60 分钟 / 4 条），超出后需用户再次发消息
 
 - **LLM 统一接口**：基于 [litellm](https://github.com/BerriAI/litellm)，支持 7 大提供商（OpenAI / DeepSeek / Ollama / SiliconFlow / Claude / Gemini / 自定义），含流式响应、Function Calling、多模态；填好 API Key 后可一键拉取提供商可用模型列表
 
@@ -64,6 +66,28 @@ uv run python main.py --host 127.0.0.1
 > 插件开发、API 接口、前端开发与打包详见 [PLUGIN_DEV.md](./PLUGIN_DEV.md)；独立插件开发
 > SDK：[Plugins-SDK](https://github.com/Qingci-Bot/Plugins-SDK) — 零依赖插件开发工具包。
 
+## 下载与分发形态
+
+每个版本发布到 [GitHub Releases](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases)，产物命名统一为「包名 + 版本 + 架构」，各格式沿用其生态的分隔符约定：
+
+| 场景 | 文件 | 说明 |
+| --- | --- | --- |
+| Windows 桌面（推荐） | `qingci-bot-ce-<ver>-x64-setup.exe` | NSIS 安装向导，可选安装目录与数据目录 |
+| Windows 桌面（免安装） | `qingci-bot-ce-<ver>-x64-portable.zip` | 解压即用，解压后运行 `Qingci-Bot CE.exe` |
+| Debian / Ubuntu 桌面 | `qingci-bot-ce_<ver>_amd64.deb` | 应用菜单启动，数据在 `~/.local/share/Qingci-Bot CE` |
+| Fedora / RHEL 桌面 | `qingci-bot-ce-<ver>-1.x86_64.rpm` | 同上 |
+| Debian / Ubuntu 服务端 | `qingci-bot-ce-server_<ver>_amd64.deb` | headless + systemd，装完 `systemctl start qingci-bot-ce` |
+| Fedora / RHEL 服务端 | `qingci-bot-ce-server-<ver>-1.x86_64.rpm` | 同上 |
+| 校验和 | `SHA256SUMS.txt` | `sha256sum -c SHA256SUMS.txt` 校验上述 6 个包 |
+
+Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。
+
+> **发行版要求**：Linux 包自带 Python 运行时，要求 **glibc ≥ 2.35**（Ubuntu 22.04+ / Debian 12+ / Fedora 36+）。早期 1.22.0 在 24.04 上构建，导致 22.04 / Debian 12 启动报 `GLIBC_2.38' not found`，1.22.1 已修复；详见 [docs/PACKAGING.md](./docs/PACKAGING.md#构建机的-glibc-决定运行时下限)。
+
+安装步骤见 [docs/SETUP.md](./docs/SETUP.md#linux-发行版包deb--rpm)，命名与校验规则见 [docs/PACKAGING.md](./docs/PACKAGING.md#产物命名与校验)。
+
+Docker 镜像同版本发布到 `ghcr.io/qingci-bot/qingci-bot-ce`（tag：`vX.Y.Z` / `X.Y` / `X` / `latest`）。
+
 ***
 
 ## 文档
@@ -72,7 +96,7 @@ uv run python main.py --host 127.0.0.1
 | --- | --- | --- |
 | 上手 | [docs/SETUP.md](./docs/SETUP.md) | 环境要求、安装、本地 / Docker / Linux 部署、桌面 EXE、命令行参数、管理命令、API 鉴权与监控 |
 | 上手 | [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) | 故障排查：协议端、鉴权、能力降级、性能、Docker |
-| 配置 | [docs/CONFIGURATION.md](./docs/CONFIGURATION.md) | OneBot / Telegram 协议端、LLM、完整 `config.yaml` 字段、环境变量、进阶功能开关 |
+| 配置 | [docs/CONFIGURATION.md](./docs/CONFIGURATION.md) | OneBot / Telegram / QQ 官方机器人、LLM、完整 `config.yaml` 字段、环境变量、进阶功能开关 |
 | 配置 | [config.example.yaml](./config.example.yaml) | 带注释的配置模板（复制为 `config.yaml`） |
 | 开发 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构、进程模型、技术栈、核心模块 |
 | 开发 | [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | 生产部署：向量检索初始化、PostgreSQL 迁移、断连恢复 |
@@ -92,7 +116,7 @@ uv run python main.py --host 127.0.0.1
 
 **本项目不包含任何针对 QQ、QQ 客户端或腾讯即时通信服务的逆向工程、协议破解、抓包分析、客户端注入、Hook 或模拟登录。**
 
-Qingci-Bot CE 是一个通用机器人框架：它只通过**公开的、由第三方协议端实现的 OneBot 11 / OneBot 12 标准接口**（反向 WebSocket / HTTP API）以及 Telegram Bot API 收发消息。QQ 侧的消息收发完全由使用者自行部署的协议端（如 NapCat、LLBot / LLOneBot、Lagrange.OneBot、go-cqhttp 等）完成，本项目：
+Qingci-Bot CE 是一个通用机器人框架：它只通过**公开的、由第三方协议端实现的 OneBot 11 / OneBot 12 标准接口**（反向 WebSocket / HTTP API）、**QQ 开放平台面向开发者的官方机器人接口**（`q.qq.com`，AppID + AppSecret 鉴权）以及 Telegram Bot API 收发消息。QQ 侧的消息收发由使用者自行选择：或自行部署协议端（如 NapCat、LLBot / LLOneBot、Lagrange.OneBot、go-cqhttp 等），或在开放平台注册官方机器人后填入 AppID / AppSecret 走官方接口。本项目：
 
 - 不内置、不捆绑、不分发任何协议端，也不参与其登录、鉴权或协议实现；
 - 不获取、不存储、不破解任何 QQ 账号凭据或加密协议；
@@ -103,7 +127,7 @@ Qingci-Bot CE 是一个通用机器人框架：它只通过**公开的、由第�
 
 **使用者责任**：使用者应自行确认其协议端的获取、部署与使用符合适用法律法规、平台服务条款及账号规则，并自行承担由此产生的全部责任；本项目作者不对使用者的具体使用方式负责。
 
-> 计划中的「QQ 机器人官方接入」指接入 QQ 开放平台面向开发者的官方机器人接口，与现有协议端方案并列，同样不涉及任何逆向或非公开接口。
+> 「QQ 机器人官方接入」指接入 QQ 开放平台面向开发者的官方机器人接口（已实现，见 `platforms.qq`），与协议端方案并列，同样不涉及任何逆向或非公开接口。
 
 ## 近期开发计划
 
@@ -111,12 +135,11 @@ Qingci-Bot CE 是一个通用机器人框架：它只通过**公开的、由第�
 
 | 方向 | 内容 |
 | --- | --- |
-| QQ 机器人官方接入 | 新增基于 QQ 开放平台官方机器人 API 的平台适配器（Webhook / WebSocket），与现有 OneBot 11 / OneBot 12 / Telegram 适配器并列，统一归一化为 OneBot 12 内部事件模型；插件层无需改动即可复用现有能力 |
-| 去冗余瘦身 | 精简运行时依赖与重复实现：收敛历史兼容代码、合并重复的消息段 / 协议转换路径、清理无调用方的旧分支，压缩 EXE / AppImage / Docker 镜像体积，并同步评估可移除的可选依赖 |
+| 去冗余瘦身 | 精简运行时依赖与重复实现：收敛历史兼容代码、合并重复的消息段 / 协议转换路径、清理无调用方的旧分支，压缩 EXE / deb / rpm / Docker 镜像体积，并同步评估可移除的可选依赖 |
 
-> 两项均会先在 CHANGELOG 的 `[Unreleased]` 段记录，发版时归入对应版本；涉及破坏性变更会提前在 Release Notes 说明。
+> 计划项会先在 CHANGELOG 的 `[Unreleased]` 段记录，发版时归入对应版本；涉及破坏性变更会提前在 Release Notes 说明。
 >
-> **去冗余瘦身 · 首轮进展**：已把 `installer.py` / `market.py` / `deps.py` 三处重复的子进程超时控制流收敛到 `bot/plugin/_proc.py` 的 `run_command()`，把 CQ 码序列化合并为 `bot/core/message.py` 的单一实现，并扩充 PyInstaller 排除项。依赖审计结论：现有 18 个运行时依赖均**不可安全移除** —— `aiosqlite` 是 SQLAlchemy 连接串里的动态驱动、`filelock` 是防版本降级的安全钉子、`websockets` 由 `uvicorn[standard]` 传递依赖且刚调整过上界，其余均有直接 import。后续重点是 EXE / AppImage 内置大件（Chromium、playwright 运行时）的按需化评估。
+> **去冗余瘦身 · 首轮进展**：已把 `installer.py` / `market.py` / `deps.py` 三处重复的子进程超时控制流收敛到 `bot/plugin/_proc.py` 的 `run_command()`，把 CQ 码序列化合并为 `bot/core/message.py` 的单一实现，并扩充 PyInstaller 排除项。依赖审计结论：现有 18 个运行时依赖均**不可安全移除** —— `aiosqlite` 是 SQLAlchemy 连接串里的动态驱动、`filelock` 是防版本降级的安全钉子、`websockets` 由 `uvicorn[standard]` 传递依赖且刚调整过上界，其余均有直接 import。后续重点是 EXE / deb / rpm 内置大件（Chromium、playwright 运行时）的按需化评估。
 
 ## 许可证
 
