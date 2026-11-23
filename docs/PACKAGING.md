@@ -37,7 +37,9 @@ dist\qingci-bot-ce\
 
 > **HTML 渲染全内置**：`build.bat` 会下载 Playwright 无头 Chromium 到产物目录 `ms-playwright\`，运行时 `main.py` 通过 `PLAYWRIGHT_BROWSERS_PATH` 指向它，EXE 开箱即可渲染签到卡等 HTML → 图片，无需最终用户另行 `playwright install chromium`。若构建环境网络不佳导致下载失败，产物仍可运行，仅渲染能力降级（签到卡回退纯文本）。构建期可设 `set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright` 走国内镜像加速。
 
-> **按需化（轻量包）**：不需要开箱渲染、想减小分发体积时，可用 `--no-browser`（Windows）/ `--no-browser`（Linux，或设 `SKIP_BROWSER=1`）跳过浏览器捆绑；产物不含 `ms-playwright\`，需要渲染能力时在产物目录执行 `playwright install chromium`（`PLAYWRIGHT_BROWSERS_PATH` 指向产物目录）。GitHub Actions 手动触发 Release 时可在 `bundle_browser` 输入中选择是否捆绑。默认（tag 推送）仍捆绑，保持开箱可渲染。
+> **按需化（轻量包）**：不需要开箱渲染、想减小分发体积时，可用 `--no-browser`（Windows）/ `--no-browser`（Linux，或设 `SKIP_BROWSER=1`）跳过浏览器捆绑；产物不含 `ms-playwright\`。GitHub Actions 手动触发 Release 时可在 `bundle_browser` 输入中选择是否捆绑；默认（tag 推送）仍捆绑，保持开箱可渲染。
+>
+> **注意**：`--no-browser` 的产物要恢复渲染，目前只适用于**源码部署与 onedir 产物**——在产物目录执行 `playwright install chromium`（`PLAYWRIGHT_BROWSERS_PATH` 指向产物目录）。deb / rpm 安装后 `/opt` 只读、包内也没有 `playwright` CLI，**无法补装浏览器**；这两类安装包需要渲染能力时请使用捆绑浏览器的版本。
 
 ## 运行
 

@@ -363,9 +363,15 @@ exit 0
 EOF
 
   local log
+  # 显式固定 payload 压缩：rpmbuild 的默认值随发行版变化——Ubuntu 24.04 的
+  # rpm 4.19 默认 zstd-19（约 232MB），而 22.04 的 rpm 4.17 默认 gzip-9
+  # （同一份内容约 315MB，比 deb 大 76MB）。构建基线是 22.04，不固定就等于
+  # 让产物体积随构建机漂移。zstd >= 4.14 起的 rpm 均可安装，目标发行版都满足。
+  # 需要对比时可覆盖：RPM_PAYLOAD=w9.gzdio bash scripts/pack_linux_server.sh ...
   if ! log="$(rpmbuild --define "_topdir $topdir" \
                         --define "_unitdir /etc/systemd/system" \
                         --define "_rpmdir $topdir/RPMS" \
+                        --define "_binary_payload ${RPM_PAYLOAD:-w19.zstdio}" \
                         -bb "$topdir/SPECS/${PKG_NAME}.spec" 2>&1)"; then
     echo "ERROR: rpmbuild 失败，末尾输出：" >&2
     echo "$log" | tail -n 30 >&2
