@@ -151,6 +151,52 @@ bash scripts/pack_linux_server.sh --version 1.22.0 --only rpm
 
 本地产物落点：桌面版在 `dist/electron/`，服务端包在 `dist/linux/`；CI 会把桌面版归集到 `dist/linux/` 后统一上传（`Collect desktop packages into dist/linux` 步骤），本地构建无需手动搬。
 
+## 安装冒烟（deb / rpm）
+
+`scripts/smoke_install_packages.sh <包目录> [--only deb|rpm]` 把分发包**真正装进**目标发行版容器（deb → Ubuntu，rpm → Fedora），断言"装得上 → 布局对 → 跑得起来 → 卸得干净"：
+
+| 包 | 断言 |
+| --- | --- |
+| 服务端 | 冻结二进制可执行 / 系统用户 `qingci-bot` 已创建 / systemd 单元 `ExecStart` 指向安装目录 / 数据与日志目录存在 / `--help` 退出码 0 / **headless 启动后 `/api/bot/health` 返回 200** / `remove` 保留用户实例数据、`purge` 才清 `/var/lib` |
+| 桌面 | 可执行文件 + `/usr/bin` 软链可解析 + `.desktop` 条目 / 内嵌 `resources/backend.zip` 存在且**解压后主程序可运行** / `remove` 后安装目录清理 |
+
+为什么桌面也要跑后端：容器内没有 X，桌面壳本身起不来；但内嵌后端是纯 CLI，解压后跑 `--help` 能验证"冻结产物在该发行版上可加载"。**不测这一步桌面包会假绿**——装得上、一启动却拉不起后端。
+
+运行位置（同一脚本，避免两套断言漂移）：
+
+- `ci.yml` 的 `package-smoke` job：只在打包链路输入变化时运行（桌面壳、spec、打包脚本），约 12 分钟；
+- `release.yml` 的 `Install smoke` 步骤：**上传前必过**，防止把装不上的包发出去。
+
+本地运行需要容器引擎（docker 或 podman）；SELinux 主机（Fedora / RHEL）上脚本会自动加 `--security-opt label=disable`（否则只读 bind mount 被标签策略拒绝）：
+
+```bash
+SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux
+# 只测一种格式
+SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux --only rpm
+# 换目标发行版
+UBUNTU_IMAGE=debian:12 SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux --only deb
+```
+
+### 已知：构建机的 glibc 决定运行时下限
+
+PyInstaller 会把**构建机**的 `libstdc++.so.6` / `libgcc_s.so.1` 打进 `_internal/`。在较新的发行版上构建、到较老的发行版运行，会以这种方式失败：
+
+```
+ImportError: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found
+  (required by /opt/qingci-bot-ce-server/_internal/libstdc++.so.6)
+```
+
+1.22.0 的产物由 CI 在 `ubuntu-24.04`（glibc 2.39）构建，实测兼容性：
+
+| 目标系统 | glibc | 结果 |
+| --- | --- | --- |
+| Ubuntu 24.04 | 2.39 | ✅ 全部断言通过（含启动与健康检查） |
+| Fedora 41 | 2.40 | ✅ 同上 |
+| Ubuntu 22.04 | 2.35 | ❌ `GLIBC_2.38' not found` |
+| Debian 12 | 2.36 | ❌ 同上 |
+
+结论：**本地打包请在与目标一致或更老的发行版上进行**。要把支持面下探到 22.04 / Debian 12，需把构建基线降到 `ubuntu-22.04` 并重发版本（构建产物会要求更老的 glibc）。
+
 ## 自动发布（GitHub Actions）
 
 打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](../.github/workflows/release.yml)，各平台自动联编：

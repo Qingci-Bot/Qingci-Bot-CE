@@ -25,6 +25,51 @@
 | POST | `/stop`    | 是  | 停止 Bot      |
 | POST | `/restart` | 是  | 重启 Bot      |
 
+### `GET /api/bot/status` 响应
+
+```jsonc
+{
+  "running": true,
+  "connected": true,            // 主平台（onebot）是否在线
+  "version": "1.22.0",
+  "last_heartbeat": 1763... ,   // epoch 秒；0 表示无心跳机制
+  "render": { "available": true, "reason": "" },   // HTML 渲染能力探测
+  "platforms": [
+    {
+      "name": "qq",                  // 适配器标识，与事件的 platform 字段一致
+      "display_name": "QQ 官方机器人",
+      "connected": true,
+      "last_heartbeat": 1763...,
+      "self_id": 9000001,            // 平台侧机器人自身 ID
+      "connection_state": "connected",   // connected / degraded / connecting / stopped
+      "consecutive_errors": 0,
+      "error_count": 0,
+      "last_error_time": 0,
+      "last_disconnect_time": 0,
+      "backoff": 2.0,
+      // ↑ 以上为各适配器通用健康字段；以下为平台特有字段（示例为 QQ）
+      "sandbox": false,
+      "app_id": "1000001",
+      "username": "测试机器人",
+      "session_resumable": true,     // 网关会话可 Resume（断连补发）
+      "token_expire_at": 1763...,    // access_token 到期时间
+      "known_sessions": 12           // 已登记的 openid ↔ 内部 ID 映射数量
+    }
+  ],
+  "plugins": [ { "name": "...", "status": "loaded", "enabled": true, "pages": [] } ]
+}
+```
+
+要点：
+
+- `platforms` 只包含**已启用**的适配器（主平台停用时不出现在列表里）；
+- 通用健康字段由 `PlatformAdapter.status_info()` 附加，各平台可有不同扩展字段：Telegram 有 `identity_dirty`，QQ 有 `sandbox` / `session_resumable` / `token_expire_at` / `known_sessions`；
+- `connected` 顶层字段只反映主平台（`onebot`），判断某个适配器是否在线请看 `platforms[].connected`。
+
+### `GET /api/bot/health`
+
+`{"status": "ok", "running": <bool>}`——仅表示 API 进程存活，不代表各平台在线。
+
 ## 配置管理 `/api/config`
 
 | 方法   | 路径               | 鉴权 | 说明                                                  |

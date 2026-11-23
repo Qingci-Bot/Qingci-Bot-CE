@@ -331,6 +331,12 @@ jobs:
           done
           echo "包名与元数据校验通过"
 
+      - name: Install smoke (deb / rpm in containers)
+        # 真装一遍再上传：布局/软链/systemd 单元/冻结二进制能否启动并响应
+        # /api/bot/health/卸载是否保留数据。只读元数据证明不了「用户装得上」。
+        # 脚本与 ci.yml 的 package-smoke 共用，避免两套断言漂移。
+        run: bash scripts/smoke_install_packages.sh dist/linux
+
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}

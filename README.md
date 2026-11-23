@@ -80,7 +80,11 @@ uv run python main.py --host 127.0.0.1
 | Fedora / RHEL 服务端 | `qingci-bot-ce-server-<ver>-1.x86_64.rpm` | 同上 |
 | 校验和 | `SHA256SUMS.txt` | `sha256sum -c SHA256SUMS.txt` 校验上述 6 个包 |
 
-Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。安装步骤见 [docs/SETUP.md](./docs/SETUP.md#linux-发行版包deb--rpm)，命名与校验规则见 [docs/PACKAGING.md](./docs/PACKAGING.md#产物命名与校验)。
+Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。
+
+> **发行版要求**：Linux 包自带 Python 运行时，要求 **glibc ≥ 2.38**（Ubuntu 24.04+ / Fedora 39+）。Ubuntu 22.04（2.35）与 Debian 12（2.36）目前启动会报 `GLIBC_2.38' not found`，请暂用 Docker 镜像或源码运行，详见 [docs/PACKAGING.md](./docs/PACKAGING.md#已知构建机的-glibc-决定运行时下限)。
+
+安装步骤见 [docs/SETUP.md](./docs/SETUP.md#linux-发行版包deb--rpm)，命名与校验规则见 [docs/PACKAGING.md](./docs/PACKAGING.md#产物命名与校验)。
 
 Docker 镜像同版本发布到 `ghcr.io/qingci-bot/qingci-bot-ce`（tag：`vX.Y.Z` / `X.Y` / `X` / `latest`）。
 
