@@ -34,6 +34,8 @@
 #             （不执行 GUI：容器内无 X server，启动必然失败，断言没有意义）
 set -euo pipefail
 
+T_START="$(date +%s)"
+
 PKG_DIR="dist/linux"
 if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then
   PKG_DIR="$1"
@@ -86,16 +88,21 @@ pkg="$1"
 fmt="$2"
 kind="$3"
 
-say() { echo "    [$kind] $*"; }
+# 每行带「用例内已耗时」：卡住时能立刻看出停在哪个断言，而不是只看到一个总时长
+T_CASE="$(date +%s)"
+say() { printf "    [%s +%3ds] %s\n" "$kind" "$(( $(date +%s) - T_CASE ))" "$*"; }
 
 install_pkg() {
   if [ "$fmt" = "deb" ]; then
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq
+    # 超时/重试显式收紧：默认值遇到不可达镜像会挂很久，看起来就像卡死
+    APT_OPTS=(-o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=2)
+    apt-get "${APT_OPTS[@]}" update -qq
     # 用 apt 而非 dpkg -i：让依赖解析真正走一遍（缺依赖就是要在这里失败）
-    apt-get install -y -qq "$pkg"
+    apt-get "${APT_OPTS[@]}" install -y -qq "$pkg"
   else
-    dnf install -y -q "$pkg"
+    # 同上：Fedora 镜像不可达时 dnf 会反复重试，必须设上限才能快速暴露问题
+    dnf install -y -q --setopt=timeout=25 --setopt=retries=2 --setopt=install_weak_deps=False "$pkg"
   fi
 }
 
@@ -207,6 +214,13 @@ else
     || { echo "    [FAIL] 内嵌后端归档缺失"; exit 1; }
   say "内嵌 backend.zip OK"
 
+  # 窗口/托盘图标：electron-builder 的 build/ 是 buildResources，不会进 asar，
+  # 必须靠 extraResources 落到 resources/ 下，否则运行期取不到图标（曾退化
+  # 成系统默认齿轮）。这里直接断产物，防止再次漏打包。
+  test -f "/opt/Qingci-Bot CE/resources/icon.png" \
+    || { echo "    [FAIL] 应用图标未打入 resources/icon.png（窗口/托盘会显示系统默认图标）"; exit 1; }
+  say "窗口/托盘图标 OK"
+
   # 桌面壳本身在容器里起不来（无 X server），但它内嵌的后端是纯 CLI：
   # 解压后跑 --help 能验证「冻结产物在该发行版上可加载」——这正是 glibc
   # 版本错配（如 libstdc++ 需要 GLIBC_2.38）最早暴露的地方。不测这一步，
@@ -241,24 +255,47 @@ run_case() {
   pkgdir="$(cd "$(dirname "$pkg")" && pwd)"
   echo ""
   echo "==> [$fmt/$kind] $name  ($image)"
-  "$ENGINE" run --rm "${SEC_ARGS[@]}" \
+  # 硬上限：单个用例 15 分钟。宁可失败并打印到哪一步，也不要让 job 挂几十分钟。
+  timeout 900 "$ENGINE" run --rm "${SEC_ARGS[@]}" \
     -v "${pkgdir}:/pkgs:ro" \
     "$image" \
     bash -c "$INNER" _ "/pkgs/${name}" "$fmt" "$kind" \
     || {
-      echo "[FAIL] $name 冒烟未通过" >&2
+      rc=$?
+      if [ "$rc" -eq 124 ]; then
+        echo "[FAIL] $name 冒烟超时（900s）——通常是容器内包管理器访问镜像源超时" >&2
+      else
+        echo "[FAIL] $name 冒烟未通过" >&2
+      fi
       exit 1
     }
   echo "    OK: $name"
 }
 
-count=0
+# 先收集用例，再并行执行。
+#
+# 串行跑 4 个用例（server/desktop × deb/rpm）需要 20 分钟以上：每个用例都要在干净
+# 容器里装 240~355MB 的包，再冷启动一次冻结后端。4 个用例彼此独立（各自一个容器、
+# 各自监听 18080，互不干扰），并行后墙钟 ≈ 最慢的那个用例，而且日志里能直接看出
+# 是哪个包慢——串行时只能看到一个不断增长的总耗时，容易被误判成「卡住」。
+c_pkgs=()
+c_fmts=()
+c_kinds=()
+c_imgs=()
+
+enqueue() {
+  c_pkgs+=("$1")
+  c_fmts+=("$2")
+  c_kinds+=("$3")
+  c_imgs+=("$4")
+}
+
 for deb in "$PKG_DIR"/*.deb; do
   [ -e "$deb" ] || continue
   [ -z "$ONLY" ] || [ "$ONLY" = "deb" ] || continue
   case "$(basename "$deb")" in
-    "${SERVER_PKG}"_*) run_case "$deb" deb server "$UBUNTU_IMAGE"; count=$((count + 1)) ;;
-    "${DESKTOP_PKG}"_*) run_case "$deb" deb desktop "$UBUNTU_IMAGE"; count=$((count + 1)) ;;
+    "${SERVER_PKG}"_*) enqueue "$deb" deb server "$UBUNTU_IMAGE" ;;
+    "${DESKTOP_PKG}"_*) enqueue "$deb" deb desktop "$UBUNTU_IMAGE" ;;
     *) echo "[WARN] 跳过未识别的 deb: $deb" ;;
   esac
 done
@@ -267,16 +304,41 @@ for rpmf in "$PKG_DIR"/*.rpm; do
   [ -e "$rpmf" ] || continue
   [ -z "$ONLY" ] || [ "$ONLY" = "rpm" ] || continue
   case "$(basename "$rpmf")" in
-    "${SERVER_PKG}"-*) run_case "$rpmf" rpm server "$FEDORA_IMAGE"; count=$((count + 1)) ;;
-    "${DESKTOP_PKG}"-*) run_case "$rpmf" rpm desktop "$FEDORA_IMAGE"; count=$((count + 1)) ;;
+    "${SERVER_PKG}"-*) enqueue "$rpmf" rpm server "$FEDORA_IMAGE" ;;
+    "${DESKTOP_PKG}"-*) enqueue "$rpmf" rpm desktop "$FEDORA_IMAGE" ;;
     *) echo "[WARN] 跳过未识别的 rpm: $rpmf" ;;
   esac
 done
 
+count="${#c_pkgs[@]}"
 if [ "$count" -eq 0 ]; then
   echo "[FAIL] $PKG_DIR 下没有找到可冒烟的分发包" >&2
   exit 1
 fi
 
+echo "==> 共 $count 个用例，并行执行"
+
+pids=()
+labels=()
+for i in "${!c_pkgs[@]}"; do
+  # 每个用例一个子 shell：run_case 里的 exit 1 只结束该用例，不影响其他用例
+  ( run_case "${c_pkgs[$i]}" "${c_fmts[$i]}" "${c_kinds[$i]}" "${c_imgs[$i]}" ) &
+  pids+=("$!")
+  labels+=("$(basename "${c_pkgs[$i]}")")
+done
+
+failed=""
+for i in "${!pids[@]}"; do
+  if ! wait "${pids[$i]}"; then
+    failed="$failed ${labels[$i]}"
+  fi
+done
+
+if [ -n "$failed" ]; then
+  echo ""
+  echo "[FAIL] 以下用例未通过:$failed" >&2
+  exit 1
+fi
+
 echo ""
-echo "全部通过：$count 个分发包安装/启动/卸载冒烟"
+echo "全部通过：$count 个分发包安装/启动/卸载冒烟，总耗时 $(( $(date +%s) - T_START ))s"

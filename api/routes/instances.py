@@ -35,7 +35,7 @@ from bot.instances import (
     list_instances,
     rename_instance,
 )
-from bot.paths import data_root
+from bot.paths import data_root, instances_dir
 from desktop.py.relaunch import spawn_relaunch
 
 logger = logging.getLogger("qingci-bot.api.instances")
@@ -105,6 +105,21 @@ async def get_instances() -> list[dict]:
         info["adapters"] = instance_adapters(inst.name)
         result.append(info)
     return result
+
+
+@router.get("/root", dependencies=[Depends(require_auth)])
+async def get_instances_root() -> dict:
+    """实例根目录的绝对路径。
+
+    用户（尤其是 Linux 包安装后）经常问「实例到底存在哪」：这里是唯一权威来源，
+    Web UI 直接展示，避免让人去猜 XDG / QINGCI_DATA_HOME 的解析规则。
+    """
+    root = instances_dir()
+    return {
+        "path": str(root),
+        "exists": root.exists(),
+        "writable": os.access(root, os.W_OK) if root.exists() else False,
+    }
 
 
 class CreateInstanceRequest(BaseModel):

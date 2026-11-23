@@ -53,6 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ver: ${{ steps.resolve.outputs.ver }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
     permissions:
       contents: write
     steps:
@@ -70,6 +71,11 @@ jobs:
             *) echo "::error::版本号必须以 v 开头（如 v1.17.0），收到: $ver"; exit 1 ;;
           esac
           echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          # rc 版本走预发布：不抢 Latest、不与正式版混在同一个下载入口
+          case "$ver" in
+            *-rc*|*.rc*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
           echo "Resolved version: $ver"
 
       - uses: actions/checkout@v7
@@ -99,16 +105,25 @@ jobs:
               echo "::warning::CHANGELOG 中未找到 $vnum 的段落，回退为自动生成说明"
             fi
 
+            # rc 版本发预发布：GitHub 上标记 Pre-release 且不替换 Latest
+            pre_args=()
+            if [ "${{ needs.prepare.outputs.prerelease }}" = "true" ]; then
+              pre_args=(--prerelease --latest=false)
+              echo "Pre-release (rc) 版本：$ver"
+            fi
             if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-              gh release create "$ver" --title "$ver" "${notes_args[@]}"
+              gh release create "$ver" --title "$ver" "${notes_args[@]}" "${pre_args[@]}"
             else
               # 手动触发（dispatch）且 Git 内无该 tag 时，从当前 HEAD 建 tag 并发布
-              gh release create "$ver" --target "$GITHUB_SHA" --title "$ver" "${notes_args[@]}"
+              gh release create "$ver" --target "$GITHUB_SHA" --title "$ver" "${notes_args[@]}" "${pre_args[@]}"
             fi
             echo "Created release $ver"
           else
             echo "Release $ver already exists, will upload assets"
             gh release view "$ver" --json isDraft -q .isDraft | grep -q false || gh release edit "$ver" --draft=false
+            if [ "${{ needs.prepare.outputs.prerelease }}" = "true" ]; then
+              gh release edit "$ver" --prerelease --latest=false
+            fi
           fi
 
   windows-exe:
@@ -298,6 +313,9 @@ jobs:
           set -euo pipefail
           ver="${{ needs.prepare.outputs.ver }}"
           ver="${ver#v}"
+          # 预发布：deb/rpm 元数据把 -rc 写成 ~rc（排序在正式版之前），
+          # 文件名可能两种写法都出现（desktop 取 appInfo.version，server 脚本转 ~）。
+          ver_pkg="${ver//-rc/~rc}"
           echo "== dist/linux =="
           ls -l dist/linux
 
@@ -314,11 +332,13 @@ jobs:
             darch="$(dpkg-deb -f "$deb" Architecture)"
             echo "deb: $base -> Package=$pkg Version=$dver Arch=$darch"
             echo "     安装路径: $(dpkg-deb -c "$deb" | grep -o '\./opt/[^/]*/' | sort -u | tr '\n' ' ')"
-            case "$base" in
+            base_norm="${base//\~/-}"
+            case "$base_norm" in
               "qingci-bot-ce_${ver}_${darch}.deb"|"qingci-bot-ce-server_${ver}_${darch}.deb") ;;
               *) echo "::error::deb 文件名不符合 <包名>_<版本>_<架构>.deb 约定: $base"; exit 1 ;;
             esac
-            [ "$dver" = "$ver" ] || { echo "::error::deb 版本与 tag 不一致: $base ($dver != $ver)"; exit 1; }
+            { [ "$dver" = "$ver" ] || [ "$dver" = "$ver_pkg" ]; } \
+              || { echo "::error::deb 版本与 tag 不一致: $base ($dver != $ver / $ver_pkg)"; exit 1; }
             [ "$darch" = "amd64" ] || { echo "::error::deb 架构非 amd64: $base ($darch)"; exit 1; }
           done
 
@@ -329,11 +349,14 @@ jobs:
             rrel="$(rpm -qp --qf '%{RELEASE}' "$rpm")"
             rarch="$(rpm -qp --qf '%{ARCH}' "$rpm")"
             echo "rpm: $base -> Name=$name Version=$rver Release=$rrel Arch=$rarch"
-            case "$base" in
-              "qingci-bot-ce-${rver}-${rrel}.${rarch}.rpm"|"qingci-bot-ce-server-${rver}-${rrel}.${rarch}.rpm") ;;
+            base_norm="${base//\~/-}"
+            rver_norm="${rver//\~/-}"
+            case "$base_norm" in
+              "qingci-bot-ce-${rver_norm}-${rrel}.${rarch}.rpm"|"qingci-bot-ce-server-${rver_norm}-${rrel}.${rarch}.rpm") ;;
               *) echo "::error::rpm 文件名不符合 <包名>-<版本>-<release>.<架构>.rpm 约定: $base"; exit 1 ;;
             esac
-            [ "$rver" = "$ver" ] || { echo "::error::rpm 版本与 tag 不一致: $base ($rver != $ver)"; exit 1; }
+            { [ "$rver" = "$ver" ] || [ "$rver" = "$ver_pkg" ]; } \
+              || { echo "::error::rpm 版本与 tag 不一致: $base ($rver != $ver / $ver_pkg)"; exit 1; }
             [ "$rarch" = "x86_64" ] || { echo "::error::rpm 架构非 x86_64: $base ($rarch)"; exit 1; }
           done
           echo "包名与元数据校验通过"

@@ -86,7 +86,18 @@ async function refreshInstances() {
 
 onMounted(() => {
   refreshInstances();
+  store.fetchInstancesRoot();
 });
+
+async function copyInstancesRoot() {
+  if (!store.instancesRoot) return;
+  try {
+    await navigator.clipboard.writeText(store.instancesRoot);
+    showToast('已复制实例目录路径', 'success');
+  } catch {
+    showToast('复制失败，请手动选择路径', 'error');
+  }
+}
 
 function openCreateForm() {
   createName.value = '';
@@ -164,6 +175,13 @@ function onRename(inst) {
   <div class="page-header">
     <h1>实例管理</h1>
     <p>创建、切换、重命名或删除多平台运行实例</p>
+    <div v-if="store.instancesRoot" class="instances-root">
+      <span class="instances-root-label">实例目录</span>
+      <code class="instances-root-path" :title="store.instancesRoot">{{
+        store.instancesRoot
+      }}</code>
+      <button class="btn btn-secondary btn-sm" @click="copyInstancesRoot">复制</button>
+    </div>
   </div>
 
   <div class="page-body">
@@ -267,9 +285,9 @@ function onRename(inst) {
           <tr>
             <th class="col-status">状态</th>
             <th>名称</th>
-            <th>平台</th>
+            <th class="col-platform">平台</th>
             <th class="col-num">端口</th>
-            <th>启用的适配器</th>
+            <th class="col-adapters">启用的适配器</th>
             <th class="col-num">数据</th>
             <th class="col-actions">操作</th>
           </tr>
@@ -344,6 +362,11 @@ function onRename(inst) {
             Lagrange.OneBot 等实现端
           </li>
           <li><strong>Telegram</strong> — Bot API 长轮询，创建后在系统设置中填写 Bot Token</li>
+          <li>
+            <strong>QQ 官方机器人</strong> — 开放平台 Bot API v2（WebSocket
+            网关），创建后在系统设置中填写 AppID /
+            AppSecret；未填写时该平台显示为「未配置」，不影响其他平台运行
+          </li>
         </ul>
         <p style="line-height: 1.8">
           切换实例会重启应用以加载目标实例的配置与数据。 删除实例将清空该实例的所有文件，无法恢复。
@@ -354,6 +377,31 @@ function onRename(inst) {
 </template>
 
 <style scoped>
+.instances-root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.instances-root-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.instances-root-path {
+  max-width: min(620px, 70vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
 .col-status {
   width: 100px;
 }
@@ -378,6 +426,7 @@ function onRename(inst) {
 }
 .instance-badge {
   display: inline-block;
+  white-space: nowrap;
   padding: 2px 10px;
   font-size: 11px;
   font-weight: 600;
@@ -491,6 +540,13 @@ function onRename(inst) {
 .col-num {
   width: 90px;
 }
+/* 「QQ 官方机器人」这类长平台名此前被挤到竖排换行，撑高整行使操作列错位 */
+.col-platform {
+  width: 150px;
+}
+.col-adapters {
+  min-width: 160px;
+}
 .td-mono {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -515,6 +571,7 @@ function onRename(inst) {
 }
 .adapter-tag {
   padding: 1px 8px;
+  white-space: nowrap;
   font-size: 11px;
   line-height: 1.6;
   border-radius: 8px;

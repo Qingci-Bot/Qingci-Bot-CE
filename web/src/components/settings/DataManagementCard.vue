@@ -19,6 +19,7 @@ const downloading = ref(false);
 const restoreFile = ref(null);
 const restoreLoading = ref(false);
 const restoreResult = ref('');
+const restoreFileName = ref('');
 const exporting = ref(false);
 
 function formatSize(bytes) {
@@ -82,6 +83,15 @@ async function downloadBackup() {
   }
 }
 
+function pickRestoreFile() {
+  restoreFile.value?.click();
+}
+
+function onRestorePick() {
+  const file = restoreFile.value?.files?.[0];
+  restoreFileName.value = file ? file.name : '';
+}
+
 async function restoreDb() {
   const file = restoreFile.value?.files?.[0];
   if (!file) {
@@ -127,6 +137,7 @@ async function restoreDb() {
   } finally {
     restoreLoading.value = false;
     if (restoreFile.value) restoreFile.value.value = '';
+    restoreFileName.value = '';
   }
 }
 
@@ -194,20 +205,34 @@ async function exportCsv() {
       备份完成：{{ backupResult.filename }}（{{ formatSize(backupResult.size) }}），保存在服务端
       data/backups/ 目录
     </div>
-    <div
-      class="restore-row"
-      style="margin-top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap"
-    >
-      <input ref="restoreFile" type="file" accept=".db" :disabled="restoreLoading" />
-      <button class="btn btn-secondary" :disabled="restoreLoading" @click="restoreDb">
-        {{ restoreLoading ? '恢复中…' : '从备份恢复数据库' }}
+    <div class="restore-row">
+      <input
+        ref="restoreFile"
+        type="file"
+        accept=".db"
+        class="file-input-hidden"
+        :disabled="restoreLoading"
+        @change="onRestorePick"
+      />
+      <button class="btn btn-secondary" :disabled="restoreLoading" @click="pickRestoreFile">
+        选择备份文件…
+      </button>
+      <span class="file-name" :class="{ 'file-name-empty': !restoreFileName }">
+        {{ restoreFileName || '未选择文件' }}
+      </span>
+      <button
+        class="btn btn-primary"
+        :disabled="!restoreFileName || restoreLoading"
+        @click="restoreDb"
+      >
+        {{ restoreLoading ? '恢复中…' : '从备份恢复' }}
       </button>
     </div>
     <div v-if="restoreResult" class="status-bar" style="margin-top: 8px">{{ restoreResult }}</div>
-    <div class="hint-text" style="margin-top: 8px">
-      备份使用 SQLite 在线备份 API，保留最近 10 份，可下载到本地；恢复上传 .db 备份会先自动
-      备份当前库再替换主库（恢复后请刷新页面）。CSV 导出包含全部消息记录（utf-8-sig 编码，Excel
-      可直接打开）。
+    <div class="hint-text restore-hint">
+      <p>备份使用 SQLite 在线备份 API，服务端保留最近 10 份，可随时下载到本地。</p>
+      <p>恢复时上传 <code>.db</code> 备份：会先自动备份当前库，再替换主库（恢复后请刷新页面）。</p>
+      <p>CSV 导出包含全部消息记录，utf-8-sig 编码，Excel 可直接打开。</p>
     </div>
   </div>
 </template>
@@ -224,5 +249,47 @@ async function exportCsv() {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* 恢复行：原生 file input 在各平台渲染差异大（“选择文件 未选择任何文件”），
+   改为统一的按钮 + 文件名展示，并与上方操作按钮对齐 */
+.restore-row {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.file-input-hidden {
+  display: none;
+}
+.file-name {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.file-name-empty {
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+}
+.restore-hint p {
+  margin: 0 0 4px;
+  line-height: 1.7;
+}
+.restore-hint p:last-child {
+  margin-bottom: 0;
+}
+.restore-hint code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 </style>

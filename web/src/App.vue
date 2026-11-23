@@ -67,6 +67,26 @@ function fmtHeartbeat(ts) {
   return `${Math.floor(diff / 86400)} 天前`;
 }
 
+// 平台状态三态：在线 / 未配置（用户还没填凭据）/ 离线（配了但连不上）
+function isUnconfigured(p) {
+  return !p.connected && typeof p.reason === 'string' && p.reason.startsWith('未配置');
+}
+function platformStateLabel(p) {
+  if (p.connected) return '在线';
+  return isUnconfigured(p) ? '未配置' : '离线';
+}
+function platformStateClass(p) {
+  if (p.connected) return 'green';
+  return isUnconfigured(p) ? 'gray' : store.botRunning ? 'yellow' : 'gray';
+}
+function platformTitle(p) {
+  const parts = [p.display_name];
+  if (p.self_id) parts.push(`self_id ${p.self_id}`);
+  if (p.last_heartbeat) parts.push(`心跳 ${fmtHeartbeat(p.last_heartbeat)}`);
+  if (!p.connected && p.reason) parts.push(p.reason);
+  return parts.join(' · ');
+}
+
 // setTimeout 链式调度：成功维持 3000ms；失败间隔翻倍（上限 30000ms），成功即重置
 async function pollStatus() {
   if (disposed) return;
@@ -131,14 +151,11 @@ onUnmounted(() => {
               v-for="p in activePlatforms"
               :key="p.name"
               class="platform-row"
-              :title="`${p.display_name}${p.self_id ? ' · self_id ' + p.self_id : ''}${p.last_heartbeat ? ' · 心跳 ' + fmtHeartbeat(p.last_heartbeat) : ''}`"
+              :title="platformTitle(p)"
             >
-              <span
-                class="status-dot"
-                :class="p.connected ? 'green' : store.botRunning ? 'yellow' : 'gray'"
-              />
+              <span class="status-dot" :class="platformStateClass(p)" />
               <span class="platform-name">{{ p.display_name }}</span>
-              <span class="platform-state">{{ p.connected ? '在线' : '离线' }}</span>
+              <span class="platform-state">{{ platformStateLabel(p) }}</span>
             </div>
           </div>
         </div>

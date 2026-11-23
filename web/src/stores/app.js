@@ -123,6 +123,8 @@ export const useAppStore = defineStore('app', () => {
   const error = ref('');
   const configLoaded = ref(false);
   const instances = ref([]);
+  // 实例根目录的绝对路径（后端 /api/instances/root 返回），用于在页面上直接告诉用户数据在哪
+  const instancesRoot = ref('');
   const appVersion = ref('');
 
   const statusText = computed(() => {
@@ -268,6 +270,15 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  async function fetchInstancesRoot() {
+    try {
+      const data = await apiFetch('/api/instances/root');
+      instancesRoot.value = data?.path || '';
+    } catch (e) {
+      console.warn('fetchInstancesRoot failed:', e.message);
+    }
+  }
+
   async function createInstance(payload) {
     const inst = await apiFetch('/api/instances', {
       method: 'POST',
@@ -312,6 +323,8 @@ export const useAppStore = defineStore('app', () => {
     error,
     configLoaded,
     instances,
+    instancesRoot,
+    fetchInstancesRoot,
     appVersion,
     statusText,
     statusColor,

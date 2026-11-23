@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from ..plugin.protocol.ratelimit import RateLimiter
     from ..rag import KnowledgeStore
     from .event_bus import EventBus
-    from .platforms.base import PlatformAdapter
+    from .platforms.base import PlatformAdapter, PlatformNotConfigured
     from .platforms.onebot11 import OneBotConnection
     from .scheduler import BotScheduler
     from .session_state import SessionStateManager
@@ -170,8 +170,15 @@ class QingciBot:
                 continue
             try:
                 await platform.start()
+                platform._start_error = ""
                 logger.info(f"平台适配器已启动: {platform.display_name}")
-            except Exception:
+            except PlatformNotConfigured as exc:
+                # 未配置凭据是正常状态（用户还没填），以 warning 提示并给出指引；
+                # 不是故障，不打 traceback，也不该让面板显示成「启动失败」。
+                platform._start_error = str(exc)
+                logger.warning(f"平台适配器未启用: {name} —— {exc}")
+            except Exception as exc:
+                platform._start_error = f"{type(exc).__name__}: {exc}"
                 logger.exception(f"平台适配器启动失败: {name}（该平台将不可用）")
 
         # 后台探测 HTML 渲染能力（失败仅记日志，结果供 /api/bot/status 与插件查询）
@@ -800,6 +807,8 @@ class QingciBot:
                     "connected": bool(p.is_connected),
                     "last_heartbeat": p.last_heartbeat,
                     "self_id": _safe_int(getattr(p, "self_id", 0)),
+                    # 未启用/失败原因（未配置凭据、鉴权失败等），供面板区分「离线」与「未配置」
+                    "reason": getattr(p, "_start_error", ""),
                     **p.status_info(),
                 }
                 for p in self.platforms.values()

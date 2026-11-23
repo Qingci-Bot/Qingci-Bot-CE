@@ -51,7 +51,7 @@ import httpx
 from qingci_plugin_sdk.segments import Message
 
 from ...errors import AppError
-from .base import PlatformAdapter, cancel_and_await
+from .base import PlatformAdapter, PlatformNotConfigured, cancel_and_await
 
 logger = logging.getLogger("qingci-bot.platforms.telegram")
 
@@ -277,6 +277,10 @@ class TelegramAdapter(PlatformAdapter):
     # ============ 生命周期 ============
 
     async def start(self) -> None:
+        if not self.token:
+            raise PlatformNotConfigured(
+                "未配置 Bot Token —— 请在「系统设置 → Telegram 连接」中填写"
+            )
         self._running = True
         # 验证 token 并获取 Bot 自身信息（self_id）
         try:

@@ -54,7 +54,7 @@ from qingci_plugin_sdk.segments import Message
 from websockets.asyncio.client import connect as ws_connect
 
 from ...errors import AppError
-from .base import PlatformAdapter, cancel_and_await
+from .base import PlatformAdapter, PlatformNotConfigured, cancel_and_await
 
 logger = logging.getLogger("qingci-bot.platforms.qq")
 
@@ -432,7 +432,9 @@ class QQAdapter(PlatformAdapter):
 
     async def start(self) -> None:
         if not self.app_id or not self.app_secret:
-            raise RuntimeError("QQ 适配器启动失败：未配置 app_id / app_secret（platforms.qq）")
+            raise PlatformNotConfigured(
+                "未配置 AppID / AppSecret —— 请在「系统设置 → QQ 官方机器人连接」中填写"
+            )
         self._running = True
         # 先取一次 token：凭据错误在启动阶段就明确报错，而不是等网关异步失败
         try:

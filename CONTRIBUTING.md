@@ -63,6 +63,47 @@ python scripts/bump_version.py --check    # 提交前自查各处是否一致（
 > 表现为上千行 diff）。**每次 `uv run` 后提交前请 `git checkout -- uv.lock`**，
 > 只有确实要改依赖时才用上面的 `--default-index` 重新生成。
 
+### Dependabot 的 Python 依赖 PR 需要接管
+
+Dependabot 的 pip 生态更新**只改 `pyproject.toml` 的版本区间，从不更新 `uv.lock`**，
+而 CI 用 `uv sync --locked`，所以这类 PR 会在第一步直接失败：
+
+```
+error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+```
+
+接管方式（已脚本化，默认预览、`--yes` 才推送）：
+
+```bash
+scripts/relock_dependabot_pr.sh <PR号>          # 切分支、并入 main、重新锁、跑 ruff，只看 diff
+scripts/relock_dependabot_pr.sh <PR号> --yes    # 确认后提交并推送
+```
+
+脚本做的事：校验作者与状态 → 切到 PR 分支 → 并入 `origin/main` → `uv lock --default-index https://pypi.org/simple`
+→ `uv lock --check` → 若碰了 ruff 钉子则用新版本跑 `check` / `format --check` →（`--yes`）提交推送。
+
+> 为什么不做成 GitHub Action 自动修：`GITHUB_TOKEN` 的推送**不会触发新的 workflow run**
+> （防止递归），而 dependabot 触发的 `pull_request` 默认还可能只拿到只读 token。
+> 要让自动修复后 CI 自动重跑，需要一个 PAT 或 GitHub App token 存为 secret——
+> 在补齐该 secret 之前，本地脚本是可靠的那一半。
+
+### 预发布（rc）与正式发布
+
+版本号里带 `rc` 就是预发布，不带就是正式发布——**由 tag 决定，不需要改 workflow**：
+
+```bash
+python scripts/bump_version.py 1.23.0-rc1   # 各文件版本同步为 1.23.0-rc1
+git tag -a v1.23.0-rc1 -m "v1.23.0-rc1"
+git push origin v1.23.0-rc1                  # → GitHub Release 标记为 Pre-release
+```
+
+- `rc` 版本：GitHub Release 标记 **Pre-release**，且**不替换 Latest**（正式版下载入口仍指向稳定版）
+- 正式版本：正常 Release，自动成为 Latest
+- 打包侧：deb / rpm 的预发布写法是 `~`，因此 `1.23.0-rc1` 在包元数据与文件名里会写成
+  `1.23.0~rc1`（排序在 `1.23.0` 之前，`apt` / `dnf` 升级方向正确）。electron-builder 对
+  deb/rpm 内建同样的 `-` → `~` 转换，`scripts/pack_linux_server.sh` 用同样规则处理服务端包
+- rc 的 CHANGELOG 段落照常写在 `[1.23.0-rc1]` 下；正式发布时再补 `[1.23.0]`
+
 ## 开发环境
 
 ### 后端

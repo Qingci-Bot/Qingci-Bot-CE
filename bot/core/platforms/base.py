@@ -26,8 +26,19 @@ from ..events import EventContractError, validate_v12_event
 logger = logging.getLogger("qingci-bot.platforms")
 
 
+class PlatformNotConfigured(RuntimeError):
+    """平台缺少必要凭据/配置，因而无法启动。
+
+    与「真实故障」区分：未配置是用户还没填 AppID / Token 之类的正常状态，
+    应当以 warning 提示并给出配置指引，而不是打 ERROR + traceback 让人以为崩溃。
+    """
+
+
 class PlatformAdapter:
     """平台适配器基类（所有平台统一契约）"""
+
+    #: 最近一次启动失败/未启用的原因；启动成功时清空。供 /api/bot/status 上报
+    _start_error: str = ""
 
     #: 平台标识（事件 dict 的 platform 字段，如 onebot / telegram）
     name: str = "base"
