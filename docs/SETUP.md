@@ -151,10 +151,9 @@ chmod +x install.sh
 
 发布页提供两款 Linux 安装包，按发行版选择 `.deb`（Debian / Ubuntu）或 `.rpm`（Fedora / RHEL / openSUSE）。文件名形如 `qingci-bot-ce_<ver>_amd64.deb`（桌面版）、`qingci-bot-ce-server_<ver>_amd64.deb`（服务端版），rpm 对应 `qingci-bot-ce-<ver>-1.x86_64.rpm` 与 `qingci-bot-ce-server-<ver>-1.x86_64.rpm`；同页面 `SHA256SUMS.txt` 可用于校验下载完整性（`sha256sum -c SHA256SUMS.txt`）。
 
-> **⚠️ 发行版兼容性（1.22.0）**：分发包内嵌的 Python 运行时来自构建机（ubuntu-24.04），
-> 要求 **glibc ≥ 2.38**。实测 Ubuntu 24.04 / Fedora 41 可用；**Ubuntu 22.04（glibc 2.35）与
-> Debian 12（2.36）会在启动时报 `GLIBC_2.38' not found`**。这两个发行版请暂用 Docker 部署，
-> 或从源码运行（见上方源码部署）。
+> **发行版要求**：Linux 包自带 Python 运行时，要求 **glibc ≥ 2.35**——即 Ubuntu 22.04+、
+> Debian 12+、Fedora 36+ 可用。1.22.0 曾在 24.04 上构建，导致 22.04 / Debian 12 启动时报
+> `GLIBC_2.38' not found`，1.22.1 已把构建基线降到 22.04 修复；仍在使用 1.22.0 请升级。
 
 **服务端版**（无桌面环境，由 systemd 托管）：
 
