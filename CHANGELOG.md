@@ -7,35 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.22.3-rc1] - 2026-11-23（Linux 桌面版实测反馈修复；发布流程支持 rc 预发布）
+
+本版针对 Linux 版装机实测反馈的问题，并给发布流程加上 rc 预发布通路。**预发布版本**：不替换 Latest，正式版下载入口不受影响。
+
 ### Fixed
 
-- **Linux 桌面版窗口/托盘图标不显示**：`main.js` 从 `__dirname/../build/icon.png` 取图标，而 `build/` 是 electron-builder 的 buildResources，不会打进 asar，打包后路径不存在 → 退化成系统默认图标。改为由 `extraResources` 复制到 `resources/icon.png`，运行时按 `process.resourcesPath` 解析
+- **Linux 桌面版窗口/托盘图标不显示**：`main.js` 从 `__dirname/../build/icon.png` 取图标，而 `build/` 是 electron-builder 的 buildResources，不会打进 asar，打包后该路径不存在 → 退化成系统默认齿轮图标。改为由 `extraResources` 复制到 `resources/icon.png`，运行时按 `process.resourcesPath` 解析（开发态回退 `build/`）；安装冒烟增加对应断言，防止再次漏打包
 - **QQ / Telegram 适配器未配置时被当成故障**：未填 AppID/AppSecret（或 Bot Token）时 `start()` 抛异常，`bot.py` 用 `logger.exception` 记 ERROR 并提示「该平台将不可用」，看起来像崩溃。新增 `PlatformNotConfigured` 区分「未配置」与「真实故障」：前者记 WARNING + 配置指引，`/api/bot/status` 的 `platforms[].reason` 上报原因，侧边栏显示「未配置」而非「离线」
-- **实例管理表格错位**：平台列过窄使「QQ 官方机器人」竖排换行，撑高整行导致操作列不齐；平台/适配器徽章改为 `nowrap` 并给列显式宽度
+- **实例管理表格错位**：「QQ 官方机器人」在过窄的平台列里被挤成竖排，撑高整行导致操作列下沉错位。平台/适配器徽章改为 `nowrap` 并给列显式宽度
 - **「关于实例与平台」未包含 QQ**：补上 QQ 官方机器人条目与「未配置」的说明
-- **系统设置「数据管理」排版**：原生 `<input type="file">`（各平台渲染不一致）换成统一按钮 + 文件名展示，恢复行与上方操作按钮对齐，提示文案分段
+- **系统设置「数据管理」排版**：原生 `<input type="file">`（各平台渲染不一致、与自定义按钮基线不齐）换成统一按钮 + 文件名展示 + 独立主按钮，提示文案分段
+- **服务端 rpm 的 payload 压缩回归**：构建基线在 1.22.1 降到 ubuntu-22.04 后，rpmbuild 默认压缩从 zstd-19 变成 gzip-9，同一份内容 server rpm 315 MB、deb 239 MB（1.22.0 时两者基本持平）。现显式指定 `_binary_payload w19.zstdio`（可用 `RPM_PAYLOAD` 覆盖）；同 payload 实测 125.5 MiB → 107.8 MiB（−14.1%）
 
 ### Added
 
 - **实例目录可见**：`GET /api/instances/root` 返回实例根目录绝对路径，「实例管理」页顶部直接展示并支持复制；`docs/SETUP.md` 新增「数据与实例存在哪」对照表（源码 / Linux 桌面 / 服务端 / Windows / Docker）
-- **rc 版本走预发布**：tag 含 `rc` 时 Release 自动标记 Pre-release 且不替换 Latest，正式版本照常；deb/rpm 的预发布版本按 `~` 写法（`1.23.0-rc1` → `1.23.0~rc1`），排序在正式版之前，`apt`/`dnf` 升级方向正确。见 CONTRIBUTING「预发布（rc）与正式发布」
+- **rc 版本走预发布**：tag 含 `rc` 时 Release 自动标记 Pre-release 且 `--latest=false`，正式版照常替换 Latest；deb/rpm 的预发布版本按 `~` 写法（`1.22.3-rc1` → `1.22.3~rc1`），排序在正式版之前，`apt`/`dnf` 升级方向正确。见 CONTRIBUTING「预发布（rc）与正式发布」
+- `scripts/relock_dependabot_pr.sh`：接管 dependabot 的 Python 依赖 PR，补上它从不更新的 `uv.lock`（默认预览，`--yes` 才推送；并入 main、按官方源重锁、`uv lock --check`、必要时用目标 ruff 版本跑格式检查）
 
 ### Changed
 
-- 安装冒烟增加**硬超时**（单用例 900s）与包管理器网络上限（apt/dnf 25s 超时、2 次重试）：镜像源不可达时快速失败并给出原因，而不是让 job 挂几十分钟
-- **安装冒烟改为并行执行 4 个用例**：此前 server/desktop × deb/rpm 串行，每个都要在干净容器里装 240~355MB 包再冷启动一次后端，累计 20 分钟以上——表现为「job 一直 in_progress」，容易被误判成卡死。并行后墙钟 ≈ 最慢的那个用例；每条断言再带「用例内已耗时」前缀，卡住时能直接看出停在哪个断言
-- **CI 加入并发取消**：`ci.yml` / `ci-desktop.yml` / `ci-web.yml` 均设 `concurrency`（同一 PR 的新推送取消旧运行，main 上的推送不取消）。此前一次修复连推 4 次就会并行 4 条完整 CI，浪费 runner 且状态难判读
-
-- **服务端 rpm 的 payload 压缩固定为 zstd-19**：构建基线在 1.22.1 降到 ubuntu-22.04 后，rpmbuild 的默认压缩从 zstd-19 变成 gzip-9，导致同一份内容 server rpm 315 MB、deb 239 MB（1.22.0 时两者基本持平）。现显式指定 `_binary_payload w19.zstdio`（可用 `RPM_PAYLOAD` 覆盖）。同 payload 实测 125.5 MiB → 107.8 MiB（−14.1%）
-
-### Added
-
-- `scripts/relock_dependabot_pr.sh`：接管 dependabot 的 Python 依赖 PR，补上它从不更新的 `uv.lock`（默认预览，`--yes` 才推送；并入 main、按官方源重锁、`uv lock --check`、必要时用目标 ruff 版本跑格式检查）
+- **安装冒烟改为并行执行 4 个用例**：此前 server/desktop × deb/rpm 串行，且每条断言只有一个不断增长的总时长，job 长时间 `in_progress` 极易被误判成卡死。并行后实测 4 个用例 70 秒完成（server 安装 +22s、health 200 在 +25s）；每条断言带「用例内已耗时」前缀，卡住时能直接定位
+- 安装冒烟增加**硬超时**（单用例 900s）与包管理器网络上限（apt/dnf 25s 超时、2 次重试）：镜像源不可达时快速失败并给出原因
+- **CI 加入并发取消**：`ci.yml` / `ci-desktop.yml` / `ci-web.yml` 均设 `concurrency`（同一 PR 的新推送取消旧运行，main 上的推送不取消）。此前一次修复连推 4 次就会并行 4 条完整 CI——多条运行同时拉 docker 镜像互相争抢，是冒烟步骤耗时异常的主要原因
 
 ### Docs
 
 - PACKAGING：修正「按需安装浏览器」的适用范围——`playwright install chromium` 只适用于源码部署与 onedir 产物；deb / rpm 装完后 `/opt` 只读且包内无 CLI，无法补装
-- CONTRIBUTING：新增「Dependabot 的 Python 依赖 PR 需要接管」，含脚本用法与「为什么不做成 Action」的说明
+- CONTRIBUTING：新增「Dependabot 的 Python 依赖 PR 需要接管」（脚本用法 + 为什么不做成 Action）与「预发布（rc）与正式发布」
 
 ## \[1.22.2] - 2026-11-23（依赖维护：litellm 解除 1.103 锁定，桌面/前端/构建链跟随升级）
 
