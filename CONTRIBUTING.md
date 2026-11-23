@@ -99,9 +99,14 @@ git push origin v1.23.0-rc1                  # → GitHub Release 标记为 Pre-
 
 - `rc` 版本：GitHub Release 标记 **Pre-release**，且**不替换 Latest**（正式版下载入口仍指向稳定版）
 - 正式版本：正常 Release，自动成为 Latest
-- 打包侧：deb / rpm 的预发布写法是 `~`，因此 `1.23.0-rc1` 在包元数据与文件名里会写成
-  `1.23.0~rc1`（排序在 `1.23.0` 之前，`apt` / `dnf` 升级方向正确）。electron-builder 对
-  deb/rpm 内建同样的 `-` → `~` 转换，`scripts/pack_linux_server.sh` 用同样规则处理服务端包
+- 打包侧有两种写法，**分工不同，不要混**：
+  - **包元数据**（deb `Version` / rpm `Version` 字段）必须是 `~`：`1.23.0-rc1` → `1.23.0~rc1`。
+    因为 `dpkg --compare-versions 1.23.0~rc1 lt 1.23.0` 为真，而 `1.23.0-rc1` 反而**大于**
+    `1.23.0`（连字符是 revision 分隔符）——用连字符会让 rc 排到正式版之后，升级方向就反了。
+    electron-builder 对桌面包内建该转换，`scripts/pack_linux_server.sh` 对服务端包用同一规则。
+  - **文件名**保持 `-`（原始版本号），六件产物统一为 `…-1.23.0-rc1-…`。原因是 GitHub 会把
+    release asset 名里的 `~` 换成 `.`，若文件名带 `~`，同一批产物就会出现 `-rc1`（桌面）
+    与 `.rc1`（服务端）两种写法。文件名不参与版本比较，无需带 `~`
 - rc 的 CHANGELOG 段落照常写在 `[1.23.0-rc1]` 下；正式发布时再补 `[1.23.0]`
 
 ## 开发环境

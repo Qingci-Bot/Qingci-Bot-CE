@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Fixed
+
+- **rc 预发布判定失效**：`prepare` job 里引用了 `needs.prepare.outputs.prerelease`，而 `needs` 上下文不含当前 job 自身 → 表达式恒为空、判断恒假，导致 v1.22.3-rc1 被创建成正式版并抢走 Latest。改为就地由版本号判定，`--prerelease --latest=false` 才真正生效
+- **rc 产物文件名写法不一致**：服务端包文件名带 `~rc1`，上传时被 GitHub 替换为 `.rc1`，与桌面端的 `-rc1` 不统一。文件名改用原始版本号（`-rc1`），包元数据仍保留 `~rc1`（`1.22.3~rc1 < 1.22.3`，排序与升级方向正确）
+
 ## \[1.22.3-rc1] - 2026-11-23（Linux 桌面版实测反馈修复；发布流程支持 rc 预发布）
 
 本版针对 Linux 版装机实测反馈的问题，并给发布流程加上 rc 预发布通路。**预发布版本**：不替换 Latest，正式版下载入口不受影响。
