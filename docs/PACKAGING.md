@@ -72,7 +72,7 @@ dist\qingci-bot-ce\
 ```powershell
 # 先决条件
 #  1) 已执行 .\build.bat，产物位于 dist\qingci-bot-ce\（后端 onedir）
-#  2) Node.js 22+ 与 npm 可用（Electron 45.2.x，与 CI 的 Node 22 一致）
+#  2) Node.js 22+ 与 npm 可用（Electron 45.4.x，与 CI 的 Node 22 一致）
 .\build-electron.bat
 ```
 
@@ -123,6 +123,7 @@ bash scripts/pack_linux_server.sh --version 1.22.0 --only rpm
 ```
 
 - 产物：`dist/linux/qingci-bot-ce-server_<ver>_amd64.deb`（文件名按 dpkg 规范）与 `qingci-bot-ce-server-<ver>-1.x86_64.rpm`。
+- rpm 的 payload 压缩显式固定为 **zstd-19**（`_binary_payload w19.zstdio`，可用 `RPM_PAYLOAD` 环境变量覆盖）：rpmbuild 的默认值随构建机漂移（Ubuntu 24.04 默认 zstd、22.04 默认 gzip-9），1.22.2 的 server rpm 因此比同内容 deb 大 76 MB；固定后与 deb 基本持平。zstd payload 需 rpm ≥ 4.14，目标发行版均满足。
 - 布局（遵循 FHS）：程序 `/opt/qingci-bot-ce-server`、实例数据 `/var/lib/qingci-bot-ce-server/instances/<name>`、日志 `/var/log/qingci-bot-ce-server/`。
 - 安装即创建系统用户 `qingci-bot`，注册并 `enable` systemd 单元 `qingci-bot-ce.service`；**首次安装不自动 start**，确认 `config.yaml` 后手动 `systemctl start`。
 - 卸载保留 `/var/lib` 下的实例数据；`apt purge` 才删除。
@@ -149,7 +150,7 @@ bash scripts/pack_linux_server.sh --version 1.22.0 --only rpm
 - `ci-desktop.yml` 校验 `artifactName` 模板与 `packageName`，防止改回旧的大写命名；
 - `release.yml` 的 `Verify package metadata & filenames` 用 `dpkg-deb -f` / `rpm -qp` 读回包元数据，断言**文件名与包内 Name/Version/Arch 一致**、且恰好 4 个 Linux 产物。
 
-校验和说明：`dist/backend-manifest.sha256` 是**后端构建清单**（冻结后的可执行文件 + Web UI 入口），由 `build.bat` / `build-linux.sh` 生成，不进 Release；发布包的校验和是 `SHA256SUMS.txt`，由 `release.yml` 的 `checksums` job 从 Release 已上传的产物统一计算（`sha256sum -c SHA256SUMS.txt` 可直接校验）。
+校验和说明：`dist/backend-manifest.sha256` 是**后端构建清单**（冻结后的可执行文件 + Web UI 入口），由 `build.bat` / `build-linux.sh` 生成，不进 Release；发布包的校验和是 `SHA256SUMS.txt`，由 `release.yml` 的 `checksums` job 生成——直接读取各资产在 GitHub 侧的 sha256 digest（接收上传时已计算），无需把约 1.8 GB 产物下载回来重算，产物缺失或 digest 缺失时该 job 明确失败。`sha256sum -c SHA256SUMS.txt` 可直接校验下载。
 
 本地产物落点：桌面版在 `dist/electron/`，服务端包在 `dist/linux/`；CI 会把桌面版归集到 `dist/linux/` 后统一上传（`Collect desktop packages into dist/linux` 步骤），本地构建无需手动搬。
 
@@ -166,8 +167,10 @@ bash scripts/pack_linux_server.sh --version 1.22.0 --only rpm
 
 运行位置（同一脚本，避免两套断言漂移）：
 
-- `ci.yml` 的 `package-smoke` job：只在打包链路输入变化时运行（桌面壳、spec、打包脚本），约 12 分钟；
+- `ci.yml` 的 `package-smoke` job：只在打包链路输入变化时运行（桌面壳、spec、打包脚本），含构建约 9 分钟；
 - `release.yml` 的 `Install smoke` 步骤：**上传前必过**，防止把装不上的包发出去。
+
+四个用例（server/desktop × deb/rpm）**并行执行**——每个用例都要在干净容器里装 240~355 MB 的包再冷启动一次后端，串行累计 20 分钟以上极易被误判成卡死；并行后墙钟 ≈ 最慢那个用例（实测约 70 秒），且每条断言带「用例内已耗时」前缀，卡住时能直接定位。脚本内置硬超时（单用例 900s）与 apt/dnf 网络上限（25s 超时、2 次重试），镜像源不可达时快速失败并给出原因。
 
 本地运行需要容器引擎（docker 或 podman）；SELinux 主机（Fedora / RHEL）上脚本会自动加 `--security-opt label=disable`（否则只读 bind mount 被标签策略拒绝）：
 
@@ -210,5 +213,9 @@ ImportError: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found
 打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](../.github/workflows/release.yml)，各平台自动联编：
 - Windows 桌面（`qingci-bot-ce-<ver>-x64-setup.exe` + `-portable.zip`，`build.bat` + `build-electron.bat`）
 - Linux deb / rpm 共 4 个产物（`build-linux.sh` + `electron-builder --linux deb rpm` 出桌面版，`scripts/pack_linux_server.sh` 出服务端版）
-- `SHA256SUMS.txt`（两个构建 job 都成功后由 `checksums` job 统一生成）
-- Docker 镜像（tag：`vX.Y.Z` / `X.Y` / `X` / `latest`）
+- `SHA256SUMS.txt`（两个构建 job 都成功后由 `checksums` job 从资产 digest 统一生成）
+- Docker 镜像（tag：`X.Y.Z` / `X.Y` / `X` / `latest`；`docker/metadata-action` 会剥掉 `v` 前缀）
+
+### 预发布（rc）
+
+tag 版本号含 `rc`（如 `v1.23.0-rc1`）时，Release 自动标记 **Pre-release** 且不替换 Latest；包内元数据版本按 deb/rpm 预发布写法转成 `1.23.0~rc1`（排序在正式版之前，升级方向正确），文件名保持 `-rc1`（GitHub 会把资产名里的 `~` 改写成 `.`）。元数据校验同时接受两种写法。完整约定见 [CONTRIBUTING.md](../CONTRIBUTING.md#预发布rc与正式发布)。

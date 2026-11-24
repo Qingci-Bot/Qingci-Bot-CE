@@ -47,7 +47,7 @@
 `pyproject.toml`（打包/CI 读取）、`bot/__init__.py`（`__version__`，后端 `/api/bot/status` 及 Web 关于页据此动态显示）、`web/package.json` 与 `web/package-lock.json`（含 `packages` 两处）、`desktop/electron/package.json` 与 `desktop/electron/package-lock.json`（含 `packages` 两处，安装包版本号来源）。
 
 ```bash
-python scripts/bump_version.py 1.19.4     # 示例：换成目标版本号，从单一输入同步升级全部版本字段
+python scripts/bump_version.py 1.23.0     # 示例：换成目标版本号，从单一输入同步升级全部版本字段
 python scripts/bump_version.py --check    # 提交前自查各处是否一致（防止漏改）
 ```
 
@@ -164,7 +164,7 @@ uv pip install -e ".[build]"
 .\build.bat       # Windows
 ./build-linux.sh  # Linux（等价脚本；构建前先 uv sync，SDK 随依赖装好）
 
-# 第二步：Electron 桌面壳（需 Node.js 22+/npm；Electron 45.2.x，与 CI 的 Node 22 一致；内嵌上一步产出的后端）
+# 第二步：Electron 桌面壳（需 Node.js 22+/npm；Electron 45.4.x，与 CI 的 Node 22 一致；内嵌上一步产出的后端）
 .\build-electron.bat                          # Windows：qingci-bot-ce-<ver>-x64-setup.exe + -portable.zip
 cd desktop/electron && npm run build:linux     # Linux deb + rpm（需系统具备 rpm 与 fakeroot）
 
@@ -172,7 +172,7 @@ cd desktop/electron && npm run build:linux     # Linux deb + rpm（需系统具�
 bash scripts/pack_linux_server.sh --version <版本号>
 ```
 
-**发布流水线（推荐，自动）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 Release、推 Docker 镜像到 `ghcr.io`，无需手动上传/构建，见 [`.github/workflows/release.yml`](.github/workflows/release.yml)。流水线会校验产物命名与包元数据一致（`dpkg-deb -f` / `rpm -qp`），并在两个构建 job 都成功后由 `checksums` job 统一生成 `SHA256SUMS.txt`——**不要手工上传产物**，否则校验和会与 Release 内容不一致。命名规则见 [docs/PACKAGING.md](docs/PACKAGING.md#产物命名与校验)。
+**发布流水线（推荐，自动）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 Release、推 Docker 镜像到 `ghcr.io`，无需手动上传/构建，见 [`.github/workflows/release.yml`](.github/workflows/release.yml)。流水线会校验产物命名与包元数据一致（`dpkg-deb -f` / `rpm -qp`），并在两个构建 job 都成功后由 `checksums` job 从资产 digest 生成 `SHA256SUMS.txt`——**不要手工上传产物**，否则校验和会与 Release 内容不一致。命名规则见 [docs/PACKAGING.md](docs/PACKAGING.md#产物命名与校验)；带 `rc` 的 tag 自动发预发布，见下文「预发布（rc）与正式发布」。
 
 > 构建详见 [docs/PACKAGING.md](docs/PACKAGING.md)「打包与发布」与 `build.bat` / `build-linux.sh` / `build-electron.bat` / `scripts/pack_linux_server.sh`。onedir（`dist\qingci-bot-ce\`）只含后端不含桌面壳；桌面壳由 electron-builder 承担，Windows 安装版/绿色解压版与 Linux deb/rpm 均内嵌后端。**Linux 不提供 AppImage**。**实例数据不在安装目录内**：Windows 安装版由向导选定数据目录（默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`），Linux 桌面版按 XDG 落在 `~/.local/share/Qingci-Bot CE`，服务端包固定在 `/var/lib/qingci-bot-ce-server`（均可用 `QINGCI_DATA_HOME` 覆盖），升级与卸载不会触碰数据。直接执行 `pyinstaller qingci-bot-ce.spec` 也能出 onedir 后端，但缺少 Web UI 产物复制与浏览器下载步骤。
 

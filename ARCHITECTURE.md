@@ -46,7 +46,7 @@
 
 - 修改权限语义、匹配规则等协议时只改 SDK 一处，主项目无需同步
 
-- SDK 是主项目的**正式依赖**（`pyproject.toml` 里钉成官方 PyPI 的精确版本 `qingci-plugin-sdk==X.Y.Z`，`uv.lock` 记录版本 + wheel URL + SHA256；无需令牌或额外索引；本地开发需改 SDK 源码时 `uv pip install -e ../Plugins-SDK` 覆盖）
+- SDK 是主项目的**正式依赖**（`pyproject.toml` 里声明官方 PyPI 的版本区间 `qingci-plugin-sdk>=1.15.2,<2.0.0`，与 `bot/plugin/abi.py` 的 `SDK_ABI_RANGE` 一致并由契约测试锁定；`uv.lock` 记录解析版本 + wheel URL + SHA256；无需令牌或额外索引；本地开发需改 SDK 源码时 `uv pip install -e ../Plugins-SDK` 覆盖）
 
 ## 进程模型与外壳边界（无头内核库化方向）
 
@@ -196,6 +196,10 @@ Qingci-Bot-CE/
 │   ├── bump_version.py        # 版本号统一升级（pyproject/bot/__init__/web/package*/desktop/electron/package*）
 │   ├── verify_migrations.py   # 迁移与模型漂移校验（CI 使用）
 │   ├── pack_backend.py        # 后端 onedir → 单 zip（安装包只写 1 个大文件，首启解压）
+│   ├── pack_linux_server.sh   # headless 服务端 deb / rpm 打包（systemd 单元 + FHS 布局；rpm 固定 zstd-19 payload）
+│   ├── smoke_install_packages.sh # 安装冒烟：把 deb/rpm 真装进目标发行版容器并断言（CI 与发版共用）
+│   ├── relock_dependabot_pr.sh   # 接管 dependabot 的 pip PR（补 uv.lock，默认预览）
+│   ├── license_headers.py     # 版权/SPDX 头补齐与检查（CI 由 tests/test_license_headers.py 调用）
 │   └── migrate_sqlite_to_pg.py # SQLite → PostgreSQL 数据迁移
 ├── tests/                     # pytest 测试（按 test_<模块>.py 命名；plugin_pkg/ 为测试插件包）
 │   └── plugin_pkg/            # 测试用插件（dep/di/p1/p2/sdk_llm_tool/subcmd_runtime 等）
@@ -255,7 +259,7 @@ Qingci-Bot-CE/
 
 - **`qq.py`**：QQ 官方机器人实现——走 QQ 开放平台公开接口（`platforms.qq.enabled/app_id/app_secret/sandbox/intents` 控制），AppID + AppSecret 换取 `access_token`（默认 7200 秒，提前 60 秒刷新，`Authorization: QQBot <token>`），经 WebSocket 网关（Hello→Identify/Resume→心跳→Dispatch）收事件、经 OpenAPI v2 发消息。关键设计：① 开放平台下发的是不透明 openid 字符串，而核心以整数 ID 组织会话与数据表，故用 `blake2b("g:"|"u:" + openid)` 映射为 63 位正整数——纯函数计算，重启后同一 openid 仍得同一 ID，会话与统计不漂移；反向表供回发消息还原 openid；② 群消息只在 `@机器人` 时推送且正文已被平台去掉 @ 前缀，事件显式携带 `is_at_bot=True`（Dispatcher 对无 `at_list` 的 v12 事件采纳该字段），避免为触发规则注入伪 `mention` 段污染 `plain_text`；③ 被动回复以事件 `d.id` 作 `msg_id` 并递增 `msg_seq`（平台按 msg_id+msg_seq 判重），群聊 5 分钟/5 条、单聊 60 分钟/4 条，超限抛 `QQPassiveWindowError` 而非硬碰平台；④ 富媒体先 `POST /files` 取 `file_info` 再以 `msg_type=7` 发送，单条消息只承载一个媒体故多图拆条；⑤ 同一消息可能重复推送，按 `d.id` 有界去重；⑥ 错误按鉴权/权限/被动窗口/判重分类
 
-- 附加平台（Telegram / OneBot 12 / QQ 官方机器人）启动失败仅记录日志，不阻断主平台（OneBot）可用性
+- 附加平台（Telegram / OneBot 12 / QQ 官方机器人）启动失败仅记录日志，不阻断主平台（OneBot）可用性。其中「未配置凭据」（`PlatformNotConfigured`，如 QQ 没填 AppID/AppSecret）按 warning 降级：不打 traceback，`/api/bot/status` 的 `platforms[].reason` 上报原因，Web UI 侧边栏显示「未配置」而非「离线」。该异常类必须运行时导入——曾被误放进 `TYPE_CHECKING` 块导致未配置即起崩（1.22.3-rc1），`bot/core/bot.py` 导入处有注释与回归测试锁定
 
 ### 事件模型（OneBot 12 内核）
 

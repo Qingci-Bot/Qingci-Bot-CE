@@ -73,6 +73,11 @@
   `/usr/share/applications/qingci-bot-ce.desktop`；若菜单未刷新，执行 `update-desktop-database`。
 - **服务端装完没有自动启动**：设计如此——安装只 `enable` 单元，首次启动前请确认
   `/var/lib/qingci-bot-ce-server/instances/default/config.yaml`，再 `sudo systemctl start qingci-bot-ce`。
+- **桌面版显示「启动失败 / 后端进程异常退出」**：真实原因在壳的日志里——打开错误页提示的
+  `<数据目录>/instances/<实例名>/data/logs/electron.log`，看 `[backend]` 段的 Python traceback：
+  - `GLIBC_2.38' not found` → 见上方第一条（1.22.0 的构建基线问题，升级解决）；
+  - `NameError` / `ImportError` 之类 → 大概率是版本缺陷，请带上该日志段到 Issues 反馈；
+  - 后端在启动页停留很久 → 首启需把内嵌 `backend.zip` 解压到数据目录（约十几秒，属正常）。
 
 ## 能力自动降级
 

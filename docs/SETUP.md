@@ -13,7 +13,7 @@
 
 - Node.js 22+（仅构建 Web UI 时需要；vite 8 / ESLint 10 / jsdom 31 要求 Node ^20.19 或 ≥22.12，CI 与构建脚本统一用 22；`web/dist` 已存在可跳过）
 
-- 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 22+（`desktop/electron`，Electron 45.2.x，与 CI 的 Node 22 一致）；最终用户运行 `build-electron.bat` 产出的安装版 / 绿色解压版 EXE 无需额外运行时
+- 桌面 GUI 由 Electron 提供：构建桌面壳需 Node.js 22+（`desktop/electron`，Electron 45.4.x，与 CI 的 Node 22 一致）；最终用户运行 `build-electron.bat` 产出的安装版 / 绿色解压版 EXE 无需额外运行时
 
 ## 安装
 
@@ -51,7 +51,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 >
 > **打包版（EXE）已全内置**：`build.bat` 构建时自动下载无头 Chromium 到产物目录 `ms-playwright\`，运行时经 `PLAYWRIGHT_BROWSERS_PATH` 定位，EXE 开箱即可渲染签到卡，无需最终用户再执行安装。构建期同样可用上述 `PLAYWRIGHT_DOWNLOAD_HOST` 走国内镜像。
 >
-> **桌面壳打包另见**：`build.bat` 产出的 onedir（`dist\qingci-bot-ce\`）与 `build-electron.bat`（electron-builder，产出 NSIS 安装版 Setup.exe + 绿色解压 zip）。**实例数据放在安装时选定的数据目录**（安装向导有一步「选择数据目录」，默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`，选择记在注册表 `HKCU\Software\Qingci-Bot CE` 与 `%APPDATA%\Qingci-Bot CE\datadir.txt`），该目录**独立于安装目录**——升级与卸载只清理 `$INSTDIR`，不会碰到数据；旧版本把数据放在 EXE 旁的 `instances/`，首次启动会自动迁移过去（同卷 rename，跨卷复制并保留原目录）。桌面壳需 Node.js 22+（Electron 45.2.x，与 CI 的 Node 22 一致），用户运行安装版/绿色解压版无需额外运行时。后端本体以**单个归档**随包分发，安装阶段只写 1 个大文件（避免数千个小文件逐个落盘导致的安装缓慢），首次启动时解压到**数据目录**下的 `backend/<版本>/`（一次性，视磁盘约十几秒，期间显示启动页）；升级到新版本会重新解压并清理旧目录。
+> **桌面壳打包另见**：`build.bat` 产出的 onedir（`dist\qingci-bot-ce\`）与 `build-electron.bat`（electron-builder，产出 NSIS 安装版 Setup.exe + 绿色解压 zip）。**实例数据放在安装时选定的数据目录**（安装向导有一步「选择数据目录」，默认 `%LOCALAPPDATA%\Qingci-Bot CE\data`，选择记在注册表 `HKCU\Software\Qingci-Bot CE` 与 `%APPDATA%\Qingci-Bot CE\datadir.txt`），该目录**独立于安装目录**——升级与卸载只清理 `$INSTDIR`，不会碰到数据；旧版本把数据放在 EXE 旁的 `instances/`，首次启动会自动迁移过去（同卷 rename，跨卷复制并保留原目录）。桌面壳需 Node.js 22+（Electron 45.4.x，与 CI 的 Node 22 一致），用户运行安装版/绿色解压版无需额外运行时。后端本体以**单个归档**随包分发，安装阶段只写 1 个大文件（避免数千个小文件逐个落盘导致的安装缓慢），首次启动时解压到**数据目录**下的 `backend/<版本>/`（一次性，视磁盘约十几秒，期间显示启动页）；升级到新版本会重新解压并清理旧目录。
 >
 > **数据都放在哪**：数据目录（安装时选定）下有 `instances/<实例>/`（配置、数据库、日志）与 `backend/`（后端解压产物）；`%APPDATA%\Qingci-Bot CE\` 只留 Electron 自身的浏览器缓存，`%APPDATA%\Qingci-Bot CE\datadir.txt` 记录你选的数据目录。
 >
@@ -60,14 +60,14 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 > **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.bat`/`build-linux.sh` 分别出后端、`build-electron.bat`/`electron-builder --linux deb rpm` 出 EXE / deb / rpm，`scripts/pack_linux_server.sh` 另出 headless 服务端 deb / rpm，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](../.github/workflows/release.yml)。
 >
 > 浏览器缺失或下载失败时渲染能力自动降级不可用（`/api/bot/status` 的 `render` 字段可查状态），不影响框架启动。
-> 插件协议层 SDK（`qingci-plugin-sdk`）自 1.15.2 起由官方 PyPI 分发，在 `pyproject.toml` 里钉成精确版本、随核心依赖一起安装；无需令牌或额外索引配置，版本由依赖声明与 `uv.lock` 共同锁定。本地开发时若需对 SDK 改代码，可 `uv pip install -e ..\Plugins-SDK` 覆盖。
+> 插件协议层 SDK（`qingci-plugin-sdk`）自 1.15.2 起由官方 PyPI 分发，在 `pyproject.toml` 里以版本区间（`>=1.15.2,<2.0.0`，与 `bot/plugin/abi.py` 的 `SDK_ABI_RANGE` 一致）声明、随核心依赖一起安装；无需令牌或额外索引配置，实际安装版本由 `uv.lock` 锁定。本地开发时若需对 SDK 改代码，可 `uv pip install -e ..\Plugins-SDK` 覆盖。
 >
-> 若跳过 `pyproject.toml`，可手动安装核心依赖（SDK 用 `pip install qingci-plugin-sdk==1.15.2` 安装）：
+> 若跳过 `pyproject.toml`，可手动安装核心依赖（SDK 用 `pip install "qingci-plugin-sdk>=1.15.2,<2"` 安装）：
 >
 > ```bash
 > uv pip install fastapi "uvicorn[standard]" websockets aiocqhttp aiohttp aiosqlite \
 >   sqlmodel alembic "sqlalchemy[asyncio]" litellm pydantic pyyaml httpx \
->   "qingci-plugin-sdk==1.15.2" "apscheduler>=3.10,<4" "mcp>=1.6,<2" \
+>   "qingci-plugin-sdk>=1.15.2,<2" "apscheduler>=3.10,<4" "mcp>=1.6,<2" \
 >   --python .venv\Scripts\python.exe
 > ```
 
@@ -117,7 +117,7 @@ docker compose down         # 停止
 
 - 文件内容与完整说明见 `Dockerfile` / `docker-compose.yml`（`.dockerignore` 排除 venv/产物，实例目录不进镜像）
 
-> 构建依赖 `qingci-plugin-sdk`（`pyproject.toml` 里的 PyPI 固定版本依赖）需构建期能访问 pypi.org；离线环境可先把该 wheel 下载到本地并临时改为本地路径。
+> 构建依赖 `qingci-plugin-sdk`（`pyproject.toml` 里的 PyPI 版本区间依赖）需构建期能访问 pypi.org；离线环境可先把该 wheel 下载到本地并临时改为本地路径。
 
 ### Linux 源码部署（一键脚本 install.sh）
 
@@ -154,6 +154,10 @@ chmod +x install.sh
 > **发行版要求**：Linux 包自带 Python 运行时，要求 **glibc ≥ 2.35**——即 Ubuntu 22.04+、
 > Debian 12+、Fedora 36+ 可用。1.22.0 曾在 24.04 上构建，导致 22.04 / Debian 12 启动时报
 > `GLIBC_2.38' not found`，1.22.1 已把构建基线降到 22.04 修复；仍在使用 1.22.0 请升级。
+
+> **预发布（rc）版本**：版本号带 `rc` 的 Release（如 `v1.22.3-rc2`）在 GitHub 上标记为
+> **Pre-release**，不会出现在 Latest 下载入口，需到 [Releases 页](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases) 手动选择。
+> 包内元数据版本写作 `1.22.3~rc2`（deb/rpm 的预发布排序写法，升级方向正确）；rc 仅用于发布前验证，生产环境请用正式版。
 
 **服务端版**（无桌面环境，由 systemd 托管）：
 
