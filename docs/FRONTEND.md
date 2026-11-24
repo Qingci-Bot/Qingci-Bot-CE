@@ -37,6 +37,7 @@ npm run build    # 构建生产版本到 web/dist/
 | `web/src/views/` | 页面组件（Dashboard / Settings / PluginManager 等） |
 | `web/src/components/` | 复用组件：`Drawer.vue`；`plugin/`（PluginManager 视图的职责分组：CommandTab / MarketTab / PluginConfigDrawer）；`settings/`（Settings 视图的卡片分组：DataManagementCard / AuditLogCard） |
 | `web/src/stores/app.js` | Pinia 全局状态 |
+| `web/src/utils/` | 纯函数工具（`configPayload.js`：系统设置页保存 payload 组装，含单测） |
 | `web/src/composables/` | useWebSocket / useToast |
 | `web/src/styles/main.css` | 全局样式 |
 
