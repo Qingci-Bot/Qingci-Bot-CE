@@ -178,7 +178,7 @@ async function marketApplySource() {
 async function marketUninstall(name) {
   if (
     !window.confirm(
-      `卸载插件 ${name}？将删除插件文件，保留数据与依赖（实例模式下仅卸载不删文件）。`,
+      `卸载插件 ${name}？将删除插件代码文件（保留数据与依赖）；实例模式下仅卸载不删除文件。`,
     )
   )
     return;
@@ -218,7 +218,7 @@ function openHomepage(url) {
           v-model="marketSearch"
           type="text"
           class="market-search"
-          placeholder="搜索插件名 / 描述 / 标签..."
+          placeholder="搜索插件名 / 描述 / 标签…"
         />
         <button
           class="btn btn-secondary btn-sm"
@@ -258,7 +258,7 @@ function openHomepage(url) {
         />
         <button class="btn btn-primary btn-sm" :disabled="sourceSaving" @click="marketApplySource">
           <span :class="{ spin: sourceSaving }">⇄</span>
-          {{ sourceSaving ? '切换中...' : '应用' }}
+          {{ sourceSaving ? '切换中…' : '应用' }}
         </button>
       </div>
       <div class="source-hint">
@@ -279,7 +279,7 @@ function openHomepage(url) {
         {{ t }}
       </button>
     </div>
-    <div v-if="marketLoading" class="empty-state">加载市场中...</div>
+    <div v-if="marketLoading" class="empty-state">加载市场中…</div>
     <div v-else-if="marketError" class="empty-state">
       <div class="icon">⚠</div>
       <div>市场加载失败：{{ marketError }}</div>
@@ -329,7 +329,7 @@ function openHomepage(url) {
             <span
               v-if="item.compatible === false"
               class="status-badge badge-incompatible"
-              title="当前 Python 版本不满足插件声明的 python_requires"
+              title="当前 Python 版本低于插件声明的最低要求，无法安装"
               >⚠ 不兼容当前 Python</span
             >
           </div>
@@ -342,7 +342,7 @@ function openHomepage(url) {
             @click="marketUpdate(item.name)"
           >
             <span :class="{ spin: marketAction === `update:${item.name}` }">↻</span>
-            {{ marketAction === `update:${item.name}` ? '更新中...' : '更新' }}
+            {{ marketAction === `update:${item.name}` ? '更新中…' : '更新' }}
           </button>
           <button
             v-else
@@ -359,7 +359,7 @@ function openHomepage(url) {
                 : item.installed
                   ? '已安装'
                   : marketAction === `install:${item.name}`
-                    ? '安装中...'
+                    ? '安装中…'
                     : '安装'
             }}
           </button>
@@ -370,7 +370,7 @@ function openHomepage(url) {
             @click="marketUninstall(item.name)"
           >
             <span :class="{ spin: marketAction === `uninstall:${item.name}` }">✕</span>
-            {{ marketAction === `uninstall:${item.name}` ? '卸载中...' : '卸载' }}
+            {{ marketAction === `uninstall:${item.name}` ? '卸载中…' : '卸载' }}
           </button>
         </div>
       </div>

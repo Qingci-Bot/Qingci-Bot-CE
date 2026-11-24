@@ -176,7 +176,7 @@ function formatDate(ts) {
 
     <div v-show="activeTab === 'sessions'" class="card fade-in">
       <div class="card-header">
-        <div class="card-title">LLM 会话</div>
+        <div class="card-title">会话记录</div>
         <button class="btn btn-secondary btn-sm" @click="loadSessions">刷新</button>
       </div>
 

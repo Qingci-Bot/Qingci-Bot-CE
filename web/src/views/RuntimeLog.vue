@@ -134,7 +134,7 @@ onUnmounted(() => {
         <div v-if="filterEntries().length === 0" class="empty-state">
           <div class="icon">⌘</div>
           <div v-if="runLogEnabled">暂无运行日志，Bot 启动后自动产生</div>
-          <div v-else>运行日志采集已关闭（系统设置 → 日志 可重新开启）</div>
+          <div v-else>运行日志采集已关闭，可在「系统设置」→「日志」中重新开启</div>
         </div>
         <div v-for="(log, i) in filterEntries()" :key="i" class="log-line">
           <span class="ln-time">{{ log.time }}</span>

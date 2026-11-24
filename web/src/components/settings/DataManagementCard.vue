@@ -230,9 +230,9 @@ async function exportCsv() {
     </div>
     <div v-if="restoreResult" class="status-bar" style="margin-top: 8px">{{ restoreResult }}</div>
     <div class="hint-text restore-hint">
-      <p>备份使用 SQLite 在线备份 API，服务端保留最近 10 份，可随时下载到本地。</p>
+      <p>备份在服务端进行（数据库保持可用，不停机），服务端保留最近 10 份，可随时下载到本地。</p>
       <p>恢复时上传 <code>.db</code> 备份：会先自动备份当前库，再替换主库（恢复后请刷新页面）。</p>
-      <p>CSV 导出包含全部消息记录，utf-8-sig 编码，Excel 可直接打开。</p>
+      <p>CSV 导出包含全部消息记录，兼容 Excel 直接打开。</p>
     </div>
   </div>
 </template>

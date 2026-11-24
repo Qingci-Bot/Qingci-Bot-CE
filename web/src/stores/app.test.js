@@ -52,6 +52,18 @@ describe('stores/app', () => {
       expect(store.statusColor).toBe('#f59e0b');
     });
 
+    it('QQ 官方机器人实例不用「协议端」术语（无协议端概念）', async () => {
+      mockJson([{ name: 'a', running: true, platform: 'qq' }]);
+      const store = useAppStore();
+      await store.fetchInstances();
+      store.botRunning = true;
+      store.botConnected = false;
+
+      expect(store.statusText).toBe('等待平台连接');
+      expect(store.statusColor).toBe('#f59e0b');
+      expect(store.connectedLabel).toBe('平台已连接');
+    });
+
     it('运行且已连接时为运行中（绿色）', () => {
       const store = useAppStore();
       store.botRunning = true;

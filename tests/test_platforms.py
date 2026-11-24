@@ -654,6 +654,28 @@ def test_get_status_skips_disabled_platforms(bot):
     assert all(p["name"] != "onebot" for p in status["platforms"])
 
 
+def test_get_status_connected_covers_any_platform(bot, monkeypatch):
+    """connected = 主连接或任一附加适配器在线。
+
+    QQ 官方机器人实例（onebot.enabled=false）没有反向 WS 主连接，
+    只有 QQ 适配器在线时面板也必须显示「运行中」，而不是「等待协议端连接」。
+    """
+    from bot.core.platforms.telegram import TelegramAdapter
+    from bot.testing.bot import FakeConnection
+
+    bot._running = True
+    monkeypatch.setattr(FakeConnection, "is_connected", property(lambda self: False))
+    assert bot.get_status()["connected"] is False
+
+    tg = FakeTelegram()
+    bot.platforms["qq"] = tg
+    monkeypatch.setattr(TelegramAdapter, "is_connected", property(lambda self: True))
+    assert bot.get_status()["connected"] is True
+
+    monkeypatch.setattr(TelegramAdapter, "is_connected", property(lambda self: False))
+    assert bot.get_status()["connected"] is False
+
+
 # ---------- 能力面：请求审批 ----------
 
 

@@ -51,6 +51,17 @@ try {
   // 极端情况下设置失败就沿用默认目录，不影响启动
 }
 
+// ── Linux 任务栏/Dock 图标关联 ──────────────────────────────
+// 安装包的 .desktop 项（qingci-bot-ce.desktop，StartupWMClass=qingci-bot-ce）
+// 需要窗口的 WM_CLASS（X11）/ app_id（Wayland）与之匹配，GNOME/Dock 才能把
+// 窗口关联到已安装应用并显示产品图标。Electron 默认用 package.json 的 name
+// （qingci-bot-ce-desktop）作这两者，与 .desktop 不一致 → 托盘有图标、
+// Dock 上却是通用图标。显式指定为安装包 executableName，两个显示服务器各自生效。
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch("class", "qingci-bot-ce");
+  app.commandLine.appendSwitch("wayland-app-id", "qingci-bot-ce");
+}
+
 // ── 主进程日志（落盘到后端 data 目录 logs/electron.log，排障用） ──
 let _logStream = null;
 let _logRoot = null;

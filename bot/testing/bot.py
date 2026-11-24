@@ -178,10 +178,14 @@ class TestBot:
         self._running = True  # 模拟已启动，事件可被处理
 
     def get_status(self) -> dict:
-        """获取 Bot 状态（与真实 Bot 对齐，供测试断言）"""
+        """获取 Bot 状态（与真实 Bot 对齐，供测试断言）
+
+        connected 与 QingciBot.get_status 同语义：主连接或任一附加适配器在线。
+        """
         return {
             "running": self._running,
-            "connected": self.connection.is_connected,
+            "connected": self.connection.is_connected
+            or any(p.is_connected for p in self.platforms.values()),
             "last_heartbeat": self.connection.last_heartbeat,
             "render": self.html_renderer.status_info() if self.html_renderer else None,
             "platforms": [

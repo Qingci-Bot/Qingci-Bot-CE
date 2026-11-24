@@ -150,7 +150,7 @@ const permissionLabel = (p) => {
             </td>
             <td>
               <span :class="['status-tag', cmd.disabled ? 'status-off' : 'status-on']">
-                {{ cmd.disabled ? '已禁用' : '启用' }}
+                {{ cmd.disabled ? '已禁用' : '已启用' }}
               </span>
             </td>
             <td>

@@ -192,7 +192,7 @@ onUnmounted(() => {
               :disabled="store.loading || !store.botRunning"
               @click="store.restartBot"
             >
-              <span class="spin-btn-icon" :class="{ spin: store.loading }">↻</span> 重启
+              <span class="spin-btn-icon" :class="{ spin: store.loading }">↻</span> 重启 Bot
             </button>
           </div>
         </header>

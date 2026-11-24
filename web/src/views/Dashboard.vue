@@ -60,7 +60,18 @@ function showLabel(index) {
 const triggerDesc = {
   always: '所有消息都回复',
   at: '被 @ 时回复',
-  keyword: '触发关键词时回复',
+  keyword: '关键词触发',
+};
+
+// LLM 供应商标签（与 ChatConfig 的下拉框保持同一叫法）
+const providerDesc = {
+  openai: 'OpenAI',
+  deepseek: 'DeepSeek',
+  ollama: 'Ollama (本地)',
+  siliconflow: 'SiliconFlow',
+  claude: 'Claude (Anthropic)',
+  gemini: 'Gemini (Google)',
+  custom: '自定义',
 };
 </script>
 
@@ -78,7 +89,11 @@ const triggerDesc = {
         <div class="stat-value" :style="{ color: store.statusColor }">{{ store.statusText }}</div>
         <div class="stat-desc">
           {{
-            !store.botRunning ? '未启动' : store.botConnected ? '协议端已连接' : '等待协议端连接'
+            !store.botRunning
+              ? '未启动'
+              : store.botConnected
+                ? store.connectedLabel
+                : store.waitingLabel
           }}
         </div>
       </div>
@@ -100,7 +115,9 @@ const triggerDesc = {
         <div class="stat-value" style="margin-top: 8px; color: var(--accent)">
           {{ store.config.llm?.model || '-' }}
         </div>
-        <div class="stat-desc">{{ store.config.llm?.provider || '未配置' }}</div>
+        <div class="stat-desc">
+          {{ providerDesc[store.config.llm?.provider] || store.config.llm?.provider || '未配置' }}
+        </div>
       </div>
     </div>
 
@@ -193,7 +210,7 @@ const triggerDesc = {
           </template>
           <template v-else>
             <strong>当前实例平台：</strong>{{ store.currentInstance?.platform }}<br />
-            该实例未启用 OneBot 反向 WS，请前往「系统设置」配置对应平台适配器。
+            当前实例未启用 OneBot 反向 WS，请前往「系统设置」配置对应平台适配器。
           </template>
         </div>
       </div>
