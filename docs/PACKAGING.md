@@ -98,6 +98,8 @@ Linux 分发**不使用 AppImage**，改为原生包管理的 **deb**（Debian /
 | `qingci-bot-ce` | Electron 桌面壳 + 内嵌后端 | `/opt/Qingci-Bot CE`（可执行文件 `qingci-bot-ce`） | 有图形环境的桌面使用 |
 | `qingci-bot-ce-server` | headless 后端 + systemd 单元 | `/opt/qingci-bot-ce-server` | 无桌面服务器 / 长期驻留 |
 
+两者各出 **x86_64（amd64）** 与 **arm64（aarch64）** 两个架构（1.22.4 起），共 8 个 Linux 产物。
+
 两款包的共同前提是先产出 Python 后端 onedir（`build-linux.sh`，对应 Windows 的 `build.bat`，输出 `dist/qingci-bot-ce/`）。
 
 ### 1. 桌面版（electron-builder）
@@ -131,6 +133,40 @@ bash scripts/pack_linux_server.sh --version 1.22.0 --only rpm
 
 > 构建机需具备 `dpkg-deb`（deb）与 `rpmbuild`（rpm）：缺哪个就跳过哪种格式，用 `--only` 可强制只出一种并在缺失时报错。
 
+### 3. arm64（aarch64）
+
+两种架构的构建方式不同，原因是 PyInstaller 与 Electron 的可交叉性不同：
+
+| 部件 | 交叉编译 | 做法 |
+| --- | --- | --- |
+| Python 后端（PyInstaller） | ❌ 不支持 | 在 **ubuntu:22.04 arm64 容器**里原生构建（x64 机器上靠 QEMU 模拟） |
+| Electron 桌面壳 | ✅ 支持 | 在 x64 宿主上 `electron-builder --linux deb rpm --arm64`，自动下载 arm64 版 Electron |
+| 服务端包（dpkg-deb / rpmbuild） | — | 在容器内执行 `pack_linux_server.sh`，`uname -m` 给出 aarch64，架构字段自动正确 |
+
+```bash
+# 本地复现（需要 docker/podman + binfmt；产物落在 dist/linux，与 x64 产物同名规则）
+docker run --rm --platform linux/arm64 -v "$PWD":/src -v "$PWD/dist/linux":/out \
+  ubuntu:22.04 bash -c '
+    apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl git build-essential xz-utils file dpkg-dev rpm
+    git clone --quiet --local /src /build && cp -r /src/web/dist /build/web/dist && cd /build
+    curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH"
+    uv python install 3.12 && uv venv --python 3.12
+    uv pip install --python .venv/bin/python -e ".[build]"
+    bash build-linux.sh && python3 scripts/pack_backend.py
+    bash scripts/pack_linux_server.sh --version 1.22.4 --out /out
+    cp -f dist/backend.zip /out/backend.zip'
+cp dist/linux/backend.zip dist/backend.zip
+cd desktop/electron && npx electron-builder --linux deb rpm --arm64 --publish never
+```
+
+> **为什么不在 GitHub 的 arm64 runner 上直接构建**：托管 arm64 runner 只有 `ubuntu-24.04`（glibc 2.39），
+> 在上面构建出的后端会要求 glibc ≥ 2.39，Debian 12 / Ubuntu 22.04 装得上却起不来（1.22.0 在 x64 上
+> 踩过同一个坑）。容器把基线钉回 22.04（glibc 2.35），与 x64 产物保持一致的下限。
+>
+> **为什么容器里要重新 `git clone`**：宿主机工作区带着 x64 的 `.venv` 与 `dist/`，而 `build-linux.sh`
+> 会优先复用 `.venv/bin/python`——直接把仓库挂进容器，等于拿 x64 解释器当 arm64 构建环境。
+
 ## 产物命名与校验
 
 发布产物统一为 **小写包名 + 版本 + 架构**，各格式沿用其生态的分隔符约定（deb 用下划线、rpm 用连字符 + release、Windows 用连字符）：
@@ -143,12 +179,18 @@ bash scripts/pack_linux_server.sh --version 1.22.0 --only rpm
 | 桌面版 Windows 便携包 | `qingci-bot-ce-<ver>-x64-portable.zip` | 解压后运行 `Qingci-Bot CE.exe` |
 | 服务端 deb | `qingci-bot-ce-server_<ver>_amd64.deb` | `Package: qingci-bot-ce-server` |
 | 服务端 rpm | `qingci-bot-ce-server-<ver>-1.x86_64.rpm` | `Name: qingci-bot-ce-server` |
-| 校验和 | `SHA256SUMS.txt` | 上述 6 个包的 sha256 |
+| 桌面版 deb（arm64） | `qingci-bot-ce_<ver>_arm64.deb` | `Architecture: arm64` |
+| 桌面版 rpm（arm64） | `qingci-bot-ce-<ver>-1.aarch64.rpm` | `Arch: aarch64` |
+| 服务端 deb（arm64） | `qingci-bot-ce-server_<ver>_arm64.deb` | `Architecture: arm64` |
+| 服务端 rpm（arm64） | `qingci-bot-ce-server-<ver>-1.aarch64.rpm` | `Arch: aarch64` |
+| 校验和 | `SHA256SUMS.txt` | 上述 10 个分发包的 sha256 |
+
+> deb 的架构名是 `arm64`、rpm 是 `aarch64`（两者规范不同），因此 arm64 的 deb 与 rpm 文件名里的架构后缀不一样，这不是笔误。
 
 命名在 `desktop/electron/package.json`（`deb` / `rpm` / `nsis` / `win` 的 `artifactName`、`packageName`）与 `scripts/pack_linux_server.sh` 中定义，并由两处 CI 断言锁定：
 
 - `ci-desktop.yml` 校验 `artifactName` 模板与 `packageName`，防止改回旧的大写命名；
-- `release.yml` 的 `Verify package metadata & filenames` 用 `dpkg-deb -f` / `rpm -qp` 读回包元数据，断言**文件名与包内 Name/Version/Arch 一致**、且恰好 4 个 Linux 产物。
+- `release.yml` 的 `linux-deb-rpm` 与 `linux-arm64` 两个 job 共用 `scripts/verify_linux_packages.sh`（架构作为参数：`amd64 x86_64` / `arm64 aarch64`），用 `dpkg-deb -f` / `rpm -qp` 读回包元数据，断言**文件名与包内 Name/Version/Arch 一致**、且每个架构恰好 4 个 Linux 产物。
 
 校验和说明：`dist/backend-manifest.sha256` 是**后端构建清单**（冻结后的可执行文件 + Web UI 入口），由 `build.bat` / `build-linux.sh` 生成，不进 Release；发布包的校验和是 `SHA256SUMS.txt`，由 `release.yml` 的 `checksums` job 生成——直接读取各资产在 GitHub 侧的 sha256 digest（接收上传时已计算），无需把约 1.8 GB 产物下载回来重算，产物缺失或 digest 缺失时该 job 明确失败。`sha256sum -c SHA256SUMS.txt` 可直接校验下载。
 
@@ -180,7 +222,11 @@ SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux
 SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux --only rpm
 # 换目标发行版
 UBUNTU_IMAGE=debian:12 SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux --only deb
+# 测 arm64 包（需 binfmt/qemu，CI 里由 docker/setup-qemu-action 提供）
+CONTAINER_PLATFORM=linux/arm64 bash scripts/smoke_install_packages.sh dist/linux
 ```
+
+arm64 包走完全相同的四类断言，只把容器平台换成 `linux/arm64`；QEMU 下 apt/dnf 与冷启动更慢，单用例硬超时因此放宽到 1200s。
 
 ### 构建机的 glibc 决定运行时下限
 
@@ -206,13 +252,16 @@ ImportError: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found
 | Ubuntu 24.04 | 2.39 | ✅ |
 | Fedora 41 | 2.40 | ✅ |
 
-改构建基线时的**三处联动**（漏一处就会出现"测的系统与发的产物不匹配"）：`release.yml` 的 `linux-deb-rpm.runner`、`ci.yml` 的 `package-smoke.runner`、`scripts/smoke_install_packages.sh` 的 `UBUNTU_IMAGE` 默认值。
+arm64 产物的下限与 x64 相同：后端在 `ubuntu:22.04` 的 arm64 容器里构建（glibc 2.35），冒烟同样跑 22.04 容器，两边对齐。
+
+改构建基线时的**四处联动**（漏一处就会出现"测的系统与发的产物不匹配"）：`release.yml` 的 `linux-deb-rpm.runner`、`release.yml` 的 `linux-arm64` 容器镜像、`ci.yml` 的 `package-smoke.runner`、`scripts/smoke_install_packages.sh` 的 `UBUNTU_IMAGE` 默认值。
 
 ## 自动发布（GitHub Actions）
 
 打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](../.github/workflows/release.yml)，各平台自动联编：
 - Windows 桌面（`qingci-bot-ce-<ver>-x64-setup.exe` + `-portable.zip`，`build.bat` + `build-electron.bat`）
-- Linux deb / rpm 共 4 个产物（`build-linux.sh` + `electron-builder --linux deb rpm` 出桌面版，`scripts/pack_linux_server.sh` 出服务端版）
+- Linux deb / rpm 共 8 个产物：x86_64 与 arm64 各 4 个（`build-linux.sh` + `electron-builder --linux deb rpm [--arm64]` 出桌面版，`scripts/pack_linux_server.sh` 出服务端版；arm64 后端在 `ubuntu:22.04` arm64 容器里构建）
+- Docker 镜像（`ghcr.io`，`linux/amd64` + `linux/arm64` 多架构 manifest）
 - `SHA256SUMS.txt`（两个构建 job 都成功后由 `checksums` job 从资产 digest 统一生成）
 - Docker 镜像（tag：`X.Y.Z` / `X.Y` / `X` / `latest`；`docker/metadata-action` 会剥掉 `v` 前缀）
 

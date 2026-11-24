@@ -78,7 +78,11 @@ uv run python main.py --host 127.0.0.1
 | Fedora / RHEL 桌面 | `qingci-bot-ce-<ver>-1.x86_64.rpm` | 同上 |
 | Debian / Ubuntu 服务端 | `qingci-bot-ce-server_<ver>_amd64.deb` | headless + systemd，装完 `systemctl start qingci-bot-ce` |
 | Fedora / RHEL 服务端 | `qingci-bot-ce-server-<ver>-1.x86_64.rpm` | 同上 |
-| 校验和 | `SHA256SUMS.txt` | `sha256sum -c SHA256SUMS.txt` 校验上述 6 个包 |
+| Debian / Ubuntu 桌面（ARM64） | `qingci-bot-ce_<ver>_arm64.deb` | 树莓派 4/5、ARM 云主机、Apple Silicon 虚拟机等 arm64 桌面 |
+| Fedora / RHEL 桌面（ARM64） | `qingci-bot-ce-<ver>-1.aarch64.rpm` | 同上 |
+| Debian / Ubuntu 服务端（ARM64） | `qingci-bot-ce-server_<ver>_arm64.deb` | arm64 服务器，headless + systemd |
+| Fedora / RHEL 服务端（ARM64） | `qingci-bot-ce-server-<ver>-1.aarch64.rpm` | 同上 |
+| 校验和 | `SHA256SUMS.txt` | `sha256sum -c SHA256SUMS.txt` 校验上述 10 个包（含 arm64） |
 
 Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。
 
@@ -87,6 +91,7 @@ Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，�
 安装步骤见 [docs/SETUP.md](./docs/SETUP.md#linux-发行版包deb--rpm)，命名与校验规则见 [docs/PACKAGING.md](./docs/PACKAGING.md#产物命名与校验)。
 
 Docker 镜像同版本发布到 `ghcr.io/qingci-bot/qingci-bot-ce`（tag：`X.Y.Z` / `X.Y` / `X` / `latest`，`docker/metadata-action` 会剥掉 `v` 前缀）。
+镜像为 **amd64 + arm64 多架构 manifest**（1.22.4 起），ARM 主机上 `docker pull` 会自动拿到 arm64 层。
 
 ***
 
