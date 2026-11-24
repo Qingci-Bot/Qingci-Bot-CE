@@ -19,6 +19,8 @@
 #   UBUNTU_IMAGE   默认 ubuntu:22.04——构建基线，也是 deb 的目标下限
 #   FEDORA_IMAGE   默认 fedora:41（rpm 侧取在用版本；更老的 Fedora 已 EOL，
 #                  dnf 源不可用，会因基础设施而非兼容性失败）
+#   CONTAINER_PLATFORM  容器平台（如 linux/arm64）。留空＝宿主原生架构；
+#                 冒烟 arm64 包时填 linux/arm64（需 binfmt/qemu，见 release.yml）
 #
 # 镜像应与构建基线**同代**：构建在 ubuntu-22.04 上做，这里就测 22.04。
 # 测系统比构建系统新，等于放过"在老系统上跑不起来"的问题（1.22.0 就是这么
@@ -59,6 +61,8 @@ done
 ENGINE="${SMOKE_ENGINE:-docker}"
 UBUNTU_IMAGE="${UBUNTU_IMAGE:-ubuntu:22.04}"
 FEDORA_IMAGE="${FEDORA_IMAGE:-fedora:41}"
+# 空＝跟随宿主架构；跨架构冒烟（arm64 包在 x64 runner 上验）时显式指定
+CONTAINER_PLATFORM="${CONTAINER_PLATFORM:-}"
 SERVER_PKG="qingci-bot-ce-server"
 DESKTOP_PKG="qingci-bot-ce"
 INSTALL_DIR_SERVER="/opt/${SERVER_PKG}"
@@ -253,17 +257,22 @@ run_case() {
   name="$(basename "$pkg")"
   # 挂目录而非单文件：apt/dnf 要求文件名带 .deb/.rpm 扩展名才会当本地包处理
   pkgdir="$(cd "$(dirname "$pkg")" && pwd)"
+  local platform_args=()
+  if [ -n "$CONTAINER_PLATFORM" ]; then
+    platform_args=(--platform "$CONTAINER_PLATFORM")
+  fi
   echo ""
-  echo "==> [$fmt/$kind] $name  ($image)"
-  # 硬上限：单个用例 15 分钟。宁可失败并打印到哪一步，也不要让 job 挂几十分钟。
-  timeout 900 "$ENGINE" run --rm "${SEC_ARGS[@]}" \
+  echo "==> [$fmt/$kind] $name  ($image${CONTAINER_PLATFORM:+ @ $CONTAINER_PLATFORM})"
+  # 硬上限：单个用例 20 分钟（QEMU 模拟下 apt/dnf 与冷启动都更慢）。宁可失败并
+  # 打印到哪一步，也不要让 job 挂几十分钟。
+  timeout 1200 "$ENGINE" run --rm "${SEC_ARGS[@]}" "${platform_args[@]}" \
     -v "${pkgdir}:/pkgs:ro" \
     "$image" \
     bash -c "$INNER" _ "/pkgs/${name}" "$fmt" "$kind" \
     || {
       rc=$?
       if [ "$rc" -eq 124 ]; then
-        echo "[FAIL] $name 冒烟超时（900s）——通常是容器内包管理器访问镜像源超时" >&2
+        echo "[FAIL] $name 冒烟超时（1200s）——通常是容器内包管理器访问镜像源超时" >&2
       else
         echo "[FAIL] $name 冒烟未通过" >&2
       fi

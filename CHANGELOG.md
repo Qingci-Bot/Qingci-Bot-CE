@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.22.4-rc1] - 2026-11-24（支持 Linux ARM64；安全策略明确 1.22.3 以下不再支持）
+
+### Added
+
+- **Linux ARM64（aarch64）支持**：Release 新增 4 个 arm64 产物——桌面版 `qingci-bot-ce_<ver>_arm64.deb` / `qingci-bot-ce-<ver>-1.aarch64.rpm`，服务端版 `qingci-bot-ce-server_<ver>_arm64.deb` / `qingci-bot-ce-server-<ver>-1.aarch64.rpm`。适用于树莓派 4/5、ARM 云主机（Ampere / Graviton）、Apple Silicon 上的 Linux 虚拟机
+  - 后端（PyInstaller 不支持交叉编译）在 `ubuntu:22.04` arm64 容器里构建，基线 glibc 2.35 与 x64 产物一致——**不用 ubuntu-24.04 的 arm64 runner 是因为那会要求 glibc ≥2.39**，重演 1.22.0 的兼容事故
+  - Electron 壳在 x64 宿主上 `electron-builder --arm64` 交叉打包（本地已实测产出 `_arm64.deb` / `.aarch64.rpm`）
+  - arm64 包同样跑完四类安装冒烟（真实装进 arm64 容器、冷启动后端、卸载断言），与 x64 共用同一份脚本（新增 `CONTAINER_PLATFORM` 参数）
+  - Docker 镜像改为 **amd64 + arm64 多架构 manifest**，ARM 主机 `docker pull` 自动取对应层
+- **包元数据校验脚本化**：`scripts/verify_linux_packages.sh`（架构作参数），x64 与 arm64 两条链共用，避免断言各写一份漂移
+- **桌面壳桌面项同步**：`desktopName` + `linux.syncDesktopName`，让 Electron 的 app_id / WM_CLASS 与安装包 `.desktop` 文件名严格一致（与 1.22.3 的 `--class` / `--wayland-app-id` 双保险，解决 Dock 图标关联）
+
+### Changed
+
+- **安全策略**：`SECURITY.md` 明确 **1.22.3 以下版本不再受支持**（含 1.22.2 及更早正式版与全部 rc），并列出具体原因（glibc 兼容、QQ 凭据缺陷链、Web UI 缓存策略）
+- Release 校验和 job 的期望资产数从 6 提升到 10；`checksums` 依赖新增 arm64 构建结果
+
 ## \[1.22.3] - 2026-11-24（正式版）
 
 包含 1.22.3-rc1 ~ rc6 的全部修复，与 rc6 代码一致（仅版本号与本文档差异）。自 1.22.2 升级的用户可直接安装本版。

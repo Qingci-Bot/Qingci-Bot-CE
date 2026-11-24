@@ -1,6 +1,7 @@
 {
   "name": "qingci-bot-ce-desktop",
-  "version": "1.22.3",
+  "desktopName": "qingci-bot-ce.desktop",
+  "version": "1.22.4-rc1",
   "description": "Qingci-Bot CE Electron 桌面壳（Electron + Python 混合架构）",
   "main": "src/main.js",
   "homepage": "https://github.com/Qingci-Bot/Qingci-Bot-CE",
@@ -85,6 +86,7 @@
       ],
       "icon": "icon.png",
       "category": "Network",
+      "syncDesktopName": true,
       "synopsis": "Multi-platform bot framework",
       "description": "Qingci-Bot CE desktop application: Electron shell with embedded Python backend, providing Web UI for bot / LLM configuration and monitoring.",
       "maintainer": "Qingci-Bot <https://github.com/Qingci-Bot>",

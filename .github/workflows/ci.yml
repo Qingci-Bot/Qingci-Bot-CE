@@ -97,6 +97,7 @@ jobs:
               - 'build-linux.sh'
               - 'scripts/pack_backend.py'
               - 'scripts/pack_linux_server.sh'
+              - 'scripts/verify_linux_packages.sh'
               - 'scripts/smoke_install_packages.sh'
               - '.github/workflows/ci.yml'
 

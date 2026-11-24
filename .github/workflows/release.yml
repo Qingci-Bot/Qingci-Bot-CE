@@ -9,18 +9,23 @@
 # 各格式沿用其生态的分隔符约定；包名一律小写连字符，版本紧邻包名）：
 #   qingci-bot-ce_<ver>_amd64.deb              桌面版 deb（dpkg 约定：下划线）
 #   qingci-bot-ce-<ver>-1.x86_64.rpm           桌面版 rpm（rpm 约定：连字符 + release）
+#   qingci-bot-ce_<ver>_arm64.deb              桌面版 deb（arm64）
+#   qingci-bot-ce-<ver>-1.aarch64.rpm          桌面版 rpm（arm64）
 #   qingci-bot-ce-<ver>-x64-setup.exe          桌面版 Windows 安装向导
 #   qingci-bot-ce-<ver>-x64-portable.zip       桌面版 Windows 便携包
 #   qingci-bot-ce-server_<ver>_amd64.deb       服务端 deb（headless + systemd）
 #   qingci-bot-ce-server-<ver>-1.x86_64.rpm    服务端 rpm
+#   qingci-bot-ce-server_<ver>_arm64.deb       服务端 deb（arm64）
+#   qingci-bot-ce-server-<ver>-1.aarch64.rpm   服务端 rpm（arm64）
 #   SHA256SUMS.txt                             上传产物的校验和（checksums job 生成）
 # 桌面版由 electron-builder 输出到 dist/electron，构建后归集到 dist/linux，
 # 与服务端包统一由 Upload release assets 收口。
 #
 # 产物：
 #   - Windows 安装版 / 便携版（PyInstaller 后端 onedir + electron-builder nsis/zip）
-#   - Linux deb / rpm（PyInstaller 后端 onedir + electron-builder deb/rpm），x86_64，两款包
-#   - Docker 镜像（ghcr.io，tag: vX.Y.Z / X.Y / X / latest）
+#   - Linux deb / rpm（PyInstaller 后端 onedir + electron-builder deb/rpm），
+#     x86_64 与 arm64 各有桌面版 + 服务端版两款包（见上方命名表）
+#   - Docker 镜像（ghcr.io，tag: vX.Y.Z / X.Y / X / latest；amd64 + arm64 多架构）
 #
 # 每个平台先产后端 onedir，再让 electron-builder 打成安装包，
 # 与本地 build.ps1 + build-electron.ps1 / build-linux.sh 链路一致。
@@ -311,60 +316,13 @@ jobs:
           bash scripts/pack_linux_server.sh --version "${ver#v}"
 
       - name: Verify package metadata & filenames
-        # 命名规整化后，文件名必须与包元数据一致，且恰好 4 个产物（2 deb + 2 rpm）。
+        # 命名规整化后，文件名必须与包元数据一致，且本 job 恰好 4 个产物（2 deb + 2 rpm，单架构）。
         # 改名/改模板后若产出偏差（如 packageName 漂回默认值、架构给错），这里直接失败，
         # 而不是让用户下到一个名字与内容对不上的包。
+        # 断言逻辑与 arm64 job 共用同一脚本（架构作为参数），避免两条链各写一份漂移。
         run: |
-          set -euo pipefail
-          ver="${{ needs.prepare.outputs.ver }}"
-          ver="${ver#v}"
-          # 预发布：deb/rpm 元数据把 -rc 写成 ~rc（排序在正式版之前），
-          # 文件名可能两种写法都出现（desktop 取 appInfo.version，server 脚本转 ~）。
-          ver_pkg="${ver//-rc/~rc}"
-          echo "== dist/linux =="
-          ls -l dist/linux
-
-          deb_count=$(ls dist/linux/*.deb 2>/dev/null | wc -l)
-          rpm_count=$(ls dist/linux/*.rpm 2>/dev/null | wc -l)
-          echo "deb=$deb_count rpm=$rpm_count"
-          [ "$deb_count" -eq 2 ] || { echo "::error::期望 2 个 deb，实际 $deb_count"; exit 1; }
-          [ "$rpm_count" -eq 2 ] || { echo "::error::期望 2 个 rpm，实际 $rpm_count"; exit 1; }
-
-          for deb in dist/linux/*.deb; do
-            base="$(basename "$deb")"
-            pkg="$(dpkg-deb -f "$deb" Package)"
-            dver="$(dpkg-deb -f "$deb" Version)"
-            darch="$(dpkg-deb -f "$deb" Architecture)"
-            echo "deb: $base -> Package=$pkg Version=$dver Arch=$darch"
-            echo "     安装路径: $(dpkg-deb -c "$deb" | grep -o '\./opt/[^/]*/' | sort -u | tr '\n' ' ')"
-            base_norm="${base//\~/-}"
-            case "$base_norm" in
-              "qingci-bot-ce_${ver}_${darch}.deb"|"qingci-bot-ce-server_${ver}_${darch}.deb") ;;
-              *) echo "::error::deb 文件名不符合 <包名>_<版本>_<架构>.deb 约定: $base"; exit 1 ;;
-            esac
-            { [ "$dver" = "$ver" ] || [ "$dver" = "$ver_pkg" ]; } \
-              || { echo "::error::deb 版本与 tag 不一致: $base ($dver != $ver / $ver_pkg)"; exit 1; }
-            [ "$darch" = "amd64" ] || { echo "::error::deb 架构非 amd64: $base ($darch)"; exit 1; }
-          done
-
-          for rpm in dist/linux/*.rpm; do
-            base="$(basename "$rpm")"
-            name="$(rpm -qp --qf '%{NAME}' "$rpm")"
-            rver="$(rpm -qp --qf '%{VERSION}' "$rpm")"
-            rrel="$(rpm -qp --qf '%{RELEASE}' "$rpm")"
-            rarch="$(rpm -qp --qf '%{ARCH}' "$rpm")"
-            echo "rpm: $base -> Name=$name Version=$rver Release=$rrel Arch=$rarch"
-            base_norm="${base//\~/-}"
-            rver_norm="${rver//\~/-}"
-            case "$base_norm" in
-              "qingci-bot-ce-${rver_norm}-${rrel}.${rarch}.rpm"|"qingci-bot-ce-server-${rver_norm}-${rrel}.${rarch}.rpm") ;;
-              *) echo "::error::rpm 文件名不符合 <包名>-<版本>-<release>.<架构>.rpm 约定: $base"; exit 1 ;;
-            esac
-            { [ "$rver" = "$ver" ] || [ "$rver" = "$ver_pkg" ]; } \
-              || { echo "::error::rpm 版本与 tag 不一致: $base ($rver != $ver / $ver_pkg)"; exit 1; }
-            [ "$rarch" = "x86_64" ] || { echo "::error::rpm 架构非 x86_64: $base ($rarch)"; exit 1; }
-          done
-          echo "包名与元数据校验通过"
+          bash scripts/verify_linux_packages.sh \
+            dist/linux "${{ needs.prepare.outputs.ver }}" amd64 x86_64
 
       - name: Install smoke (deb / rpm in containers)
         # 真装一遍再上传：布局/软链/systemd 单元/冻结二进制能否启动并响应
@@ -388,6 +346,152 @@ jobs:
           fi
           gh release upload "$ver" $debs $rpms --clobber
 
+  linux-arm64:
+    name: Linux deb / rpm (arm64)
+    needs: prepare
+    # 为什么是「x64 runner + QEMU 里的 ubuntu:22.04(arm64) 容器」：
+    #
+    #  1) PyInstaller 不能交叉编译，后端必须在 arm64 环境里构建。
+    #  2) GitHub 托管的 arm64 runner 只有 ubuntu-24.04（glibc 2.39），直接在上面
+    #     构建会让产物要求 glibc ≥2.39，Debian 12 / Ubuntu 22.04 装得上却起不来
+    #     ——正是 1.22.0 踩过的坑。容器把基线钉在 22.04（glibc 2.35），与 x64 产物一致。
+    #  3) Electron 壳用 electron-builder 在 x64 上交叉打包 arm64（官方支持路径，
+    #     本地实测可产出 _arm64.deb / .aarch64.rpm），不需要在 arm 机器上再跑一遍。
+    #
+    # 代价是 QEMU 模拟下 PyInstaller 明显变慢（约 15-30 分钟），故超时放宽到 120。
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js (for Web UI build)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # Web UI 是纯静态产物，与 CPU 架构无关：在 x64 宿主上构建，再拷进目标容器
+      - name: Web UI build
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install packaging toolchain (host)
+        # rpm CLI 供 scripts/verify_linux_packages.sh 读 rpm 元数据；
+        # electron-builder 自带 fpm，但架构断言仍要能读包。
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm xz-utils file
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build arm64 backend + server packages (in ubuntu:22.04 container)
+        # 容器里独立 git clone 一份：宿主工作区带着 x64 的 .venv / dist，
+        # build-linux.sh 会优先复用 .venv，直接挂载会把 x64 解释器当构建环境。
+        # 用字符串比较而不是 `inputs.bundle_browser == false`：tag 推送时 inputs 为空，
+        # 表达式的 null → 0 隐式转换会让判定失真。与 x64 job 保持同一种写法。
+        env:
+          BUNDLE_BROWSER: ${{ inputs.bundle_browser }}
+        run: |
+          set -euo pipefail
+          ver="${{ needs.prepare.outputs.ver }}"
+          ver="${ver#v}"
+          mkdir -p dist/linux
+          docker run --rm \
+            --platform linux/arm64 \
+            -v "$PWD":/src \
+            -v "$PWD/dist/linux":/out \
+            -e "VER=$ver" \
+            -e "BUNDLE_BROWSER=${BUNDLE_BROWSER:-true}" \
+            -e "CI=1" \
+            ubuntu:22.04 bash -c '
+              set -euo pipefail
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                ca-certificates curl git build-essential binutils xz-utils file dpkg-dev rpm
+              echo "== 容器架构: $(uname -m) =="
+              # 容器内是 root、/src 属宿主用户：显式声明为安全目录，避免 git 的
+              # ownership 校验在不同 git 版本上行为不一致导致 clone 失败
+              git config --global --add safe.directory /src
+              git clone --quiet --local /src /build
+              cp -r /src/web/dist /build/web/dist
+              cd /build
+              curl -LsSf https://astral.sh/uv/install.sh | sh
+              export PATH="$HOME/.local/bin:$PATH"
+              uv python install 3.12
+              uv venv --python 3.12
+              uv pip install --python .venv/bin/python -e ".[build]"
+              if [ "$BUNDLE_BROWSER" = "false" ]; then
+                bash build-linux.sh --no-browser
+              else
+                bash build-linux.sh
+              fi
+              python3 scripts/pack_backend.py
+              bash scripts/pack_linux_server.sh --version "$VER" --out /out
+              cp -f dist/backend.zip /out/backend.zip
+            '
+          # 后端归档供 electron-builder 作 extraResources
+          cp -f dist/linux/backend.zip dist/backend.zip
+          rm -f dist/linux/backend.zip
+          ls -l dist/linux dist/backend.zip
+
+      - name: Package desktop deb + rpm (electron-builder --arm64)
+        working-directory: desktop/electron
+        # 在 x64 宿主上交叉打 arm64 包：electron-builder 下载 arm64 版 Electron，
+        # fpm 负责 deb/rpm（rpm 的 ARCH 自动写 aarch64）。
+        run: |
+          npm ci
+          npx electron-builder --linux deb rpm --arm64 --publish never
+
+      - name: Collect desktop packages into dist/linux
+        run: |
+          found=0
+          for f in dist/electron/*.deb dist/electron/*.rpm; do
+            [ -e "$f" ] || continue
+            cp -f "$f" dist/linux/
+            found=$((found + 1))
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "::error::electron-builder produced no arm64 deb/rpm under dist/electron"
+            ls -R dist/electron 2>/dev/null || true
+            exit 1
+          fi
+          ls -l dist/linux
+
+      - name: Verify package metadata & filenames (arm64 / aarch64)
+        run: |
+          bash scripts/verify_linux_packages.sh \
+            dist/linux "${{ needs.prepare.outputs.ver }}" arm64 aarch64
+
+      - name: Install smoke (deb / rpm in arm64 containers)
+        # 与 x64 用同一份断言脚本，只换容器平台；QEMU 下 apt/dnf 安装 + 冷启动更慢，
+        # 脚本内单用例 900s 上限仍然够用。
+        env:
+          CONTAINER_PLATFORM: linux/arm64
+        run: bash scripts/smoke_install_packages.sh dist/linux
+
+      - name: Upload release assets (arm64)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${{ needs.prepare.outputs.ver }}"
+          debs=$(ls dist/linux/*.deb 2>/dev/null || true)
+          rpms=$(ls dist/linux/*.rpm 2>/dev/null || true)
+          if [ -z "$debs" ] || [ -z "$rpms" ]; then
+            echo "::error::arm64 packages missing under dist/linux (deb/rpm)"
+            ls -R dist/linux 2>/dev/null || true
+            exit 1
+          fi
+          gh release upload "$ver" $debs $rpms --clobber
+
   docker:
     name: Docker image (ghcr.io)
     if: github.event_name == 'push'
@@ -398,6 +502,13 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
+
+      - name: Set up QEMU (for arm64 image layer)
+        # 多架构镜像：arm64 层在 x64 runner 上靠 QEMU 构建（Dockerfile 只装
+        # Python 依赖，纯 wheel 安装，模拟开销可接受）。
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -420,10 +531,12 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
-      - name: Build and push image
+      - name: Build and push image (amd64 + arm64)
         uses: docker/build-push-action@v7
         with:
           context: .
+          # 多架构 manifest：arm64 主机（树莓派 / ARM 云主机）可直接 docker pull
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -438,11 +551,12 @@ jobs:
   # 残缺的校验文件。
   checksums:
     name: Release checksums
-    needs: [prepare, windows-exe, linux-deb-rpm]
+    needs: [prepare, windows-exe, linux-deb-rpm, linux-arm64]
     if: >-
       always() &&
       needs.windows-exe.result == 'success' &&
-      needs.linux-deb-rpm.result == 'success'
+      needs.linux-deb-rpm.result == 'success' &&
+      needs.linux-arm64.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -459,9 +573,9 @@ jobs:
 
           echo "== Release 资产 =="
           cat /tmp/assets.txt
-          # 期望 4 个 Linux 包 + Windows 安装版 + 便携版
+          # 期望 4 个 Linux x64 包 + 4 个 Linux arm64 包 + Windows 安装版 + 便携版
           count=$(wc -l < /tmp/assets.txt)
-          [ "$count" -eq 6 ] || { echo "::error::期望 6 个分发包，实际 $count"; exit 1; }
+          [ "$count" -eq 10 ] || { echo "::error::期望 10 个分发包，实际 $count"; exit 1; }
 
           # 缺 digest 的行形如 "  <name>"（前缀是空串），据此判残缺
           if grep -qE '^  ' /tmp/assets.txt; then
