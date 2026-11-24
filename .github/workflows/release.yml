@@ -393,8 +393,9 @@ jobs:
           platforms: arm64
 
       - name: Build arm64 backend + server packages (in ubuntu:22.04 container)
-        # 容器里独立 git clone 一份：宿主工作区带着 x64 的 .venv / dist，
-        # build-linux.sh 会优先复用 .venv，直接挂载会把 x64 解释器当构建环境。
+        # 容器里另拷一份工作树再构建：宿主工作区带着 x64 的 .venv / dist，
+        # build-linux.sh 会优先复用 .venv/bin/python，直接原地构建等于拿 x64
+        # 解释器当 arm64 构建环境。
         # 用字符串比较而不是 `inputs.bundle_browser == false`：tag 推送时 inputs 为空，
         # 表达式的 null → 0 隐式转换会让判定失真。与 x64 job 保持同一种写法。
         env:
@@ -418,11 +419,13 @@ jobs:
               apt-get install -y --no-install-recommends \
                 ca-certificates curl git build-essential binutils xz-utils file dpkg-dev rpm
               echo "== 容器架构: $(uname -m) =="
-              # 容器内是 root、/src 属宿主用户：显式声明为安全目录，避免 git 的
-              # ownership 校验在不同 git 版本上行为不一致导致 clone 失败
-              git config --global --add safe.directory /src
-              git clone --quiet --local /src /build
-              cp -r /src/web/dist /build/web/dist
+              # 用 tar 拷工作树而不是 git clone：容器内是 root、/src 属宿主用户，
+              # `git clone --local` 会因 dubious ownership 直接失败（rc1 实测 exit 128），
+              # 加 safe.directory 也不稳妥（不同 git 版本对"仓库路径"的判定不一样）。
+              # 构建也不需要 .git（版本号写在 pyproject / bot/__init__.py 里）。
+              mkdir -p /build
+              tar -C /src --exclude=.git --exclude=dist --exclude=.venv -cf - . | tar -C /build -xf -
+              test -f /build/web/dist/index.html || { echo "ERROR: web/dist 缺失，请先构建 Web UI"; exit 1; }
               cd /build
               curl -LsSf https://astral.sh/uv/install.sh | sh
               export PATH="$HOME/.local/bin:$PATH"
