@@ -1642,3 +1642,58 @@ def test_bot_module_resolves_platform_not_configured_at_runtime():
         "若它被移回 TYPE_CHECKING 块，except 子句会在求值时抛 NameError"
     )
     assert bot_module.PlatformNotConfigured is base_exc
+
+
+# ============ 保存凭据后「重启 Bot」必须用上新配置 ============
+
+
+def test_rebuild_platforms_picks_up_current_credentials():
+    """Bot._rebuild_platforms 按当前配置重建适配器
+
+    v1.22.3-rc3 实测：适配器实例持有 assemble 时刻的配置快照，用户保存
+    凭据后点「重启 Bot」（stop+start、不重新装配）仍以旧空值启动，
+    侧边栏持续显示「未配置」。此用例锁定 start 前按最新配置重建。
+    """
+    from types import SimpleNamespace
+
+    import bot.core.bot as bot_module
+    from bot.config import QQConfig
+
+    bot = bot_module.QingciBot.__new__(bot_module.QingciBot)
+    bot.connection = SimpleNamespace(name="onebot")
+    # assemble 时刻：qq 已启用但凭据为空
+    old_qq = QQConfig(enabled=True, app_id="", app_secret="")
+    bot.platforms = {"onebot": bot.connection, "qq": bot_module.make_platform(old_qq)}
+    # 用户保存后：凭据已落盘
+    new_qq = QQConfig(enabled=True, app_id="1906509484", app_secret="sec")
+    bot.config = SimpleNamespace(
+        config=SimpleNamespace(platforms=SimpleNamespace(telegram=None, onebot12=None, qq=new_qq))
+    )
+
+    bot._rebuild_platforms()
+
+    assert bot.platforms["onebot"] is bot.connection  # 主连接不重建
+    assert bot.platforms["qq"].app_id == "1906509484"
+    assert bot.platforms["qq"].app_secret == "sec"
+
+
+def test_rebuild_platforms_drops_disabled_platform():
+    """配置里停用的平台不应出现在重建后的适配器表里"""
+    from types import SimpleNamespace
+
+    import bot.core.bot as bot_module
+    from bot.config import QQConfig
+
+    bot = bot_module.QingciBot.__new__(bot_module.QingciBot)
+    bot.connection = SimpleNamespace(name="onebot")
+    old_qq = QQConfig(enabled=True, app_id="x", app_secret="y")
+    bot.platforms = {"onebot": bot.connection, "qq": bot_module.make_platform(old_qq)}
+    bot.config = SimpleNamespace(
+        config=SimpleNamespace(
+            platforms=SimpleNamespace(telegram=None, onebot12=None, qq=QQConfig(enabled=False))
+        )
+    )
+
+    bot._rebuild_platforms()
+
+    assert set(bot.platforms) == {"onebot"}

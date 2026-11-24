@@ -27,7 +27,7 @@ from .dispatcher import MessageDispatcher
 # 用在 except 子句里，必须是运行时导入——放进 TYPE_CHECKING 会让
 # `except PlatformNotConfigured` 求值时抛 NameError，把「未配置 QQ」这个
 # 正常状态变成整个后端起崩（v1.22.3-rc1 实测）。
-from .platforms.base import PlatformNotConfigured
+from .platforms.base import PlatformNotConfigured, make_platform
 from .scope import get_scope
 from .tasks import spawn_background_task
 
@@ -124,6 +124,25 @@ class QingciBot:
 
     # ============ 生命周期 ============
 
+    def _rebuild_platforms(self) -> None:
+        """按当前配置重建附加平台适配器（onebot 主连接保持不变）。
+
+        self.platforms 里的实例持有 assemble 时刻的配置快照（app_id /
+        app_secret / token 等）。用户在设置页保存凭据后 config 已落盘，
+        但「重启 Bot」是 stop + start、不重新装配——不在 start 前重建的话，
+        仍会用旧实例启动（1.22.3-rc3 实测：保存凭据后重启依旧报「未配置」，
+        必须重启整个后端进程才生效）。
+        """
+        self.platforms = {"onebot": self.connection}
+        _platforms_cfg = self.config.config.platforms
+        for _attr in ("telegram", "onebot12", "qq"):
+            _cfg = getattr(_platforms_cfg, _attr, None)
+            if _cfg is None or not getattr(_cfg, "enabled", False):
+                continue
+            _adapter = make_platform(_cfg)
+            if _adapter is not None:
+                self.platforms[_adapter.name] = _adapter
+
     async def start(self) -> None:
         """启动 Bot"""
         self._started = True
@@ -148,6 +167,7 @@ class QingciBot:
         # 初始化 MCP 工具（enable_tools + mcp_servers 配置时；失败仅记日志）
         await self.llm.setup_mcp_tools()
         # 多平台：onebot 为主连接，其余按 platforms 配置启用的适配器一并启动
+        self._rebuild_platforms()
         for platform in self.platforms.values():
             platform.on_event(self._handle_event)
             platform.on_connect(self._on_bot_connect)
