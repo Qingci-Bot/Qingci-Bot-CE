@@ -29,7 +29,7 @@ SKIP_DIRS = {
     ".venv",
     "venv",
     "instances",  # 运行时生成的实例目录（gitignore 内）；本地 e2e 会创建，扫描会把
-                  # 其模板 __init__.py 误报为缺声明（1.22.3-rc4 排障时实测踩过）
+    # 其模板 __init__.py 误报为缺声明（1.22.3-rc4 排障时实测踩过）
     "node_modules",
     "dist",
     "build",
