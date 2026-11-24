@@ -429,6 +429,31 @@ def create_app() -> FastAPI:
 
     from bot.paths import app_root
 
+    class _WebUIStaticFiles(StaticFiles):
+        """Web UI 静态资源：带 hash 的资产长缓存，HTML 每次协商缓存。
+
+        桌面壳升级后会解压新版本后端，但页面 URL 不变（127.0.0.1:<port>/ui/）。
+        StaticFiles 默认不发 Cache-Control，Chromium 走启发式缓存
+        （寿命 ≈ (now - Last-Modified) × 10%），会把上一版 index.html 与 bundle
+        直接命中而不 revalidate——用户升级后看到的仍是旧 UI，且因 URL 相同毫无
+        提示（1.22.3-rc3 实测：缓存里的 rc2 页面保存 payload 不含 qq 节，
+        表现为「QQ 凭据填了保存却一直不生效」）。
+        HTML 用 no-cache 强制 revalidate；assets 文件名自带内容 hash，immutable。
+        """
+
+        async def get_response(self, path: str, scope):
+            response = await super().get_response(path, scope)
+            headers = getattr(response, "headers", None)
+            if headers is not None:
+                # 以响应类型判断而非路径：html=True 下目录请求（"/ui/"）会在内部
+                # 解析成 index.html，传入的 path 未必带 .html 后缀
+                is_html = headers.get("content-type", "").startswith("text/html")
+                if is_html:
+                    headers["Cache-Control"] = "no-cache"
+                else:
+                    headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return response
+
     web_dir = str(app_root() / "web" / "dist")
     web_ready = False
     if os.path.isdir(web_dir):
@@ -464,7 +489,7 @@ def create_app() -> FastAPI:
                 logger.exception("检查 Web UI 构建产物失败")
 
     if web_ready:
-        app.mount("/ui", StaticFiles(directory=web_dir, html=True), name="web")
+        app.mount("/ui", _WebUIStaticFiles(directory=web_dir, html=True), name="web")
 
         @app.get("/")
         async def root():

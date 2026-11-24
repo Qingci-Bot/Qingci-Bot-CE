@@ -73,6 +73,10 @@
   `/usr/share/applications/qingci-bot-ce.desktop`；若菜单未刷新，执行 `update-desktop-database`。
 - **服务端装完没有自动启动**：设计如此——安装只 `enable` 单元，首次启动前请确认
   `/var/lib/qingci-bot-ce-server/instances/default/config.yaml`，再 `sudo systemctl start qingci-bot-ce`。
+- **升级后界面行为没有变化（像没升级）**：桌面壳升级后 Chromium 磁盘缓存里可能仍是上一版
+  的页面（URL 不变、启发式缓存命中后根本不发请求），外观完全一样。1.22.3-rc4 起已自动处理
+  （HTML 协商缓存 + 壳启动时清缓存）；旧版本可手动删 `~/.config/Qingci-Bot CE/Cache` 与
+  `Code Cache`（Windows 为 `%APPDATA%\Qingci-Bot CE` 下同名目录）后重启。
 - **桌面版显示「启动失败 / 后端进程异常退出」**：真实原因在壳的日志里——打开错误页提示的
   `<数据目录>/instances/<实例名>/data/logs/electron.log`，看 `[backend]` 段的 Python traceback：
   - `GLIBC_2.38' not found` → 见上方第一条（1.22.0 的构建基线问题，升级解决）；

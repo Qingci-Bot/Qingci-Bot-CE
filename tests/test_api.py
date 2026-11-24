@@ -283,3 +283,57 @@ class TestGzipCompression:
         # 配置 JSON 超过 minimum_size(1KB)，应命中压缩
         assert len(resp.content) > 1024
         assert resp.headers.get("content-encoding") == "gzip"
+
+
+class TestWebUICacheHeaders:
+    """Web UI 静态资源缓存头：桌面壳升级后必须能看到新 UI
+
+    StaticFiles 默认不发 Cache-Control，Chromium 启发式缓存会命中上一版
+    index.html + bundle 而不 revalidate（1.22.3-rc3 实测：升级后页面仍是
+    旧版，保存 payload 缺 platforms.qq）。HTML 必须 no-cache 强制 revalidate，
+    带 hash 的 assets 可 immutable。
+    """
+
+    def _make_app_with_web(self, tmp_path: Path, monkeypatch):
+        """在临时目录伪造一份最小 web/dist，并把 app_root 指过去。
+
+        不能动仓库内真实的 web/dist（构建产物，删了会让本地后端提示未构建）。
+        """
+        import bot.paths as paths_mod
+        from api.server import create_app
+
+        web_dist = tmp_path / "web" / "dist"
+        web_dist.mkdir(parents=True)
+        (web_dist / "index.html").write_text(
+            '<!doctype html><html><head><script src="/ui/assets/index-abc.js"></script>'
+            '</head><body><div id="app"></div></body></html>',
+            encoding="utf-8",
+        )
+        assets = web_dist / "assets"
+        assets.mkdir()
+        (assets / "index-abc.js").write_text("console.log(1)", encoding="utf-8")
+        monkeypatch.setattr(paths_mod, "app_root", lambda: tmp_path)
+        return create_app()
+
+    def _client(self, tmp_path: Path, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        return TestClient(self._make_app_with_web(tmp_path, monkeypatch))
+
+    def test_index_html_is_no_cache(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        resp = client.get("/ui/", follow_redirects=False)
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-cache"
+
+    def test_hashed_assets_are_immutable(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        resp = client.get("/ui/assets/index-abc.js")
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "public, max-age=31536000, immutable"
+
+    def test_api_responses_are_not_marked_immutable(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        resp = client.get("/api/bot/health")
+        assert resp.status_code == 200
+        assert "immutable" not in resp.headers.get("cache-control", "")
