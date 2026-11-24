@@ -237,6 +237,7 @@ log:
   retention_days: 0                # 数据保留天数（messages/usage/audit/sessions 超期自动清理；0=不清理）
   record_all_messages: true        # 框架级消息记录/广播（关闭后仅内置 chat 的 LLM 对话写库）
   run_log_enabled: true            # 运行日志采集（关闭后 WebUI「运行日志」页无数据）
+  slow_handler_threshold_ms: 2000.0  # 慢 handler 阈值（毫秒）：单次 Matcher 执行超过即记 WARN 并计入 slow_count（0/负 = 关闭）
 api_key: ''                        # API 鉴权密钥
 lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 ```

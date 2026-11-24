@@ -19,7 +19,7 @@ pytest                # 测试（含覆盖率）
 |------|----------|------|
 | ruff | `target-version = py311`，`line-length = 100`，select `E F I W UP B C4` | 忽略 `E501`（行宽由 formatter 处理）、`B008` |
 | mypy | `python_version = "3.12"`，`warn_return_any = true` | 排除 `tests/`；覆盖 `api/` `bot/` `desktop/` |
-| pytest | `asyncio_mode = "auto"`，`testpaths = ["tests"]` | 默认带 `--cov=bot --cov=api`，门槛 50%（与 CI 一致；LLM 子系统另有 70% 门槛） |
+| pytest | `asyncio_mode = "auto"`，`testpaths = ["tests"]` | 默认带 `--cov=bot --cov=api`，`--cov-fail-under=62` 防回退门槛（与 CI 一致，配置在 pyproject 的 addopts） |
 
 ## 2. 类型与语法约定
 
@@ -55,7 +55,7 @@ web/ ──HTTP──▶ api/ ──调用──▶ bot/ ──依赖──▶ b
 插件协议层（`PluginBase`/`Matcher`/`MatcherContext`/`Permission`/`Rule`/`MessageContext`/`RateLimiter`）的**唯一实现在 `Plugins-SDK`**（`qingci_plugin_sdk` 包）。本仓库约束：
 
 - `bot/plugin/protocol/{base,matcher,permission,rule,ratelimit,session,events,context}.py` **只允许薄转发**（`from qingci_plugin_sdk.xxx import *` + 显式 `__all__`），不得新增协议层实现；`bot/plugin/` 顶层同名文件仅作**兼容再导出**（不新增逻辑）。
-- 修改协议行为（权限语义、匹配规则、基类方法等）必须改 `Plugins-SDK` 仓库，发版到官方 PyPI 后在主项目更新 `pyproject.toml` 里的 SDK 精确版本约束并重新 `uv lock`。
+- 修改协议行为（权限语义、匹配规则、基类方法等）必须改 `Plugins-SDK` 仓库，发版到官方 PyPI 后在主项目更新 `pyproject.toml` 里的 SDK 版本区间（与 `bot/plugin/abi.py` 的 `SDK_ABI_RANGE` 保持一致，契约测试锁两边）并重新 `uv lock`。
 - 主项目可在 `bot/plugin/llm_tool.py` 等保留**运行时专属逻辑**（如注册到 `ToolRegistry`），但协议定义本身不得在本仓库重复。
 
 ### 装配与单例

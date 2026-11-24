@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Docs
+
+- 全量文档校对（对照 1.22.3-rc2 现状）：SECURITY 支持版本表更新为 1.22.x；CODING_STANDARDS 的覆盖率门槛改为实际的 `--cov-fail-under=62`；SETUP / PACKAGING / CONTRIBUTING 的 Electron 版本更正为 45.4.x，SDK 依赖说法从「精确钉版」统一为「版本区间 + abi.py 契约」（`qingci-plugin-sdk>=1.15.2,<2.0.0`）；API.md 补 `GET /api/instances/root`、`platforms[].reason` 与 `render` 完整字段（enabled/supported/available/reason/checked）；PACKAGING 记录校验和改用资产 digest 生成、安装冒烟并行化、rpm payload 固定 zstd-19 与 rc 预发布流程；SETUP / PACKAGING 的 Docker tag 说明修正为 `X.Y.Z`（metadata-action 会剥掉 `v` 前缀）；TROUBLESHOOTING 新增「桌面版启动失败」排查项（读 electron.log 定位 traceback）；ARCHITECTURE 补 scripts 清单与「未配置平台」降级行为；README 把渲染按需化标记为「评估完成、维持捆绑」并说明理由
+
+
 ## \[1.22.3-rc2] - 2026-11-23（修复 rc1 的启动崩溃；首个可用的 1.22.3 预发布）
 
 **rc1 请勿使用**：桌面版装完直接显示「启动失败」。本版修复该问题，并同时带上 rc1 之后合入的两处发布链修复。

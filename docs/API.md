@@ -31,9 +31,15 @@
 {
   "running": true,
   "connected": true,            // 主平台（onebot）是否在线
-  "version": "1.22.0",
+  "version": "1.22.3-rc2",
   "last_heartbeat": 1763... ,   // epoch 秒；0 表示无心跳机制
-  "render": { "available": true, "reason": "" },   // HTML 渲染能力探测
+  "render": {                   // HTML 渲染能力探测
+    "enabled": true,            //   配置开关 render.enabled
+    "supported": true,          //   运行环境是否可能支持（playwright 可导入）
+    "available": true,          //   探测后真实可用（浏览器可启动）
+    "reason": "",               //   不可用原因（未安装 / 浏览器缺失等）
+    "checked": true             //   是否已完成后台探测
+  },
   "platforms": [
     {
       "name": "qq",                  // 适配器标识，与事件的 platform 字段一致
@@ -41,6 +47,7 @@
       "connected": true,
       "last_heartbeat": 1763...,
       "self_id": 9000001,            // 平台侧机器人自身 ID
+      "reason": "",                  // 未启用/启动失败原因；未配置凭据时为可操作的指引文案
       "connection_state": "connected",   // connected / degraded / connecting / stopped
       "consecutive_errors": 0,
       "error_count": 0,
@@ -64,6 +71,7 @@
 
 - `platforms` 只包含**已启用**的适配器（主平台停用时不出现在列表里）；
 - 通用健康字段由 `PlatformAdapter.status_info()` 附加，各平台可有不同扩展字段：Telegram 有 `identity_dirty`，QQ 有 `sandbox` / `session_resumable` / `token_expire_at` / `known_sessions`；
+- `reason` 非空表示该适配器未在线的原因：以「未配置」开头的是正常状态（用户还没填凭据，Web UI 显示「未配置」而非「离线」），其余为真实故障信息；
 - `connected` 顶层字段只反映主平台（`onebot`），判断某个适配器是否在线请看 `platforms[].connected`。
 
 ### `GET /api/bot/health`
@@ -172,6 +180,7 @@
 | 方法     | 路径              | 鉴权 | 说明                            |
 | ------ | --------------- | -- | ----------------------------- |
 | GET    | `/`             | 是  | 实例列表（含端口、主平台、数据占用）            |
+| GET    | `/root`         | 是  | 实例根目录绝对路径（`{path, exists, writable}`）；Web UI「实例管理」页顶部据此展示并支持复制 |
 | POST   | `/`             | 是  | 创建实例（指定名称与主平台）                |
 | DELETE | `/{name}`       | 是  | 删除实例                          |
 | PUT    | `/{name}`       | 是  | 重命名实例（同步重命名目录与 instance.json） |

@@ -86,7 +86,7 @@ Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，�
 
 安装步骤见 [docs/SETUP.md](./docs/SETUP.md#linux-发行版包deb--rpm)，命名与校验规则见 [docs/PACKAGING.md](./docs/PACKAGING.md#产物命名与校验)。
 
-Docker 镜像同版本发布到 `ghcr.io/qingci-bot/qingci-bot-ce`（tag：`vX.Y.Z` / `X.Y` / `X` / `latest`）。
+Docker 镜像同版本发布到 `ghcr.io/qingci-bot/qingci-bot-ce`（tag：`X.Y.Z` / `X.Y` / `X` / `latest`，`docker/metadata-action` 会剥掉 `v` 前缀）。
 
 ***
 
@@ -139,7 +139,9 @@ Qingci-Bot CE 是一个通用机器人框架：它只通过**公开的、由第�
 
 > 计划项会先在 CHANGELOG 的 `[Unreleased]` 段记录，发版时归入对应版本；涉及破坏性变更会提前在 Release Notes 说明。
 >
-> **去冗余瘦身 · 首轮进展**：已把 `installer.py` / `market.py` / `deps.py` 三处重复的子进程超时控制流收敛到 `bot/plugin/_proc.py` 的 `run_command()`，把 CQ 码序列化合并为 `bot/core/message.py` 的单一实现，并扩充 PyInstaller 排除项。依赖审计结论：现有 18 个运行时依赖均**不可安全移除** —— `aiosqlite` 是 SQLAlchemy 连接串里的动态驱动、`filelock` 是防版本降级的安全钉子、`websockets` 由 `uvicorn[standard]` 传递依赖且刚调整过上界，其余均有直接 import。后续重点是 EXE / deb / rpm 内置大件（Chromium、playwright 运行时）的按需化评估。
+> **去冗余瘦身 · 首轮进展**：已把 `installer.py` / `market.py` / `deps.py` 三处重复的子进程超时控制流收敛到 `bot/plugin/_proc.py` 的 `run_command()`，把 CQ 码序列化合并为 `bot/core/message.py` 的单一实现，并扩充 PyInstaller 排除项。依赖审计结论：现有 18 个运行时依赖均**不可安全移除** —— `aiosqlite` 是 SQLAlchemy 连接串里的动态驱动、`filelock` 是防版本降级的安全钉子、`websockets` 由 `uvicorn[standard]` 传递依赖且刚调整过上界，其余均有直接 import。
+>
+> **Chromium / Playwright 按需化 · 评估结论**：渲染相关资源约占服务端包未压缩体积的 39%（Chromium 285 MB + node driver 157 MB），构建侧已有 `--no-browser`（`SKIP_BROWSER=1`）与 Release 的 `bundle_browser` 输入可产出不含浏览器的轻量包；但打包产物（deb/rpm 安装后 `/opt` 只读、包内无 playwright CLI）目前**无法事后补装浏览器**，且渲染在全仓只有 1 个可降级的调用点（`/help` 图片化）。综合评估后**默认维持捆绑**（开箱可渲染），轻量包通道保留给确有需要的自构建用户；详见 [docs/PACKAGING.md](./docs/PACKAGING.md)。
 
 ## 许可证
 
