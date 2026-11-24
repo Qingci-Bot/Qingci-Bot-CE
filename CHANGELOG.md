@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.22.3] - 2026-11-24（正式版）
+
+包含 1.22.3-rc1 ~ rc6 的全部修复，与 rc6 代码一致（仅版本号与本文档差异）。自 1.22.2 升级的用户可直接安装本版。
+
+### Fixed
+
+- **QQ 官方机器人保存凭据后「重启 Bot」仍显示「未配置」**：适配器实例在装配时持有配置快照，重启是 stop + start 不重新装配。`Bot.start()` 现按当前配置重建附加平台适配器（rc3–rc5，含保存 payload 修复与 Chromium 缓存两层问题）
+- **QQ 官方机器人已在线，面板仍显示「等待协议端连接」**：`connected` 原来只看 OneBot 主连接，改为「主连接或任一附加适配器在线」；状态文案按实例平台区分（QQ / Telegram 用「等待平台连接」，不再出现 OneBot 术语）（rc6）
+- **未配置 QQ / Telegram 时后端起崩**：`PlatformNotConfigured` 误放 `TYPE_CHECKING` 导入块，运行时抛 `NameError`。现按设计降级为面板上报原因、后端继续运行（rc1→rc2）
+- **升级桌面版后界面仍是旧版**：Web UI 静态资源无 `Cache-Control`，Chromium 启发式缓存命中旧 bundle。后端对 HTML 发 `no-cache`、assets 发 `immutable`，桌面壳每次启动清理 HTTP 缓存（rc4）
+- **实例管理表格列错位（状态竖排、数据折行、操作行变高）**：操作列 `<td>` 误用 `display: flex` 脱离表格布局；恢复表格流（rc6），附带修复表格内状态圆点不显示
+- **仪表盘卡片右侧装饰图标被文字挡住**：图标移至右上角，长值不再压住（rc6）
+- **Linux 系统托盘有图标、Dock 栏没有**：Electron 默认 WM_CLASS / Wayland app_id 与 `.desktop` 项不匹配，主进程显式指定 `--class` / `--wayland-app-id`（rc6）
+- **Linux 桌面应用图标不显示**：打包后 `build/` 不进 asar，图标改由 extraResources 分发并按运行环境解析（1.22.3-rc 系列前的实测反馈）
+- **实例列表「数据」列与根目录路径**：新增 `GET /api/instances/root`，实例页展示并可复制实例根目录
+
+### Changed
+
+- **全量文案校对（18 处）**：修复实例页 toast 参数顺序颠倒的真 bug；移除用户界面中的内部术语（`enable_tools` / `python_requires` / 调试会话键等）；统一术语与标点（rc6）
+- deb / rpm 的预发布版本元数据用 `~`（`1.22.3~rc1 < 1.22.3`），文件名统一 `-rc1`（rc 系列）
+- rpm payload 改 zstd-19（体积显著下降）；CI 并发取消与安装冒烟并行化（20-45 分钟 → 约 70 秒）
+
+### Security
+
+- pip 依赖常规升级（含 litellm 1.110.2），`uv.lock` 全程同步
+
 ## \[1.22.3-rc6] - 2026-11-24（修复 QQ 在线仍显示「等待协议端连接」、实例表格列错位、Dock 图标缺失 + 全量文案校对）
 
 本版包含 rc5 的全部修复（适配器配置快照重建）。
