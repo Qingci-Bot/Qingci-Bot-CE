@@ -85,7 +85,6 @@
       ],
       "icon": "icon.png",
       "category": "Network",
-      "startupWMClass": "qingci-bot-ce",
       "synopsis": "Multi-platform bot framework",
       "description": "Qingci-Bot CE desktop application: Electron shell with embedded Python backend, providing Web UI for bot / LLM configuration and monitoring.",
       "maintainer": "Qingci-Bot <https://github.com/Qingci-Bot>",
