@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+### Fixed
+
+- **系统设置保存时丢失 QQ 配置（「填入 AppID/AppSecret 保存后仍为空」）**：Settings.vue 组装保存 payload 时 `newConfig.platforms` 只包含 telegram / onebot12，**qq 节整个没发出去**——后端 `PUT /api/config` 是深度合并，缺的键原样保留，于是 QQ 卡片的「已启用」来自实例主平台 overlay 而凭据从未落盘，侧边栏也一直是「未配置」。payload 组装抽为纯函数 `web/src/utils/configPayload.js`（含单测锁定三个平台节一个不能少），v-model 绑定本身无问题
+- 顺带修正：`parseList` 的既有行为是按中英文逗号与换行拆分（不含分号），补了对应单测
+
+
 ### Docs
 
 - 全量文档校对（对照 1.22.3-rc2 现状）：SECURITY 支持版本表更新为 1.22.x；CODING_STANDARDS 的覆盖率门槛改为实际的 `--cov-fail-under=62`；SETUP / PACKAGING / CONTRIBUTING 的 Electron 版本更正为 45.4.x，SDK 依赖说法从「精确钉版」统一为「版本区间 + abi.py 契约」（`qingci-plugin-sdk>=1.15.2,<2.0.0`）；API.md 补 `GET /api/instances/root`、`platforms[].reason` 与 `render` 完整字段（enabled/supported/available/reason/checked）；PACKAGING 记录校验和改用资产 digest 生成、安装冒烟并行化、rpm payload 固定 zstd-19 与 rc 预发布流程；SETUP / PACKAGING 的 Docker tag 说明修正为 `X.Y.Z`（metadata-action 会剥掉 `v` 前缀）；TROUBLESHOOTING 新增「桌面版启动失败」排查项（读 electron.log 定位 traceback）；ARCHITECTURE 补 scripts 清单与「未配置平台」降级行为；README 把渲染按需化标记为「评估完成、维持捆绑」并说明理由

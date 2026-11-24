@@ -10,6 +10,7 @@ import AuditLogCard from '../components/settings/AuditLogCard.vue';
 import DataManagementCard from '../components/settings/DataManagementCard.vue';
 import { useAppStore } from '../stores/app';
 import { useToast } from '../composables/useToast';
+import { buildConfigPayload } from '../utils/configPayload';
 
 const store = useAppStore();
 const { showToast } = useToast();
@@ -115,18 +116,6 @@ function resetForm() {
   formDirty.value = false;
 }
 
-function parseList(str, asNumber = true) {
-  if (!str || !str.trim()) return [];
-  const arr = str
-    .split(/[,，\n]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (asNumber) {
-    return arr.map(Number).filter((n) => !isNaN(n));
-  }
-  return arr;
-}
-
 function saveApiKey() {
   store.setApiKey(apiKeyInput.value.trim());
   showToast('success', 'API Key 已保存到浏览器');
@@ -156,33 +145,13 @@ async function saveConfig() {
   }
   saving.value = true;
   try {
-    const newConfig = JSON.parse(JSON.stringify(store.config));
-    newConfig.bot = {
-      ...form.bot,
-      super_admin: form.bot.super_admin ? String(form.bot.super_admin).trim() : null,
-      trigger_keywords: parseList(form.bot.trigger_keywords, false),
-      admin_users: parseList(form.bot.admin_users, false),
-      group_blacklist: parseList(form.bot.group_blacklist, false),
-      user_blacklist: parseList(form.bot.user_blacklist, false),
-    };
-    newConfig.onebot = {
-      ...form.onebot,
-      port: Number(form.onebot.port) || 3001,
-    };
-    newConfig.platforms = {
-      telegram: {
-        ...form.platforms.telegram,
-        name: 'telegram',
-        poll_interval: Number(form.platforms.telegram.poll_interval) || 1.0,
-      },
-      onebot12: {
-        ...form.platforms.onebot12,
-        name: 'onebot12',
-        port: Number(form.platforms.onebot12.port) || 3002,
-      },
-    };
-    newConfig.api_key = form.api_key;
-    newConfig.log = { ...(newConfig.log || {}), run_log_enabled: runLogEnabled.value };
+    // payload 组装在 utils/configPayload.js（纯函数，含单测）——
+    // 每张平台卡片的字段都必须进 payload，漏一个就会「填了保存却不生效」
+    const newConfig = buildConfigPayload({
+      form,
+      runLogEnabled: runLogEnabled.value,
+      currentConfig: store.config,
+    });
     await store.saveConfig(newConfig);
     resetForm(); // 同步回已保存配置并清除"未保存更改"标记
     showToast('success', '系统设置已保存并生效');
