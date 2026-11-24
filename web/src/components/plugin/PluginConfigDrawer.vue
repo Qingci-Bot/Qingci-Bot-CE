@@ -100,10 +100,10 @@ async function save() {
     body-class="config-drawer-body"
     @close="close"
   >
-    <div v-if="loading" class="empty-state">加载配置中...</div>
+    <div v-if="loading" class="empty-state">加载配置中…</div>
     <div v-else-if="!schema" class="empty-state">
       <div class="icon">◇</div>
-      <div>该插件未定义配置项（无 Config 内嵌类）</div>
+      <div>该插件未定义可视化配置项</div>
     </div>
     <div v-else class="config-form">
       <div v-if="fields.length === 0" class="empty-state">该插件无配置字段</div>

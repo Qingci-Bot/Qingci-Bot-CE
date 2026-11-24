@@ -23,7 +23,7 @@ function goHome() {
   <div class="page-body">
     <div class="card fade-in notfound-card">
       <div class="nf-icon">✦</div>
-      <div class="nf-title">404 页面不存在</div>
+      <div class="nf-title">404 · 页面不存在</div>
       <div class="nf-desc">你访问的页面不存在或已被移除</div>
       <button class="btn btn-primary" @click="goHome"><span>◈</span> 返回首页</button>
     </div>

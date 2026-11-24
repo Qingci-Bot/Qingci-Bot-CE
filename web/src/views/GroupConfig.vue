@@ -24,6 +24,12 @@ const triggerOptions = [
   { value: 'keyword', label: '关键词触发' },
 ];
 
+// 全局默认触发模式的中文标签（底部提示与下拉框保持同一叫法）
+function triggerLabel(value) {
+  const opt = triggerOptions.find((o) => o.value === value);
+  return opt ? opt.label : value || '（未设置）';
+}
+
 onMounted(() => {
   loadGroups();
 });
@@ -153,7 +159,7 @@ async function removeGroup(group) {
 
       <div class="hint-text">
         <strong>全局默认：</strong>{{ defaults.enabled === false ? '停用' : '启用' }} · 触发模式
-        {{ defaults.trigger_mode || '（未设置）' }}。 触发模式选择"跟随全局"表示清除该群的独立设置。
+        {{ triggerLabel(defaults.trigger_mode) }}。触发模式选择「跟随全局」表示清除该群的独立设置。
       </div>
 
       <div v-if="groups.length === 0" class="empty-state">

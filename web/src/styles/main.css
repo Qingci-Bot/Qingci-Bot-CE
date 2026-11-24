@@ -542,6 +542,7 @@ body::before {
 }
 
 .status-dot {
+  display: inline-block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -715,13 +716,15 @@ body::before {
   overflow: hidden;
 }
 
+/* 装饰图标放右上角：标签行短，永不重叠。原先垂直居中靠右，
+   长值（等待协议端连接 / deepseek-flash）会延伸过去把图标盖住。 */
 .stat-card .stat-icon {
   position: absolute;
-  right: 18px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 42px;
-  opacity: 0.12;
+  right: 14px;
+  top: 14px;
+  font-size: 30px;
+  opacity: 0.18;
+  pointer-events: none;
 }
 
 .stat-card .stat-label {

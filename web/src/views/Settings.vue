@@ -407,12 +407,12 @@ async function saveConfigJson() {
       </div>
       <div class="hint-text" style="margin-top: 16px">
         在
-        <a href="https://q.qq.com" target="_blank" rel="noopener">QQ 开放平台</a> 创建机器人后获取
-        AppID / AppSecret；群聊需把机器人拉进群，单聊需用户先发起会话。 官方机器人<strong
-          >没有好友 / 群列表接口</strong
-        >，且被动回复有时效与条数限制 （群聊 5 分钟 / 5 条，单聊 60 分钟 / 4
-        条），超出后需用户再次发消息。 <strong>修改后需要重启 Bot 才能生效。</strong>AppSecret
-        已配置时显示为 <code>***</code>，留空保存不会清空原值。
+        <a href="https://q.qq.com" target="_blank" rel="noopener">QQ 开放平台</a>
+        创建机器人后获取 AppID / AppSecret；群聊需把机器人拉进群，单聊需用户先发起会话。
+        官方机器人<strong>没有好友 / 群列表接口</strong>，且被动回复有时效与条数限制（群聊 5 分钟 /
+        5 条，单聊 60 分钟 / 4 条），超出后需用户再次发消息。
+        <strong>修改后需要重启 Bot 才能生效。</strong>AppSecret 已配置时显示为
+        <code>***</code>，留空保存不会清空原值。
       </div>
     </div>
 

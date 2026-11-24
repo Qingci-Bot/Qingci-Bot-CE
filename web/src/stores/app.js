@@ -127,9 +127,20 @@ export const useAppStore = defineStore('app', () => {
   const instancesRoot = ref('');
   const appVersion = ref('');
 
+  // 当前运行中的实例（用于仪表盘等页面按平台展示提示）
+  const currentInstance = computed(() => instances.value.find((i) => i.running) || null);
+
+  // 主平台是否 OneBot 系（v11 / v12）：这类实例走反向 WebSocket，对端的
+  // 习惯叫法是「协议端」（NapCat / LLBot 等）；QQ 官方机器人 / Telegram
+  // 是框架主动外连的适配器，叫「协议端」会让人找错地方。文案随实例切换。
+  const isOnebotMain = computed(() => {
+    const p = currentInstance.value?.platform || 'onebot';
+    return p === 'onebot' || p === 'onebot12';
+  });
+
   const statusText = computed(() => {
     if (!botRunning.value) return '未启动';
-    if (!botConnected.value) return '等待协议端连接';
+    if (!botConnected.value) return isOnebotMain.value ? '等待协议端连接' : '等待平台连接';
     return '运行中';
   });
 
@@ -138,6 +149,10 @@ export const useAppStore = defineStore('app', () => {
     if (!botConnected.value) return '#f59e0b';
     return '#10b981';
   });
+
+  // 仪表盘 Bot 状态卡片副文案：与 statusText 用同一套平台区分逻辑
+  const connectedLabel = computed(() => (isOnebotMain.value ? '协议端已连接' : '平台已连接'));
+  const waitingLabel = computed(() => (isOnebotMain.value ? '等待协议端连接' : '等待平台连接'));
 
   async function apiFetch(url, options = {}) {
     // 统一由独立 API 层处理（鉴权头注入 / JSON 解析 / 401 跳转），
@@ -258,9 +273,6 @@ export const useAppStore = defineStore('app', () => {
 
   // ---- 实例管理 ----
 
-  // 当前运行中的实例（用于仪表盘等页面按平台展示提示）
-  const currentInstance = computed(() => instances.value.find((i) => i.running) || null);
-
   async function fetchInstances() {
     try {
       instances.value = (await apiFetch('/api/instances')) || [];
@@ -328,6 +340,8 @@ export const useAppStore = defineStore('app', () => {
     appVersion,
     statusText,
     statusColor,
+    connectedLabel,
+    waitingLabel,
     currentInstance,
     fetchStatus,
     fetchConfig,

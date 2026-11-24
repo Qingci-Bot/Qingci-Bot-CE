@@ -819,9 +819,15 @@ class QingciBot:
 
     def get_status(self) -> dict:
         """获取 Bot 状态"""
+        # connected = 任一平台连通（OneBot 主连接或任意附加适配器）。
+        # 之前只看主连接：QQ 官方机器人实例（onebot.enabled=false）适配器已在线，
+        # 面板却一直显示「等待协议端连接」。
+        connected = self.connection.is_connected or any(
+            p.is_connected for p in self.platforms.values()
+        )
         return {
             "running": self._running,
-            "connected": self.connection.is_connected,
+            "connected": connected,
             "version": __version__,
             "last_heartbeat": self.connection.last_heartbeat,
             "render": self.html_renderer.status_info(),

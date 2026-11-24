@@ -148,7 +148,7 @@ async function loadExternal() {
 async function unload(name, purge = false) {
   const message = purge
     ? `彻底删除插件 ${name}？将删除插件文件、数据目录与第三方依赖，此操作不可恢复！`
-    : `卸载插件 ${name}？将删除插件文件，保留数据与依赖（实例模式下仅卸载不删文件）。`;
+    : `卸载插件 ${name}？将删除插件代码文件（保留数据与依赖）；实例模式下仅卸载不删除文件。`;
   if (!window.confirm(message)) return;
   loading.value = name;
   try {
@@ -168,14 +168,17 @@ async function unload(name, purge = false) {
 async function toggleEnabled(plugin) {
   loading.value = plugin.name;
   const action = plugin.enabled ? 'disable' : 'enable';
+  // 动词取自发起请求前的状态：fetchStatus 会整体替换插件列表，
+  // 之后再读 plugin.enabled 拿到的是替换前的旧对象，语义上也不能依赖它
+  const verb = action === 'disable' ? '禁用' : '启用';
   try {
     await store.apiFetch(`/api/plugin/${encodeURIComponent(plugin.name)}/${action}`, {
       method: 'POST',
     });
     await store.fetchStatus();
-    showToast('success', `插件 ${plugin.name} 已${plugin.enabled ? '禁用' : '启用'}`);
+    showToast('success', `插件 ${plugin.name} 已${verb}`);
   } catch (e) {
-    showToast('error', `${action === 'disable' ? '禁用' : '启用'}失败：${e.message}`);
+    showToast('error', `${verb}失败：${e.message}`);
     // 请求失败后强制刷新，恢复开关真实状态（:checked 由 plugin.enabled 驱动）
     await store.fetchStatus();
   } finally {
@@ -206,7 +209,7 @@ function switchTab(tab) {
 <template>
   <div class="page-header">
     <h1>插件管理</h1>
-    <p>查看、重载、加载、卸载、禁用和启用 Bot 插件</p>
+    <p>查看、加载、重载、启用、禁用和卸载 Bot 插件</p>
   </div>
 
   <div class="page-body">

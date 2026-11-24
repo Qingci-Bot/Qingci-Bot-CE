@@ -386,7 +386,7 @@ async function saveConfig() {
       </div>
       <div class="hint-text">
         连接外部 MCP 服务器，将其工具注册为 <code>mcp_服务器名_工具名</code> 供 LLM 调用。
-        需同时开启「工具调用」（enable_tools）。<strong>修改后需重启 Bot 生效。</strong>
+        需同时开启「工具调用」。<strong>修改后需重启 Bot 生效。</strong>
       </div>
       <div v-for="(s, idx) in form.mcp_servers" :key="idx" class="persona-block">
         <div class="persona-row">
@@ -421,7 +421,7 @@ async function saveConfig() {
       <div class="hint-text">
         <strong>OpenAI:</strong> API 地址 https://api.openai.com/v1，模型 gpt-4o-mini<br />
         <strong>DeepSeek:</strong> API 地址 https://api.deepseek.com/v1，模型 deepseek-chat<br />
-        <strong>Ollama:</strong> API 地址 http://localhost:11434/v1，模型 llama3.1
+        <strong>Ollama:</strong> API 地址 http://localhost:11434，模型 llama3.1
       </div>
     </div>
   </div>

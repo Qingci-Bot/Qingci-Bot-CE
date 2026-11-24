@@ -87,7 +87,7 @@ async function testConnection() {
       testResult.value = { ok: false, msg: (data && (data.message || data.detail)) || '连接失败' };
     }
   } catch (e) {
-    testResult.value = { ok: false, msg: '网络错误: ' + e.message };
+    testResult.value = { ok: false, msg: '网络错误：' + e.message };
   } finally {
     loading.value = false;
   }
@@ -114,7 +114,7 @@ async function completeSetup() {
     invalidateWizardStatusCache();
     router.push('/');
   } catch (e) {
-    error.value = '网络错误: ' + e.message;
+    error.value = '网络错误：' + e.message;
     loading.value = false;
   }
 }
@@ -127,7 +127,7 @@ async function skipSetup() {
     invalidateWizardStatusCache();
     router.push('/');
   } catch (e) {
-    error.value = '网络错误: ' + e.message;
+    error.value = '网络错误：' + e.message;
     loading.value = false;
   }
 }
@@ -199,7 +199,7 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
 
         <div class="form-group">
           <label class="form-label"
-            >API 地址 <span class="optional">(可选，默认使用官方地址)</span></label
+            >API 地址 <span class="optional">（可选，默认使用官方地址）</span></label
           >
           <input
             v-model="apiUrl"
@@ -211,7 +211,7 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
 
         <div class="form-group">
           <label class="form-label"
-            >模型名称 <span class="optional">(可选，默认使用推荐模型)</span></label
+            >模型名称 <span class="optional">（可选，默认使用推荐模型）</span></label
           >
           <input
             v-model="model"
@@ -248,14 +248,15 @@ const progressPercent = computed(() => Math.round((step.value / totalSteps) * 10
 
         <div class="form-group">
           <label class="form-label"
-            >超级管理员 ID <span class="optional">(可选，唯一，拥有全部权限)</span></label
+            >超级管理员 ID <span class="optional">（可选，拥有全部权限）</span></label
           >
-          <input v-model="adminId" type="text" class="form-input" placeholder="例如：user_001" />
+          <input v-model="adminId" type="text" class="form-input" placeholder="例如：10001" />
         </div>
 
         <div class="form-group">
           <label class="form-label"
-            >OneBot 端口 <span class="optional">(协议端连接 ws://127.0.0.1:此端口/ws)</span></label
+            >OneBot 端口
+            <span class="optional">（协议端连接 ws://127.0.0.1:此端口/ws）</span></label
           >
           <input v-model="onebotPort" type="text" class="form-input" placeholder="3001" />
         </div>

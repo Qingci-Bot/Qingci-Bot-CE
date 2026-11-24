@@ -24,11 +24,15 @@ const platformOptions = [
     label: 'OneBot 12',
     hint: '原生反向 WebSocket，对接 OneBot 12 协议端（如 NapCat / Lagrange.OneBot）',
   },
-  { value: 'telegram', label: 'Telegram', hint: 'Bot API 长轮询（创建后在设置中填写 token）' },
+  {
+    value: 'telegram',
+    label: 'Telegram',
+    hint: 'Bot API 长轮询（创建后在「系统设置」中填写 token）',
+  },
   {
     value: 'qq',
     label: 'QQ 官方机器人',
-    hint: 'QQ 开放平台 Bot API v2（创建后在设置中填写 AppID / AppSecret）',
+    hint: 'QQ 开放平台 Bot API v2（创建后在「系统设置」中填写 AppID / AppSecret）',
   },
 ];
 
@@ -93,9 +97,9 @@ async function copyInstancesRoot() {
   if (!store.instancesRoot) return;
   try {
     await navigator.clipboard.writeText(store.instancesRoot);
-    showToast('已复制实例目录路径', 'success');
+    showToast('success', '已复制实例目录路径');
   } catch {
-    showToast('复制失败，请手动选择路径', 'error');
+    showToast('error', '复制失败，请手动选择路径');
   }
 }
 
@@ -123,7 +127,7 @@ function doCreate() {
       return;
     }
   }
-  showToast('info', '正在创建实例...');
+  showToast('info', '正在创建实例…');
   const payload = { name, platform: createPlatform.value };
   const desc = createDescription.value.trim();
   if (desc) payload.description = desc;
@@ -157,10 +161,10 @@ function onDelete(inst) {
 }
 
 function onRename(inst) {
-  const newName = window.prompt(`将实例「${inst.name}」重命名为（字母/数字/-/_）`, inst.name);
+  const newName = window.prompt(`将实例「${inst.name}」重命名为（字母/数字/-/_）：`, inst.name);
   if (!newName || !newName.trim() || newName.trim() === inst.name) return;
   if (inst.running) {
-    showToast('info', `正在重命名并重启到「${newName.trim()}」...`);
+    showToast('info', `正在重命名并重启到「${newName.trim()}」…`);
     store.renameInstance(inst.name, newName.trim()).catch(() => {});
     return;
   }
@@ -361,10 +365,10 @@ function onRename(inst) {
             <strong>OneBot 12</strong> — 原生反向 WebSocket，事件直通无需翻译，对接 NapCat /
             Lagrange.OneBot 等实现端
           </li>
-          <li><strong>Telegram</strong> — Bot API 长轮询，创建后在系统设置中填写 Bot Token</li>
+          <li><strong>Telegram</strong> — Bot API 长轮询，创建后在「系统设置」中填写 Bot Token</li>
           <li>
             <strong>QQ 官方机器人</strong> — 开放平台 Bot API v2（WebSocket
-            网关），创建后在系统设置中填写 AppID /
+            网关），创建后在「系统设置」中填写 AppID /
             AppSecret；未填写时该平台显示为「未配置」，不影响其他平台运行
           </li>
         </ul>
@@ -406,15 +410,17 @@ function onRename(inst) {
   width: 100px;
 }
 .col-actions {
-  width: 220px;
+  width: 230px;
 }
 .td-name {
   font-family: var(--font-mono);
   font-weight: 600;
 }
+/* 不能用 display:flex：<td> 失去 table-cell 布局后不参与列宽分配，
+   其余列被挤压换行（状态竖排、数据折行、按钮行错高）。
+   nowrap 让三个按钮保持单行即可。 */
 .td-actions {
-  display: flex;
-  gap: 6px;
+  white-space: nowrap;
 }
 .row-active {
   background: var(--accent-bg);
@@ -423,6 +429,7 @@ function onRename(inst) {
   font-size: 12px;
   margin-left: 6px;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 .instance-badge {
   display: inline-block;
@@ -551,6 +558,7 @@ function onRename(inst) {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 .td-name-cell {
   min-width: 120px;
