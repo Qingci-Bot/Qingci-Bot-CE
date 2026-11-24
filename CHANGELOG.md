@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.22.3-rc4] - 2026-11-24（修复「升级后界面仍是旧版」——Chromium 缓存命中旧 UI）
+
+本版同时包含 rc3 的 QQ 保存修复——若你直接从 1.22.2 升到本版，两个修复都会生效。
+
+### Fixed
+
+- **升级桌面版后界面行为没有变化（rc3 的 QQ 修复「看起来没生效」）**：Web UI 由后端从固定 URL（`127.0.0.1:<port>/ui/`）提供，`StaticFiles` 默认不发 `Cache-Control`，Chromium 走启发式缓存（寿命 ≈ 资源年龄 × 10%）会**直接命中上一版的 index.html 与 bundle 而不发请求**——升级后页面 URL 相同、外观一致，实际跑的还是旧前端（rc3 实测：缓存的 rc2 页面保存 payload 不含 `platforms.qq`，表现为 QQ 凭据填了保存仍不生效；后端与安装包本身都是新的）。两层修复：
+  - **后端**：Web UI 静态资源显式发缓存头——HTML `no-cache`（每次协商校验），带内容 hash 的 assets `immutable` 长缓存（`api/server.py` `_WebUIStaticFiles`，含 3 个单测）
+  - **桌面壳**：每次启动清理一次 HTTP 缓存（`session.defaultSession.clearCache()`，不动 Cookie / localStorage），双保险
+  
+  仍停留在旧 UI 的现存安装可手动清理：删除 `~/.config/Qingci-Bot CE/Cache` 与 `Code Cache`（Windows：`%APPDATA%\Qingci-Bot CE\Cache`）后重启。
+
 ## \[1.22.3-rc3] - 2026-11-24（修复系统设置保存丢失 QQ 配置）
 
 ### Fixed

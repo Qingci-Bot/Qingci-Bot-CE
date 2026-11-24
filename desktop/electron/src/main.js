@@ -19,7 +19,7 @@
  *  - 桌面能力：系统托盘、关闭驻留后台、真正的退出流程
  */
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require("electron");
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, session } = require("electron");
 const { spawn, spawnSync } = require("child_process");
 const net = require("net");
 const path = require("path");
@@ -775,6 +775,19 @@ ipcMain.on("quit", () => {
 });
 
 app.whenReady().then(async () => {
+  // 清 HTTP 缓存：桌面壳升级后，Chromium 磁盘缓存里可能仍是上一版 Web UI 的
+  // index.html 与 bundle（启发式缓存会命中而不 revalidate），URL 又与解压目录
+  // 无关，导致「升级了但界面还是旧行为」（1.22.3-rc3 实测：缓存的 rc2 页面保存
+  // payload 不含 platforms.qq，表现为 QQ 凭据填了保存却一直不生效）。后端已对
+  // HTML 发 no-cache（见 api/server.py 的 _WebUIStaticFiles），这里每次启动再
+  // 清一次双保险；仅清 HTTP 缓存，不动 Cookie / localStorage 等持久化数据。
+  try {
+    await session.defaultSession.clearCache();
+    elog("[electron] HTTP 缓存已清理");
+  } catch (e) {
+    elog("[electron] 清理 HTTP 缓存失败（忽略）:", String(e));
+  }
+
   // 实例数据放在「安装时选定的数据目录」（默认 %APPDATA%\<app>\data），
   // 独立于安装目录——NSIS 升级/卸载只清理 $INSTDIR，不会碰到数据。
   // 旧版本把数据放在 EXE 旁的 instances/，由 migrateLegacyInstances 迁走。
