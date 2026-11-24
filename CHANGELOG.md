@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## \[Unreleased]
 
+## \[1.22.3-rc6] - 2026-11-24（修复 QQ 在线仍显示「等待协议端连接」、实例表格列错位、Dock 图标缺失 + 全量文案校对）
+
+本版包含 rc5 的全部修复（适配器配置快照重建）。
+
+### Fixed
+
+- **QQ 官方机器人已在线，侧边栏仍显示「等待协议端连接」**：`/api/bot/status` 的 `connected` 只看 OneBot 反向 WS 主连接，而 QQ 官方机器人实例（`onebot.enabled=false`）没有主连接——适配器连上了也判定为未连接。改为「主连接**或任一附加适配器**在线」；测试替身 `TestBot.get_status` 与真实实现同步对齐，新增回归测试
+- **状态文案按实例平台区分**：「协议端」是 OneBot 术语，QQ 官方机器人 / Telegram 实例改用「等待平台连接 / 平台已连接」（侧边栏与仪表盘共用同一套派生文案）
+- **实例管理表格列错位（状态竖排、数据折行、操作行变高）**：操作列 `<td>` 用了 `display: flex`，脱离表格布局后不参与列宽分配，其余列被挤压换行；恢复表格流并禁止换行。附带修复表格内状态圆点不显示（`.status-dot` 缺 `inline-block`，宽高不生效）
+- **仪表盘卡片右侧装饰图标被文字挡住**：图标从「垂直居中靠右」移到右上角——标签行短，长值（「等待协议端连接」/ 模型名）不再压住图标
+- **Linux 系统托盘有图标、Dock 栏没有**：Electron 默认以 package.json 的 name（`qingci-bot-ce-desktop`）作窗口 WM_CLASS（X11）与 Wayland app_id，与安装的 `.desktop` 项（`qingci-bot-ce`）不匹配，桌面环境无法关联出产品图标。主进程显式指定 `--class` / `--wayland-app-id`；X11 与 Wayland 各自生效
+
+### Changed
+
+- **全量文案校对（18 处）**，重点：
+  - 修复实例页「复制实例目录」toast 参数顺序颠倒（签名 `(类型, 消息)`），此前用户只会看到 "success" 字样
+  - 移除用户界面中的内部术语：AstrBot ChatUI 致谢、调试会话键 `private:900000001`、「Config 内嵌类」、`enable_tools`、`python_requires`、`utf-8-sig`、「SQLite 在线备份 API」
+  - 术语统一：群组页全局默认触发模式不再直出英文枚举；仪表盘 LLM 供应商标签与配置页一致（deepseek → DeepSeek 等）；「设置中」统一「系统设置」；顶栏「重启」→「重启 Bot」
+  - 事实修正：Ollama 参考地址去掉多余的 `/v1`（与预设自动填充一致）；Telegram / QQ 实例不再被误述为「未启用 OneBot 反向 WS」
+  - 标点：半/全角括号、省略号、冒号、引号统一
+
 ## \[1.22.3-rc5] - 2026-11-24（修复「保存凭据后点重启 Bot 仍显示未配置」）
 
 ### Fixed
