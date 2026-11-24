@@ -424,7 +424,9 @@ jobs:
               # 加 safe.directory 也不稳妥（不同 git 版本对"仓库路径"的判定不一样）。
               # 构建也不需要 .git（版本号写在 pyproject / bot/__init__.py 里）。
               mkdir -p /build
-              tar -C /src --exclude=.git --exclude=dist --exclude=.venv -cf - . | tar -C /build -xf -
+              # 注意 exclude 必须锚定成 ./dist：写成 --exclude=dist 会连带排除
+              # web/dist（tar 的模式匹配任意层级的同名目录），前端产物就没了
+              tar -C /src --exclude=./.git --exclude=./dist --exclude=./.venv -cf - . | tar -C /build -xf -
               test -f /build/web/dist/index.html || { echo "ERROR: web/dist 缺失，请先构建 Web UI"; exit 1; }
               cd /build
               curl -LsSf https://astral.sh/uv/install.sh | sh
