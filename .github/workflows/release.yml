@@ -439,7 +439,9 @@ jobs:
               else
                 bash build-linux.sh
               fi
-              python3 scripts/pack_backend.py
+              # 用 venv 的解释器：ubuntu:22.04 精简镜像不带系统 python3
+              # （rc1 第三次构建就是栽在这一行，exit 127）
+              .venv/bin/python scripts/pack_backend.py
               bash scripts/pack_linux_server.sh --version "$VER" --out /out
               cp -f dist/backend.zip /out/backend.zip
             '
