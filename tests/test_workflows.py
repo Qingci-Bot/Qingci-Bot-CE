@@ -236,7 +236,7 @@ def test_macos_job_verifies_signed_arm64_bundle() -> None:
     joined = "\n".join(str(s.get("run", "")) for s in job.get("steps") or [] if isinstance(s, dict))
     assert "verify_macos_app.sh" in joined, "macos-dmg 缺少 app bundle 校验步骤"
     # 上传的产物名必须带 arm64，避免与 x64 混淆
-    assert "-arm64.dmg" in joined, "上传步骤应校验 arm64 dmg 命名"
+    assert "-macos-arm64.dmg" in joined, "上传步骤应校验 macOS dmg 命名（含平台标识）"
 
 
 def test_checksums_waits_for_all_platforms() -> None:
@@ -248,3 +248,24 @@ def test_checksums_waits_for_all_platforms() -> None:
     needs = job.get("needs") or []
     for platform in ("windows-exe", "linux-deb-rpm", "linux-arm64", "macos-dmg"):
         assert platform in needs, f"checksums.needs 缺少 {platform}"
+
+
+def test_linux_jobs_normalize_artifacts_before_verify() -> None:
+    """两个 Linux job 都必须先重命名产物、再校验文件名
+
+    重命名的意义是让发布页上每个文件都带平台与架构标识；校验脚本断言的正是
+    新命名。顺序反了就会拿旧名去比对，必然失败——但失败信息会指向「命名不符」，
+    掩盖真正的原因（步骤顺序）。
+    """
+    release = WORKFLOW_DIR / "release.yml"
+    if not release.is_file():
+        pytest.skip("release.yml 不存在")
+    jobs = _load(release).get("jobs") or {}
+    for job_name in ("linux-deb-rpm", "linux-arm64"):
+        steps = [s for s in (jobs[job_name].get("steps") or []) if isinstance(s, dict)]
+        names = [str(s.get("name", "")) for s in steps]
+        norm_idx = next((i for i, n in enumerate(names) if "Normalize artifact names" in n), None)
+        assert norm_idx is not None, f"{job_name} 缺少重命名步骤"
+        verify_idx = next((i for i, n in enumerate(names) if "Verify package metadata" in n), None)
+        assert verify_idx is not None, f"{job_name} 缺少校验步骤"
+        assert norm_idx < verify_idx, f"{job_name} 必须先重命名再校验"

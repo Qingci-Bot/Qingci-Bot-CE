@@ -76,10 +76,10 @@ dist\qingci-bot-ce\
 .\build-electron.bat
 ```
 
-- 产物（`dist\electron\`）：`qingci-bot-ce-<version>-x64-setup.exe`（NSIS 安装向导，可选安装目录与数据目录）与 `qingci-bot-ce-<version>-x64-portable.zip`（绿色解压版，无向导）；后端以单个 `backend.zip` 放在 `resources\`，Playwright Chromium 随其一并内置。命名由 `desktop/electron/package.json` 的 `nsis.artifactName` / `win.artifactName` 决定。
+- 产物（`dist\electron\`）：`qingci-bot-ce-<version>-windows-x64-setup.exe`（NSIS 安装向导，可选安装目录与数据目录）与 `qingci-bot-ce-<version>-windows-x64-portable.zip`（绿色解压版，无向导）；后端以单个 `backend.zip` 放在 `resources\`，Playwright Chromium 随其一并内置。命名由 `desktop/electron/package.json` 的 `nsis.artifactName` / `win.artifactName` 决定。
 
 ```powershell
-.\dist\electron\qingci-bot-ce-<version>-x64-setup.exe      # 安装版
+.\dist\electron\qingci-bot-ce-<version>-windows-x64-setup.exe      # 安装版
 # 绿色解压版：解压 zip 后运行其中的 Qingci-Bot CE.exe
 ```
 
@@ -110,8 +110,8 @@ Linux 分发**不使用 AppImage**，改为原生包管理的 **deb**（Debian /
 cd desktop/electron && npm ci && npx electron-builder --linux deb rpm --publish never
 ```
 
-- 产物（`dist/electron/`）：`qingci-bot-ce_<version>_amd64.deb` 与 `qingci-bot-ce-<version>-1.x86_64.rpm`（内嵌后端为 `resources/backend.zip`，首次启动解压到数据目录）。
-- 安装：`sudo apt install ./qingci-bot-ce_<ver>_amd64.deb` 或 `sudo dnf install ./qingci-bot-ce-<ver>-1.x86_64.rpm`。
+- 产物（`dist/electron/`）：`qingci-bot-ce-<version>-linux-x64.deb` 与 `qingci-bot-ce-<version>-linux-x64.rpm`（内嵌后端为 `resources/backend.zip`，首次启动解压到数据目录）。
+- 安装：`sudo apt install ./qingci-bot-ce-<ver>-linux-x64.deb` 或 `sudo dnf install ./qingci-bot-ce-<ver>-linux-x64.rpm`。
 - 数据位置：按 XDG 规范落在 `$XDG_DATA_HOME/Qingci-Bot CE`（默认 `~/.local/share/Qingci-Bot CE`），**不在 `/opt` 内**——包升级会整体替换 `/opt` 下的程序文件。
 - 依赖声明：deb/rpm 的 `depends` 见 `desktop/electron/package.json` 的 `build.deb` / `build.rpm`（GTK3 / NSS / libnotify 等 Electron 运行时库）。
 
@@ -124,7 +124,7 @@ bash scripts/pack_linux_server.sh --version 1.22.0          # 同时出 deb 与 
 bash scripts/pack_linux_server.sh --version 1.22.0 --only rpm
 ```
 
-- 产物：`dist/linux/qingci-bot-ce-server_<ver>_amd64.deb`（文件名按 dpkg 规范）与 `qingci-bot-ce-server-<ver>-1.x86_64.rpm`。
+- 产物：`dist/linux/qingci-bot-ce-server-<ver>-linux-x64.deb`（文件名按 dpkg 规范）与 `qingci-bot-ce-server-<ver>-linux-x64.rpm`。
 - rpm 的 payload 压缩显式固定为 **zstd-19**（`_binary_payload w19.zstdio`，可用 `RPM_PAYLOAD` 环境变量覆盖）：rpmbuild 的默认值随构建机漂移（Ubuntu 24.04 默认 zstd、22.04 默认 gzip-9），1.22.2 的 server rpm 因此比同内容 deb 大 76 MB；固定后与 deb 基本持平。zstd payload 需 rpm ≥ 4.14，目标发行版均满足。
 - 布局（遵循 FHS）：程序 `/opt/qingci-bot-ce-server`、实例数据 `/var/lib/qingci-bot-ce-server/instances/<name>`、日志 `/var/log/qingci-bot-ce-server/`。
 - 安装即创建系统用户 `qingci-bot`，注册并 `enable` systemd 单元 `qingci-bot-ce.service`；**首次安装不自动 start**，确认 `config.yaml` 后手动 `systemctl start`。
@@ -222,23 +222,25 @@ bash scripts/verify_macos_app.sh dist/electron 1.23.0-rc1
 
 发布产物统一为 **小写包名 + 版本 + 架构**，各格式沿用其生态的分隔符约定（deb 用下划线、rpm 用连字符 + release、Windows 用连字符）：
 
+命名规则统一为 `<包名>-<版本>-<平台>-<架构>.<ext>`：平台取 `linux` / `macos` / `windows`，架构只有 `x64` 与 `arm64`。
+
 | 产物 | 文件名 | 包内标识 |
 | --- | --- | --- |
-| 桌面版 deb | `qingci-bot-ce_<ver>_amd64.deb` | `Package: qingci-bot-ce` |
-| 桌面版 rpm | `qingci-bot-ce-<ver>-1.x86_64.rpm` | `Name: qingci-bot-ce` |
-| 桌面版 Windows 安装向导 | `qingci-bot-ce-<ver>-x64-setup.exe` | 产品名 `Qingci-Bot CE` |
-| 桌面版 Windows 便携包 | `qingci-bot-ce-<ver>-x64-portable.zip` | 解压后运行 `Qingci-Bot CE.exe` |
-| 服务端 deb | `qingci-bot-ce-server_<ver>_amd64.deb` | `Package: qingci-bot-ce-server` |
-| 服务端 rpm | `qingci-bot-ce-server-<ver>-1.x86_64.rpm` | `Name: qingci-bot-ce-server` |
-| 桌面版 deb（arm64） | `qingci-bot-ce_<ver>_arm64.deb` | `Architecture: arm64` |
-| 桌面版 rpm（arm64） | `qingci-bot-ce-<ver>-1.aarch64.rpm` | `Arch: aarch64` |
-| 服务端 deb（arm64） | `qingci-bot-ce-server_<ver>_arm64.deb` | `Architecture: arm64` |
-| 服务端 rpm（arm64） | `qingci-bot-ce-server-<ver>-1.aarch64.rpm` | `Arch: aarch64` |
-| macOS 安装镜像（arm64） | `qingci-bot-ce-<ver>-arm64.dmg` | bundle id `com.qingcibot.ce` |
-| macOS 免安装包（arm64） | `qingci-bot-ce-<ver>-arm64.zip` | 解压后为 `Qingci-Bot CE.app` |
+| 桌面版 deb | `qingci-bot-ce-<ver>-linux-x64.deb` | `Package: qingci-bot-ce` |
+| 桌面版 rpm | `qingci-bot-ce-<ver>-linux-x64.rpm` | `Name: qingci-bot-ce` |
+| 桌面版 Windows 安装向导 | `qingci-bot-ce-<ver>-windows-x64-setup.exe` | 产品名 `Qingci-Bot CE` |
+| 桌面版 Windows 便携包 | `qingci-bot-ce-<ver>-windows-x64-portable.zip` | 解压后运行 `Qingci-Bot CE.exe` |
+| 服务端 deb | `qingci-bot-ce-server-<ver>-linux-x64.deb` | `Package: qingci-bot-ce-server` |
+| 服务端 rpm | `qingci-bot-ce-server-<ver>-linux-x64.rpm` | `Name: qingci-bot-ce-server` |
+| 桌面版 deb（arm64） | `qingci-bot-ce-<ver>-linux-arm64.deb` | `Architecture: arm64` |
+| 桌面版 rpm（arm64） | `qingci-bot-ce-<ver>-linux-arm64.rpm` | `Arch: aarch64` |
+| 服务端 deb（arm64） | `qingci-bot-ce-server-<ver>-linux-arm64.deb` | `Architecture: arm64` |
+| 服务端 rpm（arm64） | `qingci-bot-ce-server-<ver>-linux-arm64.rpm` | `Arch: aarch64` |
+| macOS 安装镜像（arm64） | `qingci-bot-ce-<ver>-macos-arm64.dmg` | bundle id `com.qingcibot.ce` |
+| macOS 免安装包（arm64） | `qingci-bot-ce-<ver>-macos-arm64.zip` | 解压后为 `Qingci-Bot CE.app` |
 | 校验和 | `SHA256SUMS.txt` | 上述 12 个分发包的 sha256 |
 
-> deb 的架构名是 `arm64`、rpm 是 `aarch64`（两者规范不同），因此 arm64 的 deb 与 rpm 文件名里的架构后缀不一样，这不是笔误。
+> 文件名里的架构标识只有 `x64` / `arm64` 两种；包**内**的字段仍按各自格式规范：deb 是 `amd64` / `arm64`，rpm 是 `x86_64` / `aarch64`。这不是笔误——`dpkg-deb -f <pkg> Architecture` 与 `rpm -qp --qf '%{ARCH}'` 读出的是规范值，而用户看到的文件名是可读性优先的统一写法。
 
 命名在 `desktop/electron/package.json`（`deb` / `rpm` / `nsis` / `win` 的 `artifactName`、`packageName`）与 `scripts/pack_linux_server.sh` 中定义，并由两处 CI 断言锁定：
 
@@ -314,9 +316,9 @@ arm64 产物的下限与 x64 相同：后端在 `ubuntu-22.04-arm` 上构建（g
 ## 自动发布（GitHub Actions）
 
 打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](../.github/workflows/release.yml)，各平台自动联编：
-- Windows 桌面（`qingci-bot-ce-<ver>-x64-setup.exe` + `-portable.zip`，`build.bat` + `build-electron.bat`）
+- Windows 桌面（`qingci-bot-ce-<ver>-windows-x64-setup.exe` + `-portable.zip`，`build.bat` + `build-electron.bat`）
 - Linux deb / rpm 共 8 个产物：x86_64 与 arm64 各 4 个（`build-unix.sh` + `electron-builder --linux deb rpm` 出桌面版，`scripts/pack_linux_server.sh` 出服务端版；arm64 整条链跑在原生 `ubuntu-22.04-arm` 上）
-- macOS 共 2 个产物（仅 Apple Silicon）：`qingci-bot-ce-<ver>-arm64.dmg` + `-arm64.zip`（`macos-15` 构建，electron-builder ad-hoc 签名，上传前过 `scripts/verify_macos_app.sh`）
+- macOS 共 2 个产物（仅 Apple Silicon）：`qingci-bot-ce-<ver>-macos-arm64.dmg` + `-arm64.zip`（`macos-15` 构建，electron-builder ad-hoc 签名，上传前过 `scripts/verify_macos_app.sh`）
 - Docker 镜像（`ghcr.io`，`linux/amd64` + `linux/arm64` 多架构 manifest；tag：`X.Y.Z` / `X.Y` / `X` / `latest`，`docker/metadata-action` 会剥掉 `v` 前缀）
 - `SHA256SUMS.txt`（**全部**构建 job 都成功后由 `checksums` job 从资产 digest 统一生成；共 12 个分发包，少一个即失败）
 

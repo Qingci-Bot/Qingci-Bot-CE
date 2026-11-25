@@ -7,16 +7,21 @@
 #
 # 产物命名（统一为 <包名>_<版本>_<架构> 或 <包名>-<版本>-<release>.<架构>，
 # 各格式沿用其生态的分隔符约定；包名一律小写连字符，版本紧邻包名）：
-#   qingci-bot-ce_<ver>_amd64.deb              桌面版 deb（dpkg 约定：下划线）
-#   qingci-bot-ce-<ver>-1.x86_64.rpm           桌面版 rpm（rpm 约定：连字符 + release）
-#   qingci-bot-ce_<ver>_arm64.deb              桌面版 deb（arm64）
-#   qingci-bot-ce-<ver>-1.aarch64.rpm          桌面版 rpm（arm64）
+#   qingci-bot-ce-<ver>-linux-x64.deb          桌面版 deb
+#   qingci-bot-ce-<ver>-linux-x64.rpm          桌面版 rpm
+#   qingci-bot-ce-<ver>-linux-arm64.deb        桌面版 deb（arm64）
+#   qingci-bot-ce-<ver>-linux-arm64.rpm        桌面版 rpm（arm64）
 #   qingci-bot-ce-<ver>-x64-setup.exe          桌面版 Windows 安装向导
 #   qingci-bot-ce-<ver>-x64-portable.zip       桌面版 Windows 便携包
-#   qingci-bot-ce-server_<ver>_amd64.deb       服务端 deb（headless + systemd）
-#   qingci-bot-ce-server-<ver>-1.x86_64.rpm    服务端 rpm
-#   qingci-bot-ce-server_<ver>_arm64.deb       服务端 deb（arm64）
-#   qingci-bot-ce-server-<ver>-1.aarch64.rpm   服务端 rpm（arm64）
+#   qingci-bot-ce-server-<ver>-linux-x64.deb   服务端 deb（headless + systemd）
+#   qingci-bot-ce-server-<ver>-linux-x64.rpm   服务端 rpm
+#   qingci-bot-ce-server-<ver>-linux-arm64.deb 服务端 deb（arm64）
+#   qingci-bot-ce-server-<ver>-linux-arm64.rpm 服务端 rpm（arm64）
+#
+# 命名约定：<包名>-<版本>-<平台>-<架构>.<ext>，平台取 linux / macos / windows，
+# 架构统一用 x64 / arm64。deb/rpm 的包内字段（Package/Architecture）仍按格式规范，
+# 只有文件名统一——否则同一张发布页上会出现 amd64 / x86_64 / arm64 / aarch64
+# 四种写法，用户很难判断哪个是自己的。
 #   SHA256SUMS.txt                             上传产物的校验和（checksums job 生成）
 # 桌面版由 electron-builder 输出到 dist/electron，构建后归集到 dist/linux，
 # 与服务端包统一由 Upload release assets 收口。
@@ -213,12 +218,12 @@ jobs:
         shell: powershell
         run: |
           $ver = "${{ needs.prepare.outputs.ver }}"
-          # 命名约定：qingci-bot-ce-<ver>-x64-setup.exe / -portable.zip
+          # 命名约定：qingci-bot-ce-<ver>-windows-x64-setup.exe / -windows-x64-portable.zip
           # （由 package.json 的 nsis.artifactName / win.artifactName 决定）
           $setup = Get-ChildItem "dist\electron\*.exe" | Where-Object { $_.Name -like "*-setup.exe" } | Select-Object -First 1
-          if (-not $setup) { throw "setup exe not found (expected qingci-bot-ce-<ver>-x64-setup.exe)" }
+          if (-not $setup) { throw "setup exe not found (expected qingci-bot-ce-<ver>-windows-x64-setup.exe)" }
           $zip = Get-ChildItem "dist\electron\*.zip" | Where-Object { $_.Name -like "*-portable.zip" } | Select-Object -First 1
-          if (-not $zip) { throw "portable zip not found (expected qingci-bot-ce-<ver>-x64-portable.zip)" }
+          if (-not $zip) { throw "portable zip not found (expected qingci-bot-ce-<ver>-windows-x64-portable.zip)" }
           Write-Host "upload: $($setup.Name) / $($zip.Name)"
           # 校验和由 checksums job 统一生成 SHA256SUMS.txt
           gh release upload "$ver" "$($setup.FullName)" "$($zip.FullName)" --clobber
@@ -318,6 +323,12 @@ jobs:
         run: |
           ver="${{ needs.prepare.outputs.ver }}"
           bash scripts/pack_linux_server.sh --version "${ver#v}"
+
+      - name: Normalize artifact names (linux-x64)
+        # 桌面版 deb 走 build.linux.artifactName，rpm 在部分 electron-builder
+        # 版本上仍按 fpm 默认命名输出（无平台标识，架构词还是 x86_64）。
+        # 统一在此重命名，规则集中在 scripts/normalize_linux_artifacts.sh。
+        run: bash scripts/normalize_linux_artifacts.sh dist/linux "${{ needs.prepare.outputs.ver }}" x64
 
       - name: Verify package metadata & filenames
         # 命名规整化后，文件名必须与包元数据一致，且本 job 恰好 4 个产物（2 deb + 2 rpm，单架构）。
@@ -460,6 +471,9 @@ jobs:
           fi
           ls -l dist/linux
 
+      - name: Normalize artifact names (linux-arm64)
+        run: bash scripts/normalize_linux_artifacts.sh dist/linux "${{ needs.prepare.outputs.ver }}" arm64
+
       - name: Verify package metadata & filenames (arm64 / aarch64)
         run: |
           bash scripts/verify_linux_packages.sh \
@@ -573,9 +587,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ver="${{ needs.prepare.outputs.ver }}"
-          # 命名由 build.mac.artifactName 决定：qingci-bot-ce-<ver>-arm64.{dmg,zip}
-          dmg="dist/electron/qingci-bot-ce-${ver#v}-arm64.dmg"
-          zip="dist/electron/qingci-bot-ce-${ver#v}-arm64.zip"
+          # 命名由 build.mac.artifactName 决定：qingci-bot-ce-<ver>-macos-arm64.{dmg,zip}
+          dmg="dist/electron/qingci-bot-ce-${ver#v}-macos-arm64.dmg"
+          zip="dist/electron/qingci-bot-ce-${ver#v}-macos-arm64.zip"
           for f in "$dmg" "$zip"; do
             [ -f "$f" ] || { echo "::error::缺少产物: $f"; ls -R dist/electron | head -40; exit 1; }
           done

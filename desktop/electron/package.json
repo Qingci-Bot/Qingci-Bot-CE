@@ -1,7 +1,7 @@
 {
   "name": "qingci-bot-ce-desktop",
   "desktopName": "qingci-bot-ce.desktop",
-  "version": "1.23.0-rc2",
+  "version": "1.23.0-rc3",
   "description": "Qingci-Bot CE Electron 桌面壳（Electron + Python 混合架构）",
   "main": "src/main.js",
   "homepage": "https://github.com/Qingci-Bot/Qingci-Bot-CE",
@@ -62,7 +62,7 @@
       ],
       "icon": "build/icon-1024.png",
       "category": "public.app-category.social-networking",
-      "artifactName": "qingci-bot-ce-${version}-${arch}.${ext}",
+      "artifactName": "qingci-bot-ce-${version}-macos-${arch}.${ext}",
       "minimumSystemVersion": "13.0",
       "darkModeSupport": true,
       "identity": "-",
@@ -86,12 +86,12 @@
         }
       ],
       "icon": "icon.ico",
-      "artifactName": "qingci-bot-ce-${version}-${arch}-portable.${ext}"
+      "artifactName": "qingci-bot-ce-${version}-windows-${arch}-portable.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "qingci-bot-ce-${version}-${arch}-setup.${ext}",
+      "artifactName": "qingci-bot-ce-${version}-windows-${arch}-setup.${ext}",
       "include": "build/installer.nsh"
     },
     "linux": {
@@ -117,7 +117,7 @@
       "maintainer": "Qingci-Bot <https://github.com/Qingci-Bot>",
       "vendor": "Qingci-Bot",
       "executableName": "qingci-bot-ce",
-      "artifactName": "qingci-bot-ce_${version}_${arch}.${ext}"
+      "artifactName": "qingci-bot-ce-${version}-linux-${arch}.${ext}"
     },
     "deb": {
       "depends": [

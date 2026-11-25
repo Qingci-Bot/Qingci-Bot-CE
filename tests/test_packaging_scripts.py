@@ -185,3 +185,99 @@ def test_no_gnu_only_sort_in_macos_scripts() -> None:
         "verify_macos_app.sh 使用了 GNU 专有的 sort -V，macOS 的 BSD sort 不支持；"
         "请改用 awk 做版本比较"
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# 产物命名：<包名>-<版本>-<平台>-<架构>.<ext>
+#
+# 起因（用户反馈）：发布页上 `qingci-bot-ce-1.23.0-rc2-arm64.dmg` 看不出是
+# macOS，`.zip` / `.exe` 也看不出是 Windows；deb/rpm 又分别用 amd64 / x86_64 /
+# aarch64 三套架构写法。用户翻资产列表得靠猜。
+# ──────────────────────────────────────────────────────────────────
+
+PLATFORM_TOKENS = {"linux": "linux", "mac": "macos", "win": "windows"}
+
+
+def test_electron_artifact_names_carry_platform_token():
+    """electron-builder 的四个 artifactName 都必须带平台标识
+
+    漏掉任何一个，那一个平台的文件就会退回旧命名（无平台标识），
+    发布页上又出现「看不出这是哪个系统」的文件。
+    """
+    import json
+
+    cfg = json.loads((ROOT / "desktop/electron/package.json").read_text(encoding="utf-8"))
+    build = cfg["build"]
+
+    checks = [
+        ("win", build["win"]["artifactName"]),
+        ("nsis", build["nsis"]["artifactName"]),
+        ("linux", build["linux"]["artifactName"]),
+        ("mac", build["mac"]["artifactName"]),
+    ]
+    for key, pattern in checks:
+        token = PLATFORM_TOKENS["mac" if key == "mac" else ("win" if key == "nsis" else key)]
+        assert token in pattern, f"{key}.artifactName 缺少平台标识 {token}: {pattern}"
+        assert "${version}" in pattern, f"{key}.artifactName 缺少版本占位符: {pattern}"
+
+
+def test_normalize_linux_artifacts_renames_to_canonical_scheme(tmp_path):
+    """把 electron-builder / fpm 的各种旧写法统一成 <包名>-<版本>-linux-<arch>"""
+    version = "1.23.0-rc3"
+    for name in (
+        "qingci-bot-ce_1.23.0-rc3_amd64.deb",
+        "qingci-bot-ce-1.23.0-rc3-1.x86_64.rpm",
+        "qingci-bot-ce-server_1.23.0-rc3_amd64.deb",
+        "qingci-bot-ce-server-1.23.0-rc3-1.x86_64.rpm",
+    ):
+        (tmp_path / name).touch()
+
+    result = subprocess.run(
+        [str(ROOT / "scripts/normalize_linux_artifacts.sh"), str(tmp_path), "v" + version, "x64"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+    assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
+        [
+            f"qingci-bot-ce-{version}-linux-x64.deb",
+            f"qingci-bot-ce-{version}-linux-x64.rpm",
+            f"qingci-bot-ce-server-{version}-linux-x64.deb",
+            f"qingci-bot-ce-server-{version}-linux-x64.rpm",
+        ]
+    )
+
+
+def test_normalize_linux_artifacts_is_idempotent(tmp_path):
+    """重复执行不能叠出 -linux-x64-linux-x64（workflow 可能在两处调用）"""
+    (tmp_path / "qingci-bot-ce-1.23.0-rc3-linux-x64.deb").touch()
+    for _ in range(2):
+        result = subprocess.run(
+            [
+                str(ROOT / "scripts/normalize_linux_artifacts.sh"),
+                str(tmp_path),
+                "1.23.0-rc3",
+                "x64",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+    assert [p.name for p in tmp_path.iterdir()] == ["qingci-bot-ce-1.23.0-rc3-linux-x64.deb"]
+
+
+def test_normalize_linux_artifacts_keeps_server_prefix(tmp_path):
+    """桌面包与服务端包不能互相覆盖：前缀必须保留"""
+    (tmp_path / "qingci-bot-ce_1.23.0_amd64.deb").touch()
+    (tmp_path / "qingci-bot-ce-server_1.23.0_amd64.deb").touch()
+    subprocess.run(
+        [str(ROOT / "scripts/normalize_linux_artifacts.sh"), str(tmp_path), "1.23.0", "x64"],
+        check=True,
+        capture_output=True,
+    )
+    names = sorted(p.name for p in tmp_path.iterdir())
+    assert names == [
+        "qingci-bot-ce-1.23.0-linux-x64.deb",
+        "qingci-bot-ce-server-1.23.0-linux-x64.deb",
+    ]

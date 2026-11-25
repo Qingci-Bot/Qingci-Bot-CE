@@ -17,8 +17,8 @@
 #   bash scripts/pack_linux_server.sh --prefix /usr/lib/qingci-bot-ce-server
 #
 # 产物（统一落在 dist/linux/，与桌面版归集后一起上传）：
-#   qingci-bot-ce-server_<version>_<debarch>.deb   如 qingci-bot-ce-server_1.21.0_amd64.deb
-#   qingci-bot-ce-server-<version>-<rel>.<arch>.rpm  如 qingci-bot-ce-server-1.21.0-1.x86_64.rpm
+#   qingci-bot-ce-server-<version>-linux-<arch>.deb  如 qingci-bot-ce-server-1.23.0-linux-x64.deb
+#   qingci-bot-ce-server-<version>-linux-<arch>.rpm  如 qingci-bot-ce-server-1.23.0-linux-x64.rpm
 #
 # 实现说明：不引入 fpm，直接用 dpkg-deb / rpmbuild 原生打包，减少构建机依赖。
 # 构建机缺哪个工具就跳过哪种格式（除非用 --only 显式指定）。
@@ -84,10 +84,10 @@ PKG_VERSION="${VERSION//-rc/~rc}"
 # deb 用 Debian 架构名，rpm 用内核机器名，两者不同名（x86_64 -> amd64）
 MACHINE="$(uname -m)"
 case "$MACHINE" in
-  x86_64)  DEB_ARCH="amd64" ;;
-  aarch64) DEB_ARCH="arm64" ;;
-  armv7l)  DEB_ARCH="armhf" ;;
-  *)       DEB_ARCH="$MACHINE" ;;
+  x86_64)  DEB_ARCH="amd64"; ARCH_TOKEN="x64" ;;
+  aarch64) DEB_ARCH="arm64"; ARCH_TOKEN="arm64" ;;
+  armv7l)  DEB_ARCH="armhf"; ARCH_TOKEN="armv7" ;;
+  *)       DEB_ARCH="$MACHINE"; ARCH_TOKEN="$MACHINE" ;;
 esac
 RPM_ARCH="$MACHINE"
 
@@ -225,7 +225,9 @@ EOF
 # ── deb ───────────────────────────────────────────────────
 build_deb() {
   local stage="$1"
-  local out="$OUT_DIR/${PKG_NAME}_${VERSION}_${DEB_ARCH}.deb"
+  # 命名与桌面版统一：<包名>-<版本>-linux-<架构>.<ext>
+  # （deb 的文件名不参与校验，内部 Package/Architecture 字段仍是规范值）
+  local out="$OUT_DIR/${PKG_NAME}-${VERSION}-linux-${ARCH_TOKEN}.deb"
 
   mkdir -p "$stage/DEBIAN"
   cat > "$stage/DEBIAN/control" <<EOF
@@ -303,7 +305,7 @@ build_rpm() {
   cp -a --no-preserve=timestamps "$stage/." "$srcdir/"
 
   local out
-  out="${PKG_NAME}-${VERSION}-1.${RPM_ARCH}.rpm"
+  out="${PKG_NAME}-${VERSION}-linux-${ARCH_TOKEN}.rpm"
 
   # 目录归属：程序目录与单元文件归 root；数据/日志目录归服务用户
   # （%files 里单独声明 %attr，避免 rpm 校验属性不一致）

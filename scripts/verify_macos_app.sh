@@ -47,9 +47,9 @@ echo "== macOS 产物校验: $DIST_DIR (version=$ver) =="
 ls -l "$DIST_DIR" || true
 
 # ---------- 1. 产物数量与命名 ----------
-dmg="$DIST_DIR/qingci-bot-ce-${ver}-arm64.dmg"
-zip="$DIST_DIR/qingci-bot-ce-${ver}-arm64.zip"
-[ -f "$dmg" ] || fail "缺少 dmg: $(basename "$dmg")（命名应为 qingci-bot-ce-<ver>-arm64.dmg）"
+dmg="$DIST_DIR/qingci-bot-ce-${ver}-macos-arm64.dmg"
+zip="$DIST_DIR/qingci-bot-ce-${ver}-macos-arm64.zip"
+[ -f "$dmg" ] || fail "缺少 dmg: $(basename "$dmg")（命名应为 qingci-bot-ce-<ver>-macos-arm64.dmg）"
 [ -f "$zip" ] || fail "缺少 zip: $(basename "$zip")"
 ok "dmg / zip 命名与版本一致"
 
