@@ -100,6 +100,11 @@ jobs:
               - 'scripts/verify_linux_packages.sh'
               - 'scripts/smoke_install_packages.sh'
               - '.github/workflows/ci.yml'
+              # release.yml 决定正式产物怎么构建（runner 架构、打包参数、目标格式）。
+              # 此前只列 ci.yml 不列它，导致「改发版流水线」不会触发任何打包验证——
+              # 而发版流水线改错只有到发版当天才会暴露。纳入后改它会跑一遍
+              # package-smoke（与 release 的 linux-deb-rpm 同构建基线）。
+              - '.github/workflows/release.yml'
 
   quality:
     name: Lint / Type / Test

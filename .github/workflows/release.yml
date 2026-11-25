@@ -56,6 +56,10 @@ jobs:
   prepare:
     name: Prepare release
     runs-on: ubuntu-latest
+    # 只解析版本号并做 tag 一致性校验，正常 10 秒内结束。
+    # 设上限的意义不在它本身，而在于它是所有构建 job 的 needs：
+    # 一旦卡住（如 GitHub API 限流重试），整条发版流水线都起不来。
+    timeout-minutes: 10
     outputs:
       ver: ${{ steps.resolve.outputs.ver }}
       prerelease: ${{ steps.resolve.outputs.prerelease }}
@@ -478,6 +482,12 @@ jobs:
     if: github.event_name == 'push'
     needs: prepare
     runs-on: ubuntu-latest
+    # 多架构镜像的 arm64 层仍在 x64 runner 上靠 QEMU 构建（见下方 setup-qemu
+    # 步骤）。Dockerfile 只装 Python 依赖（纯 wheel），模拟开销可接受，实测
+    # 约 4 分钟；给 30 分钟上限既能容纳 registry 抖动，也不会卡住整条流水线。
+    # 注：deb/rpm 已改原生 arm64 runner，此处不跟随——buildx 需要单个
+    # runner 同时构建两个架构并推送同一 manifest，跨 runner 反而更复杂。
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -539,6 +549,8 @@ jobs:
       needs.linux-deb-rpm.result == 'success' &&
       needs.linux-arm64.result == 'success'
     runs-on: ubuntu-latest
+    # 只读 Release 资产的 digest 字段，不下载产物，正常 1 分钟内结束。
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
