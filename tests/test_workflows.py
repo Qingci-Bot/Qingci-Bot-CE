@@ -194,20 +194,25 @@ def test_arm64_job_builds_natively() -> None:
 
 
 def test_macos_job_targets_apple_silicon() -> None:
-    """macOS 只发布 Apple Silicon：job 必须钉在 macos-14（arm64）并自行断言
+    """macOS 只发布 Apple Silicon：job 必须钉在 macos-15（arm64）并自行断言
 
     为什么不用 `macos-latest`：它的架构随 GitHub 镜像策略漂移（曾从 macos-13
     的 x64 切到 macos-14 的 arm64）。PyInstaller 不能交叉编译，落到 x64 runner
     就会产出 x64 后端——名字写着 arm64、用户装上却跑不了。macos-13 明确是 x64，
     同样不允许。
+
+    为什么是 15 而不是 14（实测踩到）：本仓库请求 `macos-14` 会拿到注解
+    「The configuration 'macos-14-arm64-us-default' is not supported」，并在
+    1 秒内被取消（runner_id=0、0 个步骤）。矩阵探测里 macos-15 与 macos-latest
+    成功、macos-14 取消，故钉在 macos-15。
     """
     release = WORKFLOW_DIR / "release.yml"
     if not release.is_file():
         pytest.skip("release.yml 不存在")
     job = (_load(release).get("jobs") or {}).get("macos-dmg")
     assert job, "release.yml 缺少 macos-dmg job"
-    assert job.get("runs-on") == "macos-14", (
-        f"macos-dmg 应跑在 macos-14（Apple Silicon），当前为 {job.get('runs-on')!r}"
+    assert job.get("runs-on") == "macos-15", (
+        f"macos-dmg 应跑在 macos-15（Apple Silicon），当前为 {job.get('runs-on')!r}"
     )
 
     runs = [str(s.get("run", "")) for s in job.get("steps") or [] if isinstance(s, dict)]

@@ -92,6 +92,21 @@ minsys="$(plutil -extract LSMinimumSystemVersion raw "$plist" 2>/dev/null || tru
 [ "$minsys" = "$EXPECT_MIN_MACOS" ] || fail "LSMinimumSystemVersion=$minsys，期望 $EXPECT_MIN_MACOS"
 ok "bundle id / 最低系统版本正确（$bid / macOS $minsys+）"
 
+# ---------- 5.1 声明的最低系统版本不得低于二进制真实下限 ----------
+# 构建跑在 macOS 15 上，但我们的兼容目标是 macOS 11+。若二进制实际的
+# LC_BUILD_VERSION/minos 高于声明值，旧系统用户会「装得上、一开就崩」，
+# 表现与签名失效几乎一样（都是「应用已损坏」），很难区分。
+# 这里读回真实 minos，与声明值比对：声明必须 >= 真实值，否则直接失败。
+minos="$(vtool -show-build "$EXE" 2>/dev/null | awk '/minos/{print $2; exit}')"
+if [ -n "$minos" ]; then
+  echo "  主程序真实 minos: $minos（声明 $minsys）"
+  lowest="$(printf '%s\n%s\n' "$minsys" "$minos" | sort -V | head -1)"
+  [ "$lowest" = "$minsys" ] || fail "声明的最低系统 $minsys 低于二进制的真实下限 $minos（旧系统会一开就崩）——请把 package.json 的 mac.minimumSystemVersion 调到 $minos 或更高"
+  ok "最低系统版本声明不低于二进制真实下限"
+else
+  echo "  [WARN] 无法读取 minos（vtool 不可用），跳过该断言"
+fi
+
 # ---------- 6. 内嵌后端 + 真跑一次 ----------
 backend_zip="$APP/Contents/Resources/backend.zip"
 [ -f "$backend_zip" ] || fail "app 内缺少 resources/backend.zip（桌面壳拉不起后端）"
