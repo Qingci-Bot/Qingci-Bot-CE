@@ -59,10 +59,12 @@ function getLevelClass(level) {
   return String(level || '').toUpperCase();
 }
 
-function filterEntries() {
+// 级别过滤结果：用 computed 而非函数，模板里要在 v-if 与 v-for 各用一次，
+// 函数式写法等于每次渲染都全量过滤两遍（日志上限 5000 条时明显掉帧）。
+const filtered = computed(() => {
   if (levelFilter.value === 'ALL') return entries.value;
   return entries.value.filter((e) => String(e.level || '').toUpperCase() === levelFilter.value);
-}
+});
 
 function clearScreen() {
   entries.value = [];
@@ -79,7 +81,7 @@ function scrollToBottom() {
     if (containerRef.value) containerRef.value.scrollTop = containerRef.value.scrollHeight;
   });
 }
-watch(filterEntries, scrollToBottom, { deep: true });
+watch(() => filtered.value[filtered.value.length - 1], scrollToBottom);
 onMounted(scrollToBottom);
 
 onMounted(async () => {
@@ -131,12 +133,12 @@ onUnmounted(() => {
       </div>
 
       <div ref="containerRef" class="runlog-container">
-        <div v-if="filterEntries().length === 0" class="empty-state">
+        <div v-if="filtered.length === 0" class="empty-state">
           <div class="icon">⌘</div>
           <div v-if="runLogEnabled">暂无运行日志，Bot 启动后自动产生</div>
           <div v-else>运行日志采集已关闭，可在「系统设置」→「日志」中重新开启</div>
         </div>
-        <div v-for="(log, i) in filterEntries()" :key="i" class="log-line">
+        <div v-for="(log, i) in filtered" :key="i" class="log-line">
           <span class="ln-time">{{ log.time }}</span>
           <span class="ln-level" :class="getLevelClass(log.level)">{{ log.level }}</span>
           <span class="ln-name">{{ log.name }}</span>
@@ -185,11 +187,15 @@ onUnmounted(() => {
 }
 .log-line {
   display: flex;
-  align-items: baseline;
+  /* 消息可能折成多行：用 flex-start 让时间/级别/名称贴首行，
+     baseline 在多行时会按最后一行对齐，视觉上像"错位" */
+  align-items: flex-start;
   gap: 10px;
   padding: 1px 12px;
   white-space: pre-wrap;
-  word-break: break-all;
+  /* overflow-wrap 而非 word-break: break-all —— 后者会把英文单词从中间
+     切断（"threshold" 变成 "thres hold"），排查日志时极难读 */
+  overflow-wrap: anywhere;
 }
 .log-line:hover {
   background: rgba(255, 255, 255, 0.03);
@@ -235,6 +241,11 @@ onUnmounted(() => {
   border-radius: 4px;
   padding: 0 4px;
   font-size: 11px;
+  /* 事件 ID 可能很长：限宽 + 省略号，绝不能溢出到相邻行造成文字重叠 */
   flex-shrink: 0;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

@@ -242,7 +242,7 @@ function switchTab(tab) {
           <div class="card-title">加载外部插件</div>
         </div>
         <div class="input-group">
-          <div class="form-group" style="flex: 1">
+          <div class="form-group grow">
             <label>Python 模块路径</label>
             <input v-model="modulePath" type="text" placeholder="例如：plugins.my_plugin" />
           </div>

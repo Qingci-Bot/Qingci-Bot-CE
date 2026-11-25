@@ -395,10 +395,18 @@ body::before {
   box-shadow: none;
 }
 
-/* 表单 */
+/* 表单
+ *
+ * 关于 minmax(0, 1fr) / min-width: 0：
+ * `1fr` 的最小值是 auto —— 网格项不许窄于自身内容的最小宽度。表单里塞着
+ * 长 URL、长 API Key、长提示词时，min-content 会把列撑开，挤得相邻列变形、
+ * 甚至把卡片顶出容器。写成 minmax(0, 1fr) 才是「平分剩余宽度，允许收缩」。
+ * 同理，flex 项必须显式 min-width: 0 才会真正收缩——这是表单"被挤压"
+ * 系列问题的共同根因。
+ */
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -406,6 +414,8 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* 允许在 flex/grid 父容器中被压缩，而不是撑破布局 */
+  min-width: 0;
 }
 
 .form-group.full-width {
@@ -418,6 +428,8 @@ body::before {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  /* 标签里的长英文/路径（如 bot.admin_users）允许断行，不把列顶宽 */
+  overflow-wrap: anywhere;
 }
 
 .form-group input,
@@ -432,6 +444,11 @@ body::before {
   font-family: inherit;
   transition: all 0.2s ease;
   outline: none;
+  /* 控件总是填满自己的列；min-width: 0 让它在窄屏下肯让步 */
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .form-group input:hover,
@@ -600,31 +617,31 @@ body::before {
   gap: 18px;
 }
 .grid-2 {
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .grid-3 {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .grid-4 {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 @media (max-width: 1100px) {
   .grid-2,
   .grid-3 {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .grid-4 {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .form-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 640px) {
   .grid-4 {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -694,6 +711,8 @@ body::before {
   text-align: left;
   font-size: 13px;
   border-bottom: 1px solid var(--border-color);
+  /* 长 ID / 长路径允许在单元格内断行，避免把整张表撑宽后横向溢出 */
+  overflow-wrap: anywhere;
 }
 
 .table th {
@@ -911,11 +930,29 @@ body::before {
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  /* 窄屏时换行，别把输入框挤成一条缝、也别让按钮被压扁 */
+  flex-wrap: wrap;
 }
 
 .input-group .form-group {
-  flex: 1;
+  /* 基准宽度 220px：够放下常见 URL/密钥的一部分；空间不足时整体换行，
+     而不是继续压窄输入框（压到 40px 宽时用户根本没法核对内容） */
+  flex: 1 1 220px;
+  min-width: 0;
   margin-bottom: 0;
+}
+
+.input-group .btn {
+  /* 按钮保持自身尺寸，不被输入框抢走宽度 */
+  flex-shrink: 0;
+}
+
+/* 表单组在 flex 行里需要「占满剩余并可收缩」时的通用修饰类
+   （替代内联 style="flex: 1"，内联会盖掉上面的 min-width: 0） */
+.form-group.grow {
+  flex: 1 1 220px;
+  min-width: 0;
+  margin: 0;
 }
 
 /* 连接信息 */

@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>记忆星图 · Qingci-Bot CE</title>
+<!--
+  记忆星图
+
+  一颗星 = 一条记忆。
+  · 颜色表示层级：金色=永久（不衰减），青色=长期（会遗忘）
+  · 大小表示显著度（importance），外圈光晕表示被命中的次数（hits）
+  · 亮度表示新鲜度：越久没被碰过的星越暗
+  · 同一个人的记忆聚成一团（星座），因为「记得谁」是这套记忆最核心的语义
+  · 语义相近的记忆之间连线，线越亮越像
+
+  纯 Canvas + 原生 JS，无任何外部依赖：桌面版离线运行，不能指望 CDN。
+  布局用力导向（斥力 + 连线弹簧 + 星座引力），几十行足够，也便于调。
+-->
+<style>
+  :root {
+    --bg: #0b0f1a;
+    --bg-soft: #101728;
+    --border: rgba(148, 163, 184, 0.18);
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --text-mute: #64748b;
+    --gold: #fbbf24;
+    --cyan: #38bdf8;
+    --blue-bg: rgba(56, 189, 248, 0.12);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+      'Microsoft YaHei', sans-serif;
+    overflow: hidden;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-soft);
+  }
+  .brand { display: flex; align-items: baseline; gap: 8px; }
+  .brand h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: 0.3px; }
+  .brand span { font-size: 11px; color: var(--text-mute); }
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-dim);
+    background: rgba(148, 163, 184, 0.08);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 10px;
+    white-space: nowrap;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .toolbar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(16, 23, 40, 0.7);
+  }
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button {
+    background: transparent; border: 0; color: var(--text-dim);
+    font-size: 12px; padding: 5px 11px; cursor: pointer; font-family: inherit;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--blue-bg); color: var(--cyan); }
+  .seg button:hover { color: var(--text); }
+  input[type='search'] {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 6px 10px;
+    width: 210px;
+    max-width: 42vw;
+    font-family: inherit;
+    outline: none;
+  }
+  input[type='search']:focus { border-color: var(--cyan); }
+  .btn {
+    background: rgba(148, 163, 184, 0.1);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 12px; padding: 6px 11px; border-radius: 7px;
+    cursor: pointer; font-family: inherit;
+  }
+  .btn:hover { color: var(--text); border-color: rgba(148, 163, 184, 0.4); }
+  main { position: relative; flex: 1; min-height: 0; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; text-align: center; padding: 24px;
+    color: var(--text-dim);
+    pointer-events: none;
+  }
+  .overlay .big { font-size: 40px; opacity: 0.5; }
+  .overlay h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text); }
+  .overlay p { margin: 0; font-size: 12px; line-height: 1.7; max-width: 460px; }
+  .overlay code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(148, 163, 184, 0.12);
+    padding: 1px 5px; border-radius: 4px; color: var(--cyan);
+  }
+  .overlay[hidden] { display: none; }
+  #tip {
+    position: absolute;
+    max-width: 320px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid var(--border);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+    font-size: 12px;
+    line-height: 1.6;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    z-index: 5;
+  }
+  #tip.on { opacity: 1; }
+  #tip .t-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  #tip .t-body { color: var(--text); overflow-wrap: anywhere; }
+  #tip .t-meta { margin-top: 5px; color: var(--text-mute); font-size: 11px; }
+  #tip .badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 999px;
+    border: 1px solid currentColor;
+  }
+  .legend {
+    position: absolute; left: 16px; bottom: 12px;
+    display: flex; gap: 14px; flex-wrap: wrap;
+    font-size: 11px; color: var(--text-mute);
+    pointer-events: none;
+  }
+  .legend i { display: inline-flex; align-items: center; gap: 5px; font-style: normal; }
+  .legend .ring { width: 9px; height: 9px; border-radius: 50%; }
+  .hint {
+    position: absolute; right: 16px; bottom: 12px;
+    font-size: 11px; color: var(--text-mute); pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <h1>记忆星图</h1>
+      <span>它记得的每个人，都在这里</span>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div class="toolbar">
+    <div class="seg" id="tier-seg">
+      <button data-tier="all" class="on">全部</button>
+      <button data-tier="permanent">永久</button>
+      <button data-tier="long">长期</button>
+    </div>
+    <input type="search" id="q" placeholder="搜索记忆内容 / 用户 ID" />
+    <button class="btn" id="reset">重置视角</button>
+    <button class="btn" id="reload">刷新数据</button>
+  </div>
+
+  <main>
+    <canvas id="c"></canvas>
+    <div class="overlay" id="ov-loading">
+      <div class="big">✦</div>
+      <h2>正在读取记忆…</h2>
+    </div>
+    <div class="overlay" id="ov-empty" hidden>
+      <div class="big">✧</div>
+      <h2>还没有任何记忆</h2>
+      <p>
+        在聊天里说一句「记住：我不吃香菜」，或让 bot 正常聊几句——
+        自我介绍、偏好会被自动提炼成长期记忆。<br />
+        也可以直接发 <code>/memory add &lt;内容&gt;</code>。
+      </p>
+    </div>
+    <div class="overlay" id="ov-error" hidden>
+      <div class="big">⚠</div>
+      <h2>读取失败</h2>
+      <p id="err-msg"></p>
+    </div>
+    <div id="tip"></div>
+    <div class="legend">
+      <i><span class="ring" style="background: var(--gold)"></span>永久（不遗忘）</i>
+      <i><span class="ring" style="background: var(--cyan)"></span>长期（会衰减）</i>
+      <i>大小 = 显著度　亮度 = 新鲜度　光晕 = 命中次数</i>
+    </div>
+    <div class="hint">滚轮缩放 · 拖拽平移 · 悬停查看</div>
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- 鉴权 ----------
+  // 页面以 iframe 打开（/api/plugin-data/memory/?token=...）。接口要 X-API-Key，
+  // iframe 内可直接读同源 localStorage（主应用登录后写入），token query 作兜底。
+  function apiKey() {
+    try {
+      var k = localStorage.getItem('qingci_api_key');
+      if (k) return k;
+    } catch (e) { /* 隐私模式下 localStorage 可能抛错 */ }
+    var m = new URLSearchParams(location.search);
+    return m.get('token') || '';
+  }
+
+  var API = '/api/plugin-web/memory/graph';
+
+  // ---------- 状态 ----------
+  var raw = { nodes: [], edges: [], stats: {} };
+  var view = { tier: 'all', q: '' };
+  var nodes = [];          // 参与渲染的节点（含布局坐标与视觉参数）
+  var edges = [];
+  var adj = new Map();     // id -> Set(相邻 id)，悬停高亮用
+  var hovered = null;
+  var cam = { x: 0, y: 0, scale: 1 };
+  var dragging = false;
+  var dragMoved = false;
+  var last = { x: 0, y: 0 };
+  var alpha = 1;           // 力导向退火系数
+  var rafId = 0;
+  var dpr = 1;
+
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var tip = document.getElementById('tip');
+  var statsEl = document.getElementById('stats');
+
+  // ---------- 数据 ----------
+  async function load() {
+    showOverlay('loading');
+    try {
+      var headers = {};
+      var k = apiKey();
+      if (k) headers['X-API-Key'] = k;
+      var res = await fetch(API, { headers: headers, cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status + '（接口需要 API Key，请在主界面登录后重试）');
+      raw = await res.json();
+      renderStats();
+      rebuild();
+      if (!raw.nodes.length) showOverlay('empty');
+      else showOverlay(null);
+    } catch (e) {
+      document.getElementById('err-msg').textContent = String(e.message || e);
+      showOverlay('error');
+    }
+  }
+
+  function showOverlay(which) {
+    ['loading', 'empty', 'error'].forEach(function (k) {
+      document.getElementById('ov-' + k).hidden = k !== which;
+    });
+  }
+
+  function renderStats() {
+    var s = raw.stats || {};
+    var items = [
+      { label: '记忆', value: s.shown != null ? s.shown : 0 },
+      { label: '永久', value: s.permanent || 0, color: 'var(--gold)' },
+      { label: '长期', value: s.long || 0, color: 'var(--cyan)' },
+      { label: '用户', value: s.users || 0 },
+      { label: '关联', value: s.edges || 0 },
+    ];
+    var html = items
+      .map(function (it) {
+        var dot = it.color
+          ? '<span class="dot" style="background:' + it.color + '"></span>'
+          : '';
+        return '<span class="chip">' + dot + it.label + ' <b>' + it.value + '</b></span>';
+      })
+      .join('');
+    if (s.truncated) {
+      html += '<span class="chip">仅显示最显著的 <b>' + s.shown + '</b> 条</span>';
+    }
+    statsEl.innerHTML = html;
+  }
+
+  function matches(n) {
+    if (view.tier !== 'all' && n.tier !== view.tier) return false;
+    if (!view.q) return true;
+    var q = view.q.toLowerCase();
+    return (
+      String(n.content).toLowerCase().indexOf(q) >= 0 ||
+      String(n.user).indexOf(q) >= 0
+    );
+  }
+
+  // 按筛选条件重建可见图，并进行初始布局
+  function rebuild() {
+    var visible = raw.nodes.filter(matches);
+    var ids = new Set(visible.map(function (n) { return n.id; }));
+
+    // 同一个人聚成一簇：簇心均匀分布在一个大圆上
+    var users = [];
+    var seen = new Set();
+    visible.forEach(function (n) {
+      if (!seen.has(n.user)) { seen.add(n.user); users.push(n.user); }
+    });
+    var R = Math.min(320, 90 + users.length * 28);
+    var centers = new Map();
+    users.forEach(function (u, i) {
+      var ang = (i / Math.max(1, users.length)) * Math.PI * 2;
+      var jitter = (i % 3) * 18;
+      centers.set(u, {
+        x: Math.cos(ang) * (R + jitter),
+        y: Math.sin(ang) * (R + jitter),
+      });
+    });
+
+    var byUser = new Map();
+    nodes = visible.map(function (n, i) {
+      var k = byUser.get(n.user) || 0;
+      byUser.set(n.user, k + 1);
+      var c = centers.get(n.user) || { x: 0, y: 0 };
+      // 簇内散布：用黄金角避免整齐排列（看起来更自然，也减少初始重叠）
+      var a = k * 2.39996 + i * 0.7;
+      var r = 22 + Math.sqrt(k) * 26;
+      return {
+        id: n.id,
+        user: n.user,
+        tier: n.tier,
+        content: n.content,
+        importance: n.importance,
+        hits: n.hits,
+        source: n.source,
+        age_days: n.age_days,
+        cx: c.x,
+        cy: c.y,
+        x: c.x + Math.cos(a) * r,
+        y: c.y + Math.sin(a) * r,
+        vx: 0,
+        vy: 0,
+        r: 3 + Math.max(0, Math.min(1, n.importance)) * 8,
+      };
+    });
+
+    edges = (raw.edges || []).filter(function (e) {
+      return ids.has(e.source) && ids.has(e.target);
+    });
+    adj = new Map();
+    edges.forEach(function (e) {
+      if (!adj.has(e.source)) adj.set(e.source, new Set());
+      if (!adj.has(e.target)) adj.set(e.target, new Set());
+      adj.get(e.source).add(e.target);
+      adj.get(e.target).add(e.source);
+    });
+
+    alpha = 1;
+    fitToView();
+    start();
+  }
+
+  // ---------- 布局（力导向） ----------
+  function tick() {
+    if (alpha < 0.008) return;
+    alpha *= 0.985;
+    var i, j, a, b, dx, dy, d2, d, f;
+
+    // 斥力：所有点两两相斥（N≤240，O(n²) 每帧约 2.9 万次，可接受）
+    for (i = 0; i < nodes.length; i++) {
+      a = nodes[i];
+      for (j = i + 1; j < nodes.length; j++) {
+        b = nodes[j];
+        dx = b.x - a.x;
+        dy = b.y - a.y;
+        d2 = dx * dx + dy * dy;
+        if (d2 < 0.01) { d2 = 0.01; dx = (Math.random() - 0.5) * 0.6; }
+        d = Math.sqrt(d2);
+        f = 2600 / d2;
+        if (f > 14) f = 14;
+        var ux = dx / d, uy = dy / d;
+        a.vx -= ux * f; a.vy -= uy * f;
+        b.vx += ux * f; b.vy += uy * f;
+      }
+    }
+
+    // 连线弹簧：越相似越短
+    for (i = 0; i < edges.length; i++) {
+      var e = edges[i];
+      a = find(e.source);
+      b = find(e.target);
+      if (!a || !b) continue;
+      dx = b.x - a.x; dy = b.y - a.y;
+      d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+      var rest = 52 + (1 - e.weight) * 90;
+      f = (d - rest) * 0.012 * e.weight;
+      a.vx += (dx / d) * f; a.vy += (dy / d) * f;
+      b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
+    }
+
+    // 星座引力 + 全局向心：让每个人的记忆保持成团，整体不飘出视野
+    for (i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      n.vx += (n.cx - n.x) * 0.006;
+      n.vy += (n.cy - n.y) * 0.006;
+      n.vx += -n.x * 0.0016;
+      n.vy += -n.y * 0.0016;
+      n.x += n.vx * alpha * 1.6;
+      n.y += n.vy * alpha * 1.6;
+      n.vx *= 0.86;
+      n.vy *= 0.86;
+    }
+  }
+
+  function find(id) {
+    for (var i = 0; i < nodes.length; i++) if (nodes[i].id === id) return nodes[i];
+    return null;
+  }
+
+  // ---------- 绘制 ----------
+  function draw(ts) {
+    var w = canvas.clientWidth;
+    var h = canvas.clientHeight;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    // 背景星尘：极淡的随机点，给"星空"一点质感（固定种子，避免闪烁）
+    ctx.save();
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.05)';
+    for (var s = 0; s < 90; s++) {
+      var sx = ((s * 73) % 997) / 997 * w;
+      var sy = ((s * 151) % 991) / 991 * h;
+      ctx.fillRect(sx, sy, 1, 1);
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(w / 2 + cam.x, h / 2 + cam.y);
+    ctx.scale(cam.scale, cam.scale);
+
+    // 连线
+    for (var i = 0; i < edges.length; i++) {
+      var e = edges[i];
+      var a = find(e.source);
+      var b = find(e.target);
+      if (!a || !b) continue;
+      var lit = hovered && (hovered.id === e.source || hovered.id === e.target);
+      ctx.strokeStyle = lit
+        ? 'rgba(56, 189, 248, ' + (0.45 + e.weight * 0.5) + ')'
+        : 'rgba(148, 163, 184, ' + (0.05 + e.weight * 0.16) + ')';
+      ctx.lineWidth = lit ? 1.4 : 0.7;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+
+    // 节点
+    var pulse = 0.5 + 0.5 * Math.sin(ts / 900);
+    for (var k = 0; k < nodes.length; k++) {
+      var n = nodes[k];
+      var isPerm = n.tier === 'permanent';
+      var base = isPerm ? '251, 191, 36' : '56, 189, 248';
+
+      // 新鲜度：30 天内几乎全亮，之后线性变暗到 0.35
+      var fresh = n.age_days <= 30 ? 1 : Math.max(0.35, 1 - (n.age_days - 30) / 240);
+
+      // 命中次数的光晕（永久记忆额外有一圈常亮环）
+      if (n.hits > 1 || isPerm) {
+        var halo = Math.min(3, n.hits) * 2.2 + (isPerm ? 3 : 0);
+        var grd = ctx.createRadialGradient(n.x, n.y, n.r * 0.6, n.x, n.y, n.r + halo + 6);
+        grd.addColorStop(0, 'rgba(' + base + ', ' + (0.16 * fresh) + ')');
+        grd.addColorStop(1, 'rgba(' + base + ', 0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r + halo + 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      var isHover = hovered && hovered.id === n.id;
+      var linked = hovered && adj.get(hovered.id) && adj.get(hovered.id).has(n.id);
+      var alphaNode = hovered && !isHover && !linked ? 0.35 : 1;
+
+      ctx.fillStyle = 'rgba(' + base + ', ' + (0.55 + 0.45 * fresh) * alphaNode + ')';
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r + (isHover ? 1.6 : 0), 0, Math.PI * 2);
+      ctx.fill();
+
+      // 永久记忆：一圈细金环（不随时间淡忘的视觉承诺）
+      if (isPerm) {
+        ctx.strokeStyle = 'rgba(' + base + ', ' + (0.5 + 0.3 * pulse) * alphaNode + ')';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r + 2.6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // 标签：只在星座中心附近或悬停时显示，避免糊成一片
+      if (isHover) {
+        ctx.fillStyle = 'rgba(226, 232, 240, 0.95)';
+        ctx.font = '11px -apple-system, "PingFang SC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(shorten(n.content, 16), n.x, n.y - n.r - 8);
+      }
+    }
+
+    // 用户 ID 标注：取每簇的左上角节点附近写一次
+    ctx.font = '10px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = 'rgba(100, 116, 139, 0.9)';
+    ctx.textAlign = 'center';
+    var labelled = new Set();
+    for (var m = 0; m < nodes.length; m++) {
+      var nn = nodes[m];
+      if (labelled.has(nn.user)) continue;
+      labelled.add(nn.user);
+      ctx.fillText(shorten(nn.user, 14), nn.cx, nn.cy - 34);
+    }
+
+    ctx.restore();
+  }
+
+  function shorten(s, n) {
+    s = String(s || '');
+    return s.length > n ? s.slice(0, n - 1) + '…' : s;
+  }
+
+  function loop(ts) {
+    tick();
+    draw(ts || 0);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function start() {
+    if (!rafId) rafId = requestAnimationFrame(loop);
+  }
+  function stop() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+  }
+
+  function fitToView() {
+    cam.scale = 1;
+    cam.x = 0;
+    cam.y = 0;
+  }
+
+  // ---------- 交互 ----------
+  function resize() {
+    dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    canvas.width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+    canvas.height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+    draw(0);
+  }
+  window.addEventListener('resize', resize);
+
+  // 屏幕坐标 → 世界坐标
+  function toWorld(clientX, clientY) {
+    var rect = canvas.getBoundingClientRect();
+    var w = canvas.clientWidth;
+    var h = canvas.clientHeight;
+    return {
+      x: (clientX - rect.left - w / 2 - cam.x) / cam.scale,
+      y: (clientY - rect.top - h / 2 - cam.y) / cam.scale,
+    };
+  }
+
+  function hitTest(x, y) {
+    var best = null;
+    var bestD = Infinity;
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      var d = Math.hypot(n.x - x, n.y - y);
+      var hitR = Math.max(n.r + 6, 10 / cam.scale);
+      if (d <= hitR && d < bestD) { best = n; bestD = d; }
+    }
+    return best;
+  }
+
+  canvas.addEventListener('mousedown', function (e) {
+    dragging = true;
+    dragMoved = false;
+    last = { x: e.clientX, y: e.clientY };
+    canvas.classList.add('dragging');
+  });
+
+  window.addEventListener('mouseup', function () {
+    dragging = false;
+    canvas.classList.remove('dragging');
+  });
+
+  canvas.addEventListener('mousemove', function (e) {
+    if (dragging) {
+      var dx = e.clientX - last.x;
+      var dy = e.clientY - last.y;
+      if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true;
+      cam.x += dx; cam.y += dy;
+      last = { x: e.clientX, y: e.clientY };
+      return;
+    }
+    var p = toWorld(e.clientX, e.clientY);
+    var hit = hitTest(p.x, p.y);
+    hovered = hit;
+    if (hit) showTip(e, hit);
+    else tip.classList.remove('on');
+  });
+
+  canvas.addEventListener('mouseleave', function () {
+    hovered = null;
+    tip.classList.remove('on');
+  });
+
+  canvas.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    var factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    cam.scale = Math.max(0.35, Math.min(3, cam.scale * factor));
+  }, { passive: false });
+
+  function showTip(e, n) {
+    var isPerm = n.tier === 'permanent';
+    var color = isPerm ? 'var(--gold)' : 'var(--cyan)';
+    tip.innerHTML =
+      '<div class="t-head">' +
+      '<span class="badge" style="color:' + color + '">' + (isPerm ? '永久' : '长期') + '</span>' +
+      '<span style="color:var(--text-mute);font-size:11px">' + escapeHtml(n.user) + '</span>' +
+      '</div>' +
+      '<div class="t-body">' + escapeHtml(n.content) + '</div>' +
+      '<div class="t-meta">显著度 ' + n.importance.toFixed(2) +
+      ' · 命中 ' + n.hits + ' 次' +
+      ' · ' + (n.age_days < 1 ? '今天' : Math.round(n.age_days) + ' 天前') + '记下' +
+      ' · ' + (n.source === 'manual' ? '手动' : '自动提炼') +
+      '</div>';
+    var rect = canvas.getBoundingClientRect();
+    var x = e.clientX - rect.left + 14;
+    var y = e.clientY - rect.top + 14;
+    tip.style.left = Math.min(x, rect.width - 340) + 'px';
+    tip.style.top = Math.min(y, rect.height - 130) + 'px';
+    tip.classList.add('on');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ---------- 工具栏 ----------
+  document.getElementById('tier-seg').addEventListener('click', function (e) {
+    var t = e.target && e.target.getAttribute && e.target.getAttribute('data-tier');
+    if (!t) return;
+    view.tier = t;
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function (b) {
+      b.classList.toggle('on', b.getAttribute('data-tier') === t);
+    });
+    afterFilter();
+  });
+
+  var qTimer = 0;
+  document.getElementById('q').addEventListener('input', function (e) {
+    var v = e.target.value.trim();
+    clearTimeout(qTimer);
+    qTimer = setTimeout(function () {
+      view.q = v;
+      afterFilter();
+    }, 160);
+  });
+
+  function afterFilter() {
+    rebuild();
+    if (!nodes.length) showOverlay(raw.nodes.length ? 'empty' : 'empty');
+    else showOverlay(null);
+  }
+
+  document.getElementById('reset').addEventListener('click', function () {
+    fitToView();
+    alpha = 1;
+  });
+
+  document.getElementById('reload').addEventListener('click', load);
+
+  // 标签页不可见时停掉动画，别让一个隐藏的 iframe 持续吃 CPU
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) stop();
+    else start();
+  });
+
+  // ---------- 启动 ----------
+  resize();
+  load();
+})();
+</script>
+</body>
+</html>

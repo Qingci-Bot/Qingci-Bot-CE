@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -662,3 +663,143 @@ async def test_on_load_wires_provider_and_on_unload_restores(tmp_path, monkeypat
     assert isinstance(manager.memory, FallbackMemoryProvider), (
         "on_unload 未交还控制权，框架仍持有已卸载插件"
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# 记忆星图：图数据构建 + 页面/接口注册
+# ──────────────────────────────────────────────────────────────────
+
+
+def test_list_all_spans_users(tmp_path):
+    """星图要跨用户展示：list_all 不能像 list_memories 那样按用户过滤"""
+    store = MemoryStore(tmp_path / "m.db")
+    store.upsert(scope=SCOPE_USER, scope_id=1, content="甲喜欢猫", importance=0.9)
+    store.upsert(scope=SCOPE_USER, scope_id=2, content="乙喜欢狗", importance=0.5)
+    all_items = store.list_all()
+    assert {m.scope_id for m in all_items} == {1, 2}
+    # 按显著度降序
+    assert all_items[0].content == "甲喜欢猫"
+
+
+def test_build_graph_nodes_and_edges(tmp_path):
+    """相似记忆之间连线，不同主题之间不连"""
+    from bot.plugin.builtin.memory.graph import build_graph
+
+    store = MemoryStore(tmp_path / "m.db")
+    store.upsert(scope=SCOPE_USER, scope_id=1, content="对方喜欢喝冰美式咖啡", importance=0.9)
+    store.upsert(scope=SCOPE_USER, scope_id=1, content="对方喜欢喝冰美式", importance=0.7)
+    store.upsert(scope=SCOPE_USER, scope_id=2, content="对方在学 Rust 异步编程", importance=0.4)
+
+    g = build_graph(store.list_all(), max_nodes=10, edge_threshold=0.42, now=1_700_000_000)
+    assert len(g["nodes"]) == 3
+    assert g["stats"]["users"] == 2
+    assert g["stats"]["total"] == 3
+    # 只有那对「冰美式」相关，应与 Rust 无关
+    assert len(g["edges"]) == 1
+    edge = g["edges"][0]
+    ids = {edge["source"], edge["target"]}
+    assert len(ids) == 2
+    assert 0.42 <= edge["weight"] <= 1.0
+    # 节点字段齐全（前端依赖这些字段画图）
+    node = g["nodes"][0]
+    for key in ("id", "user", "tier", "content", "importance", "hits", "age_days", "source"):
+        assert key in node
+
+
+def test_build_graph_caps_nodes_and_flags_truncation(tmp_path):
+    """超过上限时截断，并如实告知（前端要提示"仅显示前 N 条"）"""
+    from bot.plugin.builtin.memory.graph import build_graph
+
+    store = MemoryStore(tmp_path / "m.db")
+    for i in range(8):
+        store.upsert(
+            scope=SCOPE_USER, scope_id=i % 2, content=f"第{i}条互不相干的记忆内容", importance=0.5
+        )
+
+    g = build_graph(store.list_all(), max_nodes=5, edge_threshold=0.99)
+    assert g["stats"]["shown"] == 5
+    assert g["stats"]["total"] == 8
+    assert g["stats"]["truncated"] is True
+
+
+def test_build_graph_limits_edges_per_node(tmp_path):
+    """每条记忆最多连几条：否则一个点连几十条线只会糊成一团"""
+    from bot.plugin.builtin.memory.graph import build_graph
+
+    store = MemoryStore(tmp_path / "m.db")
+    # 内容高度相似 → 两两都可能连线
+    for i in range(6):
+        store.upsert(
+            scope=SCOPE_USER, scope_id=1, content=f"对方喜欢喝冰美式咖啡{i}", importance=0.6
+        )
+
+    g = build_graph(store.list_all(), max_nodes=10, edge_threshold=0.3, edges_per_node=2)
+    degree: dict[int, int] = {}
+    for e in g["edges"]:
+        degree[e["source"]] = degree.get(e["source"], 0) + 1
+        degree[e["target"]] = degree.get(e["target"], 0) + 1
+    assert degree and max(degree.values()) <= 2
+
+
+async def test_graph_api_returns_payload(tmp_path):
+    """插件接口返回可直接 JSON 序列化的结构"""
+    plugin = make_plugin(tmp_path)
+    plugin._store.upsert(scope=SCOPE_USER, scope_id=7, content="对方喜欢猫", importance=0.8)
+
+    payload = await plugin._api_graph(None)
+    assert set(payload) == {"nodes", "edges", "stats"}
+    assert payload["stats"]["shown"] == 1
+    assert payload["nodes"][0]["content"] == "对方喜欢猫"
+
+
+async def test_graph_api_without_store_is_safe():
+    """插件未完成加载（无 store）时返回空结构，不抛异常"""
+    plugin = MemoryPlugin()
+    plugin._store = None
+    payload = await plugin._api_graph(None)
+    assert payload["nodes"] == [] and payload["stats"]["total"] == 0
+
+
+async def test_plugin_registers_star_map_page_and_api(tmp_path, monkeypatch):
+    """on_load 必须注册「记忆星图」页面与只读接口，且静态目录真实存在"""
+    from bot.config import LLMConfig
+    from bot.llm.manager import LLMManager
+    from bot.plugin.protocol.base import PluginBase
+
+    monkeypatch.setattr(PluginBase, "data_dir", property(lambda self: tmp_path))
+    plugin = MemoryPlugin()
+    plugin.config = SimpleNamespace(plugins={})
+    plugin.llm = LLMManager(LLMConfig())
+
+    await plugin.on_load()
+    try:
+        pages = plugin._pages
+        assert any(p["title"] == "记忆星图" for p in pages), "未注册记忆星图页面"
+        # SDK 会按「模块同级 web/」自动探测静态目录；探测不到就是空白页
+        web_dir = next(p["static_dir"] for p in pages if p["title"] == "记忆星图")
+        assert web_dir and (Path(web_dir) / "index.html").is_file(), f"静态页缺失: {web_dir}"
+        assert any(a["path"] == "graph" for a in plugin._apis), "未注册 graph 接口"
+    finally:
+        plugin.db = None
+        await plugin.on_unload()
+
+
+def test_normalize_keeps_alphanumerics(tmp_path):
+    """归一化只能删标点，绝不能吞掉数字与字母
+
+    正则字符类里一个没放对位置的 ``-`` 会构成区间（``'-—'`` 覆盖 ASCII 数字与
+    字母），归一化会把「喜欢 Rust」和「喜欢 Python」都变成「喜欢」——两条不同的
+    记忆共用一个去重键，被 upsert 当作重复合并，**静默丢数据**。
+    这是 1.23 引入的去重键实现里踩到的真实缺陷。
+    """
+    assert normalize("喜欢 Rust") == "喜欢rust"
+    assert normalize("第0条") == "第0条"
+    assert normalize("v1.23.0-rc1") == "v1230rc1"
+    assert normalize("喜欢 Rust") != normalize("喜欢 Python")
+
+    # 落到存储层：两条仅 ASCII 部分不同的记忆必须各自存在
+    store = MemoryStore(tmp_path / "m.db")
+    store.upsert(scope=SCOPE_USER, scope_id=1, content="对方在学 Rust", importance=0.5)
+    store.upsert(scope=SCOPE_USER, scope_id=1, content="对方在学 Python", importance=0.5)
+    contents = sorted(m.content for m in store.list_memories(scope=SCOPE_USER, scope_id=1))
+    assert contents == ["对方在学 Python", "对方在学 Rust"]
