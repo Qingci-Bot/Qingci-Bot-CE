@@ -243,6 +243,8 @@
   var alpha = 1;           // 力导向退火系数
   var rafId = 0;
   var dpr = 1;
+  var userMovedCam = false; // 用户手动调整过视角后，不再自动适配
+  var fitted = false;
 
   var canvas = document.getElementById('c');
   var ctx = canvas.getContext('2d');
@@ -319,14 +321,18 @@
     visible.forEach(function (n) {
       if (!seen.has(n.user)) { seen.add(n.user); users.push(n.user); }
     });
-    var R = Math.min(320, 90 + users.length * 28);
+    // 椭圆而非正圆：窗口是宽屏，正圆排布会在左右留下大片空白
+    var base = 110 + users.length * 26;
+    var Rx = base * 1.45;
+    var Ry = base * 0.82;
     var centers = new Map();
     users.forEach(function (u, i) {
-      var ang = (i / Math.max(1, users.length)) * Math.PI * 2;
-      var jitter = (i % 3) * 18;
+      // 从正上方起排，避免第一个簇贴在中线右侧显得偏
+      var ang = -Math.PI / 2 + (i / Math.max(1, users.length)) * Math.PI * 2;
+      var jitter = (i % 3) * 14;
       centers.set(u, {
-        x: Math.cos(ang) * (R + jitter),
-        y: Math.sin(ang) * (R + jitter),
+        x: Math.cos(ang) * (Rx + jitter),
+        y: Math.sin(ang) * (Ry + jitter),
       });
     });
 
@@ -353,7 +359,7 @@
         y: c.y + Math.sin(a) * r,
         vx: 0,
         vy: 0,
-        r: 3 + Math.max(0, Math.min(1, n.importance)) * 8,
+        r: 2.6 + Math.max(0, Math.min(1, n.importance)) * 5.4,
       };
     });
 
@@ -369,15 +375,36 @@
     });
 
     alpha = 1;
+    fitted = false;
+    userMovedCam = false;
     fitToView();
     start();
   }
 
   // ---------- 布局（力导向） ----------
   function tick() {
-    if (alpha < 0.008) return;
+    if (alpha < 0.008) {
+      // 布局稳定：把内容装进视野（每个视角只做一次；用户手动操作过就不打扰）
+      if (!fitted && !userMovedCam) {
+        fitted = true;
+        fitToContent();
+      }
+      return;
+    }
     alpha *= 0.985;
     var i, j, a, b, dx, dy, d2, d, f;
+
+    // 每个用户（星座）的质心：既用于星座间斥力，也用于画标签
+    var cents = new Map();
+    var counts = new Map();
+    for (i = 0; i < nodes.length; i++) {
+      var c0 = cents.get(nodes[i].user) || { x: 0, y: 0 };
+      cents.set(nodes[i].user, { x: c0.x + nodes[i].x, y: c0.y + nodes[i].y });
+      counts.set(nodes[i].user, (counts.get(nodes[i].user) || 0) + 1);
+    }
+    cents.forEach(function (v, k) {
+      cents.set(k, { x: v.x / counts.get(k), y: v.y / counts.get(k) });
+    });
 
     // 斥力：所有点两两相斥（N≤240，O(n²) 每帧约 2.9 万次，可接受）
     for (i = 0; i < nodes.length; i++) {
@@ -411,11 +438,25 @@
       b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
     }
 
-    // 星座引力 + 全局向心：让每个人的记忆保持成团，整体不飘出视野
+    // 星座引力 + 星座间斥力 + 全局向心
+    // 斥力这一项是"可读性"的关键：只靠引力时几团会叠在一起，看不出某颗星
+    // 属于谁——而"记得谁"正是这张图要表达的语义。
+    var MIN_SEP = 190;
     for (i = 0; i < nodes.length; i++) {
       var n = nodes[i];
-      n.vx += (n.cx - n.x) * 0.006;
-      n.vy += (n.cy - n.y) * 0.006;
+      n.vx += (n.cx - n.x) * 0.012;
+      n.vy += (n.cy - n.y) * 0.012;
+      cents.forEach(function (c, owner) {
+        if (owner === n.user) return;
+        var ddx = n.x - c.x;
+        var ddy = n.y - c.y;
+        var dist = Math.sqrt(ddx * ddx + ddy * ddy) || 0.01;
+        if (dist < MIN_SEP) {
+          var push = (MIN_SEP - dist) * 0.004;
+          n.vx += (ddx / dist) * push;
+          n.vy += (ddy / dist) * push;
+        }
+      });
       n.vx += -n.x * 0.0016;
       n.vy += -n.y * 0.0016;
       n.x += n.vx * alpha * 1.6;
@@ -480,13 +521,13 @@
 
       // 命中次数的光晕（永久记忆额外有一圈常亮环）
       if (n.hits > 1 || isPerm) {
-        var halo = Math.min(3, n.hits) * 2.2 + (isPerm ? 3 : 0);
-        var grd = ctx.createRadialGradient(n.x, n.y, n.r * 0.6, n.x, n.y, n.r + halo + 6);
-        grd.addColorStop(0, 'rgba(' + base + ', ' + (0.16 * fresh) + ')');
+        var halo = Math.min(3, n.hits) * 1.6 + (isPerm ? 2 : 0);
+        var grd = ctx.createRadialGradient(n.x, n.y, n.r * 0.6, n.x, n.y, n.r + halo + 3);
+        grd.addColorStop(0, 'rgba(' + base + ', ' + (0.18 * fresh) + ')');
         grd.addColorStop(1, 'rgba(' + base + ', 0)');
         ctx.fillStyle = grd;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r + halo + 6, 0, Math.PI * 2);
+        ctx.arc(n.x, n.y, n.r + halo + 3, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -517,17 +558,36 @@
       }
     }
 
-    // 用户 ID 标注：取每簇的左上角节点附近写一次
-    ctx.font = '10px ui-monospace, Menlo, monospace';
-    ctx.fillStyle = 'rgba(100, 116, 139, 0.9)';
-    ctx.textAlign = 'center';
-    var labelled = new Set();
+    // 用户 ID 标注：画在星座**最上方那颗星**之上，不压住任何星点
+    var box = new Map(); // user -> {minX, maxX, minY, n}
     for (var m = 0; m < nodes.length; m++) {
       var nn = nodes[m];
-      if (labelled.has(nn.user)) continue;
-      labelled.add(nn.user);
-      ctx.fillText(shorten(nn.user, 14), nn.cx, nn.cy - 34);
+      var bb = box.get(nn.user);
+      if (!bb) {
+        box.set(nn.user, { minX: nn.x, maxX: nn.x, minY: nn.y });
+      } else {
+        bb.minX = Math.min(bb.minX, nn.x);
+        bb.maxX = Math.max(bb.maxX, nn.x);
+        bb.minY = Math.min(bb.minY, nn.y);
+      }
     }
+    ctx.font = '10px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    box.forEach(function (bb, user) {
+      var label = shorten(user, 14);
+      var cx = (bb.minX + bb.maxX) / 2;
+      var cy = bb.minY - 16;
+      var tw = ctx.measureText(label).width;
+      // 半透明底衬：星空背景下纯文字容易糊在光晕里
+      ctx.fillStyle = 'rgba(11, 15, 26, 0.72)';
+      ctx.beginPath();
+      ctx.roundRect(cx - tw / 2 - 5, cy - 8, tw + 10, 16, 8);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.95)';
+      ctx.fillText(label, cx, cy);
+    });
+    ctx.textBaseline = 'alphabetic';
 
     ctx.restore();
   }
@@ -554,6 +614,31 @@
     cam.scale = 1;
     cam.x = 0;
     cam.y = 0;
+  }
+
+  // 按节点包围盒缩放/平移到画布中央（留 12% 边距）
+  function fitToContent() {
+    if (!nodes.length) return;
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+    }
+    var w = Math.max(1, canvas.clientWidth);
+    var h = Math.max(1, canvas.clientHeight);
+    // 边距要盖住星点半径与星座标签（标签画在最上方星点之上约 24px），
+    // 否则贴边的星座会被裁掉半个头、标签直接看不见
+    // 上边距要额外留出星座标签（画在最上方星点之上约 24 世界像素），
+    // 否则顶部那团的标签会被工具栏裁掉——标签是"这团是谁"的唯一线索
+    // 只留「星点半径 + 标签」这一小圈余量：世界坐标里给的 padding 会和
+    // 这里的比例系数叠加，两边都给太大时整张图会缩成中间一小团
+    var bw = Math.max(60, maxX - minX) + 56;
+    var bh = Math.max(60, maxY - minY) + 76;
+    var scale = Math.min((w * 0.94) / bw, (h * 0.94) / bh);
+    cam.scale = Math.max(0.4, Math.min(1.6, scale));
+    cam.x = -((minX + maxX) / 2) * cam.scale;
+    cam.y = -((minY + maxY) / 2) * cam.scale;
   }
 
   // ---------- 交互 ----------
@@ -604,7 +689,10 @@
     if (dragging) {
       var dx = e.clientX - last.x;
       var dy = e.clientY - last.y;
-      if (Math.abs(dx) + Math.abs(dy) > 2) dragMoved = true;
+      if (Math.abs(dx) + Math.abs(dy) > 2) {
+        dragMoved = true;
+        userMovedCam = true;
+      }
       cam.x += dx; cam.y += dy;
       last = { x: e.clientX, y: e.clientY };
       return;
@@ -625,6 +713,7 @@
     e.preventDefault();
     var factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
     cam.scale = Math.max(0.35, Math.min(3, cam.scale * factor));
+    userMovedCam = true;
   }, { passive: false });
 
   function showTip(e, n) {
@@ -684,6 +773,8 @@
 
   document.getElementById('reset').addEventListener('click', function () {
     fitToView();
+    userMovedCam = false;
+    fitted = false;
     alpha = 1;
   });
 
