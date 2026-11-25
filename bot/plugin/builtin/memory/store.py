@@ -45,8 +45,12 @@ SCOPE_USER = "user"
 SCOPE_GROUP = "group"
 
 # 归一化时剔除的噪声（标点/空白），仅用于去重键，不改变展示内容。
-# 用单引号原始串，避免中英文引号把字面量截断（曾因此踩过转义警告）。
-_NOISE = re.compile(r'[\s，。！？、；：“”‘’（）()\[\]【】,.!?;:~`"\'-—]+')
+#
+# 注意 `\u2014-` 这个结尾：破折号后面紧跟的 `-` 必须放在字符类末尾（或转义），
+# 否则正则会把它读成区间「从 ' 到 —」，而该区间覆盖数字与英文字母——归一化会
+# 把「喜欢 Rust」和「喜欢 Python」都变成「喜欢」，两条不同的记忆被当成同一条
+# 合并掉。这个 bug 被 test_normalize_keeps_alphanumerics 锁死。
+_NOISE = re.compile(r'[\s，。！？、；：“”‘’（）()\[\]【】,.!?;:~`"\'\u2014-]+')
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
@@ -119,7 +123,22 @@ def _unigrams(text: str) -> set[str]:
 
 
 def similarity(a: str, b: str) -> float:
-    """两条文本的相似度，0..1
+    """两条文本的相似度，0..1（见 :func:`similarity_prepared` 的说明）"""
+    return similarity_prepared(prepare(a), prepare(b))
+
+
+def prepare(text: str) -> tuple[set[str], set[str]]:
+    """预处理一条文本为 (单字集, 二元组集)
+
+    星图要在 N 条记忆间两两算相似度（N=240 时约 2.9 万对）。每次调用
+    ``similarity`` 都重新 normalize + 切词的话，单次请求要多花一两秒；
+    预处理一次、复用集合，成本降到纯集合运算。
+    """
+    return _unigrams(text), _bigrams(text)
+
+
+def similarity_prepared(a: tuple[set[str], set[str]], b: tuple[set[str], set[str]]) -> float:
+    """基于预处理结果计算相似度，0..1
 
     由两部分加权而成：
 
@@ -128,11 +147,11 @@ def similarity(a: str, b: str) -> float:
       召回直接失效；包含度对这种"一方是另一方子集"的情形更敏感。
     - **二元组 Jaccard**：惩罚语序/搭配差异，避免"猫"和"猫粮"被当成同一件事。
 
-    两者各占一半：既能召回，又不至于把无关内容并进来。用于召回排序与写入
-    时的重复合并判定。
+    两者各占一半：既能召回，又不至于把无关内容并进来。用于召回排序、写入
+    时的重复合并判定，以及记忆星图的连线强度。
     """
-    sa_uni, sb_uni = _unigrams(a), _unigrams(b)
-    sa_bi, sb_bi = _bigrams(a), _bigrams(b)
+    sa_uni, sa_bi = a
+    sb_uni, sb_bi = b
     if not sa_uni or not sb_uni:
         return 0.0
 
@@ -320,6 +339,23 @@ class MemoryStore:
         with self._lock:
             row = self._connect().execute("SELECT * FROM memories WHERE id=?", (mem_id,)).fetchone()
         return self._row_to_memory(row) if row else None
+
+    def list_all(self, *, tier: str | None = None, limit: int = 300) -> list[Memory]:
+        """跨用户列出记忆（按重要度降序）
+
+        供管理端可视化使用（记忆星图要把所有人的记忆摆在一起看）。与
+        :meth:`list_memories` 的区别只有一点：不按 scope_id 过滤。
+        """
+        sql = "SELECT * FROM memories"
+        args: list[object] = []
+        if tier:
+            sql += " WHERE tier=?"
+            args.append(tier)
+        sql += " ORDER BY importance DESC, updated_at DESC LIMIT ?"
+        args.append(limit)
+        with self._lock:
+            rows = self._connect().execute(sql, args).fetchall()
+        return [self._row_to_memory(r) for r in rows]
 
     def stats(self, *, scope: str, scope_id: int) -> dict[str, int | float]:
         with self._lock:
@@ -538,5 +574,7 @@ __all__ = [
     "Memory",
     "MemoryStore",
     "normalize",
+    "prepare",
     "similarity",
+    "similarity_prepared",
 ]

@@ -72,9 +72,15 @@ async def test_help_renders_image_segments(bot):
     result = await plugin._cmd_help(_ctx())
     assert isinstance(result, list) and result
     assert fake.calls, "应实际调用 render_html"
-    for seg in result:
-        assert seg["type"] == "image"
+    images = [seg for seg in result if seg["type"] == "image"]
+    assert images, "应至少返回一张图片"
+    for seg in images:
         assert "file" in seg["data"]
+    # 其余段只允许是「还有 N 条命令无权限」的追加文本（见 _hidden_hint）：
+    # 图片里放不下这句，但用户必须知道自己漏看了命令
+    for seg in result:
+        if seg["type"] != "image":
+            assert seg["type"] == "text" and "需要更高权限" in seg["data"]["text"]
     # HTML 卡片含命令与描述，且命令名已 escape
     html = fake.calls[0]["html"]
     assert "/help" in html

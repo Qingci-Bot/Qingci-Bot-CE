@@ -267,7 +267,7 @@ async function saveConfigJson() {
       </div>
       <div class="platform-cfg">
         <div class="platform-cfg-head">
-          <div class="form-group" style="margin: 0; flex: 1">
+          <div class="form-group grow">
             <label>OneBot（反向 WebSocket）</label>
             <div class="switch-row">
               <label class="switch">
@@ -309,7 +309,7 @@ async function saveConfigJson() {
       </div>
       <div class="platform-cfg">
         <div class="platform-cfg-head">
-          <div class="form-group" style="margin: 0; flex: 1">
+          <div class="form-group grow">
             <label>Telegram（Bot API 长轮询）</label>
             <div class="switch-row">
               <label class="switch">
@@ -361,7 +361,7 @@ async function saveConfigJson() {
       </div>
       <div class="platform-cfg">
         <div class="platform-cfg-head">
-          <div class="form-group" style="margin: 0; flex: 1">
+          <div class="form-group grow">
             <label>QQ 官方机器人（开放平台 Bot API v2）</label>
             <div class="switch-row">
               <label class="switch">
@@ -422,7 +422,7 @@ async function saveConfigJson() {
       </div>
       <div class="platform-cfg">
         <div class="platform-cfg-head">
-          <div class="form-group" style="margin: 0; flex: 1">
+          <div class="form-group grow">
             <label>OneBot 12（原生反向 WebSocket）</label>
             <div class="switch-row">
               <label class="switch">
@@ -559,6 +559,8 @@ async function saveConfigJson() {
   align-items: center;
   gap: 10px;
   margin-top: 8px;
+  /* 说明文案较长时换行，不把开关压成一条缝 */
+  flex-wrap: wrap;
 }
 
 .json-editor {

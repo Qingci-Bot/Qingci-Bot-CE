@@ -30,6 +30,10 @@ from ...rule import Rule, rate_limit
 
 logger = logging.getLogger("qingci-bot.plugin.chat")
 
+# 命令前缀：与 SDK 的 rule.command 保持一致（该处固定识别 "/"，且允许省略）。
+# 抽成常量是为了让「命令样式文本不进聊天」这条判断只有一个来源。
+_COMMAND_PREFIX = "/"
+
 # ============ 群配置缓存 ============
 # 模块级缓存：{group_id: 配置 dict 或 None（未配置）}，miss 时查 DB。
 # 使用 OrderedDict 实现 LRU（容量上限 512），防止群数无限增长时缓存无界膨胀。
@@ -87,6 +91,15 @@ def chat_trigger() -> Rule:
 
     async def _check(bot, event, ctx) -> bool:
         if not ctx.plain_text:
+            return False
+
+        # 命令样式文本不交给聊天。
+        #
+        # 命令 Matcher 因**权限不足**被跳过时，消息会一路落到本规则（priority=50
+        # 是最低优先级）。若在这里接管，LLM 会把「/status」当普通文本回答，
+        # 给出「一切正常」这类臆测内容——比不回复更糟，用户还以为命令生效了。
+        # 前缀与 SDK rule.command 的解析保持一致（都是 "/"）。
+        if ctx.plain_text.startswith(_COMMAND_PREFIX):
             return False
 
         cfg = bot.config.bot

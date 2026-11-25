@@ -79,13 +79,22 @@ if _uv_exe:
 else:
     print("[spec] WARNING: uv not found on PATH; plugin deps will fall back to bundled pip")
 
+# 插件自带 Web 页面（静态文件）：register_page 会在运行时按「插件模块同级 web/」
+# 探测目录，冻结后必须让这个目录真实存在于产物里，否则「记忆星图」入口点开是空白。
+# 目录不存在时跳过（例如从裁剪过的源码树构建），不让构建失败。
+_plugin_web_datas = []
+for _pdir in ('bot/plugin/builtin/memory/web',):
+    if os.path.isdir(_pdir):
+        _plugin_web_datas.append((_pdir, _pdir))
+        print(f"[spec] bundling plugin web page -> {_pdir}")
+
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=litellm_binaries + tiktoken_binaries + sdk_binaries + pip_binaries + pw_binaries,
-    datas=litellm_datas + tiktoken_datas + sdk_datas + pip_datas + pw_datas + uv_datas + ([
-        (_ICON, '.'),
-    ] if os.path.exists(_ICON) else []),
+    datas=litellm_datas + tiktoken_datas + sdk_datas + pip_datas + pw_datas + uv_datas
+    + _plugin_web_datas
+    + ([(_ICON, '.')] if os.path.exists(_ICON) else []),
     hiddenimports=[
         *litellm_hiddenimports,
         *tiktoken_hiddenimports,

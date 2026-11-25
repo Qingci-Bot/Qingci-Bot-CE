@@ -43,6 +43,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from ....llm.memory import HistoryDecision, SummaryPolicy
@@ -50,6 +51,7 @@ from ...base import PluginBase
 from ...matcher import MatcherContext, on_command
 from ...permission import EVERYONE
 from .extract import Fact, extract_facts
+from .graph import MAX_NODES, build_graph
 from .store import SCOPE_USER, TIER_LONG, TIER_PERMANENT, Memory, MemoryStore, similarity
 
 logger = logging.getLogger("qingci-bot.plugin.memory")
@@ -180,6 +182,36 @@ class MemoryPlugin(PluginBase):
             f"记忆插件已加载（注入上限 {self._settings.max_inject_chars} 字、"
             f"召回 {self._settings.recall_limit} 条、提炼={'开' if self._settings.extract else '关'}）"
         )
+
+        # Web 管理页面「记忆星图」：静态页（同目录 web/）+ 只读数据接口。
+        # 页面挂在插件卡片上，iframe 打开，鉴权沿用 X-API-Key。
+        #
+        # static_dir 显式传入而不是让 SDK 反射探测：PyInstaller 冻结后模块的
+        # __file__ 指向 _MEIPASS 下的包路径，spec 里的 datas 也放在同一位置，
+        # 显式路径与探测结果一致但更直观——探测失败时只会静默得到空白页。
+        self.register_page(
+            "记忆星图",
+            icon="✦",
+            static_dir=str(Path(__file__).parent / "web"),
+        )
+        self.register_api(
+            "graph",
+            self._api_graph,
+            description="记忆星图数据（节点 / 连线 / 统计，只读）",
+        )
+
+    async def _api_graph(self, request: Any) -> dict:
+        """记忆星图数据接口
+
+        只读、无参数：星图是「总览」而非查询工具。想按关键词找记忆请用
+        ``/memory search``（聊天侧）或页面顶部的搜索框（前端本地过滤）。
+        """
+        store = self._store
+        if store is None:
+            return {"nodes": [], "edges": [], "stats": {"total": 0, "shown": 0}}
+        # 多取一些再交给 build_graph 截断，保证「前 N 条」是按显著度全局取的
+        memories = await asyncio.to_thread(store.list_all, limit=MAX_NODES * 2)
+        return await asyncio.to_thread(build_graph, memories, max_nodes=MAX_NODES)
 
     async def on_unload(self) -> None:
         if self.llm is not None:
