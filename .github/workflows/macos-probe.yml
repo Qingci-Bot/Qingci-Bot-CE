@@ -1,0 +1,26 @@
+name: macOS runner probe
+
+# 临时诊断用：确认本仓库能否调度 GitHub 托管的 macOS（Apple Silicon）runner。
+# 只做最少的探测（架构 + 系统版本），不构建任何产物。
+# 用途：发版流水线里 macos-dmg job 曾在启动后 1 秒被取消、未分配到 runner，
+# 需要区分「仓库/组织策略不允许 macOS runner」与「构建脚本问题」。
+# 诊断完成后删除本文件。
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Probe Apple Silicon runner
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - name: Report host facts
+        run: |
+          echo "uname -m: $(uname -m)"
+          echo "sw_vers:"; sw_vers
+          echo "xcode: $(xcodebuild -version 2>/dev/null | head -1 || echo none)"
+          echo "codesign: $(command -v codesign || echo missing)"
+          echo "lipo: $(command -v lipo || echo missing)"
+          echo "plutil: $(command -v plutil || echo missing)"
+          echo "node: $(node --version 2>/dev/null || echo none)"
+          echo "python3: $(python3 --version 2>/dev/null || echo none)"

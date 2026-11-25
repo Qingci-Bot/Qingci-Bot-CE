@@ -54,6 +54,11 @@ if [ -z "$VERSION" ]; then
 fi
 [ -n "$VERSION" ] || { echo "ERROR: 无法确定版本号，请用 --version 指定" >&2; exit 1; }
 
+# 容忍 tag 风格的 "v" 前缀：dpkg 要求 Version 以数字开头，rpm 也不接受这种前缀。
+# 调用方（CI 的 tag 触发路径）本来就会 ${ver#v} 剥掉，但这里再兜一层——忘一次
+# 就是 deb 打包阶段直接失败、前面几分钟构建全部白做，代价远高于这两行。
+VERSION="${VERSION#v}"
+
 # 预发布版本有两种写法，分工不同：
 #
 #  - 包元数据（deb 的 Version / rpm 的 Version 字段）必须是 `~`：1.23.0-rc1 → 1.23.0~rc1。
