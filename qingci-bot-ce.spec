@@ -117,6 +117,9 @@ a = Analysis(
         'bot.plugin.builtin.help',
         'bot.plugin.builtin.imagegen',
         'bot.plugin.builtin.knowledge',
+        'bot.plugin.builtin.memory',
+        'bot.plugin.builtin.memory.store',
+        'bot.plugin.builtin.memory.extract',
         # ---- 新功能模块（延迟导入，modulegraph 不会自动收集）----
         'bot.core.message',          # 类型化消息构造器（Message/MessageSegment）
         'bot.llm.mcp',               # MCP 桥接（setup_mcp_tools 内延迟导入）

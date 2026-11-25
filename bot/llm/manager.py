@@ -7,8 +7,9 @@
 特性：
 - 基于 LiteLLMAdapter 统一调用 100+ LLM 提供商
 - 会话历史双写：内存缓存 + 数据库持久化（可选）
-- 按 max_history 条数与 max_context_tokens 双重裁剪
-- 会话摘要（session_summary.enabled）：历史超长时异步摘要压缩，保留最近 N 轮原文
+- 裁剪/摘要的**决策**由记忆提供方（内置 memory 插件）给出，本类只负责
+  落库一致性；未注入提供方时退回保守硬裁剪（见 bot/llm/memory.py）
+- 每轮对话前由提供方增强系统提示词（注入召回记忆），回复后异步观察沉淀
 - Function Calling（llm.enable_tools）：chat_with_tools 多轮工具调用循环
 - clear_session 为 async 方法，安全处理与进行中 chat 的并发竞态
 - 同一 session key 的并发调用通过 asyncio.Lock 串行化
@@ -25,6 +26,7 @@ from ..core.tasks import spawn_background_task
 from ..db.database import Database
 from .adapter import LLMAdapter
 from .litellm_adapter import LiteLLMAdapter
+from .memory import FallbackMemoryProvider, MemoryProvider, SummaryPolicy
 
 if TYPE_CHECKING:
     from .mcp import MCPBridge
@@ -76,6 +78,10 @@ class LLMManager:
         # 模型能力判断缓存：模型不变时 supports_function_calling 结果恒定，
         # 避免每条消息都走 litellm.get_model_info；reload 时一并清空
         self._tools_support_cache: bool | None = None
+        # 记忆提供方：裁剪/摘要策略、提示词增强、轮次观察都由它实现。
+        # 默认是只做硬裁剪的兜底实现，内置 memory 插件在 on_load 时替换掉
+        # （见 bot/llm/memory.py 的模块注释：框架只留接缝，能力在插件）。
+        self._memory: MemoryProvider = FallbackMemoryProvider()
 
     # ============ 适配器管理 ============
 
@@ -185,7 +191,7 @@ class LLMManager:
             return self._get_lock(key)
 
     async def _clear_one(self, key: str) -> None:
-        """清除单个会话（内存 + DB），调用方须持有该会话锁
+        """清除单个会话（内存 + DB + 该会话的短期记忆），调用方须持有该会话锁
 
         在锁内同步清除内存与 DB，避免清除期间新的 chat 从 DB 重载出
         尚未删除的历史（内存与 DB 分裂导致历史"复活"）。
@@ -197,6 +203,12 @@ class LLMManager:
                 await self._db.clear_sessions(key)
             except Exception:
                 logger.exception(f"清除 DB 会话失败: key={key}, model={self._config.model}")
+        # 短期记忆随会话一起清空；长期/永久记忆属于用户资产，不在此清除
+        # （要清需用 /memory 命令显式操作）
+        try:
+            await self._memory.forget(session_key=key)
+        except Exception:
+            logger.exception(f"清除会话短期记忆失败: key={key}")
 
     async def clear_session_by_key(self, key: str) -> None:
         """按 session key 清除单个会话（供 API 路由等外部调用）
@@ -266,161 +278,165 @@ class LLMManager:
         except (ValueError, IndexError):
             return 0
 
-    # ============ 历史裁剪 ============
+    # ============ 历史裁剪（决策交给记忆提供方） ============
+
+    def _summary_policy(self) -> SummaryPolicy:
+        """把 ``session_summary`` 与 ``llm.enable_summary`` 翻译成策略值对象
+
+        两个开关任一为真即启用摘要（历史上先后加了这两个开关，语义已合并），
+        阈值类参数统一读 ``session_summary`` 节。
+        """
+        cfg = self._summary_config
+        return SummaryPolicy(
+            enabled=bool(cfg.enabled or self._config.enable_summary),
+            max_messages=cfg.max_messages,
+            max_tokens=cfg.max_tokens,
+            keep_recent_turns=cfg.keep_recent_turns,
+            summary_max_tokens=cfg.summary_max_tokens,
+        )
+
+    async def _rewrite_db_sessions(self, key: str, msgs: list[dict]) -> None:
+        """用 ``msgs`` 整体重写会话记录（摘要压缩后条数对不上，只能重写）"""
+        if self._db is None:
+            return
+        try:
+            await self._db.clear_sessions(key)
+            for m in msgs:
+                content = m.get("content")
+                if not isinstance(content, str):
+                    content = str(content) if content is not None else ""
+                await self._db.save_session(key, m.get("role", "user"), content)
+        except Exception:
+            logger.exception(
+                f"会话历史重写失败（内存已更新，重启后将回退旧历史）: "
+                f"key={key}, model={self._config.model}"
+            )
 
     async def _trim_history(self, key: str) -> bool:
-        """异步裁剪会话历史，确保不超过 max_history 和 max_context_tokens
+        """把「本次请求该带哪些历史」交给记忆提供方决定，并保持 DB 与内存一致
 
-        裁剪策略：
-        1. 按条数硬裁剪（每轮 = user + assistant）
-        2. token 超限时：
-           - session_summary.enabled 且达到阈值 -> 将较早消息异步摘要压缩
-           - 否则/摘要失败 -> 逐条硬裁剪降级
+        裁剪/摘要策略属于记忆能力，由 ``MemoryProvider``（内置 memory 插件）
+        决定；未注入提供方时退回 ``FallbackMemoryProvider`` 的保守硬裁剪。
+        本方法只负责：调用提供方 → 更新内存 → 按决定让 DB 对齐。
 
-        注意：仅裁剪内存中的历史。DB 中的旧记录由 _ensure_session_loaded
-        的 limit 参数限制加载；摘要成功时会同步重写 DB 会话以持久化 summary。
+        落库逻辑刻意留在框架侧：这是「会话表一致性」问题而非记忆策略问题。
+        提供方只回答"用哪些消息、要不要整体重写"，由这里一次性完成 DB 写入，
+        避免两处各写一份导致内存与 DB 分裂、历史"复活"。
 
         Returns:
-            是否发生了摘要压缩（历史已重写 DB 且包含本条用户消息）；chat()
-            据此跳过后续的用户消息落库，避免摘要场景下消息重复写入 DB。
+            是否走了整体重写 DB 的路径（摘要压缩）。chat() 据此跳过本条用户
+            消息的独立落库，避免重复写入。
         """
         msgs = self._sessions.get(key, [])
         if not msgs:
             return False
 
-        # 1. 按条数裁剪（每轮 = user + assistant）
-        max_msgs = self._config.max_history * 2
-        if len(msgs) > max_msgs:
-            msgs = msgs[-max_msgs:]
-            self._sessions[key] = msgs
-            # 同步裁剪 DB 中的旧记录，避免会话表无界增长
-            if self._db is not None:
-                try:
-                    await self._db.trim_sessions(key, max_msgs)
-                except Exception:
-                    logger.exception(f"裁剪 DB 会话历史失败: key={key}, model={self._config.model}")
-
-        # 2. 按 token 上限裁剪（保留最近至少 1 轮）
-        max_tokens = self._config.max_context_tokens
-        if max_tokens <= 0 or len(msgs) <= 2:
-            return False
-        total = self._estimate_messages_tokens(msgs)
-        if total <= max_tokens:
-            return False
-
-        # 2a. 优先尝试摘要压缩（开关默认关闭）
-        if await self._summarize_history(key, msgs):
-            return True
-
-        # 2b. 降级：逐条硬裁剪（token 估算走缓存，不重复计数）
-        while len(msgs) > 2 and total > max_tokens:
-            total -= self._estimate_message_tokens(msgs.pop(0))
-        self._sessions[key] = msgs
-        return False
-
-    async def _summarize_history(self, key: str, msgs: list[dict]) -> bool:
-        """将较早消息异步摘要压缩为一条 summary 消息，保留最近 N 轮原文
-
-        summary 以 system 消息形式持久化（随会话存储写回 DB），
-        后续滚动摘要时会将其作为输入一并压缩，避免重复摘要同一内容。
-        返回 True 表示摘要成功并已替换历史，False 表示需降级硬裁剪。
-        """
-        cfg = self._summary_config
-        # 开关联动：session_summary.enabled 与 llm.enable_summary 任一为 true 即启用
-        if not (cfg.enabled or self._config.enable_summary):
-            return False
-
-        total = self._estimate_messages_tokens(msgs)
-        # 未达触发阈值（条数或 token 任一超限才摘要）
-        if len(msgs) < cfg.max_messages and total <= cfg.max_tokens:
-            return False
-
-        # 保留最近 N 轮原文，并对齐到 user 起始，避免把一轮对话勈成两半
-        keep = max(2, cfg.keep_recent_turns * 2)
-        if len(msgs) <= keep + 2:
-            return False
-        split = len(msgs) - keep
-        while split < len(msgs) - 2 and msgs[split].get("role") != "user":
-            split += 1
-        old_msgs, recent_msgs = msgs[:split], msgs[split:]
-        if not old_msgs:
-            return False
-
-        # 构造待摘要的对话文本（含此前滚动摘要的 system 消息）
-        lines: list[str] = []
-        for m in old_msgs:
-            content = m.get("content")
-            if not isinstance(content, str):
-                content = str(content) if content is not None else ""
-            lines.append(f"{m.get('role', 'user')}: {content}")
-        transcript = "\n".join(lines)
-        prompt = (
-            "请将以下对话历史压缩为一段简洁、客观的中文摘要，"
-            "保留关键事实、结论与待办事项，不超过 300 字，直接输出摘要内容：\n\n"
-            f"{transcript}"
+        decision = await self._memory.manage_history(
+            session_key=key,
+            messages=list(msgs),
+            max_messages=self._config.max_history * 2,
+            max_tokens=self._config.max_context_tokens,
+            summary=self._summary_policy(),
+            estimate=self._estimate_messages_tokens,
         )
-
-        try:
-            result = await self.adapter.chat_detail(
-                messages=[{"role": "user", "content": prompt}],
-                system_prompt="你是对话摘要助手，只输出摘要本身，不要任何额外说明。",
-                max_tokens=cfg.summary_max_tokens,
-                temperature=0.3,
-            )
-        except Exception as e:
-            logger.error(
-                f"会话摘要生成失败，降级硬裁剪: {e}, key={key}, model={self._config.model}"
-            )
+        new_msgs = decision.messages
+        # 内容与条数都没变就不必碰内存与 DB
+        if not decision.rewrite and len(new_msgs) == len(msgs):
             return False
 
-        summary = (result.content or "").strip()
-        if not summary:
-            logger.warning(f"会话摘要为空，降级硬裁剪: key={key}")
-            return False
-
-        # 摘要用量入库（fire-and-forget，受 usage_tracking 开关控制）
-        if self._db is not None and result.usage and self._usage_tracking:
-            usage = result.usage
-            spawn_background_task(
-                self._db.save_usage(
-                    session_key=key,
-                    user_id=self._user_id_from_key(key),
-                    model=self._config.model,
-                    prompt_tokens=int(usage.get("prompt_tokens", 0) or 0),
-                    completion_tokens=int(usage.get("completion_tokens", 0) or 0),
-                    source="summary",
-                ),
-                name="save_usage_summary",
-            )
-
-        summary_msg = {
-            "role": "system",
-            "content": f"[以下是早前对话的摘要]\n{summary}",
-        }
-        new_msgs = [summary_msg] + recent_msgs
         self._sessions[key] = new_msgs
 
-        # summary 持久化：重写 DB 会话（清除旧记录后写入 summary + 最近消息）
-        if self._db is not None:
-            try:
-                await self._db.clear_sessions(key)
-                await self._db.save_session(key, "system", summary_msg["content"])
-                for m in recent_msgs:
-                    content = m.get("content")
-                    if not isinstance(content, str):
-                        content = str(content) if content is not None else ""
-                    await self._db.save_session(key, m.get("role", "user"), content)
-            except Exception:
-                logger.exception(
-                    f"会话摘要持久化失败（内存已更新，重启后将回退旧历史）: "
-                    f"key={key}, model={self._config.model}"
-                )
+        if decision.rewrite:
+            await self._rewrite_db_sessions(key, new_msgs)
+            logger.info(
+                f"会话历史已由记忆提供方重写: key={key}, "
+                f"{len(msgs)} 条 -> {len(new_msgs)} 条, provider={self._memory_name()}"
+            )
+            return True
 
-        logger.info(
-            f"会话历史已摘要压缩: key={key}, 旧消息 {len(old_msgs)} 条 -> "
-            f"summary 1 条, 保留最近 {len(recent_msgs)} 条"
-        )
-        return True
+        if len(new_msgs) < len(msgs) and self._db is not None:
+            try:
+                await self._db.trim_sessions(key, len(new_msgs))
+            except Exception:
+                logger.exception(f"裁剪 DB 会话历史失败: key={key}, model={self._config.model}")
+        return False
+
+    # ============ 记忆提供方 ============
+
+    def _memory_name(self) -> str:
+        return str(getattr(self._memory, "name", type(self._memory).__name__))
+
+    def set_memory_provider(self, provider: MemoryProvider | None) -> None:
+        """挂载记忆提供方（内置 memory 插件在 on_load 时调用）
+
+        传 None 恢复兜底实现。重复调用是幂等的——插件重载会重新注入同一个
+        实例，无需先卸载。
+        """
+        if provider is None:
+            self._memory = FallbackMemoryProvider()
+            logger.info("记忆提供方已重置为兜底实现（仅硬裁剪）")
+            return
+        self._memory = provider
+        logger.info(f"记忆提供方已挂载: {self._memory_name()}")
+
+    @property
+    def memory(self) -> MemoryProvider:
+        return self._memory
+
+    async def _augment_prompt(
+        self,
+        key: str,
+        message_type: str,
+        group_id: int,
+        user_id: int,
+        query: str,
+        system_prompt: str,
+    ) -> str:
+        """让提供方往系统提示词里注入召回的记忆
+
+        失败时原样返回：记忆是增强能力，读不出来就少记一点，绝不能因为
+        记忆库损坏让用户彻底收不到回复。
+        """
+        try:
+            return await self._memory.augment_prompt(
+                session_key=key,
+                user_id=user_id,
+                group_id=group_id if message_type == "group" else 0,
+                query=query,
+                system_prompt=system_prompt,
+            )
+        except Exception:
+            logger.exception(f"记忆增强失败，使用原始系统提示词: key={key}")
+            return system_prompt
+
+    def _observe_turn(
+        self,
+        key: str,
+        message_type: str,
+        group_id: int,
+        user_id: int,
+        user_text: str,
+        assistant_text: str,
+    ) -> None:
+        """把一轮对话交给提供方观察（后台执行，不阻塞回复）
+
+        刻意 fire-and-forget：沉淀长期记忆可能要额外调一次模型，让用户等
+        这个毫无必要；失败只记日志，不影响这一轮已生成的回复。
+        """
+
+        async def _run() -> None:
+            try:
+                await self._memory.observe_turn(
+                    session_key=key,
+                    user_id=user_id,
+                    group_id=group_id if message_type == "group" else 0,
+                    user_text=user_text,
+                    assistant_text=assistant_text,
+                )
+            except Exception:
+                logger.exception(f"记忆观察失败: key={key}, provider={self._memory_name()}")
+
+        spawn_background_task(_run(), name="memory_observe")
 
     async def clear_session(self, message_type: str = "", group_id: int = 0, user_id: int = 0):
         """清除会话历史
@@ -449,6 +465,10 @@ class LLMManager:
                 async with lock:
                     self._sessions.pop(k, None)
                     self._loaded_sessions.discard(k)
+                    try:
+                        await self._memory.forget(session_key=k)
+                    except Exception:
+                        logger.exception(f"清除会话短期记忆失败: key={k}")
             # 不清空 _locks，避免进行中的 chat 丢失锁保护
             if self._db is not None:
                 try:
@@ -705,15 +725,20 @@ class LLMManager:
                 and self._tool_registry.names()
                 and self._model_supports_tools()
             )
+            # 记忆增强：由提供方把召回的记忆注入系统提示词（无内容时原样返回）
+            effective_prompt = await self._augment_prompt(
+                key,
+                message_type,
+                group_id,
+                user_id,
+                message,
+                system_prompt if system_prompt is not None else self._config.system_prompt,
+            )
             try:
                 if use_tools:
                     reply, usage = await self.chat_with_tools(
                         messages=self._sessions[key],
-                        system_prompt=(
-                            system_prompt
-                            if system_prompt is not None
-                            else self._config.system_prompt
-                        ),
+                        system_prompt=effective_prompt,
                         max_tokens=self._config.max_tokens,
                         temperature=self._config.temperature,
                         images=images,
@@ -721,11 +746,7 @@ class LLMManager:
                 else:
                     result = await self.adapter.chat_detail(
                         messages=self._sessions[key],
-                        system_prompt=(
-                            system_prompt
-                            if system_prompt is not None
-                            else self._config.system_prompt
-                        ),
+                        system_prompt=effective_prompt,
                         max_tokens=self._config.max_tokens,
                         temperature=self._config.temperature,
                         images=images,
@@ -809,6 +830,9 @@ class LLMManager:
                     logger.exception(f"持久化助手回复失败: key={key}, model={self._config.model}")
                     # DB 失败时仍保留内存（容错），记录不一致
             self._sessions.setdefault(key, []).append({"role": "assistant", "content": reply})
+            # 记忆观察（后台）：沉淀长期/永久记忆、强化显著性、演化。
+            # 放在历史已完整落库之后，保证提供方看到的是最终成功的一轮。
+            self._observe_turn(key, message_type, group_id, user_id, message, reply)
             return reply
 
     async def chat_stream(
@@ -852,10 +876,19 @@ class LLMManager:
             success = False
             cancelled = False
             gen_exit = False
+            # 记忆增强：流式路径同样注入召回的记忆（无内容时原样返回）
+            effective_prompt = await self._augment_prompt(
+                key,
+                message_type,
+                group_id,
+                user_id,
+                message,
+                self._config.system_prompt,
+            )
             try:
                 async for chunk in self.adapter.chat_stream(
                     messages=self._sessions[key],
-                    system_prompt=self._config.system_prompt,
+                    system_prompt=effective_prompt,
                     max_tokens=self._config.max_tokens,
                     temperature=self._config.temperature,
                 ):
@@ -893,6 +926,8 @@ class LLMManager:
                     self._sessions.setdefault(key, []).append(
                         {"role": "assistant", "content": full_reply}
                     )
+                    # 记忆观察（后台）：与 chat() 一致，只在成功产出回复后触发
+                    self._observe_turn(key, message_type, group_id, user_id, message, full_reply)
                 elif not success:
                     # 失败（含取消）时回滚用户消息
                     if self._sessions[key] and self._sessions[key][-1]["role"] == "user":
