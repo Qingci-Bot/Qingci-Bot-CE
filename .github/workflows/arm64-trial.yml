@@ -79,7 +79,7 @@ jobs:
         run: .venv/bin/python scripts/pack_backend.py
 
       - name: Package server deb + rpm (arm64)
-        run: bash scripts/pack_linux_server.sh --version 0.0.0-trial --out dist/linux
+        run: bash scripts/pack_linux_server.sh --version 1.22.4 --out dist/linux
 
       - name: Package desktop deb + rpm (native arm64)
         working-directory: desktop/electron
@@ -99,7 +99,7 @@ jobs:
           ls -l dist/linux
 
       - name: Verify package metadata & filenames (arm64 / aarch64)
-        run: bash scripts/verify_linux_packages.sh dist/linux 0.0.0-trial arm64 aarch64
+        run: bash scripts/verify_linux_packages.sh dist/linux 1.22.4 arm64 aarch64
 
       - name: Install smoke (deb / rpm, native arm64)
         run: bash scripts/smoke_install_packages.sh dist/linux
