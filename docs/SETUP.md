@@ -151,10 +151,10 @@ chmod +x install.sh
 
 ### Linux 发行版包（deb / rpm）
 
-发布页提供两款 Linux 安装包，按发行版选择 `.deb`（Debian / Ubuntu）或 `.rpm`（Fedora / RHEL / openSUSE）。文件名形如 `qingci-bot-ce_<ver>_amd64.deb`（桌面版）、`qingci-bot-ce-server_<ver>_amd64.deb`（服务端版），rpm 对应 `qingci-bot-ce-<ver>-1.x86_64.rpm` 与 `qingci-bot-ce-server-<ver>-1.x86_64.rpm`；同页面 `SHA256SUMS.txt` 可用于校验下载完整性（`sha256sum -c SHA256SUMS.txt`）。
+发布页提供两款 Linux 安装包，按发行版选择 `.deb`（Debian / Ubuntu）或 `.rpm`（Fedora / RHEL / openSUSE）。文件名形如 `qingci-bot-ce-<ver>-linux-x64.deb`（桌面版）、`qingci-bot-ce-server-<ver>-linux-x64.deb`（服务端版），rpm 对应 `qingci-bot-ce-<ver>-linux-x64.rpm` 与 `qingci-bot-ce-server-<ver>-linux-x64.rpm`；同页面 `SHA256SUMS.txt` 可用于校验下载完整性（`sha256sum -c SHA256SUMS.txt`）。
 
 **ARM64（aarch64）同样提供全套四个包**（1.22.4 起），用于树莓派 4/5、ARM 云主机（如 Ampere / Graviton）、Apple Silicon 上的 Linux 虚拟机：
-deb 文件名后缀为 `_arm64.deb`，rpm 为 `-1.aarch64.rpm`（两种格式的架构写法不同，属规范差异）。安装命令与 x64 完全一致，把文件名里的架构后缀换掉即可；不确定机器架构时 `uname -m` 输出 `aarch64` 即为 ARM64。
+文件名统一为 `<包名>-<版本>-<平台>-<架构>.<ext>`，架构标识只有两种：`x64` 与 `arm64`（deb 包内的 `Architecture` 字段仍是 `amd64` / `arm64`，rpm 是 `x86_64` / `aarch64`——那是格式规范，不影响文件名）。安装命令与 x64 完全一致，把文件名里的 `x64` 换成 `arm64` 即可；不确定机器架构时 `uname -m` 输出 `aarch64` 即为 ARM64。
 
 > **发行版要求**：Linux 包自带 Python 运行时，要求 **glibc ≥ 2.35**——即 Ubuntu 22.04+、
 > Debian 12+、Fedora 36+ 可用。1.22.0 曾在 24.04 上构建，导致 22.04 / Debian 12 启动时报
@@ -167,10 +167,10 @@ deb 文件名后缀为 `_arm64.deb`，rpm 为 `-1.aarch64.rpm`（两种格式的
 **服务端版**（无桌面环境，由 systemd 托管）：
 
 ```bash
-# Debian / Ubuntu（ARM64 用 _arm64.deb）
-sudo apt install ./qingci-bot-ce-server_<ver>_amd64.deb
-# Fedora / RHEL（ARM64 用 -1.aarch64.rpm）
-sudo dnf install ./qingci-bot-ce-server-<ver>-1.x86_64.rpm
+# Debian / Ubuntu（ARM64 用 -linux-arm64.deb）
+sudo apt install ./qingci-bot-ce-server-<ver>-linux-x64.deb
+# Fedora / RHEL（ARM64 用 -linux-arm64.rpm）
+sudo dnf install ./qingci-bot-ce-server-<ver>-linux-x64.rpm
 
 sudo systemctl enable --now qingci-bot-ce     # 启动服务
 sudo systemctl status qingci-bot-ce
@@ -185,10 +185,10 @@ sudo journalctl -u qingci-bot-ce -f           # 查看日志
 **桌面版**（图形环境，Electron 壳）：
 
 ```bash
-# Debian / Ubuntu（ARM64 用 _arm64.deb）
-sudo apt install ./qingci-bot-ce_<ver>_amd64.deb
-# Fedora / RHEL（ARM64 用 -1.aarch64.rpm）
-sudo dnf install ./qingci-bot-ce-<ver>-1.x86_64.rpm
+# Debian / Ubuntu（ARM64 用 -linux-arm64.deb）
+sudo apt install ./qingci-bot-ce-<ver>-linux-x64.deb
+# Fedora / RHEL（ARM64 用 -linux-arm64.rpm）
+sudo dnf install ./qingci-bot-ce-<ver>-linux-x64.rpm
 ```
 
 - 安装后从应用菜单启动「Qingci-Bot CE」；程序目录 `/opt/Qingci-Bot CE`（可执行文件 `qingci-bot-ce`），数据落在 `~/.local/share/Qingci-Bot CE`（XDG 规范，`QINGCI_DATA_HOME` 可覆盖）

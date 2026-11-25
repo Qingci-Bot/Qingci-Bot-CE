@@ -74,18 +74,18 @@ uv run python main.py --host 127.0.0.1
 
 | 场景 | 文件 | 说明 |
 | --- | --- | --- |
-| Windows 桌面（推荐） | `qingci-bot-ce-<ver>-x64-setup.exe` | NSIS 安装向导，可选安装目录与数据目录 |
-| Windows 桌面（免安装） | `qingci-bot-ce-<ver>-x64-portable.zip` | 解压即用，解压后运行 `Qingci-Bot CE.exe` |
-| Debian / Ubuntu 桌面 | `qingci-bot-ce_<ver>_amd64.deb` | 应用菜单启动，数据在 `~/.local/share/Qingci-Bot CE` |
-| Fedora / RHEL 桌面 | `qingci-bot-ce-<ver>-1.x86_64.rpm` | 同上 |
-| Debian / Ubuntu 服务端 | `qingci-bot-ce-server_<ver>_amd64.deb` | headless + systemd，装完 `systemctl start qingci-bot-ce` |
-| Fedora / RHEL 服务端 | `qingci-bot-ce-server-<ver>-1.x86_64.rpm` | 同上 |
-| Debian / Ubuntu 桌面（ARM64） | `qingci-bot-ce_<ver>_arm64.deb` | 树莓派 4/5、ARM 云主机、Apple Silicon 虚拟机等 arm64 桌面 |
-| Fedora / RHEL 桌面（ARM64） | `qingci-bot-ce-<ver>-1.aarch64.rpm` | 同上 |
-| Debian / Ubuntu 服务端（ARM64） | `qingci-bot-ce-server_<ver>_arm64.deb` | arm64 服务器，headless + systemd |
-| Fedora / RHEL 服务端（ARM64） | `qingci-bot-ce-server-<ver>-1.aarch64.rpm` | 同上 |
-| macOS 桌面（Apple 芯片） | `qingci-bot-ce-<ver>-arm64.dmg` | 仅 Apple Silicon + macOS 13 Ventura 或更高；首次打开需右键「打开」（ad-hoc 签名，无 Apple 证书） |
-| macOS 桌面（免安装） | `qingci-bot-ce-<ver>-arm64.zip` | 解压后为 `Qingci-Bot CE.app` |
+| Windows 桌面（推荐） | `qingci-bot-ce-<ver>-windows-x64-setup.exe` | NSIS 安装向导，可选安装目录与数据目录 |
+| Windows 桌面（免安装） | `qingci-bot-ce-<ver>-windows-x64-portable.zip` | 解压即用，解压后运行 `Qingci-Bot CE.exe` |
+| Debian / Ubuntu 桌面 | `qingci-bot-ce-<ver>-linux-x64.deb` | 应用菜单启动，数据在 `~/.local/share/Qingci-Bot CE` |
+| Fedora / RHEL 桌面 | `qingci-bot-ce-<ver>-linux-x64.rpm` | 同上 |
+| Debian / Ubuntu 服务端 | `qingci-bot-ce-server-<ver>-linux-x64.deb` | headless + systemd，装完 `systemctl start qingci-bot-ce` |
+| Fedora / RHEL 服务端 | `qingci-bot-ce-server-<ver>-linux-x64.rpm` | 同上 |
+| Debian / Ubuntu 桌面（ARM64） | `qingci-bot-ce-<ver>-linux-arm64.deb` | 树莓派 4/5、ARM 云主机、Apple Silicon 虚拟机等 arm64 桌面 |
+| Fedora / RHEL 桌面（ARM64） | `qingci-bot-ce-<ver>-linux-arm64.rpm` | 同上 |
+| Debian / Ubuntu 服务端（ARM64） | `qingci-bot-ce-server-<ver>-linux-arm64.deb` | arm64 服务器，headless + systemd |
+| Fedora / RHEL 服务端（ARM64） | `qingci-bot-ce-server-<ver>-linux-arm64.rpm` | 同上 |
+| macOS 桌面（Apple 芯片） | `qingci-bot-ce-<ver>-macos-arm64.dmg` | 仅 Apple Silicon + macOS 13 Ventura 或更高；首次打开需右键「打开」（ad-hoc 签名，无 Apple 证书） |
+| macOS 桌面（免安装） | `qingci-bot-ce-<ver>-macos-arm64.zip` | 解压后为 `Qingci-Bot CE.app` |
 | 校验和 | `SHA256SUMS.txt` | `sha256sum -c SHA256SUMS.txt` 校验上述 12 个包（含 arm64 / macOS） |
 
 Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。macOS 只提供 Apple Silicon（arm64）+ macOS 13 Ventura 及以上的版本，不提供 Intel 版本。

@@ -14,6 +14,11 @@
 #   scripts/verify_linux_packages.sh dist/linux 1.22.4-rc1 amd64 x86_64
 #   scripts/verify_linux_packages.sh dist/linux 1.22.4-rc1 arm64 aarch64
 #
+# 命名约定（1.23.0-rc3 起统一，见 scripts/normalize_linux_artifacts.sh）：
+#   <包名>-<版本>-linux-<架构标识>.deb|.rpm   如 qingci-bot-ce-1.23.0-linux-x64.deb
+# 架构标识用 x64/arm64（而不是 deb 的 amd64、rpm 的 x86_64），让发布页上
+# 各平台的文件名可读性一致；包内 Architecture 字段仍按格式规范。
+#
 # 期望数量固定为 2 deb + 2 rpm（桌面版 + 服务端版）。
 set -euo pipefail
 
@@ -33,7 +38,18 @@ ver="${VER_IN#v}"
 # 文件名可能两种写法都出现（desktop 取 appInfo.version，server 脚本转 ~）。
 ver_pkg="${ver//-rc/~rc}"
 
-echo "== $PKG_DIR (期望架构: deb=$EXPECT_DEB_ARCH rpm=$EXPECT_RPM_ARCH) =="
+# 文件名里的架构标识：x64 / arm64（与 Windows / macOS 产物一致）
+token_of() {
+  case "$1" in
+    amd64|x86_64|x64) echo x64 ;;
+    arm64|aarch64)    echo arm64 ;;
+    armhf|armv7|armv7l) echo armv7 ;;
+    *) echo "$1" ;;
+  esac
+}
+EXPECT_TOKEN="$(token_of "$EXPECT_DEB_ARCH")"
+
+echo "== $PKG_DIR (期望架构: deb=$EXPECT_DEB_ARCH rpm=$EXPECT_RPM_ARCH 文件名标识=$EXPECT_TOKEN) =="
 ls -l "$PKG_DIR"
 
 deb_count=$(ls "$PKG_DIR"/*.deb 2>/dev/null | wc -l)
@@ -49,11 +65,10 @@ for deb in "$PKG_DIR"/*.deb; do
   darch="$(dpkg-deb -f "$deb" Architecture)"
   echo "deb: $base -> Package=$pkg Version=$dver Arch=$darch"
   echo "     安装路径: $(dpkg-deb -c "$deb" | grep -o '\./opt/[^/]*/' | sort -u | tr '\n' ' ')"
-  base_norm="${base//\~/-}"
-  case "$base_norm" in
-    "qingci-bot-ce_${ver}_${darch}.deb"|"qingci-bot-ce-server_${ver}_${darch}.deb") ;;
-    *) echo "::error::deb 文件名不符合 <包名>_<版本>_<架构>.deb 约定: $base"; exit 1 ;;
-  esac
+  # 文件名必须是 <包名>-<版本>-linux-<x64|arm64>.deb，且包名/版本与元数据一致
+  expected_deb="${pkg}-${ver}-linux-${EXPECT_TOKEN}.deb"
+  [ "$base" = "$expected_deb" ] \
+    || { echo "::error::deb 文件名不符合约定: 期望 ${expected_deb}，实际 ${base}"; exit 1; }
   { [ "$dver" = "$ver" ] || [ "$dver" = "$ver_pkg" ]; } \
     || { echo "::error::deb 版本与 tag 不一致: $base ($dver != $ver / $ver_pkg)"; exit 1; }
   [ "$darch" = "$EXPECT_DEB_ARCH" ] \
@@ -67,12 +82,10 @@ for rpmf in "$PKG_DIR"/*.rpm; do
   rrel="$(rpm -qp --qf '%{RELEASE}' "$rpmf")"
   rarch="$(rpm -qp --qf '%{ARCH}' "$rpmf")"
   echo "rpm: $base -> Name=$name Version=$rver Release=$rrel Arch=$rarch"
-  base_norm="${base//\~/-}"
   rver_norm="${rver//\~/-}"
-  case "$base_norm" in
-    "qingci-bot-ce-${rver_norm}-${rrel}.${rarch}.rpm"|"qingci-bot-ce-server-${rver_norm}-${rrel}.${rarch}.rpm") ;;
-    *) echo "::error::rpm 文件名不符合 <包名>-<版本>-<release>.<架构>.rpm 约定: $base"; exit 1 ;;
-  esac
+  expected_rpm="${name}-${rver_norm}-linux-${EXPECT_TOKEN}.rpm"
+  [ "$base" = "$expected_rpm" ] \
+    || { echo "::error::rpm 文件名不符合约定: 期望 ${expected_rpm}，实际 ${base}"; exit 1; }
   { [ "$rver" = "$ver" ] || [ "$rver" = "$ver_pkg" ]; } \
     || { echo "::error::rpm 版本与 tag 不一致: $base ($rver != $ver / $ver_pkg)"; exit 1; }
   [ "$rarch" = "$EXPECT_RPM_ARCH" ] \

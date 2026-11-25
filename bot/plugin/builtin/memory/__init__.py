@@ -50,6 +50,7 @@ from ....llm.memory import HistoryDecision, SummaryPolicy
 from ...base import PluginBase
 from ...matcher import MatcherContext, on_command
 from ...permission import EVERYONE
+from . import emotion
 from .extract import Fact, extract_facts
 from .graph import MAX_NODES, build_graph
 from .store import SCOPE_USER, TIER_LONG, TIER_PERMANENT, Memory, MemoryStore, similarity
@@ -84,6 +85,9 @@ class MemorySettings:
     evolve_interval_seconds: int = 3600
     # 相似度达到该值即视为重复并合并
     merge_threshold: float = 0.9
+    # 情绪系统（四维状态 + 按用户隔离 + 向基线回归）。关掉后不注入也不更新，
+    # 但已有状态保留：重新开启即接着用
+    emotion: bool = True
 
     @classmethod
     def from_config(cls, raw: Any) -> MemorySettings:
@@ -92,6 +96,11 @@ class MemorySettings:
             return cls()
         defaults = cls()
         s = cls()
+        # 情绪是嵌套节（plugins.memory.emotion.enabled），单独解析
+        emotion_cfg = raw.get("emotion")
+        if isinstance(emotion_cfg, dict) and "enabled" in emotion_cfg:
+            s.emotion = bool(emotion_cfg["enabled"])
+
         for field_name in (
             "enabled",
             "extract",
@@ -240,6 +249,11 @@ class MemoryPlugin(PluginBase):
         if store is None or not self._settings.enabled or not user_id:
             return system_prompt
 
+        # 情绪先于记忆处理：用户这句话本身就要影响**这一条**回复的语气。
+        # 若放到 observe_turn（回复之后才执行），被指责的那句仍会得到乐呵呵的
+        # 回答、下一句才变——那是明显的时序错误。
+        system_prompt = await self._apply_emotion(int(user_id), query, system_prompt)
+
         memories = await asyncio.to_thread(
             store.recall,
             scope=SCOPE_USER,
@@ -269,6 +283,25 @@ class MemoryPlugin(PluginBase):
         self._cap_recalled()
         await asyncio.to_thread(store.reinforce, [m.id for m in used], delta=0.05)
         return system_prompt + _INJECT_HEADER + "\n".join(lines)
+
+    async def _apply_emotion(self, user_id: int, text: str, system_prompt: str) -> str:
+        """按这条消息更新情绪，并把偏离基线的部分翻译成行为指令注入
+
+        情绪是"当前状态"：读 → 反应（含惰性衰减）→ 落盘 → 注入。任何一步失败
+        都只记日志并原样返回提示词——情绪是增强能力，不能因为它出错让用户收不到回复。
+        """
+        store = self._store
+        if store is None or not self._settings.emotion:
+            return system_prompt
+        try:
+            row = await asyncio.to_thread(store.get_emotion, scope_id=user_id)
+            state = emotion.from_row(row) if row else emotion.EmotionState()
+            state = emotion.react(state, text)
+            await asyncio.to_thread(store.save_emotion, scope_id=user_id, row=emotion.to_row(state))
+            return system_prompt + emotion.instruct(state)
+        except Exception:
+            logger.exception(f"情绪更新失败，跳过注入: user_id={user_id}")
+            return system_prompt
 
     async def manage_history(
         self,
@@ -545,6 +578,8 @@ class MemoryPlugin(PluginBase):
             return await self._cmd_search(store, uid, rest)
         if action in ("stats", "统计"):
             return await self._cmd_stats(store, uid)
+        if action in ("mood", "情绪"):
+            return await self._cmd_mood(store, uid)
         if action in ("clear", "清空"):
             return await self._cmd_clear(store, uid)
         if action == "purge":
@@ -558,7 +593,8 @@ class MemoryPlugin(PluginBase):
             "/memory unpin <#编号> 取消永久\n"
             "/memory forget <#编号> 删除一条\n"
             "/memory search <关键词>\n"
-            "/memory clear        清空自己的全部记忆"
+            "/memory mood         查看当前情绪\n"
+            "/memory clear        清空自己的全部记忆与情绪"
         )
 
     async def _memory_overview(self, ctx: MatcherContext, store: MemoryStore) -> str:
@@ -569,6 +605,7 @@ class MemoryPlugin(PluginBase):
             f"- 长期记忆：{st['long']} 条\n"
             f"- 永久记忆：{st['permanent']} 条\n"
             f"- 平均显著度：{st['avg_importance']}\n"
+            f"- 当前情绪：{emotion.describe(await self._current_emotion(store, uid))}\n"
             f"短期记忆即当前会话窗口，随会话自动压缩；发 /memory list 查看明细。"
         )
 
@@ -652,6 +689,24 @@ class MemoryPlugin(PluginBase):
             return "没有相关记忆。"
         return f"命中 {len(items)} 条：\n" + "\n".join(self._fmt(m) for m in items)
 
+    async def _current_emotion(self, store: MemoryStore, uid: int) -> emotion.EmotionState:
+        """读当前情绪（无记录用基线；展示前先做一次惰性衰减）"""
+        row = await asyncio.to_thread(store.get_emotion, scope_id=uid)
+        state = emotion.from_row(row) if row else emotion.EmotionState()
+        return emotion.decay(state, time.time()) if state.updated_at else state
+
+    async def _cmd_mood(self, store: MemoryStore, uid: int) -> str:
+        state = await self._current_emotion(store, uid)
+        return (
+            "当前情绪（对你的）\n"
+            f"- 心情：{state.mood:+.2f}（-1 低落 .. +1 愉快）\n"
+            f"- 精神：{state.energy:+.2f}（-1 疲惫 .. +1 有劲）\n"
+            f"- 亲近：{state.affinity:.2f}（0 生疏 .. 1 亲昵）\n"
+            f"- 耐心：{state.patience:.2f}（0 不耐烦 .. 1 有耐心）\n"
+            f"一句话：{emotion.describe(state)}\n"
+            "情绪只影响语气与详略，不影响回答内容。/memory clear 可连同情绪一起重置。"
+        )
+
     async def _cmd_stats(self, store: MemoryStore, uid: int) -> str:
         st = await asyncio.to_thread(store.stats, scope=SCOPE_USER, scope_id=uid)
         return (
@@ -661,7 +716,15 @@ class MemoryPlugin(PluginBase):
 
     async def _cmd_clear(self, store: MemoryStore, uid: int) -> str:
         n = await asyncio.to_thread(store.clear, scope=SCOPE_USER, scope_id=uid)
-        return f"已清空你的 {n} 条记忆（含永久记忆）。" if n else "你本来就没有记忆。"
+        # 情绪不是记忆，但"清空关于我的一切"理应连它一起重置——
+        # 否则用户删完记忆后仍被按旧关系对待，会觉得"没删干净"
+        had_emotion = (await asyncio.to_thread(store.get_emotion, scope_id=uid)) is not None
+        if had_emotion:
+            await asyncio.to_thread(store.clear_emotion, scope_id=uid)
+        if not n and not had_emotion:
+            return "你本来就没有记忆。"
+        extra = "，并重置了对你的情绪" if had_emotion else ""
+        return f"已清空你的 {n} 条记忆（含永久记忆）{extra}。"
 
     async def _cmd_purge(self, ctx: MatcherContext, store: MemoryStore) -> str:
         """清空所有人的记忆 —— 破坏性操作，仅超管可用"""
