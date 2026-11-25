@@ -434,7 +434,7 @@ async def test_load_builtin_scans_directory(bot):
     await pm.load_builtin(bot)
 
     names = {p.name for p in pm.plugins.values()}
-    assert names == {"admin", "chat", "help", "imagegen", "knowledge"}
+    assert names == {"admin", "chat", "help", "imagegen", "knowledge", "memory"}
     # 各插件 matcher 均已注册且 owner 补齐
     assert all(m.owner in names for m in pm.all_matchers())
 

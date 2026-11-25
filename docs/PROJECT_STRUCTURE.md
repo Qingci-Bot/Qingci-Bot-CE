@@ -82,7 +82,7 @@ Qingci-Bot-CE/
 │   │   ├── webapi.py       # 插件级 Web API 适配器（register_api → /api/plugin-web/<name>/）
 │   │   ├── llm_tool.py     # @llm_tool 插件级 LLM 工具声明（注册到 ToolRegistry 的运行时逻辑，保留在本仓库）
 │   │   ├── watcher.py      # 插件自动热重载监听
-│   │   └── builtin/        # 内置插件：admin/chat/help/imagegen/knowledge
+│   │   └── builtin/        # 内置插件：admin/chat/help/imagegen/knowledge/memory
 │   ├── llm/                # LLM 管理、适配器、工具调用（Function Calling / MCP）
 │   │   ├── manager.py      # LLMManager
 │   │   ├── adapter.py      # 适配器基类

@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from bot.config import LLMConfig, SessionSummaryConfig
+from bot.config import LLMConfig
 from bot.core.tasks import await_pending_tasks
 from bot.llm.adapter import ChatResult, LLMAdapter
 from bot.llm.manager import LLMManager
@@ -294,60 +294,128 @@ async def test_trim_history_by_count(manager):
     assert manager._sessions[key][-1]["content"] == "m5"
 
 
-async def test_summarize_history_triggered(manager):
-    manager._config.enable_summary = True
-    manager._summary_config = SessionSummaryConfig(
-        enabled=True, keep_recent_turns=1, max_messages=8
-    )
-    key = "private:1"
-    flat: list[dict] = []
-    for i in range(5):
-        flat += [
-            {"role": "user", "content": f"msg{i}"},
-            {"role": "assistant", "content": f"ans{i}"},
-        ]
-    manager._sessions[key] = flat
-    manager._adapter = FakeAdapter(reply="这是摘要")
-    ok = await manager._summarize_history(key, flat)
-    assert ok is True
-    hist = manager._sessions[key]
-    assert hist[0]["role"] == "system"
-    assert "摘要" in hist[0]["content"]
-    assert len(hist) >= 3  # summary + 最近 1 轮原文
+class FakeMemoryProvider:
+    """记录调用的记忆提供方替身（不依赖内置 memory 插件）"""
+
+    name = "fake-memory"
+
+    def __init__(self, decision=None, prompt_suffix="", fail=False):
+        self.decision = decision
+        self.prompt_suffix = prompt_suffix
+        self.fail = fail
+        self.calls: list[str] = []
+        self.manage_kwargs: dict = {}
+        self.observed: list[tuple[str, str]] = []
+        self.forgotten: list[str] = []
+
+    async def augment_prompt(self, *, session_key, user_id, group_id, query, system_prompt):
+        self.calls.append("augment")
+        if self.fail:
+            raise RuntimeError("memory down")
+        return system_prompt + self.prompt_suffix
+
+    async def manage_history(
+        self, *, session_key, messages, max_messages, max_tokens, summary, estimate
+    ):
+        from bot.llm.memory import HistoryDecision
+
+        self.calls.append("manage")
+        self.manage_kwargs = {
+            "max_messages": max_messages,
+            "max_tokens": max_tokens,
+            "summary": summary,
+            "estimated": estimate(messages),
+        }
+        if self.decision is not None:
+            return self.decision
+        return HistoryDecision(messages=messages, rewrite=False)
+
+    async def observe_turn(self, *, session_key, user_id, group_id, user_text, assistant_text):
+        self.calls.append("observe")
+        self.observed.append((user_text, assistant_text))
+
+    async def forget(self, *, session_key):
+        self.calls.append("forget")
+        self.forgotten.append(session_key)
 
 
-async def test_summarize_history_persists_db(manager):
+async def test_trim_history_rewrite_path_persists_db(manager):
+    """提供方要求重写时：内存换成新列表，DB 整体重写，返回 True"""
+    from bot.llm.memory import HistoryDecision
+
     db = FakeDB()
     manager._db = db
-    manager._config.enable_summary = True
-    manager._summary_config = SessionSummaryConfig(
-        enabled=True, keep_recent_turns=1, max_messages=8
-    )
     key = "private:1"
-    flat: list[dict] = []
-    for i in range(5):
-        flat += [
-            {"role": "user", "content": f"msg{i}"},
-            {"role": "assistant", "content": f"ans{i}"},
-        ]
-    manager._adapter = FakeAdapter(
-        reply="这是摘要", usage={"prompt_tokens": 5, "completion_tokens": 3}
+    manager._sessions[key] = [{"role": "user", "content": f"m{i}"} for i in range(6)]
+    provider = FakeMemoryProvider(
+        decision=HistoryDecision(
+            messages=[
+                {"role": "system", "content": "历史摘要"},
+                {"role": "user", "content": "m5"},
+            ],
+            rewrite=True,
+        )
     )
-    ok = await manager._summarize_history(key, flat)
-    assert ok is True
-    await await_pending_tasks(0.5)  # 等待 fire-and-forget 的用量入库
+    manager.set_memory_provider(provider)
+
+    assert await manager._trim_history(key) is True
+    assert manager._sessions[key][0]["content"] == "历史摘要"
     rows = [s for s in db.sessions if s[0] == key]
-    assert any("摘要" in c for _, _, c in rows)
-    assert db.usage and db.usage[-1]["source"] == "summary"
+    assert [c for _, _, c in rows] == ["历史摘要", "m5"]
+    # 策略值对象按 llm.enable_summary / session_summary 组装后传给提供方
+    assert provider.manage_kwargs["max_messages"] == manager._config.max_history * 2
+    assert provider.manage_kwargs["summary"].enabled is False
 
 
-async def test_summarize_disabled_returns_false(manager):
-    key = "private:1"
-    manager._sessions[key] = [
-        {"role": "user", "content": "x"},
-        {"role": "assistant", "content": "y"},
-    ]
-    assert await manager._summarize_history(key, manager._sessions[key]) is False
+async def test_trim_history_passes_summary_policy(manager):
+    """启用摘要时，SummaryPolicy.enabled 必须为真，否则插件不会压缩"""
+    manager._config.enable_summary = True
+    manager.set_memory_provider(FakeMemoryProvider())
+    manager._sessions["private:1"] = [{"role": "user", "content": "x"}]
+    await manager._trim_history("private:1")
+    provider = manager.memory
+    assert provider.manage_kwargs["summary"].enabled is True
+
+
+async def test_chat_uses_provider_prompt_and_observes(manager):
+    """chat() 必须使用提供方增强后的系统提示词，并在成功后触发观察"""
+    manager._config.enable_tools = False
+    manager._adapter = FakeAdapter(reply="回复")
+    provider = FakeMemoryProvider(prompt_suffix="\n[记忆] 他喜欢猫")
+    manager.set_memory_provider(provider)
+
+    reply = await manager.chat("你好", message_type="private", user_id=7)
+    assert reply == "回复"
+    assert "augment" in provider.calls
+    # 真正下发给适配器的 system_prompt 必须含注入内容
+    assert "[记忆] 他喜欢猫" in (manager._adapter.calls[-1]["system_prompt"] or "")
+    await await_pending_tasks(0.5)  # observe 是后台任务
+    assert provider.observed == [("你好", "回复")]
+
+
+async def test_augment_prompt_failure_keeps_original(manager):
+    """提供方故障时必须原样返回提示词，不能让对话挂掉"""
+    manager._config.enable_tools = False
+    manager._adapter = FakeAdapter(reply="ok")
+    manager.set_memory_provider(FakeMemoryProvider(fail=True))
+    assert await manager.chat("hi", message_type="private", user_id=1) == "ok"
+
+
+async def test_clear_session_forgets_short_term_memory(manager):
+    """清会话要连带清短期记忆，但不动长期/永久记忆"""
+    provider = FakeMemoryProvider()
+    manager.set_memory_provider(provider)
+    await manager.clear_session(message_type="private", user_id=3)
+    assert provider.forgotten == ["private:3"]
+
+
+async def test_set_memory_provider_none_restores_fallback(manager):
+    """传 None 恢复兜底实现（仅硬裁剪）"""
+    from bot.llm.memory import FallbackMemoryProvider
+
+    manager.set_memory_provider(FakeMemoryProvider())
+    manager.set_memory_provider(None)
+    assert isinstance(manager.memory, FallbackMemoryProvider)
 
 
 # ---------- Function Calling ----------

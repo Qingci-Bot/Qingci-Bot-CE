@@ -170,6 +170,24 @@ function ensureBackendExecutable(dir) {
   }
   // 无论哪条路径，最后都确保主程序可执行（幂等）
   forceMode(path.join(dir, BACKEND_EXE), 0o755);
+
+  // macOS：清掉解压出来的文件上的 quarantine 属性。
+  //
+  // 应用从 dmg 装进 /Applications 后，系统会给 .app 内所有文件打上
+  // com.apple.quarantine（来源隔离标记）。backend.zip 解压出的后端子进程
+  // 会继承该标记，首次被 spawn 时可能被 Gatekeeper 拦下（表现为后端起不来、
+  // 界面一直停在启动页）。而用户已经为这个应用点过「打开」，再让子进程单独
+  // 被拦一次没有意义。
+  //
+  // 失败不影响启动：xattr 不可用或没有该属性时只记日志，交给系统默认行为。
+  if (process.platform === "darwin") {
+    try {
+      spawnSync("xattr", ["-dr", "com.apple.quarantine", dir], { timeout: 15000 });
+      elog("[electron] 已清理解压目录的 quarantine 属性");
+    } catch (e) {
+      elog("[electron] 清理 quarantine 属性失败（忽略）:", String((e && e.message) || e));
+    }
+  }
 }
 
 /**

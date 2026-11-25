@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS ad-hoc 签名所需 entitlements
+
+  本项目没有 Apple Developer 证书（每年 99 美元），因此走 ad-hoc 签名
+  （electron-builder 的 mac.identity = "-"）。Apple Silicon 对 arm64 原生代码
+  强制要求有效签名——与 Gatekeeper 无关——完全没有签名的应用双击只会显示
+  「已损坏，无法打开」，所以 ad-hoc 是这里的最低可用方案。
+
+  ad-hoc 签名没有 Team ID，而 Electron 自带的 Framework 是 Apple 签名的
+  （带 Apple 的 Team ID）。在默认开启的 hardened runtime 下，库校验会因为
+  「mapped file 的 Team ID 与进程不一致」而拒绝加载，应用一启动就崩。
+  因此必须关闭库校验：
+
+    com.apple.security.cs.disable-library-validation
+
+  这是官方文档给出的首选做法（保留 hardened runtime，只是不校验库来源），
+  比直接关掉 hardened runtime 更保守。
+
+  allow-jit / allow-unsigned-executable-memory 是 V8 的必需项；
+  allow-dyld-environment-variables 供 Electron 在部分场景设置 DYLD_* 变量。
+
+  换成真实证书签名时，identity 改成证书名即可，本文件可保留
+  （disable-library-validation 在正式签名下也无害，但按需收紧更好）。
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+</dict>
+</plist>

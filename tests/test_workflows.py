@@ -191,3 +191,55 @@ def test_arm64_job_builds_natively() -> None:
         "linux-arm64 的包校验参数应为 `arm64 aarch64`（deb 架构 / rpm 架构），"
         "写错会让 x64 包以 arm64 之名发布"
     )
+
+
+def test_macos_job_targets_apple_silicon() -> None:
+    """macOS 只发布 Apple Silicon：job 必须钉在 macos-14（arm64）并自行断言
+
+    为什么不用 `macos-latest`：它的架构随 GitHub 镜像策略漂移（曾从 macos-13
+    的 x64 切到 macos-14 的 arm64）。PyInstaller 不能交叉编译，落到 x64 runner
+    就会产出 x64 后端——名字写着 arm64、用户装上却跑不了。macos-13 明确是 x64，
+    同样不允许。
+    """
+    release = WORKFLOW_DIR / "release.yml"
+    if not release.is_file():
+        pytest.skip("release.yml 不存在")
+    job = (_load(release).get("jobs") or {}).get("macos-dmg")
+    assert job, "release.yml 缺少 macos-dmg job"
+    assert job.get("runs-on") == "macos-14", (
+        f"macos-dmg 应跑在 macos-14（Apple Silicon），当前为 {job.get('runs-on')!r}"
+    )
+
+    runs = [str(s.get("run", "")) for s in job.get("steps") or [] if isinstance(s, dict)]
+    joined = "\n".join(runs)
+    # 必须有架构断言：标签漂移时立刻失败，而不是产出架构错误的包
+    assert "uname -m" in joined and "arm64" in joined, "macos-dmg 缺少 arm64 宿主断言"
+
+
+def test_macos_job_verifies_signed_arm64_bundle() -> None:
+    """macOS 产物必须校验签名与架构
+
+    Apple Silicon 对 arm64 原生代码强制要求有效签名，与 Gatekeeper 无关：
+    未签名（或签名被后续步骤破坏）的包，用户双击只会看到「已损坏，无法打开」，
+    而 CI 里「构建成功」看起来一切正常。所以发版链必须跑
+    scripts/verify_macos_app.sh，而不是打完 dmg 就上传。
+    """
+    release = WORKFLOW_DIR / "release.yml"
+    if not release.is_file():
+        pytest.skip("release.yml 不存在")
+    job = (_load(release).get("jobs") or {}).get("macos-dmg") or {}
+    joined = "\n".join(str(s.get("run", "")) for s in job.get("steps") or [] if isinstance(s, dict))
+    assert "verify_macos_app.sh" in joined, "macos-dmg 缺少 app bundle 校验步骤"
+    # 上传的产物名必须带 arm64，避免与 x64 混淆
+    assert "-arm64.dmg" in joined, "上传步骤应校验 arm64 dmg 命名"
+
+
+def test_checksums_waits_for_all_platforms() -> None:
+    """校验和必须等全部平台构建成功，否则会生成缺文件的 SHA256SUMS.txt"""
+    release = WORKFLOW_DIR / "release.yml"
+    if not release.is_file():
+        pytest.skip("release.yml 不存在")
+    job = (_load(release).get("jobs") or {}).get("checksums") or {}
+    needs = job.get("needs") or []
+    for platform in ("windows-exe", "linux-deb-rpm", "linux-arm64", "macos-dmg"):
+        assert platform in needs, f"checksums.needs 缺少 {platform}"

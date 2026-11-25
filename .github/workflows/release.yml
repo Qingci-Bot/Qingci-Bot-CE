@@ -28,7 +28,7 @@
 #   - Docker 镜像（ghcr.io，tag: vX.Y.Z / X.Y / X / latest；amd64 + arm64 多架构）
 #
 # 每个平台先产后端 onedir，再让 electron-builder 打成安装包，
-# 与本地 build.ps1 + build-electron.ps1 / build-linux.sh 链路一致。
+# 与本地 build.ps1 + build-electron.ps1 / build-unix.sh 链路一致。
 
 name: Release
 
@@ -275,13 +275,13 @@ jobs:
           npm ci
           npm run build
 
-      - name: Build backend onedir (build-linux.sh)
+      - name: Build backend onedir (build-unix.sh)
         # bundle_browser=false（手动触发）时跳过 Chromium 捆绑（见 build.bat 步骤说明）
         run: |
           if [ "${{ inputs.bundle_browser }}" = "false" ]; then
-            bash build-linux.sh --no-browser
+            bash build-unix.sh --no-browser
           else
-            bash build-linux.sh
+            bash build-unix.sh
           fi
 
       - name: Pack backend into single archive
@@ -418,13 +418,13 @@ jobs:
           npm ci
           npm run build
 
-      - name: Build backend onedir (build-linux.sh)
+      - name: Build backend onedir (build-unix.sh)
         # 与 x64 同一种写法：tag 推送时 inputs 为空，字符串比较避免 null 隐式转换失真
         run: |
           if [ "${{ inputs.bundle_browser }}" = "false" ]; then
-            bash build-linux.sh --no-browser
+            bash build-unix.sh --no-browser
           else
-            bash build-linux.sh
+            bash build-unix.sh
           fi
 
       - name: Pack backend into single archive
@@ -476,6 +476,98 @@ jobs:
             exit 1
           fi
           gh release upload "$ver" $debs $rpms --clobber
+
+  macos-dmg:
+    name: macOS dmg (arm64)
+    needs: prepare
+    # 只发布 Apple Silicon（arm64），Intel Mac 不在支持范围内。
+    #
+    # 为什么用 macos-14 而不是 macos-latest：macos-latest 的架构会随 GitHub
+    # 的镜像策略漂移（历史上从 13 的 x64 切到 14 的 arm64），而我们**必须**在
+    # arm64 宿主上构建——PyInstaller 不能交叉编译，拿 x64 runner 只会产出
+    # x64 后端。显式钉住 macos-14（Apple Silicon / arm64），并在下面用
+    # `uname -m` 断言，标签再漂移也能立刻发现。
+    runs-on: macos-14
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # 架构断言：若 runner 标签被改回 x64，这里直接失败，而不是产出一个
+      # 「名字写着 arm64、实际跑不了」的包。
+      - name: Assert Apple Silicon host
+        run: |
+          arch="$(uname -m)"
+          echo "== 构建机架构: $arch =="
+          [ "$arch" = "arm64" ] || { echo "::error::期望 arm64（Apple Silicon），实际 $arch"; exit 1; }
+
+      - name: Set up Python + uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Create venv + install deps
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -e ".[build]"
+
+      - name: Set up Node.js (for Web UI build)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web UI build
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build backend onedir (build-unix.sh)
+        # 与 Linux / Windows 同一种写法：tag 推送时 inputs 为空，字符串比较避免 null 隐式转换失真
+        run: |
+          if [ "${{ inputs.bundle_browser }}" = "false" ]; then
+            bash build-unix.sh --no-browser
+          else
+            bash build-unix.sh
+          fi
+
+      - name: Pack backend into single archive
+        run: .venv/bin/python scripts/pack_backend.py
+
+      # electron-builder 按 mac.identity="-" 做 **ad-hoc 签名**（本项目没有
+      # Apple Developer 证书）。这一步必须在制作 dmg 之前由 electron-builder
+      # 完成——先出 dmg 再补签，dmg 里装的仍是未签名应用。
+      # Apple Silicon 对 arm64 原生代码强制要求有效签名，未签名会被系统直接
+      # 拒绝，用户看到的是「已损坏，无法打开」。
+      - name: Package dmg + zip (electron-builder, ad-hoc signed)
+        working-directory: desktop/electron
+        run: |
+          npm ci
+          npx electron-builder --mac dmg zip --publish never
+
+      - name: Verify app bundle (arch / signature / plist / backend runs)
+        # 逐条断言架构、ad-hoc 签名有效性、bundle 元信息，并把内嵌 backend.zip
+        # 解出来真跑一次 --help——元数据全对但 dylib 缺失或签名失效，前三项
+        # 都查不出来。
+        run: bash scripts/verify_macos_app.sh dist/electron "${{ needs.prepare.outputs.ver }}"
+
+      - name: Upload release assets (macOS arm64)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${{ needs.prepare.outputs.ver }}"
+          # 命名由 build.mac.artifactName 决定：qingci-bot-ce-<ver>-arm64.{dmg,zip}
+          dmg="dist/electron/qingci-bot-ce-${ver#v}-arm64.dmg"
+          zip="dist/electron/qingci-bot-ce-${ver#v}-arm64.zip"
+          for f in "$dmg" "$zip"; do
+            [ -f "$f" ] || { echo "::error::缺少产物: $f"; ls -R dist/electron | head -40; exit 1; }
+          done
+          # 校验和由 checksums job 统一生成 SHA256SUMS.txt
+          gh release upload "$ver" "$dmg" "$zip" --clobber
 
   docker:
     name: Docker image (ghcr.io)
@@ -531,10 +623,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-  # 校验和收口：等两个构建 job 都成功后，产出 SHA256SUMS.txt
+  # 校验和收口：等全部构建 job 都成功后，产出 SHA256SUMS.txt
   # （sha256sum 格式，用户可 `sha256sum -c SHA256SUMS.txt`）。
-  # 单独成 job 的原因：Windows / Linux 是两个并行 job，各自只能算自己那几个文件，
-  # 只有 Release 才是两者的合集。
+  # 单独成 job 的原因：Windows / Linux / macOS 是并行 job，各自只能算自己那几个
+  # 文件，只有 Release 才是全部的合集。
   #
   # 实现上直接用 Release 资产的 `digest` 字段（GitHub 在接收上传时已算好的 sha256），
   # 不把 ~1.8GB 产物下载回来重算——既省 CI 带宽/时间，也避免"算的是一份、用户下的是
@@ -542,12 +634,13 @@ jobs:
   # 残缺的校验文件。
   checksums:
     name: Release checksums
-    needs: [prepare, windows-exe, linux-deb-rpm, linux-arm64]
+    needs: [prepare, windows-exe, linux-deb-rpm, linux-arm64, macos-dmg]
     if: >-
       always() &&
       needs.windows-exe.result == 'success' &&
       needs.linux-deb-rpm.result == 'success' &&
-      needs.linux-arm64.result == 'success'
+      needs.linux-arm64.result == 'success' &&
+      needs.macos-dmg.result == 'success'
     runs-on: ubuntu-latest
     # 只读 Release 资产的 digest 字段，不下载产物，正常 1 分钟内结束。
     timeout-minutes: 10
@@ -567,8 +660,10 @@ jobs:
           echo "== Release 资产 =="
           cat /tmp/assets.txt
           # 期望 4 个 Linux x64 包 + 4 个 Linux arm64 包 + Windows 安装版 + 便携版
+          #      + macOS dmg + macOS zip
+          # 少了任何一个就说明某个构建 job 静默漏传，比生成残缺校验文件更该拦。
           count=$(wc -l < /tmp/assets.txt)
-          [ "$count" -eq 10 ] || { echo "::error::期望 10 个分发包，实际 $count"; exit 1; }
+          [ "$count" -eq 12 ] || { echo "::error::期望 12 个分发包，实际 $count"; exit 1; }
 
           # 缺 digest 的行形如 "  <name>"（前缀是空串），据此判残缺
           if grep -qE '^  ' /tmp/assets.txt; then

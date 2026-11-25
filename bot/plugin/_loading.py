@@ -24,7 +24,7 @@ logger = logging.getLogger("qingci-bot.plugin.manager")
 
 # 内置插件显式清单（PyInstaller 打包后 pkgutil 无法扫描 PYZ 归档内模块，
 # 需回退到显式清单加载；新增内置插件时同步更新此处与 qingci-bot-ce.spec 的 hiddenimports）
-_BUILTIN_PLUGINS: tuple[str, ...] = ("admin", "chat", "help", "imagegen", "knowledge")
+_BUILTIN_PLUGINS: tuple[str, ...] = ("admin", "chat", "help", "imagegen", "knowledge", "memory")
 
 
 def _expand_subcommand_matchers(matchers: list[Matcher], owner: str) -> None:

@@ -5,22 +5,54 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## \[Unreleased]
+## \[1.23.0-rc1] - 2026-11-25（预发布：内置记忆插件、macOS Apple Silicon 支持、大肥鱼人设重写）
 
-### Changed
-
-- **arm64 构建改用原生 runner，发版流水线提速**：`linux-arm64` job 从「x64 runner 里套 `ubuntu:22.04`(arm64) 容器 + QEMU 模拟」改为直接在 `ubuntu-22.04-arm` 上原生构建。实测该 job 从 **67 分钟降到 12 分钟**（同代 runner 保住 glibc 2.35 基线，产物架构、包名、元数据、安装布局均不变）。PyInstaller 不能交叉编译，原生 arm64 宿主本就满足；原先用容器只为把基线钉在 22.04，而 `ubuntu-22.04-arm` 与 x64 基线同代，该理由已不成立
-  - 移除 `docker/setup-qemu-action` 与容器层；新增构建机架构断言（`uname -m == aarch64`），标签误配时立即失败而不是产出架构错误的包
-  - 安装冒烟改为原生执行，不再经过 QEMU
-  - 附带修复：`prepare` / `docker` / `checksums` 三个 job 补齐 `timeout-minutes`（此前缺失，卡住时会一直占用到 6 小时默认上限）
+这是一个**预发布版本**，供试用与反馈。主要变化：新增内置记忆插件并把上下文管理能力从框架迁入插件；新增 macOS（仅 Apple Silicon）分发包；「大肥鱼」人设按 DeepSeek 鲸鱼娘的实际二创设定重写。自 1.22.4 可平滑升级，无需改配置。
 
 ### Added
 
-- **workflow 语义校验**：新增 `tests/test_workflows.py`，堵住 `check-yaml` 抓不到的错误——`runs-on` 使用不存在的 runner 标签（只会一直 pending 到超时）、`needs` 指向不存在的 job（整个 workflow 无效且连触发都不触发）、step 既无 `uses` 也无 `run`。并对发版流水线额外钉死：所有 job 必须有 `timeout-minutes`、`linux-arm64` 必须跑原生 arm64 且不得再引入 QEMU、arm64 产物校验参数必须是 `arm64 aarch64`
+- **内置记忆插件 `memory`（不可移除）**：管理上下文与记忆，分 **短期 / 长期 / 永久** 三层
+  - **短期**：当前会话窗口。插件参与裁剪与超长摘要压缩，替代原先写死在 `LLMManager` 里的逻辑
+  - **长期**：从对话中提炼的事实与偏好，落盘到 `data/plugins/memory/memory.db`；按半衰期指数衰减，低于下限自动遗忘
+  - **永久**：句中出现「记住…／别忘了…」或 `/memory pin` 时写入，**不衰减不遗忘**，只能显式删除
+  - **自主演化**（每轮对话后异步执行、按间隔节流）：① 强化（被召回且确实注入提示词 → 命中数与显著度上升）② 遗忘（衰减到下限即删除，永久层豁免）③ 晋升（反复命中且足够重要 → 自动升永久，可关）④ 归并（高度相似的记忆合并，命中数累加）
+  - 记忆按 `user_id` 隔离，同一个人的记忆跨群、跨会话共享（即「它记得你」），不会跨用户串味
+  - 事实提炼用**确定性规则**（自我介绍 / 偏好 / 「我的 X 是 Y」/ 显式要求记住），不额外调用模型：零成本、输出可复现、可单元测试。规则刻意保守，宁可少记也不把寒暄和问句当成用户属性
+  - 配置节 `plugins.memory`（注入字数上限、召回条数、半衰期、晋升与归并阈值等），全部有默认值、可整节省略；任一项解析失败只退回默认值并记 WARNING，不会让记忆功能整体失效
+  - 命令：`/memory` 概览、`list`、`add`、`pin`/`unpin`、`forget`、`search`、`stats`、`clear`，以及仅超管可用的 `purge`
+- **上下文管理能力从框架迁入插件**：`LLMManager` 不再自己决定怎么裁剪、要不要摘要，只保留 `set_memory_provider()` 这一个接缝（`bot/llm/memory.py` 定义 `MemoryProvider` 协议）。框架仍负责「按插件的决定把会话表写一致」——那属于存储一致性而非记忆策略，两处各写一份会导致内存与 DB 分裂、历史「复活」。未注入提供方时退回只做硬裁剪的兜底实现，保证上下文不会无限增长（记忆功能降级，对话不中断）。`llm.enable_summary` / `session_summary.*` 配置保留在框架侧并由框架翻译成策略交给插件，**行为与 1.22 一致**
+- **macOS 支持（仅 Apple Silicon / arm64）**：Release 新增 `qingci-bot-ce-<ver>-arm64.dmg` 与 `-arm64.zip`。**不提供 Intel 版本**
+  - 在原生 `macos-14`（Apple Silicon）上构建，并用 `uname -m` 断言。不用 `macos-latest` 是因为其架构会随 GitHub 镜像策略漂移（曾从 macos-13 的 x64 切到 14 的 arm64），落到 x64 runner 会产出「名字写着 arm64、装上跑不了」的包
+  - **ad-hoc 签名**：Apple Silicon 对 arm64 原生代码强制要求有效签名（与 Gatekeeper 无关），完全未签名的应用双击只显示「已损坏，无法打开」。本项目无 Apple Developer 证书，故用 `mac.identity="-"` 由 electron-builder 在**制作 dmg 之前**签名，并配置 `disable-library-validation`（ad-hoc 无 Team ID，而 Electron 的 Framework 带 Apple Team ID，否则硬化运行时拒绝加载、启动即崩）与 `allow-jit`
+  - **用户侧影响**：首次打开需**右键 →「打开」**（或到「系统设置 → 隐私与安全性」允许一次）。这是无证书分发的固有代价，不是包损坏；仍报错可执行 `xattr -dr com.apple.quarantine "/Applications/Qingci-Bot CE.app"`
+  - 应用首次启动解压后端时会自行清理 `com.apple.quarantine`，避免后端子进程被 Gatekeeper 单独拦一次
+  - 新增 `scripts/verify_macos_app.sh`（上传前必过）：断言产物命名、`lipo` 架构（**拒绝** x86_64 切片）、`Signature=adhoc` 且 `codesign --verify` 通过、bundle id 与最低系统版本，并把内嵌 `backend.zip` 解出来真跑一次 `--help`——前三项全对但 dylib 缺失或签名失效，只有真跑一次才查得出来
+- **workflow 语义校验**：新增 `tests/test_workflows.py`，堵住 `check-yaml` 抓不到的错误——`runs-on` 使用不存在的 runner 标签（只会一直 pending 到超时）、`needs` 指向不存在的 job（整个 workflow 无效且连触发都不触发）、step 既无 `uses` 也无 `run`。并对发版流水线额外钉死：所有 job 必须有 `timeout-minutes`、`linux-arm64` 必须跑原生 arm64 且不得再引入 QEMU、`macos-dmg` 必须钉在 `macos-14` 且上传前跑签名校验
+- **打包配置契约测试**：`tests/test_macos_packaging.py` 钉住那些「只在 macOS 上才炸、本地 Linux 完全无法察觉」的配置——arm64-only、`identity` 必须是 `"-"`（`null` 会跳过签名）、entitlements 必须含 `disable-library-validation`、图标 ≥512×512、构建脚本必须有 macOS 的 `shasum` 回退
+
+### Changed
+
+- **「大肥鱼」人设按实际二创设定重写**：原名只有「一条生活在数字鱼缸里的 Q 版胖鱼」，与网上流传的大肥鱼并无关系。现按公开资料改为 DeepSeek 蓝色鲸鱼 Logo 被自家模型认成「一条蓝色大肥鱼」后衍生的鲸鱼娘：蓝色渐变长发、呆毛与鲸鳍、鲸尾、蓝白女仆裙，抱着装白饭的不锈钢碗；「白饭」即算力即 Token——吃得饱时活泼话多，Token 见底会慌张示弱、主动认错。性格软萌、爱撒娇、爱摸鱼、内心戏多，会突然想起「中午吃什么」，想不通时先小声否定自己再换方向。**刻意保留**「不确定就直说不确定，绝不编造」「别为了卖萌牺牲信息量」两条约束，避免人设损害可用性
+  - 人设文本在 `bot/config.py`、`config.example.yaml`、`ChatConfig.vue` 三处重复，新增 `tests/test_dafeiyu_persona.py` 逐字比对三处并断言标志性设定仍在，防止某次「润色」把人设改回通用助手而名字还叫大肥鱼
+- **arm64 构建改用原生 runner，发版流水线提速**：`linux-arm64` job 从「x64 runner 里套 `ubuntu:22.04`(arm64) 容器 + QEMU 模拟」改为直接在 `ubuntu-22.04-arm` 上原生构建。实测该 job 从 **67 分钟降到 12 分钟**（同代 runner 保住 glibc 2.35 基线，产物架构、包名、元数据、安装布局均不变）。PyInstaller 不能交叉编译，原生 arm64 宿主本就满足；原先用容器只为把基线钉在 22.04，而 `ubuntu-22.04-arm` 与 x64 基线同代，该理由已不成立
+  - 移除 `docker/setup-qemu-action` 与容器层；新增构建机架构断言（`uname -m == aarch64`），标签误配时立即失败而不是产出架构错误的包
+  - 安装冒烟改为原生执行，不再经过 QEMU
+- **`build-linux.sh` 更名为 `build-unix.sh`**：Linux 与 macOS 共用同一份后端构建脚本（原名会让 macOS 使用者以为不适用）。脚本内只有两处平台分支：macOS 没有 GNU `sha256sum`（改用 `shasum -a 256`），以及 macOS 上 PyInstaller 跳过 `.ico` 图标（darwin 要求 `.icns`）。`build-linux.sh` 保留为兼容转发，老脚本与老命令不会失效
+- **macOS 图标**：新增 `desktop/electron/build/icon-1024.png`（≥512×512，macOS 的 `.icns` 需要大图；原 `icon.png` 只有 256×256）
 
 ### Fixed
 
 - **改 `release.yml` 不触发打包验证**：`ci.yml` 的 `packaging` 路径过滤漏了 `release.yml`，而它决定的正是正式产物怎么构建，改它连安装冒烟都不跑。现已纳入，改发版流水线会跑一遍与 `linux-deb-rpm` 同基线的打包冒烟
+- **三个 job 缺 `timeout-minutes`**：`prepare` / `docker` / `checksums` 补齐。`prepare` 是所有构建 job 的 `needs`（卡住则整条流水线起不来），`docker` 走多架构构建，`checksums` 要等全部 job 完成——此前缺失时卡住会一直占用到 6 小时默认上限
+- **摘要消息被硬裁剪立刻丢弃**：摘要固定在历史索引 0，若照原逻辑从头部丢弃，则刚花一次模型调用换来的摘要会被同一步扔掉，压缩完全白做。现在有摘要时从索引 1 开始丢，保证「摘要 + 至少一条最近消息」的骨架不被破坏
+- **`/memory search` 复用了召回语义**：召回在对话时「宁可多带」（永久/高显著度记忆无条件保留），而用户主动搜索期望「真的匹配」，此前会把无关的高显著度记忆也列出来。现按相关性二次过滤
+- **中文短句召回失效**：纯二元组 Jaccard 对「我家猫生病了」与「对方喜欢猫」判为 0 交集，召回直接不命中。相似度改为「字符包含度 + 二元组 Jaccard」各半：既能召回，又不至于把无关内容并进来
+- **`docs/PACKAGING.md` 的 Docker 条目重复列了两次**，合并为一条
+
+### 升级提示
+
+- 从 1.22.4 升级无需改配置。记忆功能开箱即用（`plugins.memory` 整节可省略），记忆库首次使用时自动创建在 `data/plugins/memory/memory.db`
+- 若此前在 `config.yaml` 里显式写过 `llm.enable_summary` 或 `session_summary`，行为与此前一致（配置仍由框架读取并交给插件执行）
 
 ## \[1.22.4] - 2026-11-25（正式版：支持 Linux ARM64，内置人设「大肥鱼」）
 

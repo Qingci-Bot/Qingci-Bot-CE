@@ -9,7 +9,7 @@
 # $PREFIX/qingci-bot-ce-server，并由 systemd 托管为长驻服务。适用于无桌面
 # 环境的服务器（Fedora / RHEL / Ubuntu Server / Debian 等）。
 #
-# 前置：先跑过 build-linux.sh 产出 dist/qingci-bot-ce/（后端 onedir）。
+# 前置：先跑过 build-unix.sh 产出 dist/qingci-bot-ce/（后端 onedir）。
 #
 # 用法：
 #   bash scripts/pack_linux_server.sh --version 1.20.0
@@ -68,11 +68,11 @@ PKG_VERSION="${VERSION//-rc/~rc}"
 
 [ -d "$BUNDLE_DIR" ] || {
   echo "ERROR: 后端 onedir 不存在: $BUNDLE_DIR" >&2
-  echo "       先执行 ./build-linux.sh 产出后端" >&2
+  echo "       先执行 ./build-unix.sh 产出后端" >&2
   exit 1
 }
 [ -x "$BUNDLE_DIR/qingci-bot-ce" ] || {
-  echo "ERROR: $BUNDLE_DIR/qingci-bot-ce 不是可执行文件（检查 build-linux.sh 是否成功）" >&2
+  echo "ERROR: $BUNDLE_DIR/qingci-bot-ce 不是可执行文件（检查 build-unix.sh 是否成功）" >&2
   exit 1
 }
 
