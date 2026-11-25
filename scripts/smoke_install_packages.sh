@@ -77,7 +77,7 @@ if [ -d /sys/fs/selinux ]; then
 fi
 
 if ! command -v "$ENGINE" >/dev/null 2>&1; then
-  echo "[FAIL] 找不到容器引擎: $ENGINE（设置 SMOKE_ENGINE=docker 或 podman）" >&2
+  echo "[FAIL] 找不到容器引擎: ${ENGINE}（设置 SMOKE_ENGINE=docker 或 podman）" >&2
   exit 2
 fi
 if [ ! -d "$PKG_DIR" ]; then

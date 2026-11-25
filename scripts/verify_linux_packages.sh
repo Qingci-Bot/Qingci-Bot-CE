@@ -78,4 +78,4 @@ for rpmf in "$PKG_DIR"/*.rpm; do
   [ "$rarch" = "$EXPECT_RPM_ARCH" ] \
     || { echo "::error::rpm 架构非 $EXPECT_RPM_ARCH: $base ($rarch)"; exit 1; }
 done
-echo "包名与元数据校验通过（$EXPECT_DEB_ARCH / $EXPECT_RPM_ARCH）"
+echo "包名与元数据校验通过（${EXPECT_DEB_ARCH} / ${EXPECT_RPM_ARCH}）"

@@ -87,9 +87,9 @@ ok "ad-hoc 签名有效（ad-hoc 免证书，用户首次打开需右键「打�
 plist="$APP/Contents/Info.plist"
 [ -f "$plist" ] || fail "缺少 Info.plist"
 bid="$(plutil -extract CFBundleIdentifier raw "$plist" 2>/dev/null || true)"
-[ "$bid" = "$EXPECT_BUNDLE_ID" ] || fail "CFBundleIdentifier=$bid，期望 $EXPECT_BUNDLE_ID"
+[ "$bid" = "$EXPECT_BUNDLE_ID" ] || fail "CFBundleIdentifier=${bid}，期望 $EXPECT_BUNDLE_ID"
 minsys="$(plutil -extract LSMinimumSystemVersion raw "$plist" 2>/dev/null || true)"
-[ "$minsys" = "$EXPECT_MIN_MACOS" ] || fail "LSMinimumSystemVersion=$minsys，期望 $EXPECT_MIN_MACOS"
+[ "$minsys" = "$EXPECT_MIN_MACOS" ] || fail "LSMinimumSystemVersion=${minsys}，期望 $EXPECT_MIN_MACOS"
 ok "bundle id / 最低系统版本正确（$bid / macOS $minsys+）"
 
 # ---------- 5.1 声明的最低系统版本不得低于二进制真实下限 ----------
@@ -97,11 +97,28 @@ ok "bundle id / 最低系统版本正确（$bid / macOS $minsys+）"
 # LC_BUILD_VERSION/minos 高于声明值，旧系统用户会「装得上、一开就崩」，
 # 表现与签名失效几乎一样（都是「应用已损坏」），很难区分。
 # 这里读回真实 minos，与声明值比对：声明必须 >= 真实值，否则直接失败。
+# 版本号比较：v1 >= v2 时返回 0
+#
+# 特意不用 `sort -V`：那是 GNU coreutils 的扩展，macOS 自带的 BSD sort
+# 不认这个选项（会直接报 illegal option），而这个脚本只在 macOS 上跑。
+# awk 到处都有，按点分段做数值比较即可（macOS 版本号最多三段）。
+version_ge() {
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    n = split(a, x, "."); m = split(b, y, ".")
+    for (i = 1; i <= 3; i++) {
+      p = (i <= n) ? x[i] + 0 : 0
+      q = (i <= m) ? y[i] + 0 : 0
+      if (p > q) exit 0
+      if (p < q) exit 1
+    }
+    exit 0
+  }'
+}
+
 minos="$(vtool -show-build "$EXE" 2>/dev/null | awk '/minos/{print $2; exit}')"
 if [ -n "$minos" ]; then
-  echo "  主程序真实 minos: $minos（声明 $minsys）"
-  lowest="$(printf '%s\n%s\n' "$minsys" "$minos" | sort -V | head -1)"
-  [ "$lowest" = "$minsys" ] || fail "声明的最低系统 $minsys 低于二进制的真实下限 $minos（旧系统会一开就崩）——请把 package.json 的 mac.minimumSystemVersion 调到 $minos 或更高"
+  echo "  主程序真实 minos: ${minos}（声明 ${minsys}）"
+  version_ge "${minsys}" "${minos}" || fail "声明的最低系统 ${minsys} 低于二进制的真实下限 ${minos}（旧系统会一开就崩）——请把 package.json 的 mac.minimumSystemVersion 调到 ${minos} 或更高"
   ok "最低系统版本声明不低于二进制真实下限"
 else
   echo "  [WARN] 无法读取 minos（vtool 不可用），跳过该断言"
@@ -126,5 +143,24 @@ chmod +x "$backend_bin"
   || { echo "  ---- backend --help 输出 ----" >&2; "$backend_bin" --help 2>&1 | tail -20; \
        fail "内嵌后端 --help 执行失败（冻结产物缺库或签名失效）"; }
 ok "内嵌后端 --help 退出码 0（arm64 原生可运行）"
+
+# ---------- 6.1 后端自身的架构与最低系统版本 ----------
+# 前面查的是 Electron 外壳；真正随项目构建、决定「哪些 macOS 能跑我们的 bot」
+# 的是这个后端二进制。两者取更高者，才是整个包的真实系统下限。
+backend_archs="$(lipo -archs "$backend_bin" 2>/dev/null || true)"
+echo "  后端架构: ${backend_archs}"
+case "$backend_archs" in
+  *x86_64*) fail "内嵌后端含 x86_64 切片（本项目只发布 Apple Silicon）" ;;
+  *arm64*) ok "内嵌后端为 arm64" ;;
+  *) fail "内嵌后端不含 arm64 切片: ${backend_archs}" ;;
+esac
+
+backend_minos="$(vtool -show-build "$backend_bin" 2>/dev/null | awk '/minos/{print $2; exit}')"
+if [ -n "$backend_minos" ]; then
+  echo "  后端真实 minos: ${backend_minos}"
+  version_ge "${minsys}" "${backend_minos}" \
+    || fail "声明的最低系统 ${minsys} 低于后端的真实下限 ${backend_minos}——请把 package.json 的 mac.minimumSystemVersion 调到 ${backend_minos} 或更高"
+  ok "最低系统版本声明不低于后端真实下限"
+fi
 
 echo "== 全部通过 =="
