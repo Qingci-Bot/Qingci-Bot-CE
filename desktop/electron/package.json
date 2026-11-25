@@ -134,7 +134,7 @@
         "libayatana-appindicator3-1"
       ],
       "packageName": "qingci-bot-ce",
-      "artifactName": "qingci-bot-ce_${version}_${arch}.${ext}"
+      "artifactName": "qingci-bot-ce-${version}-linux-${arch}.${ext}"
     },
     "rpm": {
       "depends": [
@@ -152,7 +152,7 @@
         "_build_id_links none"
       ],
       "packageName": "qingci-bot-ce",
-      "artifactName": "qingci-bot-ce-${version}-1.${arch}.${ext}"
+      "artifactName": "qingci-bot-ce-${version}-linux-${arch}.${ext}"
     }
   },
   "devDependencies": {

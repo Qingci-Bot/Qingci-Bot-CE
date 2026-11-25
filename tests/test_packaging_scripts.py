@@ -209,14 +209,18 @@ def test_electron_artifact_names_carry_platform_token():
     cfg = json.loads((ROOT / "desktop/electron/package.json").read_text(encoding="utf-8"))
     build = cfg["build"]
 
+    # deb / rpm 有各自的 artifactName，会**覆盖** linux 级模板——这正是历史上
+    # rpm 不理会 linux.artifactName、按 fpm 默认名输出的原因。所以四处都必须写，
+    # 漏一处那个格式就退回旧命名。
     checks = [
-        ("win", build["win"]["artifactName"]),
-        ("nsis", build["nsis"]["artifactName"]),
-        ("linux", build["linux"]["artifactName"]),
-        ("mac", build["mac"]["artifactName"]),
+        ("win", build["win"]["artifactName"], "windows"),
+        ("nsis", build["nsis"]["artifactName"], "windows"),
+        ("linux", build["linux"]["artifactName"], "linux"),
+        ("deb", build["deb"]["artifactName"], "linux"),
+        ("rpm", build["rpm"]["artifactName"], "linux"),
+        ("mac", build["mac"]["artifactName"], "macos"),
     ]
-    for key, pattern in checks:
-        token = PLATFORM_TOKENS["mac" if key == "mac" else ("win" if key == "nsis" else key)]
+    for key, pattern, token in checks:
         assert token in pattern, f"{key}.artifactName 缺少平台标识 {token}: {pattern}"
         assert "${version}" in pattern, f"{key}.artifactName 缺少版本占位符: {pattern}"
 
