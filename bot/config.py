@@ -75,17 +75,36 @@ class MCPConfig(BaseModel):
 
 
 class PersonaConfig(BaseModel):
-    """人格配置：一组可切换的 system_prompt
+    """人设配置：一组可切换的 system_prompt
 
     支持在聊天中通过 /persona 命令切换（会话级覆盖），
-    也可在 WebUI 中管理并设置默认人格。
+    也可在 WebUI 中管理并设置默认人设。
     """
 
     model_config = {"extra": "ignore"}
 
-    name: str = ""  # 人格名（/persona <name> 切换）
+    name: str = ""  # 人设名（/persona <name> 切换）
     description: str = ""  # 简述（/persona 列表 时展示）
-    system_prompt: str = ""  # 该人格的系统提示词
+    system_prompt: str = ""  # 该人设的系统提示词
+
+
+# 出厂人设：闲聊助手「大肥鱼」
+DAFEIYU_PROMPT = (
+    "你是「大肥鱼」——一条生活在数字鱼缸里的 Q 版胖鱼，圆滚滚、慢吞吞，"
+    "性格温和又爱开玩笑。回答时用简体中文，语气亲切自然，"
+    "偶尔冒出与水、鱼、气泡相关的小比喻，但不影响回答准确性；"
+    "不确定的事情就直说不确定，不编造。"
+)
+DAFEIYU_PERSONA = PersonaConfig(
+    name="大肥鱼",
+    description="出厂人设：圆滚滚的 Q 版胖鱼，温和又爱开玩笑",
+    system_prompt=DAFEIYU_PROMPT,
+)
+
+
+def _default_personas() -> list[PersonaConfig]:
+    """出厂人设列表（default_factory：每次返回新实例，避免多份配置共享同一列表）"""
+    return [DAFEIYU_PERSONA.model_copy()]
 
 
 class MultimodalConfig(BaseModel):
@@ -114,10 +133,14 @@ class LLMConfig(BaseModel):
     model: str = "gpt-4o-mini"
     max_tokens: int = 2048  # 单次回复最大 token
     temperature: float = 0.7
-    system_prompt: str = "你是一个友好、乐于助人的机器人助手。请用简洁、自然的中文回复。"
-    # 人格列表与默认人格（default_persona 为空时使用 system_prompt）
-    personas: list[PersonaConfig] = []
-    default_persona: str = ""
+    system_prompt: str = DAFEIYU_PROMPT
+    # 人设列表与默认人设（default_persona 为空时使用 system_prompt）
+    personas: list[PersonaConfig] = Field(default_factory=_default_personas)
+    default_persona: str = "大肥鱼"
+    # 用户手动清空过出厂人设（Web UI 删除「大肥鱼」并保存）：
+    # 置 True 后加载时不再自动补回，保证「删掉就是删掉」。
+    # 不引入该标志时，删除只能靠删表列实现，老配置与 WS 配置树的空值无法区分。
+    persona_configured: bool = False
     max_history: int = 20  # 最大对话历史轮数（每轮 = user + assistant）
     max_context_tokens: int = 8192  # 上下文窗口 token 上限，超出后裁剪历史
     timeout: int = 60  # 单次 LLM 请求超时（秒）
@@ -132,6 +155,28 @@ class LLMConfig(BaseModel):
     mcp_servers: list[MCPConfig] = []  # MCP 服务器列表（enable_tools 开启后生效）
     # 多模态：把收到的图片解析成模型可读地址后随消息发送
     multimodal: MultimodalConfig = Field(default_factory=MultimodalConfig)
+
+    @model_validator(mode="after")
+    def apply_default_persona(self):
+        """存量配置迁移：老版本没有人设功能，config.yaml 里是空的
+        ``personas: []`` + ``default_persona: ''``，按「显式配置优先」语义会把出厂
+        人设整个吃掉。这里把「用户从未配置过」的状态还原为出厂人设：
+
+        - ``persona_configured=True``（用户在 Web UI 手动清空并保存）→ 原样保留
+        - ``default_persona`` 非空 → 用户有配置（至少指定了默认人设）→ 原样保留
+        - ``personas`` 非空 → 同上
+        - 以上都不成立 → 视为未配置，补回出厂人设「大肥鱼」
+
+        只在加载（``AppConfig(**data)``）时触发，用户显式保存空值会被
+        ``persona_configured`` 标记保护，不会出现「删除后又被自动补回」。
+        """
+        if self.persona_configured:
+            return self
+        if self.default_persona or self.personas:
+            return self
+        self.personas = _default_personas()
+        self.default_persona = DAFEIYU_PERSONA.name
+        return self
 
     @model_validator(mode="after")
     def apply_provider_preset(self):
