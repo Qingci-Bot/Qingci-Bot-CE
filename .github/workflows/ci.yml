@@ -94,7 +94,7 @@ jobs:
             packaging:
               - 'desktop/electron/**'
               - 'qingci-bot-ce.spec'
-              - 'build-linux.sh'
+              - 'build-unix.sh'
               - 'scripts/pack_backend.py'
               - 'scripts/pack_linux_server.sh'
               - 'scripts/verify_linux_packages.sh'
@@ -395,7 +395,7 @@ jobs:
           npm run build
 
       - name: Build backend onedir
-        run: bash build-linux.sh --no-browser
+        run: bash build-unix.sh --no-browser
 
       - name: Pack backend + desktop packages
         run: |

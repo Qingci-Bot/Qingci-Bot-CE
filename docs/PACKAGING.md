@@ -100,13 +100,13 @@ Linux 分发**不使用 AppImage**，改为原生包管理的 **deb**（Debian /
 
 两者各出 **x86_64（amd64）** 与 **arm64（aarch64）** 两个架构（1.22.4 起），共 8 个 Linux 产物。
 
-两款包的共同前提是先产出 Python 后端 onedir（`build-linux.sh`，对应 Windows 的 `build.bat`，输出 `dist/qingci-bot-ce/`）。
+两款包的共同前提是先产出 Python 后端 onedir（`build-unix.sh`，对应 Windows 的 `build.bat`，输出 `dist/qingci-bot-ce/`）。
 
 ### 1. 桌面版（electron-builder）
 
 ```bash
 # 先决条件：.venv + [build] 依赖、Node.js 22+、系统需 rpm 与 fakeroot（生成 rpm 依赖）
-./build-linux.sh
+./build-unix.sh
 cd desktop/electron && npm ci && npx electron-builder --linux deb rpm --publish never
 ```
 
@@ -152,7 +152,7 @@ bash scripts/pack_linux_server.sh --version 1.22.0 --only rpm
 # 依赖：rpm fakeroot xz-utils file、Python 3.12、Node 22
 uv venv .venv && uv pip install --python .venv/bin/python -e ".[build]"
 (cd web && npm ci && npm run build)
-bash build-linux.sh && .venv/bin/python scripts/pack_backend.py
+bash build-unix.sh && .venv/bin/python scripts/pack_backend.py
 bash scripts/pack_linux_server.sh --version 1.22.4 --out dist/linux
 (cd desktop/electron && npm ci && npx electron-builder --linux deb rpm --publish never)
 ```
@@ -164,6 +164,58 @@ bash scripts/pack_linux_server.sh --version 1.22.4 --out dist/linux
 >
 > **依赖侧已确认**：锁文件里 17 个编译扩展（numpy / pyarrow / lancedb / tiktoken / tokenizers /
 > pydantic-core / uvloop / cryptography / regex 等）全部提供 aarch64 manylinux wheel，arm 上无需源码编译。
+
+## macOS 打包（仅 Apple Silicon）
+
+**只发布 arm64（Apple Silicon）**，不提供 Intel 版本。产物为 `.dmg` 安装镜像与 `.zip` 免安装包。
+
+### 为什么必须在 arm64 宿主上构建
+
+PyInstaller 不能交叉编译，后端只能在目标架构上产出。CI 固定用 `macos-14`（Apple Silicon），并在第一步用 `uname -m` 断言——不用 `macos-latest` 是因为它的架构会随 GitHub 镜像策略漂移（曾从 macos-13 的 x64 切到 macos-14 的 arm64），一旦落到 x64 runner 就会产出「名字写着 arm64、装上跑不了」的包。
+
+### 签名：ad-hoc，以及它为什么不是可选项
+
+Apple Silicon 对 arm64 原生代码**强制要求有效签名**，这与 Gatekeeper 无关。完全未签名的应用双击只会显示「已损坏，无法打开」——不是「无法验证开发者」，是直接打不开。
+
+本项目没有 Apple Developer 证书（每年 99 美元），因此走 **ad-hoc 签名**：
+
+- `package.json` 的 `build.mac.identity` 设为 `"-"`，由 electron-builder 在**制作 dmg 之前**完成签名（顺序很重要：先出 dmg 再补签，dmg 里装的仍是未签名应用）
+- ad-hoc 签名没有 Team ID，而 Electron 自带的 Framework 带 Apple Team ID，硬化的运行时（hardened runtime）默认会因库校验拒绝加载 → 必须带 `com.apple.security.cs.disable-library-validation`。这是官方文档给出的首选做法，比关掉 hardened runtime 更保守。entitlements 见 `desktop/electron/build/entitlements.mac.plist`
+- PyInstaller 在 macOS 上会自动对收集的二进制做 ad-hoc 签名（arm64 的硬性要求），所以 `backend.zip` 解压出来的后端本身也是已签名的，能被正常 spawn
+
+**用户侧影响**：首次打开需要**右键 →「打开」**（或在「系统设置 → 隐私与安全性」里允许一次）。这是无证书分发的固有代价，不是包损坏。若仍提示已损坏，可执行：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Qingci-Bot CE.app"
+```
+
+应用在首次启动解压后端时会自己清理解压目录的 quarantine 属性（`main.js` 的 `ensureBackendExecutable`），避免后端子进程被单独拦一次。
+
+### 本地复现（在 Apple Silicon Mac 上）
+
+```bash
+uv venv .venv && uv pip install --python .venv/bin/python -e ".[build]"
+(cd web && npm ci && npm run build)
+bash build-unix.sh && .venv/bin/python scripts/pack_backend.py
+(cd desktop/electron && npm ci && npx electron-builder --mac dmg zip --publish never)
+bash scripts/verify_macos_app.sh dist/electron 1.23.0-rc1
+```
+
+> `build-unix.sh` 与 Linux 共用（原名 `build-linux.sh`，保留为兼容转发）。脚本内只有两处平台分支：`sha256sum` 在 macOS 上不存在（改用 `shasum -a 256`），以及 macOS 上 PyInstaller 跳过 `.ico` 图标（darwin 要求 `.icns`，而 macOS 的后端是纯命令行可执行文件，图标由 Electron 外壳承担）。
+
+### 产物校验
+
+`scripts/verify_macos_app.sh` 逐条断言，CI 上传前必过：
+
+| 检查 | 断言 | 为什么必须查 |
+| --- | --- | --- |
+| 命名 | `qingci-bot-ce-<ver>-arm64.{dmg,zip}` 存在 | 版本/架构错位会让用户下到别人的包 |
+| 架构 | `lipo -archs` 只含 arm64，**拒绝** x86_64 切片 | Intel 切片意味着产物跑不了 |
+| 签名 | `codesign -dv` 含 `Signature=adhoc` 且 `codesign --verify --deep --strict` 通过 | 未签名 → 用户看到「已损坏」 |
+| 元信息 | `CFBundleIdentifier` = `com.qingcibot.ce`，`LSMinimumSystemVersion` = `11.0` | bundle id 不一致会导致权限/数据目录错乱 |
+| 可运行 | 解开 `resources/backend.zip` 跑 `--help`，退出码必须为 0 | 前三项全对但 dylib 缺失/签名失效，只有真跑一次才查得出来 |
+
+> 图标要求 ≥512×512 PNG（electron-builder 据此生成 `.icns`）。仓库里 `build/icon.png` 只有 256×256，另备 `build/icon-1024.png` 专供 macOS。
 
 ## 产物命名与校验
 
@@ -181,7 +233,9 @@ bash scripts/pack_linux_server.sh --version 1.22.4 --out dist/linux
 | 桌面版 rpm（arm64） | `qingci-bot-ce-<ver>-1.aarch64.rpm` | `Arch: aarch64` |
 | 服务端 deb（arm64） | `qingci-bot-ce-server_<ver>_arm64.deb` | `Architecture: arm64` |
 | 服务端 rpm（arm64） | `qingci-bot-ce-server-<ver>-1.aarch64.rpm` | `Arch: aarch64` |
-| 校验和 | `SHA256SUMS.txt` | 上述 10 个分发包的 sha256 |
+| macOS 安装镜像（arm64） | `qingci-bot-ce-<ver>-arm64.dmg` | bundle id `com.qingcibot.ce` |
+| macOS 免安装包（arm64） | `qingci-bot-ce-<ver>-arm64.zip` | 解压后为 `Qingci-Bot CE.app` |
+| 校验和 | `SHA256SUMS.txt` | 上述 12 个分发包的 sha256 |
 
 > deb 的架构名是 `arm64`、rpm 是 `aarch64`（两者规范不同），因此 arm64 的 deb 与 rpm 文件名里的架构后缀不一样，这不是笔误。
 
@@ -190,7 +244,7 @@ bash scripts/pack_linux_server.sh --version 1.22.4 --out dist/linux
 - `ci-desktop.yml` 校验 `artifactName` 模板与 `packageName`，防止改回旧的大写命名；
 - `release.yml` 的 `linux-deb-rpm` 与 `linux-arm64` 两个 job 共用 `scripts/verify_linux_packages.sh`（架构作为参数：`amd64 x86_64` / `arm64 aarch64`），用 `dpkg-deb -f` / `rpm -qp` 读回包元数据，断言**文件名与包内 Name/Version/Arch 一致**、且每个架构恰好 4 个 Linux 产物。
 
-校验和说明：`dist/backend-manifest.sha256` 是**后端构建清单**（冻结后的可执行文件 + Web UI 入口），由 `build.bat` / `build-linux.sh` 生成，不进 Release；发布包的校验和是 `SHA256SUMS.txt`，由 `release.yml` 的 `checksums` job 生成——直接读取各资产在 GitHub 侧的 sha256 digest（接收上传时已计算），无需把约 1.8 GB 产物下载回来重算，产物缺失或 digest 缺失时该 job 明确失败。`sha256sum -c SHA256SUMS.txt` 可直接校验下载。
+校验和说明：`dist/backend-manifest.sha256` 是**后端构建清单**（冻结后的可执行文件 + Web UI 入口），由 `build.bat` / `build-unix.sh` 生成，不进 Release；发布包的校验和是 `SHA256SUMS.txt`，由 `release.yml` 的 `checksums` job 生成——直接读取各资产在 GitHub 侧的 sha256 digest（接收上传时已计算），无需把约 1.8 GB 产物下载回来重算，产物缺失或 digest 缺失时该 job 明确失败。`sha256sum -c SHA256SUMS.txt` 可直接校验下载。
 
 本地产物落点：桌面版在 `dist/electron/`，服务端包在 `dist/linux/`；CI 会把桌面版归集到 `dist/linux/` 后统一上传（`Collect desktop packages into dist/linux` 步骤），本地构建无需手动搬。
 
@@ -260,10 +314,10 @@ arm64 产物的下限与 x64 相同：后端在 `ubuntu-22.04-arm` 上构建（g
 
 打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](../.github/workflows/release.yml)，各平台自动联编：
 - Windows 桌面（`qingci-bot-ce-<ver>-x64-setup.exe` + `-portable.zip`，`build.bat` + `build-electron.bat`）
-- Linux deb / rpm 共 8 个产物：x86_64 与 arm64 各 4 个（`build-linux.sh` + `electron-builder --linux deb rpm` 出桌面版，`scripts/pack_linux_server.sh` 出服务端版；arm64 整条链跑在原生 `ubuntu-22.04-arm` 上）
-- Docker 镜像（`ghcr.io`，`linux/amd64` + `linux/arm64` 多架构 manifest）
-- `SHA256SUMS.txt`（两个构建 job 都成功后由 `checksums` job 从资产 digest 统一生成）
-- Docker 镜像（tag：`X.Y.Z` / `X.Y` / `X` / `latest`；`docker/metadata-action` 会剥掉 `v` 前缀）
+- Linux deb / rpm 共 8 个产物：x86_64 与 arm64 各 4 个（`build-unix.sh` + `electron-builder --linux deb rpm` 出桌面版，`scripts/pack_linux_server.sh` 出服务端版；arm64 整条链跑在原生 `ubuntu-22.04-arm` 上）
+- macOS 共 2 个产物（仅 Apple Silicon）：`qingci-bot-ce-<ver>-arm64.dmg` + `-arm64.zip`（`macos-14` 构建，electron-builder ad-hoc 签名，上传前过 `scripts/verify_macos_app.sh`）
+- Docker 镜像（`ghcr.io`，`linux/amd64` + `linux/arm64` 多架构 manifest；tag：`X.Y.Z` / `X.Y` / `X` / `latest`，`docker/metadata-action` 会剥掉 `v` 前缀）
+- `SHA256SUMS.txt`（**全部**构建 job 都成功后由 `checksums` job 从资产 digest 统一生成；共 12 个分发包，少一个即失败）
 
 ### 预发布（rc）
 

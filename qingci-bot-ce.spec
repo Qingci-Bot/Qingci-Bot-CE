@@ -24,12 +24,19 @@
 
 import os
 import shutil
+import sys
 
 from PyInstaller.utils.hooks import collect_all
 
-# 应用图标（跨平台）：Linux 构建时该文件可能缺失，缺失则不打包 icon 也不传入 EXE，
-# 仅在存在时才加入 datas 与 icon 参数。
+# 应用图标（跨平台）：Linux / macOS 构建时该文件可能缺失，缺失则不打包 icon
+# 也不传入 EXE，仅在存在时才加入 datas 与 icon 参数。
+#
+# macOS 单独跳过：PyInstaller 在 darwin 上要求 .icns，传 .ico 会报错；而 macOS
+# 的后端是纯命令行可执行文件（不是 .app bundle，图标由 Electron 外壳的
+# dmg 承担），给它挂图标没有意义。
 _ICON = os.path.join('desktop', 'assets', 'app-icon.ico')
+if sys.platform == 'darwin':
+    _ICON = ''
 
 # 过滤目标：litellm/proxy/_experimental/out 的前端静态产物子树
 _LITELLM_OUT_PREFIX = ("litellm", "proxy", "_experimental", "out")

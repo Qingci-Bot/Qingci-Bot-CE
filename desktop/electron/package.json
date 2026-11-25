@@ -45,6 +45,31 @@
         "to": "backend.zip"
       }
     ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon-1024.png",
+      "category": "public.app-category.social-networking",
+      "artifactName": "qingci-bot-ce-${version}-${arch}.${ext}",
+      "minimumSystemVersion": "11.0",
+      "darkModeSupport": true,
+      "identity": "-",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
     "win": {
       "target": [
         {

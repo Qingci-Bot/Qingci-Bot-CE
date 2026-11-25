@@ -55,9 +55,11 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 >
 > **数据都放在哪**：数据目录（安装时选定）下有 `instances/<实例>/`（配置、数据库、日志）与 `backend/`（后端解压产物）；`%APPDATA%\Qingci-Bot CE\` 只留 Electron 自身的浏览器缓存，`%APPDATA%\Qingci-Bot CE\datadir.txt` 记录你选的数据目录。
 >
-> **Linux 桌面（deb / rpm）**：与 Windows 同源，Linux 后端由 `build-linux.sh`（`build.bat` 的对应脚本）产出 onedir，再经 `electron-builder --linux deb rpm` 打成 deb / rpm 安装包；另有 headless 服务端包（`qingci-bot-ce-server`，含 systemd 单元），由 `scripts/pack_linux_server.sh` 产出。**本项目不提供 AppImage**。桌面版数据按 XDG 规范落在 `$XDG_DATA_HOME/Qingci-Bot CE`（默认 `~/.local/share`），可用 `QINGCI_DATA_HOME` 覆盖。详见 [docs/PACKAGING.md](./PACKAGING.md)。
+> **Linux 桌面（deb / rpm）**：与 Windows 同源，Linux 后端由 `build-unix.sh`（`build.bat` 的对应脚本）产出 onedir，再经 `electron-builder --linux deb rpm` 打成 deb / rpm 安装包；另有 headless 服务端包（`qingci-bot-ce-server`，含 systemd 单元），由 `scripts/pack_linux_server.sh` 产出。**本项目不提供 AppImage**。桌面版数据按 XDG 规范落在 `$XDG_DATA_HOME/Qingci-Bot CE`（默认 `~/.local/share`），可用 `QINGCI_DATA_HOME` 覆盖。详见 [docs/PACKAGING.md](./PACKAGING.md)。
 >
-> **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.bat`/`build-linux.sh` 分别出后端、`build-electron.bat`/`electron-builder --linux deb rpm` 出 EXE / deb / rpm，`scripts/pack_linux_server.sh` 另出 headless 服务端 deb / rpm，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](../.github/workflows/release.yml)。
+> **macOS（仅 Apple 芯片）**：提供 `.dmg` 安装镜像与 `.zip` 免安装包，**只支持 arm64（Apple Silicon）**，不提供 Intel 版本。无 Apple Developer 证书，因此走 ad-hoc 签名——首次打开需**右键 →「打开」**（或到「系统设置 → 隐私与安全性」允许一次）；若提示「已损坏」，执行 `xattr -dr com.apple.quarantine "/Applications/Qingci-Bot CE.app"`。这是无证书分发的固有代价，不是包损坏。构建与校验细节见 [docs/PACKAGING.md](./PACKAGING.md#macos-打包仅-apple-silicon)。
+>
+> **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.bat`/`build-unix.sh` 分别出后端、`build-electron.bat`/`electron-builder` 出 EXE / deb / rpm / dmg，`scripts/pack_linux_server.sh` 另出 headless 服务端 deb / rpm，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](../.github/workflows/release.yml)。
 >
 > 浏览器缺失或下载失败时渲染能力自动降级不可用（`/api/bot/status` 的 `render` 字段可查状态），不影响框架启动。
 > 插件协议层 SDK（`qingci-plugin-sdk`）自 1.15.2 起由官方 PyPI 分发，在 `pyproject.toml` 里以版本区间（`>=1.15.2,<2.0.0`，与 `bot/plugin/abi.py` 的 `SDK_ABI_RANGE` 一致）声明、随核心依赖一起安装；无需令牌或额外索引配置，实际安装版本由 `uv.lock` 锁定。本地开发时若需对 SDK 改代码，可 `uv pip install -e ..\Plugins-SDK` 覆盖。

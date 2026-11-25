@@ -32,7 +32,7 @@
 
 - **安全与运维**：API Key 鉴权（登录防暴力限流）、敏感词过滤、对话限流、登录审计、数据库在线备份、错误告警、结构化 JSON 日志（可选）、Prometheus 指标导出（`/api/metrics`，含事件积压/丢弃、消息缓冲、插件与 Matcher 调用指标）
 
-- **增强能力**：AI 图片生成、轻量知识库（关键词检索零依赖；向量检索需可选依赖 lancedb）、会话摘要（历史裁剪）、Function Calling（内置时间/一言/群事件查询工具）、MCP 服务器接入、定时任务调度器、LLM 用量统计
+- **增强能力**：AI 图片生成、轻量知识库（关键词检索零依赖；向量检索需可选依赖 lancedb）、**记忆插件（短期 / 长期 / 永久三层，自主演化：强化·遗忘·晋升·归并；并接管上下文裁剪与摘要）**、Function Calling（内置时间/一言/群事件查询工具）、MCP 服务器接入、定时任务调度器、LLM 用量统计
 
 - **HTML 渲染服务**：基于 Playwright 无头 Chromium 将 HTML 渲染为 JPEG/PNG（可选依赖 `[render]`），供签到卡等「HTML 模板 → 图片消息」插件复用；playwright 未安装/浏览器缺失时自动降级不可用，不影响框架启动
 
@@ -68,6 +68,8 @@ uv run python main.py --host 127.0.0.1
 
 ## 下载与分发形态
 
+> **macOS 版本是 ad-hoc 签名的**：本项目没有 Apple Developer 证书（99 美元/年），而 Apple Silicon 对 arm64 原生代码强制要求有效签名——完全未签名的应用双击只会显示「已损坏，无法打开」。因此发布包用 ad-hoc 签名，代价是首次打开需**右键 →「打开」**确认一次。若仍报已损坏，执行 `xattr -dr com.apple.quarantine "/Applications/Qingci-Bot CE.app"`。详见 [docs/PACKAGING.md](./docs/PACKAGING.md#macos-打包仅-apple-silicon)。
+
 每个版本发布到 [GitHub Releases](https://github.com/Qingci-Bot/Qingci-Bot-CE/releases)，产物命名统一为「包名 + 版本 + 架构」，各格式沿用其生态的分隔符约定：
 
 | 场景 | 文件 | 说明 |
@@ -82,9 +84,11 @@ uv run python main.py --host 127.0.0.1
 | Fedora / RHEL 桌面（ARM64） | `qingci-bot-ce-<ver>-1.aarch64.rpm` | 同上 |
 | Debian / Ubuntu 服务端（ARM64） | `qingci-bot-ce-server_<ver>_arm64.deb` | arm64 服务器，headless + systemd |
 | Fedora / RHEL 服务端（ARM64） | `qingci-bot-ce-server-<ver>-1.aarch64.rpm` | 同上 |
-| 校验和 | `SHA256SUMS.txt` | `sha256sum -c SHA256SUMS.txt` 校验上述 10 个包（含 arm64） |
+| macOS 桌面（Apple 芯片） | `qingci-bot-ce-<ver>-arm64.dmg` | 仅 Apple Silicon；首次打开需右键「打开」（ad-hoc 签名，无 Apple 证书） |
+| macOS 桌面（免安装） | `qingci-bot-ce-<ver>-arm64.zip` | 解压后为 `Qingci-Bot CE.app` |
+| 校验和 | `SHA256SUMS.txt` | `sha256sum -c SHA256SUMS.txt` 校验上述 12 个包（含 arm64 / macOS） |
 
-Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。
+Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。macOS 只提供 Apple Silicon（arm64）版本，不提供 Intel 版本。
 
 > **发行版要求**：Linux 包自带 Python 运行时，要求 **glibc ≥ 2.35**（Ubuntu 22.04+ / Debian 12+ / Fedora 36+）。早期 1.22.0 在 24.04 上构建，导致 22.04 / Debian 12 启动报 `GLIBC_2.38' not found`，1.22.1 已修复；详见 [docs/PACKAGING.md](./docs/PACKAGING.md#构建机的-glibc-决定运行时下限)。
 

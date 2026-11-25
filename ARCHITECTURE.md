@@ -157,7 +157,9 @@ Qingci-Bot-CE/
 │           ├── admin/         # 管理命令（含 /filter /group）
 │           ├── help/          # /help 命令（按权限列出可用命令）
 │           ├── imagegen/      # AI 绘图（/image 命令）
-│           └── knowledge/     # 知识库管理（/kb 命令）
+│           ├── knowledge/     # 知识库管理（/kb 命令）
+│           └── memory/        # 记忆管理（/memory 命令）：短期/长期/永久三层 +
+│                              #   自主演化，并接管上下文裁剪与摘要（见 bot/llm/memory.py）
 ├── plugins/                   # 外部插件目录（Bot 启动时自动扫描加载；实例模式下为 instances/<name>/plugins）
 │   ├── __init__.py
 │   ├── _template/             # 插件开发模板（以 _ 开头，不自动加载）
