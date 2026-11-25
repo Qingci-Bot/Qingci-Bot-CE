@@ -5,12 +5,16 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## \[Unreleased]
+## \[1.22.4] - 2026-11-25（正式版：支持 Linux ARM64，内置人设「大肥鱼」）
 
-## \[1.22.4-rc1] - 2026-11-24（支持 Linux ARM64；安全策略明确 1.22.3 以下不再支持）
+包含 1.22.4-rc1 的全部内容，并新增内置人设「大肥鱼」。自 1.22.3 升级可直接安装本版；**1.22.4 以下的版本已不再受支持**（见下方安全策略）。
 
 ### Added
 
+- **存量配置自动补出厂人设**：老版本 `config.yaml` 里写着空的 `llm.personas` 与 `llm.default_persona`（1.22.4 及更早版本生成的配置都是这个形态），升级后会自动补回出厂人设「大肥鱼」，无需手工改配置
+  - 新增 `llm.persona_configured` 字段：在 Web UI 删空人设并保存时由服务端自动置位，此后不再自动补回，避免出现「删掉又被长回来」；`PUT /api/config` 与 `PUT /api/config/llm` 两个保存入口均已覆盖
+  - 「LLM 配置 → 人设管理」在人设为空时提供「恢复出厂人设」按钮，一键回填并设为默认
+  - 判定顺序：`persona_configured` 为真 → 保持为空；`personas` 或 `default_persona` 任一非空 → 原样保留；两者皆空 → 补回出厂人设
 - **Linux ARM64（aarch64）支持**：Release 新增 4 个 arm64 产物——桌面版 `qingci-bot-ce_<ver>_arm64.deb` / `qingci-bot-ce-<ver>-1.aarch64.rpm`，服务端版 `qingci-bot-ce-server_<ver>_arm64.deb` / `qingci-bot-ce-server-<ver>-1.aarch64.rpm`。适用于树莓派 4/5、ARM 云主机（Ampere / Graviton）、Apple Silicon 上的 Linux 虚拟机
   - 后端（PyInstaller 不支持交叉编译）在 `ubuntu:22.04` arm64 容器里构建，基线 glibc 2.35 与 x64 产物一致——**不用 ubuntu-24.04 的 arm64 runner 是因为那会要求 glibc ≥2.39**，重演 1.22.0 的兼容事故
   - Electron 壳在 x64 宿主上 `electron-builder --arm64` 交叉打包（本地已实测产出 `_arm64.deb` / `.aarch64.rpm`）
@@ -21,7 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **安全策略**：`SECURITY.md` 明确 **1.22.3 以下版本不再受支持**（含 1.22.2 及更早正式版与全部 rc），并列出具体原因（glibc 兼容、QQ 凭据缺陷链、Web UI 缓存策略）
+- **内置聊天插件与默认人设统一改称「大肥鱼」**：插件展示名与描述改为「大肥鱼」，出厂默认人设由通用助手提示词替换为「大肥鱼」（一条圆滚滚、慢吞吞、温和爱开玩笑的 Q 版胖鱼），`default_persona` 默认值同步为 `大肥鱼`；插件标识 `chat`、配置节 `plugins.chat`、命令 `/persona` 与字段名 `personas` / `default_persona` 均保持不变——**不改插件标识**是因为它同时是配置键、依赖解析键与前端管理接口路径，改名会连带破坏存量配置与依赖它的外部插件，且界面上感知不到收益。已配置自定义人设的实例不受影响
+- **界面与文档用词统一为「人设」**：Web UI「LLM 配置」中的「人格管理」改为「人设管理」，`/persona` 命令的全部回执文案、配置示例与文档（README / SETUP / CONFIGURATION / FRONTEND / ARCHITECTURE）中的「人格」统一为「人设」
+- **安全策略**：`SECURITY.md` 支持矩阵调整为本版起「积极支持」，**1.22.4 以下（含 1.22.3 正式版与全部 rc）不再受支持**，并列出具体原因（glibc 兼容、QQ 凭据缺陷链、Web UI 缓存策略）
 - Release 校验和 job 的期望资产数从 6 提升到 10；`checksums` 依赖新增 arm64 构建结果
 
 ## \[1.22.3] - 2026-11-24（正式版）
