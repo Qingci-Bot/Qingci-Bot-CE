@@ -349,22 +349,57 @@ jobs:
   linux-arm64:
     name: Linux deb / rpm (arm64)
     needs: prepare
-    # 为什么是「x64 runner + QEMU 里的 ubuntu:22.04(arm64) 容器」：
+    # 原生 arm64 runner 构建，不用 QEMU。
     #
-    #  1) PyInstaller 不能交叉编译，后端必须在 arm64 环境里构建。
-    #  2) GitHub 托管的 arm64 runner 只有 ubuntu-24.04（glibc 2.39），直接在上面
-    #     构建会让产物要求 glibc ≥2.39，Debian 12 / Ubuntu 22.04 装得上却起不来
-    #     ——正是 1.22.0 踩过的坑。容器把基线钉在 22.04（glibc 2.35），与 x64 产物一致。
-    #  3) Electron 壳用 electron-builder 在 x64 上交叉打包 arm64（官方支持路径，
-    #     本地实测可产出 _arm64.deb / .aarch64.rpm），不需要在 arm 机器上再跑一遍。
+    # 为什么可以直接用原生 runner（v1.22.4 之前用的是「x64 + QEMU 里的
+    # ubuntu:22.04(arm64) 容器」，后端构建单步就要 60 分钟以上，比 x64 整条链还慢）：
     #
-    # 代价是 QEMU 模拟下 PyInstaller 明显变慢（约 15-30 分钟），故超时放宽到 120。
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    #  1) PyInstaller 不能交叉编译，必须在 arm64 上构建——原生 runner 满足这点。
+    #  2) 基线必须钉在 ubuntu-22.04（glibc 2.35）。GitHub 同时托管
+    #     ubuntu-22.04-arm 与 ubuntu-24.04-arm，用前者即可，不必为了「拿到
+    #     arm64」退让到 24.04 的 glibc 2.39（那是 1.22.0 的事故）。
+    #     22.04-arm 与 22.04 同代，产物下限与 x64 完全一致。
+    #  3) 依赖侧无阻碍：锁文件里的编译扩展（numpy / pyarrow / lancedb /
+    #     tiktoken / tokenizers / pydantic-core / uvloop 等 17 个）全部提供
+    #     aarch64 manylinux wheel，无需在 arm 上从源码编译。
+    #
+    # 保留 checkout + npm + electron-builder 的原生路径：electron-builder 在
+    # arm64 宿主上打 arm64 包是原生行为，比在 x64 上 --arm64 交叉更少假设。
+    # 安装冒烟同样原生执行——smoke_install_packages.sh 的 CONTAINER_PLATFORM
+    # 留空即「宿主原生架构」，不再需要 binfmt/QEMU。
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 60
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
+
+      - name: Install packaging toolchain
+        # 与 x64 job 同款：rpm / fakeroot / xz-utils 是 electron-builder 出
+        # deb+rpm 的前置，file 供 verify 脚本判定二进制架构。
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            rpm fakeroot xz-utils file
+
+      # 架构断言：ARM runner 若被误配回 x64（例如标签打错），这里立即失败，
+      # 避免在错误架构上产出一个「看起来正常」的 arm64 包名。
+      - name: Assert native arm64 host
+        run: |
+          arch="$(uname -m)"
+          echo "== 构建机架构: $arch =="
+          [ "$arch" = "aarch64" ] || { echo "::error::期望 aarch64 构建机，实际 $arch"; exit 1; }
+
+      - name: Set up Python + uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Create venv + install deps
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -e ".[build]"
 
       - name: Set up Node.js (for Web UI build)
         uses: actions/setup-node@v7
@@ -373,92 +408,34 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      # Web UI 是纯静态产物，与 CPU 架构无关：在 x64 宿主上构建，再拷进目标容器
       - name: Web UI build
         working-directory: web
         run: |
           npm ci
           npm run build
 
-      - name: Install packaging toolchain (host)
-        # rpm CLI 供 scripts/verify_linux_packages.sh 读 rpm 元数据；
-        # electron-builder 自带 fpm，但架构断言仍要能读包。
+      - name: Build backend onedir (build-linux.sh)
+        # 与 x64 同一种写法：tag 推送时 inputs 为空，字符串比较避免 null 隐式转换失真
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends rpm xz-utils file
+          if [ "${{ inputs.bundle_browser }}" = "false" ]; then
+            bash build-linux.sh --no-browser
+          else
+            bash build-linux.sh
+          fi
 
-      - name: Set up QEMU (arm64 emulation)
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
+      - name: Pack backend into single archive
+        run: .venv/bin/python scripts/pack_backend.py
 
-      - name: Build arm64 backend + server packages (in ubuntu:22.04 container)
-        # 容器里另拷一份工作树再构建：宿主工作区带着 x64 的 .venv / dist，
-        # build-linux.sh 会优先复用 .venv/bin/python，直接原地构建等于拿 x64
-        # 解释器当 arm64 构建环境。
-        # 用字符串比较而不是 `inputs.bundle_browser == false`：tag 推送时 inputs 为空，
-        # 表达式的 null → 0 隐式转换会让判定失真。与 x64 job 保持同一种写法。
-        env:
-          BUNDLE_BROWSER: ${{ inputs.bundle_browser }}
-        run: |
-          set -euo pipefail
-          ver="${{ needs.prepare.outputs.ver }}"
-          ver="${ver#v}"
-          mkdir -p dist/linux
-          docker run --rm \
-            --platform linux/arm64 \
-            -v "$PWD":/src \
-            -v "$PWD/dist/linux":/out \
-            -e "VER=$ver" \
-            -e "BUNDLE_BROWSER=${BUNDLE_BROWSER:-true}" \
-            -e "CI=1" \
-            ubuntu:22.04 bash -c '
-              set -euo pipefail
-              export DEBIAN_FRONTEND=noninteractive
-              apt-get update
-              apt-get install -y --no-install-recommends \
-                ca-certificates curl git build-essential binutils xz-utils file dpkg-dev rpm
-              echo "== 容器架构: $(uname -m) =="
-              # 用 tar 拷工作树而不是 git clone：容器内是 root、/src 属宿主用户，
-              # `git clone --local` 会因 dubious ownership 直接失败（rc1 实测 exit 128），
-              # 加 safe.directory 也不稳妥（不同 git 版本对"仓库路径"的判定不一样）。
-              # 构建也不需要 .git（版本号写在 pyproject / bot/__init__.py 里）。
-              mkdir -p /build
-              # 注意 exclude 必须锚定成 ./dist：写成 --exclude=dist 会连带排除
-              # web/dist（tar 的模式匹配任意层级的同名目录），前端产物就没了
-              tar -C /src --exclude=./.git --exclude=./dist --exclude=./.venv -cf - . | tar -C /build -xf -
-              test -f /build/web/dist/index.html || { echo "ERROR: web/dist 缺失，请先构建 Web UI"; exit 1; }
-              cd /build
-              curl -LsSf https://astral.sh/uv/install.sh | sh
-              export PATH="$HOME/.local/bin:$PATH"
-              uv python install 3.12
-              uv venv --python 3.12
-              uv pip install --python .venv/bin/python -e ".[build]"
-              if [ "$BUNDLE_BROWSER" = "false" ]; then
-                bash build-linux.sh --no-browser
-              else
-                bash build-linux.sh
-              fi
-              # 用 venv 的解释器：ubuntu:22.04 精简镜像不带系统 python3
-              # （rc1 第三次构建就是栽在这一行，exit 127）
-              .venv/bin/python scripts/pack_backend.py
-              bash scripts/pack_linux_server.sh --version "$VER" --out /out
-              cp -f dist/backend.zip /out/backend.zip
-            '
-          # 后端归档供 electron-builder 作 extraResources
-          cp -f dist/linux/backend.zip dist/backend.zip
-          rm -f dist/linux/backend.zip
-          ls -l dist/linux dist/backend.zip
+      - name: Package server deb + rpm (arm64)
+        run: bash scripts/pack_linux_server.sh --version "${{ needs.prepare.outputs.ver }}" --out dist/linux
 
-      - name: Package desktop deb + rpm (electron-builder --arm64)
+      - name: Package desktop deb + rpm (electron-builder, native arm64)
         working-directory: desktop/electron
-        # 在 x64 宿主上交叉打 arm64 包：electron-builder 下载 arm64 版 Electron，
-        # fpm 负责 deb/rpm（rpm 的 ARCH 自动写 aarch64）。
         run: |
           npm ci
-          npx electron-builder --linux deb rpm --arm64 --publish never
+          npx electron-builder --linux deb rpm --publish never
 
-      - name: Collect desktop packages into dist/linux
+      - name: Collect packages into dist/linux
         run: |
           found=0
           for f in dist/electron/*.deb dist/electron/*.rpm; do
@@ -478,11 +455,8 @@ jobs:
           bash scripts/verify_linux_packages.sh \
             dist/linux "${{ needs.prepare.outputs.ver }}" arm64 aarch64
 
-      - name: Install smoke (deb / rpm in arm64 containers)
-        # 与 x64 用同一份断言脚本，只换容器平台；QEMU 下 apt/dnf 安装 + 冷启动更慢，
-        # 脚本内单用例 900s 上限仍然够用。
-        env:
-          CONTAINER_PLATFORM: linux/arm64
+      - name: Install smoke (deb / rpm, native arm64)
+        # CONTAINER_PLATFORM 留空 = 宿主原生架构，不再走 QEMU 模拟
         run: bash scripts/smoke_install_packages.sh dist/linux
 
       - name: Upload release assets (arm64)
