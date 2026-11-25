@@ -22,12 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 命令：`/memory` 概览、`list`、`add`、`pin`/`unpin`、`forget`、`search`、`stats`、`clear`，以及仅超管可用的 `purge`
 - **上下文管理能力从框架迁入插件**：`LLMManager` 不再自己决定怎么裁剪、要不要摘要，只保留 `set_memory_provider()` 这一个接缝（`bot/llm/memory.py` 定义 `MemoryProvider` 协议）。框架仍负责「按插件的决定把会话表写一致」——那属于存储一致性而非记忆策略，两处各写一份会导致内存与 DB 分裂、历史「复活」。未注入提供方时退回只做硬裁剪的兜底实现，保证上下文不会无限增长（记忆功能降级，对话不中断）。`llm.enable_summary` / `session_summary.*` 配置保留在框架侧并由框架翻译成策略交给插件，**行为与 1.22 一致**
 - **macOS 支持（仅 Apple Silicon / arm64）**：Release 新增 `qingci-bot-ce-<ver>-arm64.dmg` 与 `-arm64.zip`。**不提供 Intel 版本**
-  - 在原生 `macos-14`（Apple Silicon）上构建，并用 `uname -m` 断言。不用 `macos-latest` 是因为其架构会随 GitHub 镜像策略漂移（曾从 macos-13 的 x64 切到 14 的 arm64），落到 x64 runner 会产出「名字写着 arm64、装上跑不了」的包
+  - 在原生 `macos-15`（Apple Silicon）上构建，并用 `uname -m` 断言。**不用 `macos-14`**：本仓库请求它会得到 `The configuration 'macos-14-arm64-us-default' is not supported` 并在 1 秒内被取消（`runner_id=0`、0 个步骤）——GitHub 已停止为该标签提供 arm64 配置；矩阵探测中 `macos-15` 与 `macos-latest` 可用。不用 `macos-latest` 是因为其架构会随 GitHub 镜像策略漂移（曾从 macos-13 的 x64 切到 14 的 arm64），落到 x64 runner 会产出「名字写着 arm64、装上跑不了」的包
   - **ad-hoc 签名**：Apple Silicon 对 arm64 原生代码强制要求有效签名（与 Gatekeeper 无关），完全未签名的应用双击只显示「已损坏，无法打开」。本项目无 Apple Developer 证书，故用 `mac.identity="-"` 由 electron-builder 在**制作 dmg 之前**签名，并配置 `disable-library-validation`（ad-hoc 无 Team ID，而 Electron 的 Framework 带 Apple Team ID，否则硬化运行时拒绝加载、启动即崩）与 `allow-jit`
   - **用户侧影响**：首次打开需**右键 →「打开」**（或到「系统设置 → 隐私与安全性」允许一次）。这是无证书分发的固有代价，不是包损坏；仍报错可执行 `xattr -dr com.apple.quarantine "/Applications/Qingci-Bot CE.app"`
   - 应用首次启动解压后端时会自行清理 `com.apple.quarantine`，避免后端子进程被 Gatekeeper 单独拦一次
   - 新增 `scripts/verify_macos_app.sh`（上传前必过）：断言产物命名、`lipo` 架构（**拒绝** x86_64 切片）、`Signature=adhoc` 且 `codesign --verify` 通过、bundle id 与最低系统版本，并把内嵌 `backend.zip` 解出来真跑一次 `--help`——前三项全对但 dylib 缺失或签名失效，只有真跑一次才查得出来
-- **workflow 语义校验**：新增 `tests/test_workflows.py`，堵住 `check-yaml` 抓不到的错误——`runs-on` 使用不存在的 runner 标签（只会一直 pending 到超时）、`needs` 指向不存在的 job（整个 workflow 无效且连触发都不触发）、step 既无 `uses` 也无 `run`。并对发版流水线额外钉死：所有 job 必须有 `timeout-minutes`、`linux-arm64` 必须跑原生 arm64 且不得再引入 QEMU、`macos-dmg` 必须钉在 `macos-14` 且上传前跑签名校验
+- **workflow 语义校验**：新增 `tests/test_workflows.py`，堵住 `check-yaml` 抓不到的错误——`runs-on` 使用不存在的 runner 标签（只会一直 pending 到超时）、`needs` 指向不存在的 job（整个 workflow 无效且连触发都不触发）、step 既无 `uses` 也无 `run`。并对发版流水线额外钉死：所有 job 必须有 `timeout-minutes`、`linux-arm64` 必须跑原生 arm64 且不得再引入 QEMU、`macos-dmg` 必须钉在可用的 arm64 标签（当前 `macos-15`）且上传前跑签名校验
 - **打包配置契约测试**：`tests/test_macos_packaging.py` 钉住那些「只在 macOS 上才炸、本地 Linux 完全无法察觉」的配置——arm64-only、`identity` 必须是 `"-"`（`null` 会跳过签名）、entitlements 必须含 `disable-library-validation`、图标 ≥512×512、构建脚本必须有 macOS 的 `shasum` 回退
 
 ### Changed

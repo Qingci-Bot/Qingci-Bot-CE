@@ -493,7 +493,14 @@ jobs:
     # arm64 宿主上构建——PyInstaller 不能交叉编译，拿 x64 runner 只会产出
     # x64 后端。显式钉住 macos-14（Apple Silicon / arm64），并在下面用
     # `uname -m` 断言，标签再漂移也能立刻发现。
-    runs-on: macos-14
+    #
+    # 为什么是 macos-15 而不是 macos-14（实测踩到）：本仓库请求 `macos-14`
+    # 会拿到注解
+    #     The configuration 'macos-14-arm64-us-default' is not supported
+    # 并在 1 秒内被取消（runner_id=0、0 个步骤、日志不存在）——GitHub 已不再
+    # 为该标签提供这套 arm64 配置。同批矩阵探测中 macos-15 与 macos-latest
+    # 成功、macos-14 取消，因此钉在 macos-15。
+    runs-on: macos-15
     timeout-minutes: 60
     permissions:
       contents: write

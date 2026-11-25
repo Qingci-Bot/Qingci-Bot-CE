@@ -171,7 +171,7 @@ bash scripts/pack_linux_server.sh --version 1.22.4 --out dist/linux
 
 ### 为什么必须在 arm64 宿主上构建
 
-PyInstaller 不能交叉编译，后端只能在目标架构上产出。CI 固定用 `macos-14`（Apple Silicon），并在第一步用 `uname -m` 断言——不用 `macos-latest` 是因为它的架构会随 GitHub 镜像策略漂移（曾从 macos-13 的 x64 切到 macos-14 的 arm64），一旦落到 x64 runner 就会产出「名字写着 arm64、装上跑不了」的包。
+PyInstaller 不能交叉编译，后端只能在目标架构上产出。CI 固定用 `macos-15`（Apple Silicon），并在第一步用 `uname -m` 断言——不用 `macos-latest` 是因为它的架构会随 GitHub 镜像策略漂移（曾从 macos-13 的 x64 切到 macos-14 的 arm64），一旦落到 x64 runner 就会产出「名字写着 arm64、装上跑不了」的包。
 
 ### 签名：ad-hoc，以及它为什么不是可选项
 
@@ -315,7 +315,7 @@ arm64 产物的下限与 x64 相同：后端在 `ubuntu-22.04-arm` 上构建（g
 打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](../.github/workflows/release.yml)，各平台自动联编：
 - Windows 桌面（`qingci-bot-ce-<ver>-x64-setup.exe` + `-portable.zip`，`build.bat` + `build-electron.bat`）
 - Linux deb / rpm 共 8 个产物：x86_64 与 arm64 各 4 个（`build-unix.sh` + `electron-builder --linux deb rpm` 出桌面版，`scripts/pack_linux_server.sh` 出服务端版；arm64 整条链跑在原生 `ubuntu-22.04-arm` 上）
-- macOS 共 2 个产物（仅 Apple Silicon）：`qingci-bot-ce-<ver>-arm64.dmg` + `-arm64.zip`（`macos-14` 构建，electron-builder ad-hoc 签名，上传前过 `scripts/verify_macos_app.sh`）
+- macOS 共 2 个产物（仅 Apple Silicon）：`qingci-bot-ce-<ver>-arm64.dmg` + `-arm64.zip`（`macos-15` 构建，electron-builder ad-hoc 签名，上传前过 `scripts/verify_macos_app.sh`）
 - Docker 镜像（`ghcr.io`，`linux/amd64` + `linux/arm64` 多架构 manifest；tag：`X.Y.Z` / `X.Y` / `X` / `latest`，`docker/metadata-action` 会剥掉 `v` 前缀）
 - `SHA256SUMS.txt`（**全部**构建 job 都成功后由 `checksums` job 从资产 digest 统一生成；共 12 个分发包，少一个即失败）
 
