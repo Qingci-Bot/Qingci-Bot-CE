@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -117,3 +118,70 @@ def test_pack_server_output_has_no_leading_v(tmp_path: Path) -> None:
     ).stdout.strip()
     # dpkg-deb -f 指定单个字段时只返回值本身，不带 "Version: " 前缀
     assert meta == "1.23.0~rc1", f"包内版本应为 1.23.0~rc1，实际 {meta}"
+
+
+# ──────────────────────────────────────────────────────────────────
+# macOS / BSD 工具链的可移植性护栏
+#
+# 这两类问题本地 Linux 完全测不出来，只有真正在 macOS runner 上跑才暴露，
+# 而一次发版要 20 分钟才发现——值得用静态检查提前拦住。
+# ──────────────────────────────────────────────────────────────────
+
+SHELL_SCRIPTS = [
+    "build-unix.sh",
+    "build-linux.sh",
+    "scripts/verify_macos_app.sh",
+    "scripts/pack_linux_server.sh",
+    "scripts/smoke_install_packages.sh",
+    "scripts/verify_linux_packages.sh",
+]
+
+
+def _shell_files() -> list[Path]:
+    return [ROOT / p for p in SHELL_SCRIPTS if (ROOT / p).is_file()]
+
+
+def test_no_unbraced_variable_before_non_ascii_in_shell() -> None:
+    """shell 里 `$var` 后面紧跟中文时必须是 `${var}`
+
+    macOS 自带的是 bash 3.2，它会把紧随其后的多字节字符当成变量名的一部分，
+    报 `minos?: unbound variable`；Linux 的 bash 5 不会。于是这种写法在本地
+    与 ubuntu CI 上都正常，只在 macOS 发版时炸——1.23.0-rc1 就踩了。
+
+    这不是风格问题：只要变量出现在中文句子里（本项目的脚本全是中文提示），
+    就一定会遇到。
+    """
+    pattern = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)(?=[^\x00-\x7F])")
+    offenders: list[str] = []
+    for path in _shell_files():
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
+            if line.lstrip().startswith("#"):
+                continue  # 注释不参与展开
+            for m in pattern.finditer(line):
+                offenders.append(
+                    f"{path.relative_to(ROOT)}:{lineno}: ${m.group(1)} 后紧跟非 ASCII"
+                    f" -> 改为 ${{{m.group(1)}}}"
+                )
+    assert not offenders, "以下位置在 macOS 的 bash 3.2 上会报 unbound variable：\n" + "\n".join(
+        offenders
+    )
+
+
+def test_no_gnu_only_sort_in_macos_scripts() -> None:
+    """macOS 脚本不得使用 `sort -V`
+
+    `-V`（版本排序）是 GNU coreutils 扩展，macOS 自带的 BSD sort 不认，
+    会直接报 illegal option。版本比较请用 awk 分段数值比较。
+    """
+    verify = ROOT / "scripts" / "verify_macos_app.sh"
+    assert verify.is_file()
+    # 只看可执行行：注释里说明「为什么不用 sort -V」是合法的
+    code = [
+        ln
+        for ln in verify.read_text(encoding="utf-8").split("\n")
+        if not ln.lstrip().startswith("#")
+    ]
+    assert "sort -V" not in "\n".join(code), (
+        "verify_macos_app.sh 使用了 GNU 专有的 sort -V，macOS 的 BSD sort 不支持；"
+        "请改用 awk 做版本比较"
+    )
