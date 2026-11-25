@@ -5,6 +5,23 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[Unreleased]
+
+### Changed
+
+- **arm64 构建改用原生 runner，发版流水线提速**：`linux-arm64` job 从「x64 runner 里套 `ubuntu:22.04`(arm64) 容器 + QEMU 模拟」改为直接在 `ubuntu-22.04-arm` 上原生构建。实测该 job 从 **67 分钟降到 12 分钟**（同代 runner 保住 glibc 2.35 基线，产物架构、包名、元数据、安装布局均不变）。PyInstaller 不能交叉编译，原生 arm64 宿主本就满足；原先用容器只为把基线钉在 22.04，而 `ubuntu-22.04-arm` 与 x64 基线同代，该理由已不成立
+  - 移除 `docker/setup-qemu-action` 与容器层；新增构建机架构断言（`uname -m == aarch64`），标签误配时立即失败而不是产出架构错误的包
+  - 安装冒烟改为原生执行，不再经过 QEMU
+  - 附带修复：`prepare` / `docker` / `checksums` 三个 job 补齐 `timeout-minutes`（此前缺失，卡住时会一直占用到 6 小时默认上限）
+
+### Added
+
+- **workflow 语义校验**：新增 `tests/test_workflows.py`，堵住 `check-yaml` 抓不到的错误——`runs-on` 使用不存在的 runner 标签（只会一直 pending 到超时）、`needs` 指向不存在的 job（整个 workflow 无效且连触发都不触发）、step 既无 `uses` 也无 `run`。并对发版流水线额外钉死：所有 job 必须有 `timeout-minutes`、`linux-arm64` 必须跑原生 arm64 且不得再引入 QEMU、arm64 产物校验参数必须是 `arm64 aarch64`
+
+### Fixed
+
+- **改 `release.yml` 不触发打包验证**：`ci.yml` 的 `packaging` 路径过滤漏了 `release.yml`，而它决定的正是正式产物怎么构建，改它连安装冒烟都不跑。现已纳入，改发版流水线会跑一遍与 `linux-deb-rpm` 同基线的打包冒烟
+
 ## \[1.22.4] - 2026-11-25（正式版：支持 Linux ARM64，内置人设「大肥鱼」）
 
 包含 1.22.4-rc1 的全部内容，并新增内置人设「大肥鱼」。自 1.22.3 升级可直接安装本版；**1.22.4 以下的版本已不再受支持**（见下方安全策略）。
