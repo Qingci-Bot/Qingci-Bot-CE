@@ -623,3 +623,42 @@ async def test_manager_delegates_to_plugin_end_to_end(tmp_path):
     prompt = manager._adapter.calls[-1]["system_prompt"]
     assert "[记忆]" in prompt
     assert "小明" in prompt
+
+
+# ──────────────────────────────────────────────────────────────────
+# 插件生命周期：on_load 真的把框架接管了
+# ──────────────────────────────────────────────────────────────────
+
+
+async def test_on_load_wires_provider_and_on_unload_restores(tmp_path, monkeypatch):
+    """on_load 必须把自己挂到 LLMManager 上；on_unload 必须交还控制权
+
+    单元测试都直接塞 _store / _settings，绕过了真实生命周期。这里走一遍
+    on_load / on_unload，验证「插件确实接管了框架」以及卸载后不会留下
+    指向已卸载实例的引用（否则框架会调用到已关闭的 store）。
+    """
+    from bot.config import LLMConfig
+    from bot.llm.manager import LLMManager
+    from bot.llm.memory import FallbackMemoryProvider
+    from bot.plugin.protocol.base import PluginBase
+
+    # 插件数据目录由 SDK 按实例解析；测试里指到 tmp_path，避免污染真实数据根
+    monkeypatch.setattr(PluginBase, "data_dir", property(lambda self: tmp_path))
+
+    plugin = MemoryPlugin()
+    plugin.config = SimpleNamespace(plugins={})
+    manager = LLMManager(LLMConfig())
+    plugin.llm = manager
+
+    await plugin.on_load()
+    try:
+        assert manager.memory is plugin, "on_load 未把插件挂到 LLMManager"
+        assert plugin.matchers and len(plugin.matchers) == 1, "未注册 /memory 命令"
+        assert (tmp_path / "memory.db").exists(), "未在插件数据目录建库"
+    finally:
+        plugin.db = None
+        await plugin.on_unload()
+
+    assert isinstance(manager.memory, FallbackMemoryProvider), (
+        "on_unload 未交还控制权，框架仍持有已卸载插件"
+    )

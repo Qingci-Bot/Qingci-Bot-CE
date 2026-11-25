@@ -160,8 +160,13 @@ class MemoryPlugin(PluginBase):
         elif not self._settings.enabled:
             logger.info("plugins.memory.enabled=false，记忆插件不参与对话（命令仍可用）")
 
-        # matchers 由框架在加载前初始化，None 只存在于未加载状态
-        assert self.matchers is not None
+        # matchers 正常由框架在 on_load 前初始化（PluginManager._init_plugin）。
+        # 这里防御式兜底而不是断言：若框架漏了这一步，断言会让整个插件加载
+        # 失败，而 PluginManager 只记一条日志——表现为「记忆悄悄没了」，
+        # 比少一条命令难查得多。宁可自己建一个列表。
+        if self.matchers is None:
+            logger.warning("插件 matchers 未被框架初始化，已自行创建")
+            self.matchers = []
         self.matchers.append(
             on_command(
                 "memory",
