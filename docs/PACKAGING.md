@@ -135,37 +135,35 @@ bash scripts/pack_linux_server.sh --version 1.22.0 --only rpm
 
 ### 3. arm64（aarch64）
 
-两种架构的构建方式不同，原因是 PyInstaller 与 Electron 的可交叉性不同：
+**在原生 arm64 机器上构建，不用 QEMU。** GitHub 托管了 `ubuntu-22.04-arm`，与 x64 的构建基线同代（glibc 2.35），CI 直接在它上面跑完整条链。
 
 | 部件 | 交叉编译 | 做法 |
 | --- | --- | --- |
-| Python 后端（PyInstaller） | ❌ 不支持 | 在 **ubuntu:22.04 arm64 容器**里原生构建（x64 机器上靠 QEMU 模拟） |
-| Electron 桌面壳 | ✅ 支持 | 在 x64 宿主上 `electron-builder --linux deb rpm --arm64`，自动下载 arm64 版 Electron |
-| 服务端包（dpkg-deb / rpmbuild） | — | 在容器内执行 `pack_linux_server.sh`，`uname -m` 给出 aarch64，架构字段自动正确 |
+| Python 后端（PyInstaller） | ❌ 不支持 | 在 **arm64 宿主**上原生构建（CI 用 `ubuntu-22.04-arm`） |
+| Electron 桌面壳 | ✅ 支持（但没必要） | 同一台 arm64 宿主上 `electron-builder --linux deb rpm`，产物即 arm64 |
+| 服务端包（dpkg-deb / rpmbuild） | — | 原生执行 `pack_linux_server.sh`，`uname -m` 给出 aarch64，架构字段自动正确 |
+
+> **历史**：1.22.4 之前的 arm64 包是在 x64 runner 里套一层 `ubuntu:22.04`(arm64) 容器、靠 QEMU 模拟构建的，
+> 单个「后端构建」步骤就要 60 分钟以上，比 x64 整条链还慢（实测 67 分钟 vs 21 分钟）。
+> 改用原生 runner 后整条链 **12 分钟**，见下节。**不要再退回 QEMU 方案**——`tests/test_workflows.py` 会拦。
 
 ```bash
-# 本地复现（需要 docker/podman + binfmt；产物落在 dist/linux，与 x64 产物同名规则）
-docker run --rm --platform linux/arm64 -v "$PWD":/src -v "$PWD/dist/linux":/out \
-  ubuntu:22.04 bash -c '
-    apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git build-essential xz-utils file dpkg-dev rpm
-    git clone --quiet --local /src /build && cp -r /src/web/dist /build/web/dist && cd /build
-    curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH"
-    uv python install 3.12 && uv venv --python 3.12
-    uv pip install --python .venv/bin/python -e ".[build]"
-    bash build-linux.sh && python3 scripts/pack_backend.py
-    bash scripts/pack_linux_server.sh --version 1.22.4 --out /out
-    cp -f dist/backend.zip /out/backend.zip'
-cp dist/linux/backend.zip dist/backend.zip
-cd desktop/electron && npx electron-builder --linux deb rpm --arm64 --publish never
+# 本地在 arm64 机器上复现（产物落在 dist/linux，与 x64 产物同名规则）
+# 依赖：rpm fakeroot xz-utils file、Python 3.12、Node 22
+uv venv .venv && uv pip install --python .venv/bin/python -e ".[build]"
+(cd web && npm ci && npm run build)
+bash build-linux.sh && .venv/bin/python scripts/pack_backend.py
+bash scripts/pack_linux_server.sh --version 1.22.4 --out dist/linux
+(cd desktop/electron && npm ci && npx electron-builder --linux deb rpm --publish never)
 ```
 
-> **为什么不在 GitHub 的 arm64 runner 上直接构建**：托管 arm64 runner 只有 `ubuntu-24.04`（glibc 2.39），
-> 在上面构建出的后端会要求 glibc ≥ 2.39，Debian 12 / Ubuntu 22.04 装得上却起不来（1.22.0 在 x64 上
-> 踩过同一个坑）。容器把基线钉回 22.04（glibc 2.35），与 x64 产物保持一致的下限。
+> **为什么原生可行**：PyInstaller 不能交叉编译，必须在 arm64 上构建——原生 runner 正好满足，QEMU 只是模拟。
+> 原先用容器的**唯一真实理由**是「基线必须钉在 glibc 2.35」，而 `ubuntu-22.04-arm` 与 `ubuntu-22.04` 同代，
+> 产物下限与 x64 完全一致，该理由已不成立（若退到 `ubuntu-24.04-arm`，glibc 2.39 会让 Debian 12 /
+> Ubuntu 22.04 装得上却起不来——1.22.0 在 x64 上踩过同一个坑）。
 >
-> **为什么容器里要重新 `git clone`**：宿主机工作区带着 x64 的 `.venv` 与 `dist/`，而 `build-linux.sh`
-> 会优先复用 `.venv/bin/python`——直接把仓库挂进容器，等于拿 x64 解释器当 arm64 构建环境。
+> **依赖侧已确认**：锁文件里 17 个编译扩展（numpy / pyarrow / lancedb / tiktoken / tokenizers /
+> pydantic-core / uvloop / cryptography / regex 等）全部提供 aarch64 manylinux wheel，arm 上无需源码编译。
 
 ## 产物命名与校验
 
@@ -222,11 +220,13 @@ SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux
 SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux --only rpm
 # 换目标发行版
 UBUNTU_IMAGE=debian:12 SMOKE_ENGINE=podman bash scripts/smoke_install_packages.sh dist/linux --only deb
-# 测 arm64 包（需 binfmt/qemu，CI 里由 docker/setup-qemu-action 提供）
-CONTAINER_PLATFORM=linux/arm64 bash scripts/smoke_install_packages.sh dist/linux
+# 测 arm64 包：在 arm64 机器上直接跑（CONTAINER_PLATFORM 留空 = 宿主原生架构）
+bash scripts/smoke_install_packages.sh dist/linux
 ```
 
-arm64 包走完全相同的四类断言，只把容器平台换成 `linux/arm64`；QEMU 下 apt/dnf 与冷启动更慢，单用例硬超时因此放宽到 1200s。
+`CONTAINER_PLATFORM` 留空即「宿主原生架构」。在 x64 机器上想测 arm64 包，可以显式设 `CONTAINER_PLATFORM=linux/arm64`（需 binfmt/qemu，CI 不再依赖这条路径）；QEMU 下 apt/dnf 与冷启动更慢，单用例硬超时因此放宽到 1200s。
+
+arm64 包走完全相同的四类断言。CI 里 `linux-arm64` job 跑在原生 `ubuntu-22.04-arm` 上，冒烟也是原生执行，不再经过 QEMU。
 
 ### 构建机的 glibc 决定运行时下限
 
@@ -252,15 +252,15 @@ ImportError: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found
 | Ubuntu 24.04 | 2.39 | ✅ |
 | Fedora 41 | 2.40 | ✅ |
 
-arm64 产物的下限与 x64 相同：后端在 `ubuntu:22.04` 的 arm64 容器里构建（glibc 2.35），冒烟同样跑 22.04 容器，两边对齐。
+arm64 产物的下限与 x64 相同：后端在 `ubuntu-22.04-arm` 上构建（glibc 2.35），冒烟也跑在同一个宿主上，两边对齐。
 
-改构建基线时的**四处联动**（漏一处就会出现"测的系统与发的产物不匹配"）：`release.yml` 的 `linux-deb-rpm.runner`、`release.yml` 的 `linux-arm64` 容器镜像、`ci.yml` 的 `package-smoke.runner`、`scripts/smoke_install_packages.sh` 的 `UBUNTU_IMAGE` 默认值。
+改构建基线时的**四处联动**（漏一处就会出现"测的系统与发的产物不匹配"）：`release.yml` 的 `linux-deb-rpm.runner`、`release.yml` 的 `linux-arm64.runner`（须选同代 arm 镜像，如 `ubuntu-22.04-arm`）、`ci.yml` 的 `package-smoke.runner`、`scripts/smoke_install_packages.sh` 的 `UBUNTU_IMAGE` 默认值。
 
 ## 自动发布（GitHub Actions）
 
 打 `vX.Y.Z` tag（或在 Actions 里手动触发 `workflow_dispatch`）即自动构建并上传分发包到同名 GitHub Release，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`——无需手动上传。流水线见 [`.github/workflows/release.yml`](../.github/workflows/release.yml)，各平台自动联编：
 - Windows 桌面（`qingci-bot-ce-<ver>-x64-setup.exe` + `-portable.zip`，`build.bat` + `build-electron.bat`）
-- Linux deb / rpm 共 8 个产物：x86_64 与 arm64 各 4 个（`build-linux.sh` + `electron-builder --linux deb rpm [--arm64]` 出桌面版，`scripts/pack_linux_server.sh` 出服务端版；arm64 后端在 `ubuntu:22.04` arm64 容器里构建）
+- Linux deb / rpm 共 8 个产物：x86_64 与 arm64 各 4 个（`build-linux.sh` + `electron-builder --linux deb rpm` 出桌面版，`scripts/pack_linux_server.sh` 出服务端版；arm64 整条链跑在原生 `ubuntu-22.04-arm` 上）
 - Docker 镜像（`ghcr.io`，`linux/amd64` + `linux/arm64` 多架构 manifest）
 - `SHA256SUMS.txt`（两个构建 job 都成功后由 `checksums` job 从资产 digest 统一生成）
 - Docker 镜像（tag：`X.Y.Z` / `X.Y` / `X` / `latest`；`docker/metadata-action` 会剥掉 `v` 前缀）
