@@ -84,11 +84,11 @@ uv run python main.py --host 127.0.0.1
 | Fedora / RHEL 桌面（ARM64） | `qingci-bot-ce-<ver>-1.aarch64.rpm` | 同上 |
 | Debian / Ubuntu 服务端（ARM64） | `qingci-bot-ce-server_<ver>_arm64.deb` | arm64 服务器，headless + systemd |
 | Fedora / RHEL 服务端（ARM64） | `qingci-bot-ce-server-<ver>-1.aarch64.rpm` | 同上 |
-| macOS 桌面（Apple 芯片） | `qingci-bot-ce-<ver>-arm64.dmg` | 仅 Apple Silicon；首次打开需右键「打开」（ad-hoc 签名，无 Apple 证书） |
+| macOS 桌面（Apple 芯片） | `qingci-bot-ce-<ver>-arm64.dmg` | 仅 Apple Silicon + macOS 13 Ventura 或更高；首次打开需右键「打开」（ad-hoc 签名，无 Apple 证书） |
 | macOS 桌面（免安装） | `qingci-bot-ce-<ver>-arm64.zip` | 解压后为 `Qingci-Bot CE.app` |
 | 校验和 | `SHA256SUMS.txt` | `sha256sum -c SHA256SUMS.txt` 校验上述 12 个包（含 arm64 / macOS） |
 
-Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。macOS 只提供 Apple Silicon（arm64）版本，不提供 Intel 版本。
+Linux 不提供 AppImage：桌面与服务端都以发行版原生包分发，依赖、升级与卸载交给包管理器。macOS 只提供 Apple Silicon（arm64）+ macOS 13 Ventura 及以上的版本，不提供 Intel 版本。
 
 > **发行版要求**：Linux 包自带 Python 运行时，要求 **glibc ≥ 2.35**（Ubuntu 22.04+ / Debian 12+ / Fedora 36+）。早期 1.22.0 在 24.04 上构建，导致 22.04 / Debian 12 启动报 `GLIBC_2.38' not found`，1.22.1 已修复；详见 [docs/PACKAGING.md](./docs/PACKAGING.md#构建机的-glibc-决定运行时下限)。
 

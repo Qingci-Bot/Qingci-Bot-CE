@@ -63,7 +63,7 @@
       "icon": "build/icon-1024.png",
       "category": "public.app-category.social-networking",
       "artifactName": "qingci-bot-ce-${version}-${arch}.${ext}",
-      "minimumSystemVersion": "11.0",
+      "minimumSystemVersion": "13.0",
       "darkModeSupport": true,
       "identity": "-",
       "hardenedRuntime": true,
