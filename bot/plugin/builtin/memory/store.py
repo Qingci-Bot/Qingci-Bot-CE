@@ -82,6 +82,20 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- 情绪状态：与 memories 刻意分表。情绪不是记忆，不该出现在 /memory list
+-- 或星图里；它的四个维度是连续值，演化规则也与记忆（显著性/命中/归并）无关。
+CREATE TABLE IF NOT EXISTS emotions (
+    scope      TEXT    NOT NULL,
+    scope_id   INTEGER NOT NULL,
+    mood       REAL    NOT NULL DEFAULT 0,
+    energy     REAL    NOT NULL DEFAULT 0,
+    affinity   REAL    NOT NULL DEFAULT 0.1,
+    patience   REAL    NOT NULL DEFAULT 0.7,
+    updated_at REAL    NOT NULL,
+    turns      INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (scope, scope_id)
+);
 """
 
 
@@ -563,6 +577,66 @@ class MemoryStore:
                 "INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=?",
                 (key, value, value),
             )
+            conn.commit()
+
+    # ============ 情绪状态 ============
+
+    def get_emotion(
+        self, *, scope: str = SCOPE_USER, scope_id: int
+    ) -> tuple[float, float, float, float, float, int] | None:
+        """读取情绪原始行；无记录返回 None（调用方用基线兜底）"""
+        with self._lock:
+            row = (
+                self._connect()
+                .execute(
+                    "SELECT mood, energy, affinity, patience, updated_at, turns "
+                    "FROM emotions WHERE scope=? AND scope_id=?",
+                    (scope, scope_id),
+                )
+                .fetchone()
+            )
+        if row is None:
+            return None
+        return (
+            float(row["mood"]),
+            float(row["energy"]),
+            float(row["affinity"]),
+            float(row["patience"]),
+            float(row["updated_at"]),
+            int(row["turns"]),
+        )
+
+    def save_emotion(
+        self,
+        *,
+        scope: str = SCOPE_USER,
+        scope_id: int,
+        row: tuple[float, float, float, float, float, int],
+    ) -> None:
+        """整行覆盖写入（情绪是"当前状态"，没有历史值需要保留）"""
+        mood, energy, affinity, patience, updated_at, turns = row
+        with self._lock:
+            conn = self._connect()
+            conn.execute(
+                "INSERT INTO emotions(scope, scope_id, mood, energy, affinity, patience, updated_at, turns) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(scope, scope_id) DO UPDATE SET "
+                "mood=excluded.mood, energy=excluded.energy, affinity=excluded.affinity, "
+                "patience=excluded.patience, updated_at=excluded.updated_at, turns=excluded.turns",
+                (scope, scope_id, mood, energy, affinity, patience, updated_at, turns),
+            )
+            conn.commit()
+
+    def clear_emotion(self, *, scope: str = SCOPE_USER, scope_id: int) -> None:
+        with self._lock:
+            conn = self._connect()
+            conn.execute("DELETE FROM emotions WHERE scope=? AND scope_id=?", (scope, scope_id))
+            conn.commit()
+
+    def clear_all_emotions(self) -> None:
+        with self._lock:
+            conn = self._connect()
+            conn.execute("DELETE FROM emotions")
             conn.commit()
 
 
