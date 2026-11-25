@@ -431,7 +431,13 @@ jobs:
         run: .venv/bin/python scripts/pack_backend.py
 
       - name: Package server deb + rpm (arm64)
-        run: bash scripts/pack_linux_server.sh --version "${{ needs.prepare.outputs.ver }}" --out dist/linux
+        # 必须剥掉 tag 的 v 前缀：dpkg 要求 Version 以数字开头，
+        # 传 v1.23.0-rc1 会得到 "v1.23.0~rc1" 并被 dpkg-deb 直接拒绝
+        # （deb 打包阶段就失败，前面几分钟的构建全部白做）。
+        # 与 x64 job 的写法保持一致。
+        run: |
+          ver="${{ needs.prepare.outputs.ver }}"
+          bash scripts/pack_linux_server.sh --version "${ver#v}" --out dist/linux
 
       - name: Package desktop deb + rpm (electron-builder, native arm64)
         working-directory: desktop/electron
