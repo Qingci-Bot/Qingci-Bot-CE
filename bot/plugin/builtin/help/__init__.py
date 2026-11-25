@@ -29,9 +29,29 @@ from html import escape
 from typing import Any
 
 from ...base import PluginBase
-from ...matcher import MatcherContext, on_command
+from ...matcher import MatcherContext, on_command, on_message
+from ...rule import Rule
 
 logger = logging.getLogger("qingci-bot.plugin.help")
+
+# 命令前缀：与 SDK 的 rule.command 保持一致（固定识别 "/"，且允许省略前缀）
+_COMMAND_PREFIX = "/"
+
+
+def _unhandled_command_rule() -> Rule:
+    """匹配「命令样式」的消息：以 / 开头且后面有实际内容
+
+    单独的 "/" 不算命令（可能是用户手滑），不触发兜底提示。
+    """
+
+    def _check(bot, event, ctx) -> bool:
+        text = ctx.plain_text or ""
+        if not text.startswith(_COMMAND_PREFIX):
+            return False
+        return bool(text[len(_COMMAND_PREFIX) :].strip())
+
+    return Rule(_check)
+
 
 # 渲染图片宽度 / 单图最大高度（超出按插件拆图，防内容被裁剪）
 _IMAGE_WIDTH = 720
@@ -66,6 +86,72 @@ class HelpPlugin(PluginBase):
                 priority=1,
             )(self._cmd_help)
         )
+        # 命令兜底：以 "/" 开头的消息若最终没有任何命令 Matcher 处理它
+        # （命令未注册，或因权限不足被跳过），在这里给出明确答复。
+        #
+        # 为什么必须有：这类消息原本会落到聊天 Matcher（priority=50），被 LLM
+        # 当普通文本回答——用户发 /status 收到一段「一切正常」的臆测，还以为
+        # 命令生效了。priority=45 高于聊天、低于所有命令（1），保证只在
+        # 命令体系确实无人接手时才触发。
+        self.matchers.append(
+            on_message(
+                rule=_unhandled_command_rule(),
+                priority=45,
+                block=True,
+                description="命令兜底提示",
+            )(self._handle_unhandled_command)
+        )
+
+    async def _handle_unhandled_command(self, ctx: MatcherContext) -> str | None:
+        """命令样式的消息没被任何命令 Matcher 接住时的提示
+
+        两种情形分开说，因为用户的下一步动作完全不同：
+        - 命令不存在 → 让用户去 /help 找可用命令
+        - 命令存在但没权限 → 把**当前平台身份**打出来（非 OneBot 平台是
+          openid 而不是 QQ 号，管理员极易填错 admin_users，表现就是
+          「命令突然只剩三条」）
+        """
+        text = ctx.plain_text or ""
+        # 去掉前缀后可能为空（用户只发了 "/"），此时 split 会返回空列表，
+        # 不能直接取 [0]——那就是一个 IndexError
+        parts = text[len(_COMMAND_PREFIX) :].split(maxsplit=1)
+        token = parts[0].strip() if parts else ""
+        if not token:
+            return None
+        matchers = self._find_command_matchers(token)
+        if not matchers:
+            return f"未找到命令 /{token}。回复 /help 查看可用命令。"
+        # 有权限却仍落到这里，说明该命令主动不回复（例如参数不足时静默）。
+        # 这时不该再插一句「没有权限」——那会误导。
+        event = ctx.raw_event or {}
+        for m in matchers:
+            try:
+                if await m.permission.check(self.bot, event, ctx):
+                    return None
+            except Exception:
+                logger.warning(f"命令兜底权限检查异常: /{token}", exc_info=True)
+        return (
+            f"没有权限执行 /{token}。\n"
+            f"你当前的身份：{ctx.user_id}"
+            "（如需授权，请管理员把它加入配置 bot.admin_users 或 bot.super_admin）"
+        )
+
+    def _find_command_matchers(self, token: str) -> list:
+        """按命令名/别名找出所有候选 Matcher（子指令按首个词归到父命令）"""
+        if self.bot is None:
+            return []
+        found = []
+        for matcher in self.bot.plugin_manager.all_matchers():
+            meta = matcher.meta or {}
+            cmd = str(meta.get("command") or "")
+            if not cmd:
+                continue
+            # 子指令的 meta["command"] 形如 "memory list"，按首词归属
+            head = cmd.split(maxsplit=1)[0]
+            aliases = [str(a).split(maxsplit=1)[0] for a in (meta.get("aliases") or [])]
+            if token == head or token in aliases:
+                found.append(matcher)
+        return found
 
     async def on_unload(self):
         logger.info("帮助插件已卸载")
@@ -82,8 +168,35 @@ class HelpPlugin(PluginBase):
 
         image = await self._try_render_help_image(plugin_commands)
         if image is not None:
-            return image
-        return self._build_help_text(plugin_commands)
+            # 图片里放不下「还有几条你没权限」，用追加文本段补一句
+            extra = self._hidden_hint(ctx)
+            return [*image, extra] if extra else image
+
+        text = self._build_help_text(plugin_commands)
+        hint = self._hidden_hint_text(ctx)
+        return f"{text}\n\n{hint}" if hint else text
+
+    def _hidden_hint_text(self, ctx: MatcherContext) -> str:
+        """被权限过滤掉的命令提示文案（无隐藏命令时返回空串）
+
+        只列可见命令时用户会以为「命令就这么几条」。尤其是在非 OneBot 平台
+        （如 QQ 官方机器人，身份是 openid 而非 QQ 号）上，管理员很容易填错
+        `admin_users`，表现就是「好用的命令突然只剩三条」——把身份直接打出来，
+        用户就知道该往配置里填什么。
+        """
+        hidden = getattr(self, "_hidden_by_permission", 0)
+        if hidden <= 0:
+            return ""
+        return (
+            f"另有 {hidden} 条命令需要更高权限，未列出。\n"
+            f"你当前的身份：{ctx.user_id}"
+            "（如需授权，请管理员把它加入配置 bot.admin_users 或 bot.super_admin）"
+        )
+
+    def _hidden_hint(self, ctx: MatcherContext) -> dict | None:
+        """同 :meth:`_hidden_hint_text`，但包装成消息段（供图片路径追加）"""
+        text = self._hidden_hint_text(ctx)
+        return {"type": "text", "data": {"text": text}} if text else None
 
     # ---- 收集 ----
 
@@ -97,6 +210,9 @@ class HelpPlugin(PluginBase):
         event = ctx.raw_event or {}
         plugin_commands: dict[str, dict] = {}
         seen: set[str] = set()
+        # 因权限被过滤掉的命令数：由 _cmd_help 附在输出末尾，避免用户误以为
+        # 「命令就这么几条」（非 OneBot 平台尤其常见，身份是 openid 而非 QQ 号）
+        self._hidden_by_permission = 0
 
         for matcher in self.bot.plugin_manager.all_matchers():
             meta = matcher.meta or {}
@@ -113,6 +229,7 @@ class HelpPlugin(PluginBase):
                 logger.warning(f"帮助权限检查异常: command={cmd}", exc_info=True)
                 visible = False
             if not visible:
+                self._hidden_by_permission = getattr(self, "_hidden_by_permission", 0) + 1
                 continue
             seen.add(cmd)
 
