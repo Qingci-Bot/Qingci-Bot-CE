@@ -43,6 +43,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from ....llm.memory import HistoryDecision, SummaryPolicy
@@ -182,9 +183,17 @@ class MemoryPlugin(PluginBase):
             f"召回 {self._settings.recall_limit} 条、提炼={'开' if self._settings.extract else '关'}）"
         )
 
-        # Web 管理页面「记忆星图」：静态页（同目录 web/，SDK 自动探测）+
-        # 只读数据接口。页面挂在插件卡片上，iframe 打开，鉴权沿用 X-API-Key。
-        self.register_page("记忆星图", icon="✦")
+        # Web 管理页面「记忆星图」：静态页（同目录 web/）+ 只读数据接口。
+        # 页面挂在插件卡片上，iframe 打开，鉴权沿用 X-API-Key。
+        #
+        # static_dir 显式传入而不是让 SDK 反射探测：PyInstaller 冻结后模块的
+        # __file__ 指向 _MEIPASS 下的包路径，spec 里的 datas 也放在同一位置，
+        # 显式路径与探测结果一致但更直观——探测失败时只会静默得到空白页。
+        self.register_page(
+            "记忆星图",
+            icon="✦",
+            static_dir=str(Path(__file__).parent / "web"),
+        )
         self.register_api(
             "graph",
             self._api_graph,
