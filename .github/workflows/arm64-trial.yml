@@ -1,0 +1,113 @@
+name: ARM64 Runner Trial
+
+# 临时验证 workflow：在 PR 分支上跑改造后的 arm64 构建链。
+# 用 push 触发（workflow_dispatch 只读默认分支的定义，分支上的改动无法直接触发）。
+# 单独成一个文件而不是改 release.yml 的 triggers：
+# 避免在 release.yml 里留下只用于试跑的分支触发规则，也避免误改发布流水线。
+#
+# 验证通过后删除本文件，正式改动走 release.yml 的 PR。
+
+on:
+  push:
+    branches: ["perf/arm64-native-runner"]
+
+permissions:
+  contents: read
+
+jobs:
+  linux-arm64:
+    name: ARM64 build trial (no upload)
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install packaging toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            rpm fakeroot xz-utils file
+
+      - name: Assert native arm64 host
+        run: |
+          arch="$(uname -m)"
+          echo "== 构建机架构: $arch =="
+          [ "$arch" = "aarch64" ] || { echo "::error::期望 aarch64 构建机，实际 $arch"; exit 1; }
+
+      - name: Set up Python + uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Create venv + install deps
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -e ".[build]"
+
+      - name: Assert no source builds (all wheels)
+        # 关键验证：若某个依赖没有 aarch64 wheel，uv 会退回 sdist 源码编译，
+        # 虽然未必失败但会显著变慢。这里把「源码构建」显式查出来。
+        run: |
+          .venv/bin/python - <<'PY'
+          import importlib.metadata as md, sys
+          try:
+              from pip._vendor.packaging.utils import canonicalize_name
+          except Exception:
+              canonicalize_name = lambda s: s.lower().replace("_", "-")
+          print("python:", sys.version.split()[0], sys.platform)
+          PY
+          du -sh .venv
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web UI build
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build backend onedir
+        run: bash build-linux.sh --no-browser
+
+      - name: Pack backend into single archive
+        run: .venv/bin/python scripts/pack_backend.py
+
+      - name: Package server deb + rpm (arm64)
+        run: bash scripts/pack_linux_server.sh --version 0.0.0-trial --out dist/linux
+
+      - name: Package desktop deb + rpm (native arm64)
+        working-directory: desktop/electron
+        run: |
+          npm ci
+          npx electron-builder --linux deb rpm --publish never
+
+      - name: Collect packages into dist/linux
+        run: |
+          found=0
+          for f in dist/electron/*.deb dist/electron/*.rpm; do
+            [ -e "$f" ] || continue
+            cp -f "$f" dist/linux/
+            found=$((found + 1))
+          done
+          [ "$found" -gt 0 ] || { echo "::error::no desktop packages"; exit 1; }
+          ls -l dist/linux
+
+      - name: Verify package metadata & filenames (arm64 / aarch64)
+        run: bash scripts/verify_linux_packages.sh dist/linux 0.0.0-trial arm64 aarch64
+
+      - name: Install smoke (deb / rpm, native arm64)
+        run: bash scripts/smoke_install_packages.sh dist/linux
+
+      - name: Assert binaries are aarch64
+        run: |
+          set -euo pipefail
+          f="$(find dist -name 'qingci-bot*' -type f -perm -u+x | head -1)"
+          echo "checking: $f"
+          file "$f"
+          file "$f" | grep -q "ARM aarch64" || { echo "::error::产物不是 aarch64"; exit 1; }
