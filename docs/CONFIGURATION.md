@@ -81,14 +81,14 @@ llm:
       args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
       url: ''                     #   HTTP 模式：填写后忽略 command
       env: {}                     #   可选额外环境变量
-  personas:                       # 人格列表（/persona 命令切换，会话级覆盖）
-    - name: 猫娘
-      description: 可爱的猫娘
-      system_prompt: 你是一只可爱的猫娘，喜欢用"喵"结尾。
-    - name: 助手
+  personas:                       # 人设列表（/persona 命令切换，会话级覆盖）
+    - name: 大肥鱼                 #   内置默认人设，出厂即启用
+      description: 默认人设：圆滚滚的 Q 版胖鱼，温和又爱开玩笑
+      system_prompt: 你是「大肥鱼」——一条生活在数字鱼缸里的 Q 版胖鱼，圆滚滚、慢吞吞，性格温和又爱开玩笑。回答时用简体中文，语气亲切自然，偶尔冒出与水、鱼、气泡相关的小比喻，但不影响回答准确性；不确定的事情就直说不确定，不编造。
+    - name: 助手                   #   可追加任意自定义人设
       description: 严谨的助手
       system_prompt: 你是严谨的技术助手，回答简洁准确。
-  default_persona: ''             # 默认人格名（空 = 使用 system_prompt）
+  default_persona: 大肥鱼         # 默认人设名（空 = 使用 system_prompt）
   multimodal:                     # 图片输入（需模型支持视觉，否则会报错）
     enabled: false                #   开启后把消息里的图片解析为地址一并发送
     max_images: 4                 #   单条消息最多带几张
@@ -100,7 +100,17 @@ llm:
 
 LLM 连接测试（`/api/config/llm/test`）使用 10 秒短超时探测，不受 `timeout` 配置影响，并透传具体失败原因（鉴权 / 超时 / 网络 / 其他）。
 
-**人格切换**：聊天中发送 `/persona 列表` 查看全部，`/persona 猫娘` 切换（仅对当前会话生效），`/persona 重置` 恢复默认人格或 `system_prompt`。
+**人设切换**：聊天中发送 `/persona 列表` 查看全部，`/persona 助手` 切换（仅对当前会话生效），`/persona 重置` 恢复默认人设（出厂为「大肥鱼」）或 `system_prompt`。
+
+**出厂人设与迁移规则**：内置聊天插件即「大肥鱼」，出厂自带同名默认人设，`personas` / `default_persona` 留空时自动补回：
+
+| 配置状态 | 加载后的行为 |
+| --- | --- |
+| `personas` 与 `default_persona` 都为空（老版本配置即此形态） | 补回出厂人设「大肥鱼」并设为默认 |
+| 任一非空（自定义了人设名或指定了默认人设） | 原样保留，不被覆盖 |
+| `persona_configured: true`（在 Web UI 删空人设并保存） | 保持为空，直接使用 `system_prompt`，不会出现「删除后又被自动补回」的情况 |
+
+`persona_configured` 由服务端在 Web UI 保存「人设为空」时自动置位（`PUT /api/config` 与 `PUT /api/config/llm` 均覆盖），无需手工维护。想恢复出厂人设时，在「LLM 配置 → 人设管理」点「恢复出厂人设」并保存即可。
 
 **MCP 工具**：开启 `enable_tools` 并配置 `mcp_servers` 后，启动时自动连接各服务器并将工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用。修改 MCP 配置后需重启 Bot 生效。
 
@@ -172,8 +182,9 @@ llm:
   enable_tools: false              # Function Calling 工具调用开关（默认关闭）
   max_tool_rounds: 5               # 工具调用最大轮次
   mcp_servers: []                  # MCP 服务器列表（enable_tools 开启后生效，见上方示例）
-  personas: []                     # 人格列表（/persona 命令切换，见上方示例）
-  default_persona: ''              # 默认人格名（空 = 使用 system_prompt）
+  personas: []                     # 人设列表（留空 = 自动补出厂「大肥鱼」，见上方迁移规则）
+  default_persona: ''              # 默认人设名（留空 = 同样补出厂「大肥鱼」）
+  persona_configured: false        # Web UI 删空人设时自动置 true，抑制出厂人设回填
   multimodal:                      # 图片输入（需模型支持视觉，否则会报错）
     enabled: false                 #   开启后把消息里的图片解析为地址一并发送
     max_images: 4                  #   单条消息最多带几张
@@ -271,7 +282,7 @@ lang: zh-CN                        # 全局语言（插件 i18n 默认语言）
 | `session_summary`                 | 会话摘要             | `enabled: false`                                                                                                                                            | 与 `llm.enable_summary` 等价，任一为 true 即启用；上下文超过条数/token 阈值时将较早消息摘要压缩，保留最近 N 轮原文                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `log.usage_tracking`              | LLM 用量入库         | `true`                                                                                                                                                      | 可退出的遥测：关闭后 chat/摘要/图片不再写 usage\_logs，Dashboard 用量统计将为空                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `llm.enable_tools`                | Function Calling | `false`                                                                                                                                                     | 启用工具调用（内置 `get_current_time` / `random_quote`，可经 ToolRegistry 扩展）；`max_tool_rounds` 限制最大轮次（默认 5）                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `llm.personas`                    | 人格/人设            | `[]`                                                                                                                                                        | 多组 system\_prompt；聊天中 `/persona` 切换（会话级覆盖）、`/persona 列表` 查看；Web UI「LLM 配置」管理                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `llm.personas`                    | 人设                 | `[{name: 大肥鱼, ...}]`                                                                                                                                                        | 多组 system\_prompt；聊天中 `/persona` 切换（会话级覆盖）、`/persona 列表` 查看；Web UI「LLM 配置」管理；留空自动补出厂人设（`persona_configured` 可抑制回填）                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `llm.mcp_servers`                 | MCP 服务器          | `[]`                                                                                                                                                        | 连接外部 MCP 服务器（stdio/HTTP 传输），工具注册为 `mcp_{服务器名}_{工具名}` 供 LLM 调用；需开启 `enable_tools`，修改后重启 Bot 生效                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `llm.provider`                    | 提供商联动            | `openai`                                                                                                                                                    | 切换 provider 自动带出预设 api\_url/model（openai/deepseek/ollama/siliconflow/claude/gemini/custom 共 7 个）；`api_url` 非空统一走 OpenAI 兼容协议                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `llm.timeout` / `llm.num_retries` | 请求超时与重试          | `60` / `2`                                                                                                                                                  | 单次 LLM 请求超时秒数与失败重试次数                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |

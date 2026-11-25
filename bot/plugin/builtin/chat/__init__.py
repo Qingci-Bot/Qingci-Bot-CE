@@ -2,7 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Additional terms under GPLv3 Section 7: see NOTICE
 
-"""内置聊天插件 - 对接 LLM 进行对话（Matcher 新式 API）
+"""内置聊天插件「大肥鱼」- 对接 LLM 进行对话（Matcher 新式 API）
+
+插件名固定为 chat（依赖解析、配置节 plugins.chat 均以此为键），
+对外展示名与默认人设统一为「大肥鱼」。
 
 触发模式（运行时读 config，配置热更新无需重新注册 Matcher）：
 - always: 所有消息触发
@@ -34,7 +37,7 @@ logger = logging.getLogger("qingci-bot.plugin.chat")
 _GROUP_CONFIG_CACHE_MAX = 512
 _group_config_cache: "OrderedDict[int, dict | None]" = OrderedDict()
 
-# 会话级人格覆盖缓存：{session_key: persona_name}
+# 会话级人设覆盖缓存：{session_key: persona_name}
 # 与群配置缓存同理使用 OrderedDict 做 LRU，防止长期运行无界膨胀。
 _PERSONA_OVERRIDE_MAX = 512
 _persona_override: "OrderedDict[str, str]" = OrderedDict()
@@ -136,17 +139,17 @@ def chat_permission() -> Permission:
 
 
 class ChatPlugin(PluginBase):
-    """LLM 对话插件（Matcher 新式 API）"""
+    """「大肥鱼」LLM 对话插件（Matcher 新式 API）"""
 
     name = "chat"
     version = "2.0.0"
     author = "Qingci-Bot CE"
-    description = "LLM 智能对话插件"
+    description = "大肥鱼：LLM 智能对话插件"
 
     async def on_load(self):
         # 限流器由核心层按配置创建（bot.rate_limiter），此处不再自建
         logger.info("聊天插件已加载")
-        # 人格命令：priority=1 高于聊天 Matcher（50），block=True 阻止后续
+        # 人设命令：priority=1 高于聊天 Matcher（50），block=True 阻止后续
         # Matcher 将 /persona 当作普通消息送给 LLM
         self.matchers.append(
             on_command(
@@ -154,7 +157,7 @@ class ChatPlugin(PluginBase):
                 permission=chat_permission(),
                 priority=1,
                 block=True,
-                description="人格切换 / 查看",
+                description="人设切换 / 查看",
             )(self._handle_persona)
         )
         self.matchers.append(
@@ -169,7 +172,7 @@ class ChatPlugin(PluginBase):
     async def on_unload(self):
         logger.info("聊天插件已卸载")
 
-    # ============ 人格 / 人设 ============
+    # ============ 人设（大肥鱼） ============
 
     @staticmethod
     def _session_key(ctx: MatcherContext) -> str:
@@ -180,14 +183,14 @@ class ChatPlugin(PluginBase):
 
     @staticmethod
     def _set_persona_override(key: str, name: str) -> None:
-        """设置会话人格覆盖（LRU 淘汰最久未访问项）"""
+        """设置会话人设覆盖（LRU 淘汰最久未访问项）"""
         _persona_override[key] = name
         _persona_override.move_to_end(key)
         if len(_persona_override) > _PERSONA_OVERRIDE_MAX:
             _persona_override.popitem(last=False)
 
     def _resolve_persona_prompt(self, ctx: MatcherContext) -> str | None:
-        """解析当前会话生效的人格 prompt（会话级覆盖 > 默认人格 > None）
+        """解析当前会话生效的人设 prompt（会话级覆盖 > 默认人设 > None）
 
         返回 None 表示使用 LLMConfig.system_prompt。
         """
@@ -196,7 +199,7 @@ class ChatPlugin(PluginBase):
         key = self._session_key(ctx)
         override = _persona_override.get(key)
         if override is not None:
-            # LRU 命中：刷新访问顺序，避免仍在使用的人格被淘汰
+            # LRU 命中：刷新访问顺序，避免仍在使用的人设被淘汰
             _persona_override.move_to_end(key)
             name = override
         else:
@@ -218,25 +221,25 @@ class ChatPlugin(PluginBase):
 
         if not args:
             cur = _persona_override.get(key) or llm_cfg.default_persona or "默认"
-            return f"当前人格：{cur}\n发送 /persona 列表 查看全部，/persona 重置 恢复默认。"
+            return f"当前人设：{cur}\n发送 /persona 列表 查看全部，/persona 重置 恢复默认。"
 
         if args in ("列表", "list", "ls"):
             if not personas:
-                return "当前未配置人格，请在 WebUI「LLM 配置」中管理。"
-            lines = [f"默认人格：{llm_cfg.default_persona or '（使用默认 system_prompt）'}"]
+                return "当前未配置人设，请在 WebUI「LLM 配置」中管理。"
+            lines = [f"默认人设：{llm_cfg.default_persona or '（使用默认 system_prompt）'}"]
             for name, p in personas.items():
                 lines.append(f"- {name}：{p.description or '（无描述）'}")
             return "\n".join(lines)
 
         if args in ("重置", "reset"):
             _persona_override.pop(key, None)
-            return "已恢复默认人格。"
+            return "已恢复默认人设。"
 
         if args not in personas:
-            return f"未找到人格「{args}」，发送 /persona 列表 查看可用人格。"
+            return f"未找到人设「{args}」，发送 /persona 列表 查看可用人设。"
 
         self._set_persona_override(key, args)
-        return f"已切换为「{args}」人格。"
+        return f"已切换为「{args}」人设。"
 
     async def _handle_chat(self, ctx: MatcherContext) -> str | None:
         """处理聊天消息：调用 LLM + 保存记录 + 实时广播"""
@@ -267,13 +270,13 @@ class ChatPlugin(PluginBase):
                     # 命中时不调用 LLM，直接返回拒答文案
                     return "您的消息包含敏感内容，请调整后重试。"
 
-        # 人格解析：会话级覆盖 > 默认人格 > LLMConfig.system_prompt
+        # 人设解析：会话级覆盖 > 默认人设 > LLMConfig.system_prompt
         persona_prompt = self._resolve_persona_prompt(ctx)
         base_prompt = persona_prompt or self.config.llm.system_prompt
         system_prompt = base_prompt
 
         # 轻量 RAG：rag.enabled 且命中知识时，将参考资料注入 system_prompt
-        # （注入长度受 rag.max_inject_chars 约束，未命中时保持人格 prompt）
+        # （注入长度受 rag.max_inject_chars 约束，未命中时保持人设 prompt）
         rag_cfg = self.config.rag
         if rag_cfg.enabled and self.knowledge_store is not None:
             try:

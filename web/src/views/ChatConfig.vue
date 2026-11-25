@@ -88,7 +88,7 @@ function resetForm() {
   });
 }
 
-// 人格管理
+// 人设管理
 function addPersona() {
   form.personas.push({ name: '', description: '', system_prompt: '' });
 }
@@ -101,6 +101,27 @@ function removePersona(idx) {
 }
 function toggleDefaultPersona(name) {
   form.default_persona = form.default_persona === name ? '' : name;
+}
+
+// 出厂人设「大肥鱼」：与后端 bot/config.py 的 DAFEIYU_PERSONA 保持一致。
+// 前端仅用于「恢复出厂人设」的本地回填，真正生效以保存后的后端配置为准。
+const DAFEIYU_PROMPT =
+  '你是「大肥鱼」——一条生活在数字鱼缸里的 Q 版胖鱼，圆滚滚、慢吞吞，' +
+  '性格温和又爱开玩笑。回答时用简体中文，语气亲切自然，' +
+  '偶尔冒出与水、鱼、气泡相关的小比喻，但不影响回答准确性；' +
+  '不确定的事情就直说不确定，不编造。';
+const DAFEIYU_PERSONA = {
+  name: '大肥鱼',
+  description: '出厂人设：圆滚滚的 Q 版胖鱼，温和又爱开玩笑',
+  system_prompt: DAFEIYU_PROMPT,
+};
+
+function restoreDefaultPersona() {
+  if (!form.personas.some((p) => p.name === DAFEIYU_PERSONA.name)) {
+    form.personas.push({ ...DAFEIYU_PERSONA });
+  }
+  form.default_persona = DAFEIYU_PERSONA.name;
+  showToast('info', '已回填出厂人设，保存后生效');
 }
 
 // MCP 服务器管理
@@ -308,28 +329,26 @@ async function saveConfig() {
         </div>
         <div class="form-group full-width">
           <label>系统提示词 (System Prompt)</label>
-          <textarea
-            v-model="form.system_prompt"
-            placeholder="定义 Bot 的人格、回复风格和知识边界..."
-          />
+          <textarea v-model="form.system_prompt" placeholder="定义大肥鱼的说话风格与知识边界..." />
         </div>
       </div>
     </div>
 
     <div class="card fade-in">
       <div class="card-header">
-        <div class="card-title">人格管理</div>
+        <div class="card-title">人设管理</div>
         <div class="action-bar">
-          <button class="btn btn-secondary" @click="addPersona">+ 添加人格</button>
+          <button class="btn btn-secondary" @click="addPersona">+ 添加人设</button>
         </div>
       </div>
       <div class="hint-text">
-        聊天中通过 <code>/persona 名称</code> 切换会话人格，<code>/persona 列表</code> 查看全部，
-        <code>/persona 重置</code> 恢复默认。未设置人格覆盖时使用下方「系统提示词」。
+        出厂自带人设「大肥鱼」。聊天中通过 <code>/persona 名称</code> 切换会话人设，
+        <code>/persona 列表</code> 查看全部，<code>/persona 重置</code> 恢复默认。
+        未设置人设覆盖时使用上方「系统提示词」；删空人设并保存后不会再自动补回。
       </div>
       <div v-for="(p, idx) in form.personas" :key="idx" class="persona-block">
         <div class="persona-row">
-          <input v-model="p.name" placeholder="人格名（如：猫娘）" class="persona-name" />
+          <input v-model="p.name" placeholder="人设名（如：大肥鱼）" class="persona-name" />
           <input v-model="p.description" placeholder="简述" class="persona-desc" />
           <button
             class="btn btn-secondary btn-sm"
@@ -342,11 +361,14 @@ async function saveConfig() {
         </div>
         <textarea
           v-model="p.system_prompt"
-          placeholder="该人格的 system prompt，例如：你是一只可爱的猫娘，喜欢用喵结尾..."
+          placeholder="该人设的 system prompt，例如：你是「大肥鱼」，一条圆滚滚、爱开玩笑的胖鱼..."
         />
       </div>
       <div v-if="!form.personas.length" class="hint-text" style="margin-top: 12px">
-        暂无人格，点击「添加人格」开始配置。
+        暂无人设，将直接使用上方「系统提示词」。点击「添加人设」可新建，
+        <button class="btn btn-secondary btn-sm" @click="restoreDefaultPersona">
+          恢复出厂人设
+        </button>
       </div>
     </div>
 

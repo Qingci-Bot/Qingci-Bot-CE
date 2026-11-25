@@ -187,6 +187,13 @@ async def update_config(data: dict, request: Request):
             # 过滤脱敏占位符后深度合并
             filtered = _filter_masked(data)
             _deep_merge(current, filtered)
+            # 人设历史留痕：用户在 Web UI 把出厂人设「大肥鱼」删空后保存，
+            # 打上标记，加载时不再自动补回（见 bot/config.py:apply_default_persona）。
+            # 只置位不清零：一旦用户表达过「我配置过人设」，后续空值即真实意图。
+            llm_section = current.get("llm")
+            if isinstance(llm_section, dict):
+                if not llm_section.get("personas") and not llm_section.get("default_persona"):
+                    llm_section["persona_configured"] = True
             cfg.update(current)
             _maybe_notify_bot(reload_llm=True)
             # 审计埋点：仅记录变更的顶层字段名，不含字段值（避免泄露密钥）
@@ -263,6 +270,11 @@ async def update_llm_config(data: dict, request: Request):
                     status_code=400,
                     detail="custom 提供商必须填写 API 地址（api_url）",
                 )
+            # 人设历史留痕：用户把出厂人设「大肥鱼」删空并保存后，打上标记，
+            # 加载时不再自动补回（见 bot/config.py:apply_default_persona）。
+            # 只置位不清零：一旦用户表达过「我配置过人设」，后续空值就是真实意图。
+            if not current.get("personas") and not current.get("default_persona"):
+                current["persona_configured"] = True
             full = cfg.to_dict()
             full["llm"] = current
             cfg.update(full)

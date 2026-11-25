@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from bot.config import ConfigManager, LLMConfig, OneBotConfig
+from bot.config import ConfigManager, LLMConfig, OneBotConfig, PersonaConfig
 
 
 @pytest.fixture
@@ -100,6 +100,35 @@ class TestConfigManager:
         cfg = LLMConfig(provider="openai")
         assert cfg.model == "gpt-4o-mini"
         assert cfg.api_url == "https://api.openai.com/v1"
+
+    def test_llm_default_persona_is_dafeiyu(self):
+        """出厂默认人设为「大肥鱼」，且 personas 默认值不共享可变对象"""
+        cfg = LLMConfig()
+        assert cfg.default_persona == "大肥鱼"
+        assert [p.name for p in cfg.personas] == ["大肥鱼"]
+        assert "大肥鱼" in cfg.system_prompt
+        # default_factory：两个实例的 personas 必须是不同列表，避免互相污染
+        other = LLMConfig()
+        cfg.personas.append(PersonaConfig(name="自定义"))
+        assert [p.name for p in other.personas] == ["大肥鱼"]
+
+    def test_legacy_empty_persona_migrates_to_default(self):
+        """存量配置迁移：老版本写死的空 personas / default_persona 视为「未配置」"""
+        cfg = LLMConfig(personas=[], default_persona="")
+        assert cfg.default_persona == "大肥鱼"
+        assert [p.name for p in cfg.personas] == ["大肥鱼"]
+
+    def test_persona_configured_flag_keeps_empty(self):
+        """用户手动清空人设并保存后（persona_configured=True），不再自动补回"""
+        cfg = LLMConfig(personas=[], default_persona="", persona_configured=True)
+        assert cfg.personas == []
+        assert cfg.default_persona == ""
+
+    def test_custom_persona_not_overridden(self):
+        """用户自定义人设不被迁移逻辑覆盖"""
+        cfg = LLMConfig(personas=[{"name": "助手", "system_prompt": "x"}], default_persona="助手")
+        assert [p.name for p in cfg.personas] == ["助手"]
+        assert cfg.default_persona == "助手"
 
     def test_config_to_dict(self, config_file):
         cm = ConfigManager(Path(config_file))

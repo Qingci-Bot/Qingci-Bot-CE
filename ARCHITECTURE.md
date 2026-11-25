@@ -299,7 +299,7 @@ Qingci-Bot-CE/
 
 - 会话摘要：可选的摘要压缩，保留最近 N 轮原文
 
-- 人格切换：`/persona` 命令会话级覆盖 system\_prompt
+- 内置聊天插件「大肥鱼」：`/persona` 命令切换人设，会话级覆盖 system\_prompt
 
 ### HTML 渲染服务（`bot/html_renderer.py`）
 
