@@ -21,6 +21,18 @@ from ...permission import ADMIN, SUPERUSER
 logger = logging.getLogger("qingci-bot.plugin.admin")
 
 
+def _group_id_int(value: str | int | None) -> int:
+    """把 group_id 收敛成 int（缓存键是 int，QQ 适配器给的是字符串）
+
+    非数字（理论上不该出现）返回 0：缓存失效是「尽力而为」的优化，
+    不能因为一个畸形 id 让 /group 报错。
+    """
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 class AdminPlugin(PluginBase):
     """管理命令插件（Matcher 新式 API）"""
 
@@ -95,16 +107,45 @@ class AdminPlugin(PluginBase):
         return "对话历史已清除。"
 
     async def _cmd_status(self, ctx: MatcherContext) -> str:
-        """查看 Bot 状态"""
-        connected = self.connection.is_connected if self.connection else False
+        """查看 Bot 状态：按实际启用的适配器逐条列出
+
+        早期只支持 OneBot，这里写死了「OneBot 连接」。接入多平台后，在 QQ 官方
+        机器人 / Telegram 实例下这条永远显示「离线」——用户看到的是「明明在线
+        却说离线」，比不显示更糟。改为遍历 ``bot.platforms``（只含已启用的
+        适配器），并带上未连上的原因（凭据缺失、鉴权失败等），让「离线」与
+        「没配」可区分。
+        """
         llm_ok = await self._check_llm_cached()
         msg_count = (await self.db.get_message_count()) if self.db else 0
-        return (
-            f"Bot 状态:\n"
-            f"  OneBot 连接: {'在线' if connected else '离线'}\n"
-            f"  LLM 服务: {'可用' if llm_ok else '不可用'}\n"
-            f"  消息记录: {msg_count} 条"
-        )
+        lines = ["Bot 状态:", *self._platform_lines()]
+        lines.append(f"  LLM 服务: {'可用' if llm_ok else '不可用'}")
+        lines.append(f"  消息记录: {msg_count} 条")
+        return "\n".join(lines)
+
+    def _platform_lines(self) -> list[str]:
+        """各平台连接状态（一行一个适配器）"""
+        adapters = []
+        for platform in getattr(self.bot, "platforms", {}).values():
+            # 与 bot.get_status() 口径一致：停用的适配器不上报，
+            # 否则「Telegram 实例下 OneBot 已关闭」也会列出来
+            if getattr(platform, "enabled", True):
+                adapters.append(platform)
+
+        if not adapters:
+            return ["  平台: 未启用（在「平台配置」里启用并填写凭据）"]
+
+        lines = ["  平台:"]
+        for platform in adapters:
+            label = getattr(platform, "display_name", "") or getattr(platform, "name", "未知")
+            online = bool(getattr(platform, "is_connected", False))
+            # 未连上时的原因：区分「进程没起来」与「凭据没配」，后者用户自己能修
+            reason = "" if online else getattr(platform, "_start_error", "")
+            suffix = f"（{reason}）" if reason else ""
+            lines.append(
+                f"    · {label} [{getattr(platform, 'name', '')}] "
+                f"{'在线' if online else '离线'}{suffix}"
+            )
+        return lines
 
     async def _check_llm_cached(self) -> bool:
         """检查 LLM 可用性（带 60 秒缓存，避免频繁消耗 token）"""
@@ -225,9 +266,11 @@ class AdminPlugin(PluginBase):
                 logger.exception(f"保存群配置失败: group_id={ctx.group_id}")
                 return "保存群配置失败，请稍后再试。"
         # 失效 chat 插件的群配置缓存，使变更立即生效
-        from .chat import invalidate_group_config_cache
+        # 注意是 `..chat`（builtin 下的兄弟包），写成 `.chat` 会去找
+        # bot.plugin.builtin.admin.chat——不存在的模块，`/group` 直接 ImportError
+        from ..chat import invalidate_group_config_cache
 
-        invalidate_group_config_cache(ctx.group_id)
+        invalidate_group_config_cache(_group_id_int(ctx.group_id))
         return f"本群 Bot 已{'开启' if enabled else '关闭'}。"
 
     async def _save_config_async(self):
