@@ -95,9 +95,15 @@ def test_icon_is_large_enough(mac_cfg):
     assert min(w, h) >= 512, f"macOS 图标至少 512×512，实际 {w}×{h}"
 
 
-def test_minimum_system_version_matches_arm64_baseline(mac_cfg):
-    """Apple Silicon 起点是 macOS 11，声明更低没有意义、更高会挡住用户"""
-    assert mac_cfg.get("minimumSystemVersion") == "11.0"
+def test_minimum_system_version_matches_electron_floor(mac_cfg):
+    """声明的最低系统版本必须等于产物的真实下限，不能凭「Apple Silicon 从 11 起」想当然
+
+    Electron 45 的主程序 minos 实测是 **13.0**（`vtool -show-build` 读回）。
+    此前这里声明 11.0，意味着 macOS 11/12 用户「装得上、一开就崩」——
+    症状与签名失效几乎一样，极难排查。发版校验脚本已把这条变成硬断言
+    （声明值 < 真实 minos 即失败），这里同步锁住期望值。
+    """
+    assert mac_cfg.get("minimumSystemVersion") == "13.0"
 
 
 def test_verify_script_checks_signature_and_arch():

@@ -167,7 +167,7 @@ bash scripts/pack_linux_server.sh --version 1.22.4 --out dist/linux
 
 ## macOS 打包（仅 Apple Silicon）
 
-**只发布 arm64（Apple Silicon）**，不提供 Intel 版本。产物为 `.dmg` 安装镜像与 `.zip` 免安装包。
+**只发布 arm64（Apple Silicon）**，且要求 **macOS 13（Ventura）及以上**——不提供 Intel 版本。产物为 `.dmg` 安装镜像与 `.zip` 免安装包。
 
 ### 为什么必须在 arm64 宿主上构建
 
@@ -212,7 +212,8 @@ bash scripts/verify_macos_app.sh dist/electron 1.23.0-rc1
 | 命名 | `qingci-bot-ce-<ver>-arm64.{dmg,zip}` 存在 | 版本/架构错位会让用户下到别人的包 |
 | 架构 | `lipo -archs` 只含 arm64，**拒绝** x86_64 切片 | Intel 切片意味着产物跑不了 |
 | 签名 | `codesign -dv` 含 `Signature=adhoc` 且 `codesign --verify --deep --strict` 通过 | 未签名 → 用户看到「已损坏」 |
-| 元信息 | `CFBundleIdentifier` = `com.qingcibot.ce`，`LSMinimumSystemVersion` = `11.0` | bundle id 不一致会导致权限/数据目录错乱 |
+| 元信息 | `CFBundleIdentifier` = `com.qingcibot.ce`，`LSMinimumSystemVersion` = `13.0` | bundle id 不一致会导致权限/数据目录错乱 |
+| 真实下限 | 用 `vtool -show-build` 读主程序与后端的 `minos`，要求**声明值 ≥ 两者** | 声明低于真实下限 → macOS 11/12 用户「装得上、一开就崩」，症状与签名失效几乎一样 |
 | 可运行 | 解开 `resources/backend.zip` 跑 `--help`，退出码必须为 0 | 前三项全对但 dylib 缺失/签名失效，只有真跑一次才查得出来 |
 
 > 图标要求 ≥512×512 PNG（electron-builder 据此生成 `.icns`）。仓库里 `build/icon.png` 只有 256×256，另备 `build/icon-1024.png` 专供 macOS。

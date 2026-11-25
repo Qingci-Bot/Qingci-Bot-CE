@@ -31,7 +31,7 @@ DIST_DIR="${1:-dist/electron}"
 VER_IN="${2:-}"
 APP_NAME="Qingci-Bot CE"
 EXPECT_BUNDLE_ID="com.qingcibot.ce"
-EXPECT_MIN_MACOS="11.0"
+EXPECT_MIN_MACOS="13.0"
 
 [ -n "$VER_IN" ] || {
   echo "用法: $0 <产物目录> <版本号(不带 v)>" >&2

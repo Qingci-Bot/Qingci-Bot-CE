@@ -57,7 +57,7 @@ uv pip install -e ".[dev]" --python .venv\Scripts\python.exe
 >
 > **Linux 桌面（deb / rpm）**：与 Windows 同源，Linux 后端由 `build-unix.sh`（`build.bat` 的对应脚本）产出 onedir，再经 `electron-builder --linux deb rpm` 打成 deb / rpm 安装包；另有 headless 服务端包（`qingci-bot-ce-server`，含 systemd 单元），由 `scripts/pack_linux_server.sh` 产出。**本项目不提供 AppImage**。桌面版数据按 XDG 规范落在 `$XDG_DATA_HOME/Qingci-Bot CE`（默认 `~/.local/share`），可用 `QINGCI_DATA_HOME` 覆盖。详见 [docs/PACKAGING.md](./PACKAGING.md)。
 >
-> **macOS（仅 Apple 芯片）**：提供 `.dmg` 安装镜像与 `.zip` 免安装包，**只支持 arm64（Apple Silicon）**，不提供 Intel 版本。无 Apple Developer 证书，因此走 ad-hoc 签名——首次打开需**右键 →「打开」**（或到「系统设置 → 隐私与安全性」允许一次）；若提示「已损坏」，执行 `xattr -dr com.apple.quarantine "/Applications/Qingci-Bot CE.app"`。这是无证书分发的固有代价，不是包损坏。构建与校验细节见 [docs/PACKAGING.md](./PACKAGING.md#macos-打包仅-apple-silicon)。
+> **macOS（仅 Apple 芯片）**：提供 `.dmg` 安装镜像与 `.zip` 免安装包，**只支持 arm64（Apple Silicon）且需 macOS 13（Ventura）或更高**，不提供 Intel 版本（下限由 Electron 45 的主程序 minos 决定，已在发版校验中硬断言）。无 Apple Developer 证书，因此走 ad-hoc 签名——首次打开需**右键 →「打开」**（或到「系统设置 → 隐私与安全性」允许一次）；若提示「已损坏」，执行 `xattr -dr com.apple.quarantine "/Applications/Qingci-Bot CE.app"`。这是无证书分发的固有代价，不是包损坏。构建与校验细节见 [docs/PACKAGING.md](./PACKAGING.md#macos-打包仅-apple-silicon)。
 >
 > **发布流水线（GitHub Actions）**：打 `vX.Y.Z` tag 即自动构建并上传分发包到同名 GitHub Release，无需手动上传——`build.bat`/`build-unix.sh` 分别出后端、`build-electron.bat`/`electron-builder` 出 EXE / deb / rpm / dmg，`scripts/pack_linux_server.sh` 另出 headless 服务端 deb / rpm，同时构建并推送 Docker 镜像到 `ghcr.io/<repo>`（tag 含 `vX.Y.Z` / `X.Y` / `X` / `latest`）。见 [.github/workflows/release.yml](../.github/workflows/release.yml)。
 >
