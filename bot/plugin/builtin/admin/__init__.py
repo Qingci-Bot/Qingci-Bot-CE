@@ -76,7 +76,7 @@ class AdminPlugin(PluginBase):
                 ("whoami", "id", "我是谁"),
                 permission=EVERYONE,
                 priority=1,
-                description="查看自己的身份识别码与权限（配置管理员时用）",
+                description="查看身份识别码与当前权限",
             )(self._cmd_whoami)
         )
         self.matchers.append(

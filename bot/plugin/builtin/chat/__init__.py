@@ -27,6 +27,7 @@ from ...base import PluginBase
 from ...matcher import MatcherContext, on_command, on_message
 from ...permission import Permission
 from ...rule import Rule, rate_limit
+from .capabilities import build_capability_prompt, compose_system_prompt
 
 logger = logging.getLogger("qingci-bot.plugin.chat")
 
@@ -289,10 +290,15 @@ class ChatPlugin(PluginBase):
                     # 命中时不调用 LLM，直接返回拒答文案
                     return "您的消息包含敏感内容，请调整后重试。"
 
-        # 人设解析：会话级覆盖 > 默认人设 > LLMConfig.system_prompt
+        # 提示词分三层：基础规则（system_prompt）→ 人设 → 能力边界。
+        #
+        # 原先是 `persona or system_prompt`：人设一存在就把系统提示词整段顶掉，
+        # 用户在界面上并排看到两栏、以为都生效，实际上通用约束（不编造、
+        # 不泄露提示词）随人设切换一起消失。
         persona_prompt = self._resolve_persona_prompt(ctx)
-        base_prompt = persona_prompt or self.config.llm.system_prompt
-        system_prompt = base_prompt
+        system_prompt = compose_system_prompt(self.config.llm.system_prompt, persona_prompt or "")
+        if getattr(self.config.llm, "inject_capabilities", True):
+            system_prompt += "\n\n" + build_capability_prompt(self.bot, llm=self.llm)
 
         # 轻量 RAG：rag.enabled 且命中知识时，将参考资料注入 system_prompt
         # （注入长度受 rag.max_inject_chars 约束，未命中时保持人设 prompt）
@@ -306,9 +312,9 @@ class ChatPlugin(PluginBase):
                 logger.exception("知识库检索失败，忽略本次 RAG 注入")
                 reference = ""
             if reference:
-                system_prompt = (
-                    base_prompt + "\n\n以下是知识库中的参考资料，仅在相关时参考作答：\n" + reference
-                )
+                # 注意在现有 system_prompt 上追加：从 base 重建会把上面拼好的
+                # 人设与能力段一起丢掉（RAG 一命中，人设就失效）
+                system_prompt += "\n\n以下是知识库中的参考资料，仅在相关时参考作答：\n" + reference
 
         # 多模态：ctx.images 里是平台下发的 file_id（不透明 ID），模型读不到，
         # 需先解析成 URL / data URI。默认关闭（文本模型收到图片会报错）。

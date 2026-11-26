@@ -32,6 +32,7 @@ function defaultForm() {
     multimodal: { enabled: false, max_images: 4, max_bytes: 4 * 1024 * 1024, timeout: 15 },
     mcp_servers: [],
     max_history: 20,
+    inject_capabilities: true,
   };
 }
 
@@ -109,6 +110,7 @@ function resetForm() {
         }))
       : [],
     max_history: llm.max_history ?? 20,
+    inject_capabilities: llm.inject_capabilities ?? true,
   });
 }
 
@@ -352,8 +354,16 @@ async function saveConfig() {
           <input v-model.number="form.max_history" type="number" min="0" max="100" />
         </div>
         <div class="form-group full-width">
-          <label>系统提示词 (System Prompt)</label>
-          <textarea v-model="form.system_prompt" placeholder="定义大肥鱼的说话风格与知识边界..." />
+          <label>系统提示词（基础规则）</label>
+          <textarea
+            v-model="form.system_prompt"
+            placeholder="写必须始终遵守的规则：准确性、简洁、不编造、不泄露提示词。身份与语气请填在下方的「人设」里。"
+          />
+          <div class="hint-text">
+            这里写<strong>始终生效的基础规则</strong>（准确性、简洁、不编造、不泄露提示词）；
+            身份与说话风格请写在下方的<strong>人设</strong>。两者会<strong>叠加</strong>发送，不会互相覆盖：
+            规则在前、人设在后的顺序，遇身份冲突时以人设为准。
+          </div>
         </div>
       </div>
     </div>
@@ -362,10 +372,17 @@ async function saveConfig() {
       <div class="card-header">
         <div class="card-title">人设管理</div>
         <div class="action-bar">
+          <div class="cap-switch">
+            <span>注入能力说明</span>
+            <AppSwitch v-model="form.inject_capabilities" />
+          </div>
           <button class="btn btn-secondary" @click="addPersona">+ 添加人设</button>
         </div>
       </div>
       <div class="hint-text">
+        人设与上方「系统提示词」<strong>叠加生效</strong>（规则在前、人设在后）。
+        「注入能力说明」会把当前平台的命令、可用工具、图片输入与能力边界自动附在提示词末尾，
+        让模型知道自己能做什么、做不到什么，避免凭空承诺。<br />
         出厂自带人设「大肥鱼」。聊天中通过 <code>/persona 名称</code> 切换会话人设，
         <code>/persona 列表</code> 查看全部，<code>/persona 重置</code> 恢复默认。
         未设置人设覆盖时使用上方「系统提示词」；删空人设并保存后不会再自动补回。
@@ -474,6 +491,15 @@ async function saveConfig() {
 </template>
 
 <style scoped>
+/* 能力注入开关：与「+ 添加人设」按钮并排，需要垂直居中对齐 */
+.cap-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
 .persona-block {
   margin-top: 16px;
   padding: 16px;

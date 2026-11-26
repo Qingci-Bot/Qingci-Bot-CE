@@ -106,7 +106,9 @@ class TestConfigManager:
         cfg = LLMConfig()
         assert cfg.default_persona == "大肥鱼"
         assert [p.name for p in cfg.personas] == ["大肥鱼"]
-        assert "大肥鱼" in cfg.system_prompt
+        # system_prompt 是基础规则，不再兼任人设（身份在 personas 里）
+        assert "大肥鱼" not in cfg.system_prompt
+        assert "不编造" in cfg.system_prompt
         # default_factory：两个实例的 personas 必须是不同列表，避免互相污染
         other = LLMConfig()
         cfg.personas.append(PersonaConfig(name="自定义"))

@@ -37,7 +37,7 @@ class ImageGenPlugin(PluginBase):
             on_command(
                 ("image", "画图"),
                 rule=rate_limit(),
-                description="AI 绘图: /image <提示词>",
+                description="AI 绘图（需开启 image.enabled）",
                 priority=1,
             )(self._cmd_image)
         )
