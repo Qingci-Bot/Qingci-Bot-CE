@@ -5,6 +5,8 @@
 -->
 
 <script setup>
+import AppSelect from '../components/form/AppSelect.vue';
+import AppSwitch from '../components/form/AppSwitch.vue';
 import { ref, onMounted } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useToast } from '../composables/useToast';
@@ -70,9 +72,8 @@ async function updateGroup(group, payload) {
   }
 }
 
-function onEnabledChange(group, event) {
-  // 以 DOM 实际勾选状态为准（:checked 绑定不会自动同步 group.enabled）
-  const newValue = event.target.checked;
+function onEnabledChange(group, newValue) {
+  // 开关是受控的：组件把「新的值」作为事件参数传出，这里同步到本地行并提交
   group.enabled = newValue;
   updateGroup(group, { enabled: newValue });
 }
@@ -181,27 +182,20 @@ async function removeGroup(group) {
           <tr v-for="group in groups" :key="group.group_id">
             <td style="font-family: var(--font-mono); font-weight: 600">{{ group.group_id }}</td>
             <td>
-              <label class="switch">
-                <input
-                  type="checkbox"
-                  :checked="group.enabled"
-                  :disabled="savingId === group.group_id"
-                  @change="onEnabledChange(group, $event)"
-                />
-                <span class="slider" />
-              </label>
+              <AppSwitch
+                :model-value="group.enabled"
+                :disabled="savingId === group.group_id"
+                @change="onEnabledChange(group, $event)"
+              />
             </td>
             <td>
-              <select
+              <AppSelect
                 v-model="group.triggerValue"
                 class="inline-select"
                 :disabled="savingId === group.group_id"
+                :options="triggerOptions"
                 @change="onTriggerChange(group)"
-              >
-                <option v-for="opt in triggerOptions" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </option>
-              </select>
+              />
             </td>
             <td>
               <button

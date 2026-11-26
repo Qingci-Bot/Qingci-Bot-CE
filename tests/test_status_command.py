@@ -169,3 +169,57 @@ async def test_group_command_does_not_crash_on_chat_import(bot):
     assert "已关闭" in text
     # 保留了群原有的 trigger_mode，没有被重置
     assert plugin.db.saved == [(100, False, "always")]
+
+
+# ──────────────────────────────────────────────────────────────────
+# /whoami：身份识别码独立成命令
+# ──────────────────────────────────────────────────────────────────
+
+
+async def test_whoami_marks_super_admin(bot):
+    plugin = await _admin_plugin(bot)
+    bot.config.bot.super_admin = str(ADMIN_ID)
+    text = await plugin._cmd_whoami(_ctx())
+    assert "身份信息" in text
+    assert str(ADMIN_ID) in text
+    assert "超级管理员" in text
+    # 已是管理员就不该再教他「去配置 admin_users」
+    assert "bot.admin_users" not in text
+
+
+async def test_whoami_marks_normal_user_and_tells_what_to_do(bot):
+    """普通用户必须看到「把这串 ID 填到哪」——QQ 平台的身份是 openid 字符串"""
+    plugin = await _admin_plugin(bot)
+    bot.config.bot.super_admin = "999999"
+    bot.config.bot.admin_users = ["888888"]
+    text = await plugin._cmd_whoami(_ctx())
+    assert "普通用户" in text
+    assert "bot.admin_users" in text
+
+
+async def test_whoami_includes_group_id_only_in_group(bot):
+    from bot.plugin.matcher import MatcherContext
+
+    plugin = await _admin_plugin(bot)
+    private = await plugin._cmd_whoami(_ctx())
+    assert "群 ID" not in private
+
+    group_ctx = MatcherContext(
+        raw_event={"platform": "qq", "group_id": "12345", "user_id": str(ADMIN_ID)},
+        type="message",
+        detail_type="group",
+        message_type="group",
+        user_id=ADMIN_ID,
+        group_id=12345,
+        plain_text="/whoami",
+        args="",
+    )
+    assert "群 ID：12345" in await plugin._cmd_whoami(group_ctx)
+
+
+async def test_whoami_registered_for_everyone(bot):
+    """/whoami 必须所有人可用，否则普通用户查不到自己的 ID"""
+    await bot.plugin_manager.load_builtin(bot)
+    plugin = bot.plugin_manager.get("admin")
+    matcher = next(m for m in plugin.matchers if (m.meta or {}).get("command") == "whoami")
+    assert matcher.permission.label == "EVERYONE"

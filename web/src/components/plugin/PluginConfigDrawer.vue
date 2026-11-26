@@ -5,6 +5,7 @@
 -->
 
 <script setup>
+import AppSwitch from '../form/AppSwitch.vue';
 import { ref, computed } from 'vue';
 import Drawer from '../Drawer.vue';
 import { useAppStore } from '../../stores/app';
@@ -115,10 +116,7 @@ async function save() {
           </span>
           <span v-if="field.description" class="config-desc">{{ field.description }}</span>
         </label>
-        <label v-if="field.type === 'boolean'" class="switch">
-          <input v-model="values[field.key]" type="checkbox" />
-          <span class="slider round" />
-        </label>
+        <AppSwitch v-if="field.type === 'boolean'" v-model="values[field.key]" />
         <input
           v-else
           v-model="values[field.key]"

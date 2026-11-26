@@ -403,10 +403,80 @@ function resolveIconPath() {
   return path.join(__dirname, "..", "build", "icon.png");
 }
 
+/**
+ * 锁定窗口宽高比（等比例缩放）
+ *
+ * 三层兜底，因为各平台能力不同：
+ * 1) `setAspectRatio` —— macOS / Windows 原生支持，拖动时由系统约束，最平滑
+ * 2) `will-resize` —— Windows / macOS 的拖动事件，系统未约束时（如从边缘单边拖）
+ *    用 preventDefault + setSize 自行纠正；Linux 不触发该事件
+ * 3) `resize` 去抖 —— Linux 没有前两者，只能在用户松手后按目标比例纠正一次；
+ *    拖动过程中会短暂变形，但不会留下错误比例
+ *
+ * 只锁定用户拖动缩放；程序自身的 setSize（如最大化/全屏）不干预。
+ */
+function lockAspect(win, ratio) {
+  const TOLERANCE = 0.012; // 允许 1.2% 误差，避免像素取整导致来回抖动
+
+  const fixByHeight = () => {
+    const [w, h] = win.getSize();
+    if (!w || !h) return;
+    if (Math.abs(w / h - ratio) <= TOLERANCE) return;
+    win.setSize(Math.max(1, Math.round(h * ratio)), h);
+  };
+  const fixByWidth = () => {
+    const [w, h] = win.getSize();
+    if (!w || !h) return;
+    if (Math.abs(w / h - ratio) <= TOLERANCE) return;
+    win.setSize(w, Math.max(1, Math.round(w / ratio)));
+  };
+
+  // 1) 系统级约束（不支持的平台会静默忽略或抛错）
+  try {
+    win.setAspectRatio(ratio, { width: 0, height: 0 });
+  } catch {
+    /* 平台不支持，交给下面两层 */
+  }
+
+  // 2) 拖动中约束：高度变化为主（用户多从下边框拖），宽度变化为主时按宽度纠正
+  win.on("will-resize", (event, newBounds) => {
+    if (win.isMaximized() || win.isFullScreen()) return;
+    const { width, height } = newBounds;
+    if (!width || !height) return;
+    if (Math.abs(width / height - ratio) <= TOLERANCE) return;
+    event.preventDefault();
+    // 取变化更大的一边作为主导，另一维按比例推导
+    const [curW, curH] = win.getSize();
+    const widthChanged = Math.abs(width - curW) >= Math.abs(height - curH);
+    const fixedW = widthChanged ? width : Math.round(height * ratio);
+    const fixedH = widthChanged ? Math.round(width / ratio) : height;
+    win.setSize(Math.max(1, fixedW), Math.max(1, fixedH));
+  });
+
+  // 3) Linux 兜底：松手后纠正（150ms 去抖，避免拖动过程中的 resize 风暴）
+  let timer = null;
+  win.on("resize", () => {
+    if (win.isMaximized() || win.isFullScreen()) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      if (win.isDestroyed()) return;
+      fixByHeight();
+    }, 150);
+  });
+
+  // 最大化/全屏时不要强行改回，退出后再纠一次
+  win.on("unmaximize", () => setTimeout(fixByHeight, 60));
+  win.on("leave-full-screen", () => setTimeout(fixByWidth, 60));
+}
+
 function makeWindow({ error = false } = {}) {
+  // 宽高比固定为初始尺寸之比：等比例缩放，避免布局被拉伸变形
+  const width = error ? 640 : 1100;
+  const height = error ? 420 : 750;
   const win = new BrowserWindow({
-    width: error ? 640 : 1100,
-    height: error ? 420 : 750,
+    width,
+    height,
     minWidth: error ? 480 : 800,
     minHeight: error ? 300 : 600,
     title: "Qingci-Bot CE",
@@ -429,6 +499,8 @@ function makeWindow({ error = false } = {}) {
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
   });
+
+  lockAspect(win, width / height);
   return win;
 }
 

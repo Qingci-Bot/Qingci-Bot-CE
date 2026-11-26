@@ -6,6 +6,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import AppSwitch from '../components/form/AppSwitch.vue';
 import Drawer from '../components/Drawer.vue';
 import CommandTab from '../components/plugin/CommandTab.vue';
 import MarketTab from '../components/plugin/MarketTab.vue';
@@ -345,15 +346,12 @@ function switchTab(tab) {
               </div>
             </div>
             <div class="action-bar">
-              <label class="switch" :title="plugin.enabled ? '点击禁用' : '点击启用'">
-                <input
-                  type="checkbox"
-                  :checked="plugin.enabled"
-                  :disabled="loading === plugin.name"
-                  @change="toggleEnabled(plugin)"
-                />
-                <span class="slider round" />
-              </label>
+              <AppSwitch
+                :model-value="plugin.enabled"
+                :disabled="loading === plugin.name"
+                :title="plugin.enabled ? '点击禁用' : '点击启用'"
+                @change="toggleEnabled(plugin)"
+              />
               <template v-if="plugin.pages && plugin.pages.length > 0">
                 <button
                   v-for="page in plugin.pages"

@@ -97,18 +97,20 @@ async def test_unknown_command_reports_not_found(bot):
     assert "/help" in out
 
 
-async def test_denied_command_prints_identity_for_admin_config(bot):
-    """有该命令但没权限 → 说明没有权限，并把当前身份打出来
+async def test_denied_command_points_to_whoami(bot):
+    """有该命令但没权限 → 说明没有权限，并指向 /whoami 查身份
 
-    身份是 QQ 官方机器人场景下的 openid 字符串：管理员只有看到它，才知道
-    该往 bot.admin_users 里填什么。只说「没有权限」等于没说。
+    身份码已独立成 /whoami：帮助/拒绝提示只负责指路，不再兼任身份查询
+    （在帮助里找自己的 ID 是反直觉的）。
     """
     plugin = await _help_plugin(bot)
     out = await plugin._handle_unhandled_command(_ctx("/status", user_id=NORMAL_ID))
     assert out is not None
     assert "没有权限执行 /status" in out
-    assert str(NORMAL_ID) in out
+    assert "/whoami" in out
     assert "admin_users" in out
+    # 身份码不应再出现在这条提示里
+    assert str(NORMAL_ID) not in out
 
 
 async def test_authorized_command_is_not_mislabeled(bot):
@@ -140,14 +142,14 @@ async def test_help_reports_hidden_command_count(bot):
     # TestBot 无 html_renderer → 走纯文本分支，提示应拼在正文末尾
     if isinstance(result, str):
         assert "需要更高权限" in result
-        assert str(NORMAL_ID) in result
+        assert "/whoami" in result
         return
     # 有渲染能力时以追加文本段返回
     assert isinstance(result, list)
     texts = [seg["data"]["text"] for seg in result if seg.get("type") == "text"]
     assert texts, "应在图片之后附带隐藏命令提示"
     assert "需要更高权限" in texts[-1]
-    assert str(NORMAL_ID) in texts[-1]
+    assert "/whoami" in texts[-1]
 
 
 async def test_hidden_hint_absent_when_nothing_hidden(bot):
@@ -164,3 +166,72 @@ async def test_hidden_hint_absent_when_nothing_hidden(bot):
     plugin._hidden_by_permission = 3
     hint = plugin._hidden_hint(_ctx("", user_id=NORMAL_ID))
     assert hint is not None and "另有 3 条" in hint["data"]["text"]
+
+
+# ──────────────────────────────────────────────────────────────────
+# /help：按「类别 → 插件」分组，并展开子命令
+#
+# 反馈：/help 显示的命令不全，且希望按所属插件归类。真实成因有两个：
+# 1) 描述只写一行「/memory list|add|pin|...」，看不出每个子命令做什么；
+# 2) 权限检查抛异常会被当作「无权限」，命令从帮助里静默消失
+#    （chat 的 /persona 就因读取缺失的 user_blacklist 字段而消失）。
+# ──────────────────────────────────────────────────────────────────
+
+
+async def test_help_expands_subcommands(bot):
+    """子命令要单独成行，而不是挤在一条竖线分隔的字符串里"""
+    from bot.plugin.builtin.help import HelpPlugin
+
+    await bot.plugin_manager.load_builtin(bot)
+    plugin = bot.plugin_manager.get("help")
+    assert isinstance(plugin, HelpPlugin) or plugin is not None
+
+    collected = await plugin._collect(_ctx("", user_id=ADMIN_ID), "")
+    memory = collected["memory"]["commands"]
+    cmd, _aliases, _desc, subs = next(c for c in memory if c[0] == "memory")
+    assert cmd == "memory"
+    assert subs, "memory 未声明子命令说明"
+    names = [s[0] for s in subs]
+    assert "mood" in names and "list [永久]" in names
+
+
+async def test_help_text_groups_by_category_then_plugin(bot):
+    """文本兜底也要分组：类别分隔线 + 插件名小节"""
+    await bot.plugin_manager.load_builtin(bot)
+    plugin = bot.plugin_manager.get("help")
+    collected = await plugin._collect(_ctx("", user_id=ADMIN_ID), "")
+    text = plugin._build_help_text(collected)
+
+    assert "━━━" in text, "缺少类别分隔线"
+    assert "[admin]" in text and "[memory]" in text, "缺少插件分组标题"
+    # 子命令缩进层级：比命令行更深
+    assert "\n        list" in text or "\n        mood" in text
+
+
+async def test_persona_visible_when_config_lacks_blacklist(bot):
+    """权限检查不能因为缺字段就把命令藏掉
+
+    chat_permission 直接读 `cfg.user_blacklist`，字段缺失时抛 AttributeError，
+    被 Permission.check 当作「无权限」——/persona 从 /help 消失且无法执行。
+    默认空名单的语义就是「不屏蔽任何人」，不该影响可用性。
+    """
+    await bot.plugin_manager.load_builtin(bot)
+    plugin = bot.plugin_manager.get("help")
+
+    # TestBot 的 bot 配置本就没有 user_blacklist / group_blacklist
+    assert not hasattr(bot.config.bot, "user_blacklist")
+    collected = await plugin._collect(_ctx("", user_id=ADMIN_ID), "")
+    heads = {c[0] for info in collected.values() for c in info["commands"]}
+    assert "persona" in heads, "/persona 因权限检查异常被隐藏了"
+
+
+async def test_help_hint_points_to_whoami(bot):
+    """帮助里的隐藏提示不再塞身份码，改为指向 /whoami"""
+    await bot.plugin_manager.load_builtin(bot)
+    plugin = bot.plugin_manager.get("help")
+    plugin._hidden_by_permission = 3
+
+    text = plugin._hidden_hint_text(_ctx("", user_id=NORMAL_ID))
+    assert "另有 3 条" in text
+    assert "/whoami" in text
+    assert str(NORMAL_ID) not in text, "身份码仍出现在 /help 里"

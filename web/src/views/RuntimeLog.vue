@@ -5,6 +5,7 @@
 -->
 
 <script setup>
+import AppSelect from '../components/form/AppSelect.vue';
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useWebSocket } from '../composables/useWebSocket';
 import { useAppStore } from '../stores/app';
@@ -121,9 +122,7 @@ onUnmounted(() => {
         <div class="runlog-actions">
           <label class="level-filter">
             级别
-            <select v-model="levelFilter">
-              <option v-for="lv in LEVELS" :key="lv" :value="lv">{{ lv }}</option>
-            </select>
+            <AppSelect v-model="levelFilter" :options="LEVELS" />
           </label>
           <button class="btn btn-secondary btn-sm" @click="toggleAutoScroll">
             {{ autoScroll ? '自动滚动：开' : '自动滚动：关' }}

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from types import SimpleNamespace
@@ -815,3 +816,94 @@ async def test_start_without_credentials_raises_not_configured():
     # 提示里要给出可操作的指引，而不是只说失败
     assert "AppID" in str(exc.value)
     assert adapter.is_connected is False
+
+
+# ──────────────────────────────────────────────────────────────────
+# 断线处理：关闭码分类、心跳超时、重连退避
+#
+# 反馈现象是「QQ 官方适配器有概率断开连接」。根因有三个机制缺口：
+# 1) 半开连接（NAT 静默丢包）时心跳一直发、ACK 永不回，接收循环不结束，
+#    适配器显示在线但收不到消息；
+# 2) 关闭码未分类：4004（token 失效）后仍用旧 token 重连，永远失败；
+# 3) 正常关闭固定 1 秒重连并清零计数，服务端连续踢时形成重连风暴。
+# ──────────────────────────────────────────────────────────────────
+
+
+def test_close_code_4004_forces_token_refresh(adapter):
+    """4004 = 鉴权失败。必须清掉 token 到期时间，下次重连才会强制换新 token
+
+    只重连不换 token 的话，会一直用过期凭证循环失败——用户看到的就是
+    「一直连不上」，日志里只有一串 4004。
+    """
+    adapter._session_id = "sess"
+    adapter._seq = 42
+    adapter._token_expire_at = time.time() + 3600
+
+    adapter._on_close_code(4004)
+
+    assert adapter._token_expire_at == 0.0, "未清空 token 到期时间，不会触发刷新"
+    assert adapter._session_id == "", "token 都失效了，session 也不能再 Resume"
+
+
+def test_close_code_session_invalid_clears_session(adapter):
+    """4006/4007/4900+ = 会话失效，必须清 session 走 Identify"""
+    for code in (4006, 4007, 4901, 4914):
+        adapter._session_id = "sess"
+        adapter._seq = 9
+        adapter._on_close_code(code)
+        assert adapter._session_id == "", f"{code} 后仍保留 session，Resume 一定被拒"
+
+
+def test_close_code_normal_close_keeps_session(adapter):
+    """1000/1001（正常关闭、服务端重启）要保留 session，下次带 Resume 补事件"""
+    adapter._session_id = "sess"
+    adapter._seq = 7
+    adapter._on_close_code(1000)
+    adapter._on_close_code(1001)
+    assert adapter._session_id == "sess"
+    assert adapter._seq == 7
+
+
+async def test_heartbeat_timeout_closes_connection(adapter):
+    """长时间收不到 ACK 必须主动关闭：否则半开连接会一直「在线但不收消息」"""
+    closed: list[int] = []
+
+    class _FakeWS:
+        async def send(self, _payload):
+            return None
+
+        async def close(self, code=1000, reason=""):
+            closed.append(code)
+
+    adapter.heartbeat_interval = 0.01
+    # 心跳基准设在 200 秒前 → 必然超过 max(60s, 2.5*interval)
+    adapter._last_heartbeat = time.time() - 200
+
+    await adapter._heartbeat_loop(_FakeWS())
+
+    assert closed == [1000], "心跳超时后未主动关闭连接"
+
+
+async def test_heartbeat_sends_when_ack_fresh(adapter):
+    """ACK 新鲜时应正常发心跳，不能误判为超时"""
+    sent: list[str] = []
+
+    class _FakeWS:
+        async def send(self, payload):
+            sent.append(payload)
+
+        async def close(self, code=1000, reason=""):  # pragma: no cover - 不该被调用
+            raise AssertionError("不应关闭连接")
+
+    adapter.heartbeat_interval = 0.01
+    adapter._last_heartbeat = time.time()
+
+    task = asyncio.create_task(adapter._heartbeat_loop(_FakeWS()))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert sent, "心跳没发出去"

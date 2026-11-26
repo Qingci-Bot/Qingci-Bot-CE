@@ -142,9 +142,14 @@ def chat_permission() -> Permission:
 
     async def _check(bot, event, ctx) -> bool:
         cfg = bot.config.bot
-        if ctx.user_id in cfg.user_blacklist:
+        # 用 getattr 兜底：权限检查抛异常会被 Permission.check 当作「无权限」，
+        # 表现是 /persona 从 /help 里静默消失、命令也执行不了。缺一个黑名单
+        # 字段不该导致整个命令不可用（默认空名单 = 不屏蔽任何人）。
+        blacklist = getattr(cfg, "user_blacklist", None) or []
+        if ctx.user_id in blacklist:
             return False
-        if ctx.group_id and ctx.group_id in cfg.group_blacklist:
+        group_blacklist = getattr(cfg, "group_blacklist", None) or []
+        if ctx.group_id and ctx.group_id in group_blacklist:
             return False
         return True
 
@@ -155,6 +160,7 @@ class ChatPlugin(PluginBase):
     """「大肥鱼」LLM 对话插件（Matcher 新式 API）"""
 
     name = "chat"
+    category = "对话"
     version = "2.0.0"
     author = "Qingci-Bot CE"
     description = "大肥鱼：LLM 智能对话插件"

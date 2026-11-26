@@ -275,7 +275,11 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 18px;
+  /* 空间不足时让按钮组换行，而不是压缩标题 */
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 .card-title {
@@ -285,6 +289,11 @@ body::before {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 标题必须整行显示：flex 行里的文本容器默认可以被压缩到 min-content，
+     中文会在任意字间断行——「全部实例」被压成竖排两个字就是这么来的。
+     右侧按钮区该让位（按钮有 flex-shrink: 0），而不是把标题挤断。 */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .card-title::before {
@@ -924,6 +933,8 @@ body::before {
 .breadcrumb {
   font-size: 13px;
   color: var(--text-secondary);
+  /* 面包屑是导航，不是正文：不允许在词中间断行 */
+  white-space: nowrap;
 }
 
 /* 操作栏 */
