@@ -20,8 +20,11 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
+import os
 import shutil
+import sys
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -35,6 +38,11 @@ INSTANCE_META = "instance.json"
 DEFAULT_PORT = 8080
 DEFAULT_INSTANCE_NAME = "default"
 DEFAULT_PLATFORM = "onebot"
+
+# 进程运行锁文件名（位于实例 data/ 下，由 API lifespan 启动时写入、
+# 关闭时删除；内容为 pid）。删除实例前据此判断是否有存活进程占用，
+# 防止删掉正在运行实例的数据目录（审阅发现：原实现只挡当前实例）。
+RUNNING_LOCK = ".running.lock"
 
 # 端口分配/占用临界区锁：create_instance 的「计算空闲端口 + 写元数据占用」必须
 # 原子，否则并发创建可能分到同一端口（TOCTOU）。
@@ -304,14 +312,62 @@ def create_instance(
 
 
 def delete_instance(name: str) -> bool:
-    """删除实例目录（含数据）。返回 False 表示实例不存在或名称非法。"""
+    """删除实例目录（含数据）。返回 False 表示实例不存在或名称非法。
+
+    Raises:
+        RuntimeError: 实例正被存活进程占用（data/.running.lock 的 pid 仍活着）。
+    """
     if not is_valid_name(name):
         return False
     path = instance_path(name)
     if not path.is_dir():
         return False
+    if is_instance_running(name):
+        raise RuntimeError(f"实例 {name} 正在运行，请先停止对应进程再删除")
     shutil.rmtree(path, ignore_errors=True)
     return True
+
+
+def _pid_alive(pid: int) -> bool:
+    """探测进程是否存活（跨平台 best-effort）"""
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        try:
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            handle = ctypes.windll.kernel32.OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+            )
+        except Exception:
+            return False
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # 进程存在但属其他用户
+    except OSError:
+        return False
+    return True
+
+
+def is_instance_running(name: str) -> bool:
+    """判断实例是否有存活进程占用（best-effort）
+
+    依据 data/.running.lock 中的 pid 做存活探测；锁文件缺失/损坏/
+    pid 已死亡均视为未运行（崩溃残留不阻塞删除）。
+    """
+    lock = instance_path(name) / "data" / RUNNING_LOCK
+    try:
+        data = json.loads(lock.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    pid = data.get("pid") if isinstance(data, dict) else None
+    return isinstance(pid, int) and _pid_alive(pid)
 
 
 def rename_instance(old_name: str, new_name: str) -> InstanceInfo:

@@ -293,11 +293,29 @@ class MessageDispatcher:
         if not record_all:
             return
         group_id = ctx.group_id if ctx.message_type == "group" and ctx.group_id else None
+        content = ctx.message.extract_plain_text()
+        if not content.strip():
+            # 纯媒体消息（图片/语音/文件等）没有纯文本，只记空串会让审计
+            # 出现"看不到内容"的空洞。不落原始数据（体积与隐私），改为
+            # 记类型占位符，保证消息日志能看出「这条消息是什么」。
+            tag = {
+                "image": "[图片]",
+                "voice": "[语音]",
+                "audio": "[音频]",
+                "video": "[视频]",
+                "file": "[文件]",
+            }
+            tags = " ".join(
+                tag.get(seg.get("type", ""), f"[{seg.get('type', '未知')}]")
+                for seg in ctx.segments
+                if seg.get("type") not in ("text", "reply", "mention", "mention_all")
+            )
+            content = tags or content
         record = {
             "message_id": ctx.message_id,
             "user_id": ctx.user_id,
             "group_id": group_id,
-            "content": ctx.message.extract_plain_text(),
+            "content": content,
             "message_type": ctx.message_type,
             "role": "user",
             "platform": ctx.platform,

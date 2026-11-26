@@ -276,25 +276,43 @@ class MemoryStore:
             )
             conn.commit()
 
-    def set_tier(self, mem_id: int, tier: str, *, now: float | None = None) -> bool:
-        """改层级（pin 升为永久 / unpin 降回长期）"""
+    def set_tier(
+        self,
+        mem_id: int,
+        tier: str,
+        *,
+        scope: str,
+        scope_id: int,
+        now: float | None = None,
+    ) -> bool:
+        """改层级（pin 升为永久 / unpin 降回长期）
+
+        scope/scope_id 必传并在 SQL 里过滤：记忆 id 是顺序小整数，
+        不带归属校验的话，任何用户都能用 /memory pin #5 改别人的记忆
+        （横向越权，审阅发现）。
+        """
         ts = time.time() if now is None else now
         with self._lock:
             conn = self._connect()
             cur = conn.execute(
-                "UPDATE memories SET tier=?, updated_at=?, last_hit_at=? WHERE id=?",
-                (tier, ts, ts, mem_id),
+                "UPDATE memories SET tier=?, updated_at=?, last_hit_at=? "
+                "WHERE id=? AND scope=? AND scope_id=?",
+                (tier, ts, ts, mem_id, scope, scope_id),
             )
             conn.commit()
             return cur.rowcount > 0
 
-    def delete(self, ids: list[int]) -> int:
+    def delete(self, ids: list[int], *, scope: str, scope_id: int) -> int:
+        """删除指定记忆，仅限 scope/scope_id 归属名下的条目（防横向越权）"""
         if not ids:
             return 0
         with self._lock:
             conn = self._connect()
             marks = ",".join("?" * len(ids))
-            cur = conn.execute(f"DELETE FROM memories WHERE id IN ({marks})", ids)
+            cur = conn.execute(
+                f"DELETE FROM memories WHERE id IN ({marks}) AND scope=? AND scope_id=?",
+                [*ids, scope, scope_id],
+            )
             conn.commit()
             return cur.rowcount
 
@@ -518,7 +536,7 @@ class MemoryStore:
             # 把被合并者的命中次数计入幸存者，避免"越合并越弱"
             self.reinforce([dup.id], delta=0.0)
         if removed:
-            self.delete(removed)
+            self.delete(removed, scope=scope, scope_id=scope_id)
         return len(removed)
 
     # ---------- 会话摘要 ----------

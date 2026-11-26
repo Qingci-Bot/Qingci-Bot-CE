@@ -121,10 +121,23 @@ def test_delete_and_clear(tmp_path):
     store = MemoryStore(tmp_path / "m.db")
     a, _ = store.upsert(scope=SCOPE_USER, scope_id=1, content="甲")
     store.upsert(scope=SCOPE_USER, scope_id=1, content="乙")
-    assert store.delete([a]) == 1
+    assert store.delete([a], scope=SCOPE_USER, scope_id=1) == 1
     assert [m.content for m in store.list_memories(scope=SCOPE_USER, scope_id=1)] == ["乙"]
     assert store.clear(scope=SCOPE_USER, scope_id=1) == 1
     assert store.list_memories(scope=SCOPE_USER, scope_id=1) == []
+
+
+def test_delete_and_set_tier_reject_foreign_scope(tmp_path):
+    """delete / set_tier 必须校验归属：不能用编号操作别人的记忆（横向越权）"""
+    store = MemoryStore(tmp_path / "m.db")
+    a, _ = store.upsert(scope=SCOPE_USER, scope_id=1, content="甲的秘密")
+    # 用户 2 尝试删除/改层用户 1 的记忆：应无效果
+    assert store.delete([a], scope=SCOPE_USER, scope_id=2) == 0
+    assert store.set_tier(a, TIER_PERMANENT, scope=SCOPE_USER, scope_id=2) is False
+    assert [m.content for m in store.list_memories(scope=SCOPE_USER, scope_id=1)] == ["甲的秘密"]
+    # 归属者本人操作正常
+    assert store.set_tier(a, TIER_PERMANENT, scope=SCOPE_USER, scope_id=1) is True
+    assert store.delete([a], scope=SCOPE_USER, scope_id=1) == 1
 
 
 # ──────────────────────────────────────────────────────────────────

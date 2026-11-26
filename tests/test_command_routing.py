@@ -83,6 +83,27 @@ async def test_chat_rule_still_accepts_plain_text(bot):
     assert await rule.check(bot, {}, _ctx("今天天气怎么样")) is True
 
 
+async def test_chat_rule_keyword_mode_with_slash_keywords(bot):
+    """keyword 模式 + `/` 开头的触发词必须能触发（审阅发现的逻辑冲突）
+
+    默认 trigger_keywords 就是 ['/bot', '/ai']；命令前缀检查若先于
+    keyword 判定且不豁免，keyword 模式在默认配置下永远无法触发。
+    """
+    bot.config.bot.trigger_mode = "keyword"
+    bot.config.bot.trigger_keywords = ["/bot", "/ai"]
+    rule = chat_trigger()
+    ctx = _ctx("/bot 今天天气怎么样")
+    assert await rule.check(bot, {}, ctx) is True
+    assert ctx.args == "今天天气怎么样"
+    # 触发词之外的命令样式文本仍被拦截（不交给 LLM 瞎回答）
+    assert await rule.check(bot, {}, _ctx("/status")) is False
+    # 非 / 开头的关键词照常工作
+    bot.config.bot.trigger_keywords = ["小鱼"]
+    ctx2 = _ctx("小鱼 今天天气怎么样")
+    assert await rule.check(bot, {}, ctx2) is True
+    assert ctx2.args == "今天天气怎么样"
+
+
 # ──────────────────────────────────────────────────────────────────
 # 2. 命令兜底提示
 # ──────────────────────────────────────────────────────────────────
