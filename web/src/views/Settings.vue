@@ -130,23 +130,32 @@ function saveApiKey() {
   showToast('success', 'API Key 已保存到浏览器');
 }
 
+// 端口校验：填写了非法端口时明确提示，而不是静默回退默认值
+// （Telegram / QQ 官方机器人走外连，不监听本地端口，无需校验）
+function validatePorts() {
+  const checks = [
+    { label: 'OneBot 监听端口', value: form.onebot.port },
+    { label: 'OneBot 12 监听端口', value: form.platforms.onebot12.port },
+  ];
+  for (const { label, value } of checks) {
+    if (value === '' || value == null) continue;
+    const n = Number(value);
+    if (isNaN(n) || n < 1024 || n > 65535) {
+      return `${label}无效：${value}（需为 1024-65535 之间的整数）`;
+    }
+  }
+  return '';
+}
+
 async function saveConfig() {
   if (!store.configLoaded) {
     showToast('error', '配置尚未加载完成，无法保存');
     return;
   }
-  // 端口校验：填写了非法端口时明确提示，而不是静默回退默认值
-  // （Telegram / QQ 官方机器人走外连，不监听本地端口，无需校验）
-  if (!['telegram', 'qq'].includes(currentPlatform.value)) {
-    const rawPort =
-      currentPlatform.value === 'onebot' ? form.onebot.port : form.platforms.onebot12.port;
-    if (rawPort !== '' && rawPort != null) {
-      const n = Number(rawPort);
-      if (isNaN(n) || n < 1024 || n > 65535) {
-        showToast('error', `监听端口无效：${rawPort}（需为 1024-65535 之间的整数）`);
-        return;
-      }
-    }
+  const portError = validatePorts();
+  if (portError) {
+    showToast('error', portError);
+    return;
   }
   // 服务端 API Key 由非空变空意味着关闭鉴权，需要二次确认
   if (store.config.api_key && !form.api_key.trim()) {
@@ -190,6 +199,9 @@ async function saveConfigJson() {
   jsonSaving.value = true;
   try {
     await store.saveConfig(data);
+    // 与表单保存路径保持一致：同步表单卡片并清除脏标记
+    // （configLoaded 已是 true，watch 不会触发，必须显式 resetForm）
+    resetForm();
     showToast('success', '配置已保存');
   } catch (e) {
     showToast('error', `保存失败：${e.message}`);

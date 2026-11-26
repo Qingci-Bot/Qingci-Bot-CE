@@ -60,6 +60,24 @@ describe('buildConfigPayload', () => {
     expect(payload.platforms.telegram.poll_interval).toBe(1.0);
   });
 
+  it('端口为空/非法时省略该键（后端深合并保留原值），绝不静默回退默认端口', () => {
+    const form = makeForm();
+    form.onebot.port = '';
+    form.platforms.onebot12.port = 'abc';
+    const payload = buildConfigPayload({
+      form,
+      runLogEnabled: true,
+      currentConfig: { onebot: { port: 4000 }, platforms: { onebot12: { port: 4002 } } },
+    });
+    expect(payload.onebot.port).toBeUndefined();
+    expect(payload.platforms.onebot12.port).toBeUndefined();
+    // 非端口数值字段同样不回退：poll_interval 为空时省略
+    const form2 = makeForm();
+    form2.platforms.telegram.poll_interval = '';
+    const payload2 = buildConfigPayload({ form: form2, runLogEnabled: true, currentConfig: {} });
+    expect(payload2.platforms.telegram.poll_interval).toBeUndefined();
+  });
+
   it('bot 名单字符串按逗号/换行拆分；空串得空数组', () => {
     const payload = buildConfigPayload({
       form: makeForm(),

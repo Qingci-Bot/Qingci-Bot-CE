@@ -6,10 +6,12 @@ import { defineStore } from 'pinia';
 import { ref, computed, reactive } from 'vue';
 import { authHeaders, getApiKey, request, setApiKey } from '../api/request';
 
-// 默认值逐项与后端 bot/config.py 的模型定义保持一致
+// 默认值逐项与后端 bot/config.py 的模型定义保持一致（漂移会导致首帧
+// 渲染读到过时结构；新增配置字段时请同步此处）
 const defaultConfig = {
   bot: {
     name: 'Qingci-Bot CE',
+    super_admin: null,
     admin_users: [],
     trigger_mode: 'at',
     trigger_keywords: ['/bot', '/ai'],
@@ -26,7 +28,7 @@ const defaultConfig = {
     temperature: 0.7,
     system_prompt: '你是一个友好、乐于助人的机器人助手。请用简洁、自然的中文回复。',
     personas: [],
-    default_persona: '',
+    default_persona: '大肥鱼',
     max_history: 20,
     max_context_tokens: 8192,
     timeout: 60,
@@ -35,6 +37,13 @@ const defaultConfig = {
     enable_tools: false,
     max_tool_rounds: 5,
     mcp_servers: [],
+    multimodal: {
+      enabled: false,
+      max_images: 4,
+      max_bytes: 4 * 1024 * 1024,
+      timeout: 15,
+    },
+    inject_capabilities: true,
   },
   onebot: {
     enabled: true,
@@ -48,6 +57,20 @@ const defaultConfig = {
       enabled: false,
       token: '',
       poll_interval: 1.0,
+    },
+    onebot12: {
+      name: 'onebot12',
+      enabled: false,
+      host: '127.0.0.1',
+      port: 3002,
+      access_token: '',
+    },
+    qq: {
+      name: 'qq',
+      enabled: false,
+      app_id: '',
+      app_secret: '',
+      sandbox: false,
     },
   },
   rate_limit: {
@@ -257,9 +280,23 @@ export const useAppStore = defineStore('app', () => {
     });
   }
 
-  async function fetchLogs(keyword = '', limit = 50) {
-    const params = new URLSearchParams({ keyword, limit: String(limit) });
+  async function fetchLogs(keyword = '', limit = 50, offset = 0) {
+    const params = new URLSearchParams({
+      keyword,
+      limit: String(limit),
+      offset: String(offset),
+    });
     logs.value = await apiFetch(`/api/log/messages?${params}`);
+  }
+
+  // 分页追加查询（消息日志「加载更多」）：不替换 logs，由调用方决定如何合并
+  async function searchMessages(keyword = '', limit = 50, offset = 0) {
+    const params = new URLSearchParams({
+      keyword,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return apiFetch(`/api/log/messages?${params}`);
   }
 
   async function fetchMessageCount() {
@@ -317,10 +354,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function switchInstance(name) {
-    // 触发后端重启进程到目标实例；当前连接将断开，页面随之刷新
-    apiFetch(`/api/instances/${encodeURIComponent(name)}/start`, { method: 'POST' }).catch(
-      () => {},
-    );
+    // 触发后端重启进程到目标实例；当前连接将断开，页面随之刷新。
+    // 返回 Promise 供调用方在发起时提示、失败时报错（页面随进程重启销毁，成功无需处理）。
+    return apiFetch(`/api/instances/${encodeURIComponent(name)}/start`, { method: 'POST' });
   }
 
   return {
@@ -353,6 +389,7 @@ export const useAppStore = defineStore('app', () => {
     testLLM,
     fetchLLMModels,
     fetchLogs,
+    searchMessages,
     fetchMessageCount,
     addLog,
     fetchInstances,

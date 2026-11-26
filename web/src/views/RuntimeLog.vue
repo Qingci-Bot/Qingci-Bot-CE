@@ -61,7 +61,7 @@ function getLevelClass(level) {
 }
 
 // 级别过滤结果：用 computed 而非函数，模板里要在 v-if 与 v-for 各用一次，
-// 函数式写法等于每次渲染都全量过滤两遍（日志上限 5000 条时明显掉帧）。
+// 函数式写法等于每次渲染都全量过滤两遍（日志上限 MAX_ENTRIES 条时明显掉帧）。
 const filtered = computed(() => {
   if (levelFilter.value === 'ALL') return entries.value;
   return entries.value.filter((e) => String(e.level || '').toUpperCase() === levelFilter.value);

@@ -12,7 +12,7 @@ import { useToast } from './composables/useToast';
 
 const route = useRoute();
 const store = useAppStore();
-const { toast, showToast } = useToast();
+const { toasts, showToast } = useToast();
 let pollTimer = null;
 let pollDelay = 3000;
 let disposed = false;
@@ -49,7 +49,13 @@ const navItems = computed(() => {
     { path: '/about', name: '关于', icon: '♢' },
   ];
   if (runLogEnabled) {
-    items.splice(7, 0, { path: '/runlog', name: '运行日志', icon: '⌘' });
+    // 按路径定位插入，避免依赖下标（导航项重排后下标会插错位置）
+    const settingsIdx = items.findIndex((it) => it.path === '/settings');
+    items.splice(settingsIdx === -1 ? items.length : settingsIdx, 0, {
+      path: '/runlog',
+      name: '运行日志',
+      icon: '⌘',
+    });
   }
   return items;
 });
@@ -205,9 +211,9 @@ onUnmounted(() => {
       </main>
     </template>
 
-    <transition name="toast">
-      <div v-if="toast.show" class="toast" :class="toast.type">{{ toast.message }}</div>
-    </transition>
+    <transition-group name="toast" tag="div" class="toast-stack">
+      <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">{{ t.message }}</div>
+    </transition-group>
   </div>
 </template>
 
@@ -248,12 +254,20 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-.toast {
+/* toast 队列：纵向堆叠展示 */
+.toast-stack {
   position: fixed;
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
   padding: 10px 18px;
   border-radius: 8px;
   font-size: 14px;

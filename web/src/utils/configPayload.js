@@ -29,6 +29,17 @@ export function parseList(str, asNumber = true) {
 }
 
 /**
+ * 数值字段转换：合法数字返回 number；空/非法返回 undefined——
+ * 调用方省略该键，后端 PUT /api/config 深度合并时保留原值。
+ * 禁止静默回退默认端口（如 3001）：那会把用户已配置的值悄悄改掉。
+ */
+function numberOrOmit(raw) {
+  if (raw === '' || raw == null) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
  * 由表单 + 当前已加载配置组装 PUT /api/config 的 payload。
  * 敏感字段若被 GET 脱敏为 "***"，原样上送——后端 _filter_masked 会
  * 跳过占位符、保留原值，前端不自行判断。
@@ -43,26 +54,39 @@ export function buildConfigPayload({ form, runLogEnabled, currentConfig }) {
     group_blacklist: parseList(form.bot.group_blacklist, false),
     user_blacklist: parseList(form.bot.user_blacklist, false),
   };
-  newConfig.onebot = {
-    ...form.onebot,
-    port: Number(form.onebot.port) || 3001,
-  };
+  newConfig.onebot = { ...form.onebot };
+  const onebotPort = numberOrOmit(form.onebot.port);
+  if (onebotPort !== undefined) {
+    newConfig.onebot.port = onebotPort;
+  } else {
+    delete newConfig.onebot.port; // 移除空串/非法值，交由后端深合并保留原配置
+  }
   newConfig.platforms = {
     telegram: {
       ...form.platforms.telegram,
       name: 'telegram',
-      poll_interval: Number(form.platforms.telegram.poll_interval) || 1.0,
     },
     onebot12: {
       ...form.platforms.onebot12,
       name: 'onebot12',
-      port: Number(form.platforms.onebot12.port) || 3002,
     },
     qq: {
       ...form.platforms.qq,
       name: 'qq',
     },
   };
+  const ob12Port = numberOrOmit(form.platforms.onebot12.port);
+  if (ob12Port !== undefined) {
+    newConfig.platforms.onebot12.port = ob12Port;
+  } else {
+    delete newConfig.platforms.onebot12.port;
+  }
+  const pollInterval = numberOrOmit(form.platforms.telegram.poll_interval);
+  if (pollInterval !== undefined) {
+    newConfig.platforms.telegram.poll_interval = pollInterval;
+  } else {
+    delete newConfig.platforms.telegram.poll_interval;
+  }
   newConfig.api_key = form.api_key;
   newConfig.log = { ...(newConfig.log || {}), run_log_enabled: runLogEnabled };
   return newConfig;
