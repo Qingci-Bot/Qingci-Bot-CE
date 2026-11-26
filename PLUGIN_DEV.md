@@ -856,6 +856,12 @@ plugins/my_plugin/
 
 **静态文件挂载：** 框架自动将 `web/` 目录挂载到 `/api/plugin-data/{plugin_name}/`，前端通过 iframe 加载。插件页面需预构建为纯静态 HTML/CSS/JS，不依赖框架前端构建链。
 
+**安全边界（插件页面作者必读）：**
+
+- 插件页面以**同源 iframe** 嵌入管理界面（`sandbox="allow-scripts allow-same-origin"` 组合在浏览器规范中等价于无沙箱），因此插件页面脚本与管理界面**同源、同权限**：理论上可访问同源的 localStorage（含浏览器端 API Key）与全部 `/api/*` 接口。框架已对插件页面响应注入 CSP（限制 `connect-src`/`form-action`/`object-src`、`frame-ancestors 'self'`）作为纵深防御，但**无法彻底消除该信任边界**。
+- 这意味着：**安装第三方插件 = 信任该插件可执行任意后端代码，其 Web 页面亦然**。请只安装可信来源的插件；插件页面也不要引入不可信的第三方脚本。
+- 若插件页面需要访问 `/api/*`，优先走「插件级 Web API」（见下一节）而非自行携带 token。
+
 ## 插件级 Web API（register\_api）
 
 插件可注册 HTTP 接口（管理页面后端、数据查询等），框架统一挂载到 `/api/plugin-web/{plugin_name}/{path}`，鉴权对齐现有 API 体系（`X-API-Key`），无需引入独立服务。

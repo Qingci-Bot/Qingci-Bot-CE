@@ -12,11 +12,22 @@ import { useAppStore } from '../stores/app';
 const store = useAppStore();
 const keyword = ref('');
 
+// 分页加载：首屏 50 条，「加载更多」按 offset 追加。
+// 实时推送的记录没有 id（广播发生在入库之前），用 message_id+时间+角色合成 key。
+const PAGE_SIZE = 50;
+const hasMore = ref(false);
+const loadingMore = ref(false);
+
 // 会话记录
 const activeTab = ref('messages');
 const sessions = ref([]);
 const currentSession = ref('');
 const sessionMessages = ref([]);
+
+function logKey(log) {
+  if (log.id != null) return log.id;
+  return `${log.created_at}-${log.message_id ?? 'noid'}-${log.role}`;
+}
 
 const {
   connected: wsConnected,
@@ -37,7 +48,7 @@ const {
 });
 
 onMounted(() => {
-  store.fetchLogs('', 50).catch((e) => console.warn('初始消息日志加载失败:', e));
+  search();
   connectWebSocket();
 });
 
@@ -89,9 +100,29 @@ async function removeSession(key) {
 
 async function search() {
   try {
-    await store.fetchLogs(keyword.value, 50);
+    const rows = (await store.searchMessages(keyword.value, PAGE_SIZE, 0)) || [];
+    store.logs = rows;
+    hasMore.value = rows.length === PAGE_SIZE;
   } catch (e) {
     console.warn('消息搜索失败:', e);
+  }
+}
+
+// 追加下一页；期间若有新消息实时插入队首，offset 会整体后移，
+// 因此按 id 去重避免重复条目
+async function loadMore() {
+  if (loadingMore.value) return;
+  loadingMore.value = true;
+  try {
+    const knownIds = new Set(store.logs.map((l) => l.id).filter((id) => id != null));
+    const more = (await store.searchMessages(keyword.value, PAGE_SIZE, store.logs.length)) || [];
+    const fresh = more.filter((m) => m.id == null || !knownIds.has(m.id));
+    store.logs.push(...fresh);
+    hasMore.value = more.length === PAGE_SIZE;
+  } catch (e) {
+    console.warn('加载更多失败:', e);
+  } finally {
+    loadingMore.value = false;
   }
 }
 
@@ -160,7 +191,7 @@ function formatDate(ts) {
         </div>
         <div
           v-for="log in store.logs"
-          :key="log.id"
+          :key="logKey(log)"
           class="log-item"
           :class="{ user: log.role === 'user', bot: log.role === 'assistant' }"
         >
@@ -170,6 +201,11 @@ function formatDate(ts) {
             {{ log.group_id ? `群组 ${log.group_id}` : `私聊 ${log.user_id}` }}
           </span>
           <span class="content">{{ log.content }}</span>
+        </div>
+        <div v-if="hasMore" style="padding: 10px; text-align: center">
+          <button class="btn btn-secondary btn-sm" :disabled="loadingMore" @click="loadMore">
+            {{ loadingMore ? '加载中…' : '加载更多' }}
+          </button>
         </div>
       </div>
     </div>

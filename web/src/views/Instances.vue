@@ -145,7 +145,11 @@ function doCreate() {
 function onSwitch(inst) {
   if (inst.running) return;
   if (window.confirm(`切换到实例「${inst.name}」？应用将重启以加载该实例。`)) {
-    store.switchInstance(inst.name);
+    showToast('info', `正在切换到实例「${inst.name}」，应用即将重启…`);
+    // 成功后进程重启、页面随之销毁，无需处理；失败时明确报错
+    store.switchInstance(inst.name).catch((e) => {
+      showToast('error', `切换实例失败：${e.message || '请求失败'}`);
+    });
   }
 }
 
@@ -166,7 +170,10 @@ function onRename(inst) {
   if (!newName || !newName.trim() || newName.trim() === inst.name) return;
   if (inst.running) {
     showToast('info', `正在重命名并重启到「${newName.trim()}」…`);
-    store.renameInstance(inst.name, newName.trim()).catch(() => {});
+    // 成功后进程重启、页面随之销毁；失败时明确报错
+    store.renameInstance(inst.name, newName.trim()).catch((e) => {
+      showToast('error', `重命名失败：${e.message || '请求失败'}`);
+    });
     return;
   }
   store

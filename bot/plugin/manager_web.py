@@ -15,6 +15,8 @@ import os
 from collections.abc import Callable
 from typing import Any, Union, cast, get_args, get_origin
 
+from starlette.datastructures import MutableHeaders
+
 from ..config_schema import is_secret_field as _is_secret_field
 from .protocol.base import PluginBase
 
@@ -22,13 +24,33 @@ logger = logging.getLogger("qingci-bot.plugin.manager")
 
 
 class _AuthStaticFiles:
-    """带鉴权的插件静态文件服务（包装 StaticFiles）
+    """带鉴权 + CSP 的插件静态文件服务（包装 StaticFiles）
 
     插件管理页面（/api/plugin-data/...）与 /api/plugin 鉴权对齐：
     - 配置了 api_key：要求 X-API-Key 头或 ?token= 查询参数
       （iframe/img 无法携带自定义请求头，故支持 query token 作为前端回退）
     - 未配置：仅环回来源 + Origin 为环回时放行
+
+    前端以同源 iframe 嵌入插件页面（sandbox allow-scripts+allow-same-origin
+    组合无沙箱效果），插件页面脚本本质上与管理界面同源。无法彻底消除该信任
+    边界（见 PLUGIN_DEV.md「安全边界」），此处为插件页面注入 CSP 作为纵深
+    防御：限制 connect-src / form-action / object-src，抬高恶意页面外传数据
+    与加载外部脚本的门槛。
     """
+
+    # 与主界面 index.html 的 CSP 对齐，另加 frame-ancestors 'self'
+    # （插件页面只允许被本站 iframe 嵌入，禁止被任意第三方网站套壳）
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'self'"
+    )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         from fastapi.staticfiles import StaticFiles
@@ -36,10 +58,21 @@ class _AuthStaticFiles:
         self._inner = StaticFiles(*args, **kwargs)
 
     async def __call__(self, scope: dict, receive, send) -> None:
-        if scope["type"] == "http" and not self._authorized(scope):
-            from starlette.responses import Response
+        if scope["type"] == "http":
+            if not self._authorized(scope):
+                from starlette.responses import Response
 
-            await Response("Unauthorized", status_code=401)(scope, receive, send)
+                await Response("Unauthorized", status_code=401)(scope, receive, send)
+                return
+
+            async def send_with_csp(message) -> None:
+                if message["type"] == "http.response.start":
+                    headers = MutableHeaders(scope=message)
+                    if "content-security-policy" not in headers:
+                        headers["Content-Security-Policy"] = self._CSP
+                await send(message)
+
+            await self._inner(scope, receive, send_with_csp)
             return
         await self._inner(scope, receive, send)
 

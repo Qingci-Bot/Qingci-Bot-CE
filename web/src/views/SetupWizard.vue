@@ -94,6 +94,15 @@ async function testConnection() {
 }
 
 async function completeSetup() {
+  // OneBot 端口校验：与其他页面同一规则（1024-65535），不合法时留在本页提示
+  const portRaw = onebotPort.value.trim();
+  if (portRaw) {
+    const n = Number(portRaw);
+    if (isNaN(n) || n < 1024 || n > 65535) {
+      error.value = `OneBot 端口无效：${portRaw}（需为 1024-65535 之间的整数）`;
+      return;
+    }
+  }
   loading.value = true;
   error.value = '';
   try {

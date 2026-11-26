@@ -28,11 +28,12 @@ async function openFor(target) {
   try {
     const data = await store.apiFetch(`/api/plugin/${encodeURIComponent(target.name)}/config`);
     schema.value = data.schema;
-    // 以 schema 默认值补全，保证必填字段有初值
+    // 以 schema 默认值补全，并按字段类型给初值（boolean→false、number→0、
+    // array/object→空容器），避免全用 '' 导致 AppSwitch 收到非布尔值
     const merged = {};
     const props = data.schema?.properties || {};
     for (const key of Object.keys(props)) {
-      merged[key] = props[key].default !== undefined ? props[key].default : '';
+      merged[key] = defaultFor(props[key]);
     }
     Object.assign(merged, data.values || {});
     values.value = merged;
@@ -41,6 +42,52 @@ async function openFor(target) {
     close();
   } finally {
     loading.value = false;
+  }
+}
+
+function defaultFor(prop) {
+  if (prop && prop.default !== undefined) return prop.default;
+  switch (prop && prop.type) {
+    case 'boolean':
+      return false;
+    case 'integer':
+    case 'number':
+      return 0;
+    case 'array':
+      return [];
+    case 'object':
+      return {};
+    default:
+      return '';
+  }
+}
+
+function isComplexType(field) {
+  return field.type === 'array' || field.type === 'object';
+}
+
+// array/object 字段以格式化 JSON 文本展示，change 时解析回写
+function complexText(field) {
+  const v = values.value[field.key];
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+}
+
+function onComplexChange(field, event) {
+  const raw = event.target.value.trim();
+  if (!raw) {
+    values.value[field.key] = defaultFor({ type: field.type });
+    return;
+  }
+  try {
+    values.value[field.key] = JSON.parse(raw);
+  } catch {
+    // 解析失败保留原值并提示，避免把非法 JSON 字符串静默存进配置
+    showToast('error', `「${field.title}」不是有效 JSON，已保留原值`);
+    event.target.value = complexText(field);
   }
 }
 
@@ -117,6 +164,14 @@ async function save() {
           <span v-if="field.description" class="config-desc">{{ field.description }}</span>
         </label>
         <AppSwitch v-if="field.type === 'boolean'" v-model="values[field.key]" />
+        <textarea
+          v-else-if="isComplexType(field)"
+          class="config-input config-textarea"
+          :value="complexText(field)"
+          rows="4"
+          spellcheck="false"
+          @change="onComplexChange(field, $event)"
+        />
         <input
           v-else
           v-model="values[field.key]"
@@ -185,6 +240,14 @@ async function save() {
 .config-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+.config-textarea {
+  width: 320px;
+  max-width: 60%;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .config-actions {
   display: flex;
