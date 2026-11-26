@@ -152,7 +152,12 @@ async def remove_instance(name: str) -> dict:
         raise HTTPException(status_code=400, detail=f"非法实例名: {name!r}") from None
     if name == _current_instance_name():
         raise HTTPException(status_code=400, detail="不能删除正在运行的实例") from None
-    if not delete_instance(name):
+    try:
+        ok = delete_instance(name)
+    except RuntimeError as exc:
+        # 并行运行的其他实例进程仍占用该目录（data/.running.lock 的 pid 存活）
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if not ok:
         raise HTTPException(status_code=404, detail=f"实例不存在: {name}") from None
     # 兜底校验残留：delete_instance 内部 rmtree(ignore_errors=True) 可能静默失败
     # （如 Windows 下文件句柄被占用），目录残留时应返回明确错误而非假装成功

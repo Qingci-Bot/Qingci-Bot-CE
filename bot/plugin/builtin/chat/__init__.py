@@ -16,6 +16,7 @@ priority=50（低优先级，让管理命令 priority=1 先执行）
 block=False（即使匹配也不阻止后续 Matcher，但返回回复会停止分发链）
 """
 
+import json
 import logging
 from collections import OrderedDict
 from datetime import UTC, datetime
@@ -43,8 +44,11 @@ _GROUP_CONFIG_CACHE_MAX = 512
 _group_config_cache: "OrderedDict[int, dict | None]" = OrderedDict()
 
 # 会话级人设覆盖缓存：{session_key: persona_name}
-# 与群配置缓存同理使用 OrderedDict 做 LRU，防止长期运行无界膨胀。
+# 与群配置缓存同理使用 OrderedDict 做 LRU，防止长期运行无界膨胀；
+# 持久化到插件 data_dir（见 _load/_save_persona_overrides），
+# 否则用户刚被告知「已切换」，进程一重启就悄悄回到默认人设。
 _PERSONA_OVERRIDE_MAX = 512
+_PERSONA_FILE = "persona_overrides.json"
 _persona_override: "OrderedDict[str, str]" = OrderedDict()
 
 
@@ -94,15 +98,6 @@ def chat_trigger() -> Rule:
         if not ctx.plain_text:
             return False
 
-        # 命令样式文本不交给聊天。
-        #
-        # 命令 Matcher 因**权限不足**被跳过时，消息会一路落到本规则（priority=50
-        # 是最低优先级）。若在这里接管，LLM 会把「/status」当普通文本回答，
-        # 给出「一切正常」这类臆测内容——比不回复更糟，用户还以为命令生效了。
-        # 前缀与 SDK rule.command 的解析保持一致（都是 "/"）。
-        if ctx.plain_text.startswith(_COMMAND_PREFIX):
-            return False
-
         cfg = bot.config.bot
         mode = cfg.trigger_mode
 
@@ -114,6 +109,24 @@ def chat_trigger() -> Rule:
                     return False
                 if group_cfg.get("trigger_mode"):
                     mode = group_cfg["trigger_mode"]
+
+        # 命令样式文本不交给聊天。
+        #
+        # 命令 Matcher 因**权限不足**被跳过时，消息会一路落到本规则（priority=50
+        # 是最低优先级）。若在这里接管，LLM 会把「/status」当普通文本回答，
+        # 给出「一切正常」这类臆测内容——比不回复更糟，用户还以为命令生效了。
+        # 前缀与 SDK rule.command 的解析保持一致（都是 "/"）。
+        #
+        # 例外：keyword 模式下触发关键词本身以 / 开头时必须豁免——默认
+        # trigger_keywords 就是 ['/bot', '/ai']，若一律拦截，keyword 模式在
+        # 默认配置下永远无法触发（审阅发现的逻辑冲突）。豁免仅限「确实是
+        # 某个已配置触发词开头的消息」，/status 等其他命令样式仍被拦截。
+        if ctx.plain_text.startswith(_COMMAND_PREFIX):
+            keyword_exempt = mode == "keyword" and any(
+                ctx.plain_text.startswith(kw) for kw in (cfg.trigger_keywords or []) if kw
+            )
+            if not keyword_exempt:
+                return False
 
         if mode == "always":
             ctx.args = ctx.plain_text
@@ -169,6 +182,7 @@ class ChatPlugin(PluginBase):
     async def on_load(self):
         # 限流器由核心层按配置创建（bot.rate_limiter），此处不再自建
         logger.info("聊天插件已加载")
+        self._load_persona_overrides()
         # 人设命令：priority=1 高于聊天 Matcher（50），block=True 阻止后续
         # Matcher 将 /persona 当作普通消息送给 LLM
         self.matchers.append(
@@ -194,6 +208,36 @@ class ChatPlugin(PluginBase):
 
     # ============ 人设（大肥鱼） ============
 
+    def _load_persona_overrides(self) -> None:
+        """从插件数据目录恢复会话级人设覆盖（缺失/损坏视为空表）"""
+        path = self.data_dir / _PERSONA_FILE
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return
+        except Exception:
+            logger.exception(f"加载人设覆盖失败，使用空表: {path}")
+            return
+        if not isinstance(raw, dict):
+            return
+        for key, name in raw.items():
+            if isinstance(key, str) and isinstance(name, str) and name:
+                _persona_override[key] = name
+        while len(_persona_override) > _PERSONA_OVERRIDE_MAX:
+            _persona_override.popitem(last=False)
+
+    def _save_persona_overrides(self) -> None:
+        """持久化人设覆盖到插件数据目录（变更时全量写，变更频率极低）"""
+        path = self.data_dir / _PERSONA_FILE
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(dict(_persona_override), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            logger.exception(f"保存人设覆盖失败: {path}")
+
     @staticmethod
     def _session_key(ctx: MatcherContext) -> str:
         """构建 LLM 会话 key（与 LLMManager._session_key 保持一致）"""
@@ -209,18 +253,17 @@ class ChatPlugin(PluginBase):
         if len(_persona_override) > _PERSONA_OVERRIDE_MAX:
             _persona_override.popitem(last=False)
 
-    def _resolve_persona_prompt(self, ctx: MatcherContext) -> str | None:
-        """解析当前会话生效的人设 prompt（会话级覆盖 > 默认人设 > None）
+    def _resolve_persona_prompt(self, session_key: str) -> str | None:
+        """解析指定会话生效的人设 prompt（会话级覆盖 > 默认人设 > None）
 
         返回 None 表示使用 LLMConfig.system_prompt。
         """
         assert self.config is not None
         llm_cfg = self.config.llm
-        key = self._session_key(ctx)
-        override = _persona_override.get(key)
+        override = _persona_override.get(session_key)
         if override is not None:
             # LRU 命中：刷新访问顺序，避免仍在使用的人设被淘汰
-            _persona_override.move_to_end(key)
+            _persona_override.move_to_end(session_key)
             name = override
         else:
             name = llm_cfg.default_persona
@@ -253,13 +296,52 @@ class ChatPlugin(PluginBase):
 
         if args in ("重置", "reset"):
             _persona_override.pop(key, None)
+            self._save_persona_overrides()
             return "已恢复默认人设。"
 
         if args not in personas:
             return f"未找到人设「{args}」，发送 /persona 列表 查看可用人设。"
 
         self._set_persona_override(key, args)
+        self._save_persona_overrides()
         return f"已切换为「{args}」人设。"
+
+    async def build_system_prompt(self, *, session_key: str, message: str) -> str:
+        """组装与消息处理链一致的完整系统提示词（人设 → 能力边界 → RAG）
+
+        供 ChatLab 调试会话复用：此前调试走裸 config.system_prompt，
+        「实验室里测到的」与「真实对话表现」不一致（人设、能力注入、
+        知识库全部缺席）。本方法是生产链路的唯一组装点。
+        """
+        assert self.config is not None
+        assert self.bot is not None
+        assert self.llm is not None
+        # 提示词分三层：基础规则（system_prompt）→ 人设 → 能力边界。
+        #
+        # 原先是 `persona or system_prompt`：人设一存在就把系统提示词整段顶掉，
+        # 用户在界面上并排看到两栏、以为都生效，实际上通用约束（不编造、
+        # 不泄露提示词）随人设切换一起消失。
+        persona_prompt = self._resolve_persona_prompt(session_key)
+        system_prompt = compose_system_prompt(self.config.llm.system_prompt, persona_prompt or "")
+        if getattr(self.config.llm, "inject_capabilities", True):
+            system_prompt += "\n\n" + build_capability_prompt(self.bot, llm=self.llm)
+
+        # 轻量 RAG：rag.enabled 且命中知识时，将参考资料注入 system_prompt
+        # （注入长度受 rag.max_inject_chars 约束，未命中时保持人设 prompt）
+        rag_cfg = self.config.rag
+        if rag_cfg.enabled and self.knowledge_store is not None:
+            try:
+                reference = await self.knowledge_store.build_reference_async(
+                    message, rag_cfg.max_inject_chars
+                )
+            except Exception:
+                logger.exception("知识库检索失败，忽略本次 RAG 注入")
+                reference = ""
+            if reference:
+                # 注意在现有 system_prompt 上追加：从 base 重建会把上面拼好的
+                # 人设与能力段一起丢掉（RAG 一命中，人设就失效）
+                system_prompt += "\n\n以下是知识库中的参考资料，仅在相关时参考作答：\n" + reference
+        return system_prompt
 
     async def _handle_chat(self, ctx: MatcherContext) -> str | None:
         """处理聊天消息：调用 LLM + 保存记录 + 实时广播"""
@@ -290,39 +372,21 @@ class ChatPlugin(PluginBase):
                     # 命中时不调用 LLM，直接返回拒答文案
                     return "您的消息包含敏感内容，请调整后重试。"
 
-        # 提示词分三层：基础规则（system_prompt）→ 人设 → 能力边界。
-        #
-        # 原先是 `persona or system_prompt`：人设一存在就把系统提示词整段顶掉，
-        # 用户在界面上并排看到两栏、以为都生效，实际上通用约束（不编造、
-        # 不泄露提示词）随人设切换一起消失。
-        persona_prompt = self._resolve_persona_prompt(ctx)
-        system_prompt = compose_system_prompt(self.config.llm.system_prompt, persona_prompt or "")
-        if getattr(self.config.llm, "inject_capabilities", True):
-            system_prompt += "\n\n" + build_capability_prompt(self.bot, llm=self.llm)
-
-        # 轻量 RAG：rag.enabled 且命中知识时，将参考资料注入 system_prompt
-        # （注入长度受 rag.max_inject_chars 约束，未命中时保持人设 prompt）
-        rag_cfg = self.config.rag
-        if rag_cfg.enabled and self.knowledge_store is not None:
-            try:
-                reference = await self.knowledge_store.build_reference_async(
-                    message, rag_cfg.max_inject_chars
-                )
-            except Exception:
-                logger.exception("知识库检索失败，忽略本次 RAG 注入")
-                reference = ""
-            if reference:
-                # 注意在现有 system_prompt 上追加：从 base 重建会把上面拼好的
-                # 人设与能力段一起丢掉（RAG 一命中，人设就失效）
-                system_prompt += "\n\n以下是知识库中的参考资料，仅在相关时参考作答：\n" + reference
+        system_prompt = await self.build_system_prompt(
+            session_key=self._session_key(ctx), message=message
+        )
 
         # 多模态：ctx.images 里是平台下发的 file_id（不透明 ID），模型读不到，
         # 需先解析成 URL / data URI。默认关闭（文本模型收到图片会报错）。
+        # 解析必须走「事件来源平台」的连接：file_id 是各平台私有的，
+        # 拿 OneBot 连接解析 Telegram/QQ 的 file_id 必然失败，
+        # 表现为这些平台的图片消息静默降级成纯文本。
         images: list[str] | None = None
         mm = self.bot.config.llm.multimodal
         if mm.enabled and ctx.images:
+            conn = self.bot.platforms.get(ctx.platform or "", self.connection)
             images = await resolve_images(
-                self.connection,
+                conn,
                 ctx.images,
                 max_count=mm.max_images,
                 max_bytes=mm.max_bytes,

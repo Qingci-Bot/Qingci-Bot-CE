@@ -457,24 +457,33 @@ class LLMManager:
                 await self._clear_one(key)
             # 注意：不弹出 _locks[key]，避免进行中的 chat 丢失锁保护
         else:
-            # 清除全部：在 reload 锁内快照（期间不会新建会话锁），
-            # 然后按 key 字典序逐个加锁清理
+            # 清除全部：全程持有 reload 锁，并快照 _locks（而非仅 _sessions）。
+            #
+            # 原实现只在快照时持锁、随后释放再逐个清理，存在两个分裂窗口：
+            # 1) 快照后新建的会话不在列表里，内存未被清、DB 却被全清；
+            # 2) 刚拿到锁、正从 DB 装载历史的首轮 chat（_sessions 还没有该 key）
+            #    会把已删除的旧历史装回内存，之后继续追加——"历史复活"。
+            # 快照 _locks + 全程持锁：清理期间不会有新锁被创建（_get_session_lock
+            # 需 reload 锁）；已持锁的进行中 chat 会先完成（其写入先于下方
+            # DB 全清），随后被一并清掉。reload 锁内无人反向等待（chat 只在
+            # 取锁瞬间短暂持有 reload 锁），按字典序加锁也无自环风险。
             async with self._reload_lock:
-                items = [(k, self._get_lock(k)) for k in sorted(self._sessions.keys())]
-            for k, lock in items:
-                async with lock:
-                    self._sessions.pop(k, None)
-                    self._loaded_sessions.discard(k)
+                items = [(k, self._locks[k]) for k in sorted(self._locks.keys())]
+                for k, lock in items:
+                    async with lock:
+                        self._sessions.pop(k, None)
+                        self._loaded_sessions.discard(k)
+                        try:
+                            await self._memory.forget(session_key=k)
+                        except Exception:
+                            logger.exception(f"清除会话短期记忆失败: key={k}")
+                if self._db is not None:
                     try:
-                        await self._memory.forget(session_key=k)
+                        await self._db.clear_sessions(None)
                     except Exception:
-                        logger.exception(f"清除会话短期记忆失败: key={k}")
-            # 不清空 _locks，避免进行中的 chat 丢失锁保护
-            if self._db is not None:
-                try:
-                    await self._db.clear_sessions(None)
-                except Exception:
-                    logger.exception(f"清除全部 DB 会话失败: model={self._config.model}")
+                        logger.exception(
+                            f"清除全部 DB 会话失败: model={self._config.model}"
+                        )
 
     # ============ Function Calling ============
 
@@ -841,8 +850,14 @@ class LLMManager:
         message_type: str = "group",
         group_id: int = 0,
         user_id: int = 0,
+        system_prompt: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """流式聊天（逐段返回增量文本）
+
+        Args:
+            system_prompt: 可选覆盖系统提示词，None 时回退配置中的 system_prompt
+                （与 chat() 对齐；ChatLab 经此传入人设/能力/RAG 组装结果，
+                保证调试会话与真实对话行为一致）
 
         注意：流式路径暂不统计用量——litellm 流式响应需额外开启
         stream_options 才能拿到 usage，待后续批次单独处理。
@@ -876,14 +891,15 @@ class LLMManager:
             success = False
             cancelled = False
             gen_exit = False
-            # 记忆增强：流式路径同样注入召回的记忆（无内容时原样返回）
+            # 记忆增强：流式同样注入召回的记忆（无内容时原样返回）；
+            # system_prompt 覆盖值优先（与 chat() 语义一致）
             effective_prompt = await self._augment_prompt(
                 key,
                 message_type,
                 group_id,
                 user_id,
                 message,
-                self._config.system_prompt,
+                system_prompt if system_prompt is not None else self._config.system_prompt,
             )
             try:
                 async for chunk in self.adapter.chat_stream(

@@ -7,9 +7,11 @@
 import asyncio
 import json
 import logging
+import os
 import secrets
 import time
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,7 +24,9 @@ from api.auth import _get_configured_api_key
 from bot.broadcast import register_broker, unregister_broker
 from bot.core.bot import QingciBot
 from bot.core.bot import get_bot as _get_bot
+from bot.instances import RUNNING_LOCK
 from bot.logformat import get_runlog_new_nowait, get_runlog_snapshot
+from bot.paths import data_root
 
 
 def get_bot() -> QingciBot | None:
@@ -103,8 +107,26 @@ async def _stop_runlog_pump() -> None:
 async def lifespan(app: FastAPI):
     """应用生命周期"""
     logger.info("API 服务启动")
+    # 进程运行锁：写入 data/.running.lock（pid），供实例删除接口判断
+    # 「该实例目录正被存活进程占用」。崩溃残留的锁文件因 pid 探测失效
+    # 不会阻塞后续删除（见 bot.instances.is_instance_running）。
+    _running_lock_path = data_root() / RUNNING_LOCK
+    try:
+        _running_lock_path.parent.mkdir(parents=True, exist_ok=True)
+        _running_lock_path.write_text(
+            json.dumps({"pid": os.getpid(), "started_at": datetime.now(UTC).isoformat()}),
+            encoding="utf-8",
+        )
+    except Exception:
+        logger.warning("写入进程运行锁失败（删除实例时将失去运行检测）", exc_info=True)
+        _running_lock_path = None  # type: ignore[assignment]
     _ensure_runlog_pump()
     yield
+    if _running_lock_path is not None:
+        try:
+            _running_lock_path.unlink(missing_ok=True)
+        except Exception:
+            logger.debug("清理进程运行锁失败", exc_info=True)
     # 清理 WebSocket 连接
     for ws in list(_ws_clients):
         try:
@@ -354,14 +376,28 @@ def create_app() -> FastAPI:
                 if bot is None or not bot.is_running or bot.llm is None:
                     await ws.send_json({"type": "error", "text": "Bot 未运行，请先在顶部启动 Bot"})
                     continue
-                # 调试会话固定为私聊 + 独立 user_id，避免污染真实对话
+                # 调试会话固定为私聊 + 独立 user_id，避免污染真实对话。
+                # system_prompt 用与生产一致的组装链（人设/能力/RAG），
+                # 否则实验室里测不出真实对话行为。
                 try:
                     user_id = int(data.get("user_id") or 0) or 900000001
                 except (ValueError, TypeError):
                     await ws.send_json({"type": "error", "text": "user_id 必须为数字"})
                     continue
+                system_prompt = None
+                chat_plugin = bot.plugin_manager.get("chat")
+                if chat_plugin is not None and hasattr(chat_plugin, "build_system_prompt"):
+                    try:
+                        system_prompt = await chat_plugin.build_system_prompt(
+                            session_key=f"private:{user_id}", message=message
+                        )
+                    except Exception:
+                        logger.exception("调试会话 system_prompt 组装失败，回退默认提示词")
                 stream = bot.llm.chat_stream(
-                    message=message, message_type="private", user_id=user_id
+                    message=message,
+                    message_type="private",
+                    user_id=user_id,
+                    system_prompt=system_prompt,
                 )
                 try:
                     async for chunk in stream:

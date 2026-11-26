@@ -148,8 +148,6 @@ class MemoryPlugin(PluginBase):
         super().__init__()
         self._store: MemoryStore | None = None
         self._settings = MemorySettings()
-        # 本轮召回的记忆 id，用于在回复成功后按"确实用上了"强化
-        self._recalled: dict[str, list[int]] = {}
 
     # ============ 生命周期 ============
 
@@ -294,9 +292,10 @@ class MemoryPlugin(PluginBase):
         if not lines:
             return system_prompt
 
-        # 真正被注入的才计入"命中"——没进提示词的记忆不该因为被检索到就变重要
-        self._recalled[session_key] = [m.id for m in used]
-        self._cap_recalled()
+        # 真正被注入的才计入"命中"——没进提示词的记忆不该因为被检索到就变重要。
+        # 强化在注入时就地生效（delta 小、靠多次累积）；不做「回复成功后再强化」
+        # 的二段式——那需要跨协程记住本轮注入了哪些 id，而回复成败并不改变
+        # 「这条记忆与当前话题相关」的事实。
         await asyncio.to_thread(store.reinforce, [m.id for m in used], delta=0.05)
         return system_prompt + _INJECT_HEADER + "\n".join(lines)
 
@@ -391,7 +390,6 @@ class MemoryPlugin(PluginBase):
 
     async def forget(self, *, session_key: str) -> None:
         """会话被清除：只清该会话的短期痕迹，长期/永久记忆是用户资产不动"""
-        self._recalled.pop(session_key, None)
         if self._store is not None:
             await asyncio.to_thread(self._store.forget_session, session_key)
 
@@ -556,13 +554,6 @@ class MemoryPlugin(PluginBase):
         except (ValueError, IndexError):
             return 0
 
-    def _cap_recalled(self, limit: int = 512) -> None:
-        """``_recalled`` 是内存字典：按会话数上限裁剪，防止长期运行无界增长"""
-        if len(self._recalled) <= limit:
-            return
-        for key in list(self._recalled.keys())[: len(self._recalled) - limit]:
-            self._recalled.pop(key, None)
-
     # ============ /memory 命令 ============
 
     async def _cmd_memory(self, ctx: MatcherContext) -> str:
@@ -661,7 +652,9 @@ class MemoryPlugin(PluginBase):
             return "格式：/memory pin <#编号> 或 /memory pin <要永久记住的内容>"
         mem_id = self._parse_id(rest)
         if mem_id is not None:
-            ok = await asyncio.to_thread(store.set_tier, mem_id, TIER_PERMANENT)
+            ok = await asyncio.to_thread(
+                store.set_tier, mem_id, TIER_PERMANENT, scope=SCOPE_USER, scope_id=uid
+            )
             if not ok:
                 return f"没找到 #{mem_id}。"
             return f"已把 #{mem_id} 设为永久记忆（不再随时间淡忘）。"
@@ -680,7 +673,9 @@ class MemoryPlugin(PluginBase):
         mem_id = self._parse_id(rest)
         if mem_id is None:
             return "格式：/memory unpin <#编号>"
-        ok = await asyncio.to_thread(store.set_tier, mem_id, TIER_LONG)
+        ok = await asyncio.to_thread(
+            store.set_tier, mem_id, TIER_LONG, scope=SCOPE_USER, scope_id=uid
+        )
         if not ok:
             return f"没找到 #{mem_id}。"
         return f"已把 #{mem_id} 降为长期记忆（此后会随时间淡忘）。"
@@ -689,7 +684,9 @@ class MemoryPlugin(PluginBase):
         mem_id = self._parse_id(rest)
         if mem_id is None:
             return "格式：/memory forget <#编号>（编号见 /memory list）"
-        n = await asyncio.to_thread(store.delete, [mem_id])
+        n = await asyncio.to_thread(
+            store.delete, [mem_id], scope=SCOPE_USER, scope_id=uid
+        )
         return f"已忘记 #{mem_id}。" if n else f"没找到 #{mem_id}。"
 
     async def _cmd_search(self, store: MemoryStore, uid: int, rest: str) -> str:

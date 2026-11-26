@@ -51,6 +51,19 @@ logger = logging.getLogger("qingci-bot")
 _DEFAULT_EVENT_CONCURRENCY = 16
 # 事件排队上限的默认值（实际取值见 bot.max_pending_events）
 _DEFAULT_MAX_PENDING_EVENTS = 128
+# 数据保留清理的单批行数（见 _purge_expired_data）
+_PURGE_BATCH_SIZE = 5000
+# 发送回复重试时视为「可重试」的异常类型：仅限请求未到达协议端的
+# 连接类错误。超时与协议端业务错误不在列——超时时消息往往已实际送达
+# （协议端只是没回 echo），重发会让用户收到重复消息；业务错误（如
+# 群不存在）重发也必然失败。
+_RETRYABLE_SEND_ERRORS: tuple[type[BaseException], ...] = (ConnectionError, OSError)
+try:  # aiohttp 是 telegram 适配器的传输层；缺失时仅少一类可重试错误
+    from aiohttp import ClientError as _ClientError
+
+    _RETRYABLE_SEND_ERRORS = (*_RETRYABLE_SEND_ERRORS, _ClientError)
+except ImportError:  # pragma: no cover
+    pass
 
 
 def _safe_int(value, default: int = 0) -> int:
@@ -121,6 +134,10 @@ class QingciBot:
         # _pre_event_hooks（事件级、Matcher 调度前）与插件级 before_handler
         # （插件内、handler 前）。默认为空列表。
         self._matcher_preprocessors: list[Any] = []
+        # 平台 API 调用钩子：register_api_hook 只登记到这里（bot 级持久名单），
+        # 由 _attach_api_hooks 绑定到当前平台适配器实例——_rebuild_platforms
+        # 会新建适配器实例，仅绑实例不记名单的话，重启（stop+start）后钩子丢失
+        self._api_hooks: list[Any] = []
 
     # ============ 生命周期 ============
 
@@ -142,6 +159,19 @@ class QingciBot:
             _adapter = make_platform(_cfg)
             if _adapter is not None:
                 self.platforms[_adapter.name] = _adapter
+        # 新适配器实例不持有旧实例上注册的 API 钩子，按 bot 级名单重挂
+        self._attach_api_hooks()
+
+    def _attach_api_hooks(self) -> None:
+        """把已登记的 API 钩子绑定到当前全部平台适配器实例
+
+        on_api_call 自带去重（同一 fn 不重复追加），重复调用安全。
+        getattr 兜底：测试可能用 __new__ 构造跳过 __init__ 的裸实例。
+        """
+        for fn in getattr(self, "_api_hooks", None) or ():
+            self.connection.on_api_call(fn)
+            for platform in self.platforms.values():
+                platform.on_api_call(fn)
 
     async def start(self) -> None:
         """启动 Bot"""
@@ -290,6 +320,14 @@ class QingciBot:
             await self.plugin_manager.dispatch_lifecycle("on_shutdown")
         except (Exception, asyncio.CancelledError):
             pass  # exception isolation already inside
+
+        # 清空全局钩子名单：插件随 stop 一并卸载，下次 start 会重新加载并
+        # 重新注册。不清理的话，插件 on_load 里注册的新闭包会与上一轮残留
+        # 的旧闭包叠加——每个钩子被执行两次（restart 一次翻一倍）。
+        self._pre_event_hooks.clear()
+        self._post_event_hooks.clear()
+        self._matcher_preprocessors.clear()
+        self._api_hooks.clear()
 
         # 先停止接收新事件
         try:
@@ -486,10 +524,12 @@ class QingciBot:
             async (api_name, params) -> Optional[dict]
         返回新 params 时替换原参数；返回 None 保持原样；抛异常则阻止该次
         API 调用。用于横切鉴权、参数改写、审计。注册自动去重。
+        钩子名单记在 bot 级（_api_hooks）：_rebuild_platforms 新建适配器
+        实例后由 _attach_api_hooks 重新绑定，重启（stop+start）不丢失。
         """
-        self.connection.on_api_call(fn)
-        for platform in self.platforms.values():
-            platform.on_api_call(fn)
+        if fn not in self._api_hooks:
+            self._api_hooks.append(fn)
+        self._attach_api_hooks()
 
     async def _run_post_hooks(self, event: dict, ctx: MessageContext, reply: str | None) -> None:
         """执行后置钩子（异常隔离）"""
@@ -694,7 +734,7 @@ class QingciBot:
             try:
                 await conn.send_msg(ctx.message_type, target_id, message)
                 return True
-            except Exception:
+            except _RETRYABLE_SEND_ERRORS:
                 logger.exception(
                     f"发送消息失败 (attempt {attempt + 1}/3, "
                     f"platform={platform or 'onebot'}, "
@@ -702,6 +742,14 @@ class QingciBot:
                 )
                 if attempt < 2:
                     await asyncio.sleep(0.5)
+            except Exception:
+                # 非「请求未到达」类错误（超时/协议端业务失败）不重试：
+                # 消息可能已送达，重发=重复投递；详见 _RETRYABLE_SEND_ERRORS 注释
+                logger.exception(
+                    f"发送消息失败（不重试，避免重复投递）: platform={platform or 'onebot'}, "
+                    f"type={ctx.message_type}, target={target_id}"
+                )
+                return False
         logger.error(
             f"发送消息失败（已重试 3 次，视为未送达）: platform={platform or 'onebot'}, "
             f"type={ctx.message_type}, target={target_id}"
@@ -751,25 +799,40 @@ class QingciBot:
                 slept += 60
 
     async def _purge_expired_data(self, retention_days: int) -> None:
-        """删除超过保留期的消息/会话/用量/审计记录（按 created_at 批量）"""
+        """删除超过保留期的消息/会话/用量/审计记录（按 created_at 分批）
+
+        分批（每批 _PURGE_BATCH_SIZE 行，按 rowid 子查询定位）而非单条
+        DELETE 全量：长期运行的 messages 表可达百万行级，单事务删除会把
+        SQLite 写锁占满整个清理期，阻塞消息落库等全部写入。
+        """
         import datetime
 
-        from sqlalchemy import delete
+        from sqlalchemy import text
 
         from ..db.engine import session_scope
         from ..db.models import AuditLog, Message, SessionHistory, UsageLog
 
         cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=retention_days)
-        tables = (Message, SessionHistory, UsageLog, AuditLog)
+        models = (Message, SessionHistory, UsageLog, AuditLog)
         total = 0
         async with session_scope() as session:
-            for model in tables:
-                # 各模型均含 created_at 列；rowcount 在 CursorResult 上，SQLAlchemy
-                # 类型为 Result 基类时用 getattr 兜底（运行时行为一致）
-                result = await session.execute(
-                    delete(model).where(model.created_at < cutoff)  # type: ignore[arg-type,union-attr]
-                )
-                total += getattr(result, "rowcount", 0) or 0
+            for model in models:
+                table = model.__tablename__
+                while True:
+                    # SQLite 的 DELETE 不支持 LIMIT（需特殊编译开关），
+                    # 用 rowid 子查询实现同语义的分批删除
+                    result = await session.execute(
+                        text(
+                            f"DELETE FROM {table} WHERE rowid IN ("
+                            f"SELECT rowid FROM {table} WHERE created_at < :cutoff "
+                            f"LIMIT :batch)"
+                        ),
+                        {"cutoff": cutoff, "batch": _PURGE_BATCH_SIZE},
+                    )
+                    total += getattr(result, "rowcount", 0) or 0
+                    if getattr(result, "rowcount", 0) == 0:
+                        break
+                await session.commit()
         if total:
             logger.info(f"数据保留清理完成：删除 {total} 条超过 {retention_days} 天的记录")
 
