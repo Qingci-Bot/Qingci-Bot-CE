@@ -684,9 +684,7 @@ class MemoryPlugin(PluginBase):
         mem_id = self._parse_id(rest)
         if mem_id is None:
             return "格式：/memory forget <#编号>（编号见 /memory list）"
-        n = await asyncio.to_thread(
-            store.delete, [mem_id], scope=SCOPE_USER, scope_id=uid
-        )
+        n = await asyncio.to_thread(store.delete, [mem_id], scope=SCOPE_USER, scope_id=uid)
         return f"已忘记 #{mem_id}。" if n else f"没找到 #{mem_id}。"
 
     async def _cmd_search(self, store: MemoryStore, uid: int, rest: str) -> str:

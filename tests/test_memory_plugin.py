@@ -134,9 +134,7 @@ def test_delete_and_set_tier_reject_foreign_scope(tmp_path):
     # 用户 2 尝试删除/改层用户 1 的记忆：应无效果
     assert store.delete([a], scope=SCOPE_USER, scope_id=2) == 0
     assert store.set_tier(a, TIER_PERMANENT, scope=SCOPE_USER, scope_id=2) is False
-    assert [m.content for m in store.list_memories(scope=SCOPE_USER, scope_id=1)] == [
-        "甲的秘密"
-    ]
+    assert [m.content for m in store.list_memories(scope=SCOPE_USER, scope_id=1)] == ["甲的秘密"]
     # 归属者本人操作正常
     assert store.set_tier(a, TIER_PERMANENT, scope=SCOPE_USER, scope_id=1) is True
     assert store.delete([a], scope=SCOPE_USER, scope_id=1) == 1

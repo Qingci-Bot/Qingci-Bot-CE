@@ -481,9 +481,7 @@ class LLMManager:
                     try:
                         await self._db.clear_sessions(None)
                     except Exception:
-                        logger.exception(
-                            f"清除全部 DB 会话失败: model={self._config.model}"
-                        )
+                        logger.exception(f"清除全部 DB 会话失败: model={self._config.model}")
 
     # ============ Function Calling ============
 
