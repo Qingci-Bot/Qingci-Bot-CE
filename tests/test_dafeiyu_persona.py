@@ -75,9 +75,22 @@ def test_persona_name_and_prompt_wired():
 
 
 def test_config_example_matches_backend(example):
-    """config.example.yaml 的两处人设文本与后端逐字一致"""
+    """config.example.yaml 的人设文本与后端逐字一致，且系统提示词不再兼任人设
+
+    1.23.0-rc5 起提示词分三层：``system_prompt`` 是「基础规则」（不含身份），
+    身份与语气由 ``personas`` 提供。此前 ``system_prompt`` 直接放人设文本，
+    造成两栏内容重复——用户改系统提示词看不出效果（人设覆盖它），切人设时
+    又把通用约束一起丢掉。这里同时锁住「人设一致」与「两栏职责分离」。
+    """
+    from bot.config import DEFAULT_BASE_PROMPT
+
     llm = example["llm"]
-    assert llm["system_prompt"] == DAFEIYU_PROMPT
+    # 系统提示词 = 基础规则，且不得再是那段人设文本
+    assert llm["system_prompt"] == DEFAULT_BASE_PROMPT
+    assert llm["system_prompt"] != DAFEIYU_PROMPT, "系统提示词又变回人设文本了"
+    # 基础规则必须含「不编造」这类硬约束：它是切人设后唯一保底的一层
+    assert "不编造" in llm["system_prompt"]
+
     first = llm["personas"][0]
     assert first["name"] == DAFEIYU_PERSONA.name
     assert first["system_prompt"] == DAFEIYU_PROMPT
