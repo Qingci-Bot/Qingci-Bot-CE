@@ -6,12 +6,36 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue';
+import AppSelect from '../components/form/AppSelect.vue';
+import AppSlider from '../components/form/AppSlider.vue';
+import AppSwitch from '../components/form/AppSwitch.vue';
 import { useAppStore } from '../stores/app';
 import { useToast } from '../composables/useToast';
 
 const store = useAppStore();
 const { showToast } = useToast();
-const form = reactive({});
+// 表单必须有完整的初始结构：`reactive({})` 时首帧模板就会读
+// form.personas.length / form.multimodal.enabled —— 对 undefined 取属性直接抛
+// 「Cannot read properties of undefined」，整页白屏。配置要等 fetchConfig 回来
+// 才填充，所以默认值不能为空对象。
+function defaultForm() {
+  return {
+    provider: 'openai',
+    api_url: '',
+    api_key: '',
+    model: '',
+    max_tokens: 2048,
+    temperature: 0.7,
+    system_prompt: '',
+    personas: [],
+    default_persona: '',
+    multimodal: { enabled: false, max_images: 4, max_bytes: 4 * 1024 * 1024, timeout: 15 },
+    mcp_servers: [],
+    max_history: 20,
+  };
+}
+
+const form = reactive(defaultForm());
 const testing = ref(false);
 const saving = ref(false);
 const fetchingModels = ref(false);
@@ -283,11 +307,11 @@ async function saveConfig() {
       <div class="form-grid">
         <div class="form-group">
           <label>提供商</label>
-          <select v-model="form.provider" @change="onProviderChange">
-            <option v-for="opt in providerOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
+          <AppSelect
+            v-model="form.provider"
+            :options="providerOptions"
+            @change="onProviderChange"
+          />
         </div>
         <div class="form-group">
           <label>API 地址</label>
@@ -299,9 +323,7 @@ async function saveConfig() {
         </div>
         <div class="form-group">
           <label>模型名称</label>
-          <select v-if="modelOptions.length" v-model="form.model">
-            <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
-          </select>
+          <AppSelect v-if="modelOptions.length" v-model="form.model" :options="modelOptions" />
           <input v-else v-model="form.model" type="text" placeholder="gpt-4o-mini" />
           <div class="model-actions">
             <button
@@ -319,11 +341,11 @@ async function saveConfig() {
         </div>
         <div class="form-group">
           <label>最大 Token: {{ form.max_tokens }}</label>
-          <input v-model.number="form.max_tokens" type="range" min="256" max="8192" step="256" />
+          <AppSlider v-model.number="form.max_tokens" :min="256" :max="8192" :step="256" />
         </div>
         <div class="form-group">
           <label>温度 (Temperature): {{ form.temperature }}</label>
-          <input v-model.number="form.temperature" type="range" min="0" max="2" step="0.1" />
+          <AppSlider v-model.number="form.temperature" :min="0" :max="2" :step="0.1" />
         </div>
         <div class="form-group">
           <label>最大历史轮数</label>
@@ -382,10 +404,10 @@ async function saveConfig() {
         开启后会把消息里的图片解析为模型可读的地址一并发送。
         <strong>需模型支持视觉输入</strong>，否则请求会报错；图片过大或无法解析时自动跳过。
       </div>
-      <label class="mm-row">
-        <input v-model="form.multimodal.enabled" type="checkbox" />
+      <div class="mm-row">
+        <AppSwitch v-model="form.multimodal.enabled" />
         <span>启用图片输入</span>
-      </label>
+      </div>
       <div v-if="form.multimodal.enabled" class="mm-row">
         <span>单条最多</span>
         <input

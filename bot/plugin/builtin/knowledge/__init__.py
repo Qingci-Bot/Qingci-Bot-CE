@@ -19,6 +19,7 @@ import logging
 from ...base import PluginBase
 from ...matcher import MatcherContext, on_command
 from ...permission import SUPERUSER
+from ...subcommands import with_subcommands
 
 logger = logging.getLogger("qingci-bot.plugin.knowledge")
 
@@ -27,6 +28,7 @@ class KnowledgePlugin(PluginBase):
     """知识库管理插件（Matcher 新式 API）"""
 
     name = "knowledge"
+    category = "工具"
     version = "1.0.0"
     author = "Qingci-Bot CE"
     description = "轻量知识库管理：文档增删、检索与索引"
@@ -34,12 +36,21 @@ class KnowledgePlugin(PluginBase):
     async def on_load(self):
         logger.info("知识库插件已加载")
         self.matchers.append(
-            on_command(
-                "kb",
-                permission=SUPERUSER,
-                priority=1,
-                description="知识库管理: /kb add|list|search|remove|reload",
-            )(self._cmd_kb)
+            with_subcommands(
+                on_command(
+                    "kb",
+                    permission=SUPERUSER,
+                    priority=1,
+                    description="知识库管理",
+                )(self._cmd_kb),
+                {
+                    "add <内容>": "添加一条知识",
+                    "list": "列出已收录条目",
+                    "search <关键词>": "检索",
+                    "remove <#编号>": "删除一条",
+                    "reload": "重新加载知识库文件",
+                },
+            )
         )
 
     async def on_unload(self):

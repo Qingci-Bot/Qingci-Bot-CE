@@ -115,7 +115,7 @@ def test_build_help_text_aliases_and_desc():
         "demo": {
             "category": "tool",
             "description": "",
-            "commands": [("ping", ["p", "pong"], "测试命令"), ("abc", [], "")],
+            "commands": [("ping", ["p", "pong"], "测试命令", []), ("abc", [], "", [])],
         }
     }
     text = HelpPlugin._build_help_text(pc)
@@ -126,7 +126,7 @@ def test_build_help_text_aliases_and_desc():
 
 def test_build_help_text_folds_when_many():
     """命令行数超阈值 → 折叠为仅命令名（方案 C 兜底），带提示"""
-    commands = [(f"cmd{i}", [], f"desc{i}") for i in range(50)]
+    commands = [(f"cmd{i}", [], f"desc{i}", []) for i in range(50)]
     pc = {"demo": {"category": "tool", "description": "", "commands": commands}}
     text = HelpPlugin._build_help_text(pc)
     assert "/cmd0" in text
@@ -136,7 +136,7 @@ def test_build_help_text_folds_when_many():
 
 def test_build_help_html_escapes_injection():
     """HTML 卡片：命令名/描述/插件名一律 escape，防注入"""
-    chunk = [("demo", {"category": "", "description": "", "commands": [("a<b", [], 'd>"')]})]
+    chunk = [("demo", {"category": "", "description": "", "commands": [("a<b", [], 'd>"', [])]})]
     html = HelpPlugin._build_help_html(chunk)
     assert "a&lt;b" in html
     assert "d&gt;" in html
@@ -144,7 +144,7 @@ def test_build_help_html_escapes_injection():
 
 def test_chunk_plugins_splits_oversize():
     """单插件命令过多 → 内部拆分为多份（同插件名），每份高度不超预算"""
-    commands = [(f"cmd{i}", [], "") for i in range(200)]
+    commands = [(f"cmd{i}", [], "", []) for i in range(200)]
     groups = [("huge", {"category": "", "description": "", "commands": commands})]
     chunks = HelpPlugin._chunk_plugins(groups)
     assert len(chunks) >= 2
@@ -164,7 +164,7 @@ async def test_help_renders_multiple_images_when_large(bot):
         pc[f"plugin{i}"] = {
             "category": "tool",
             "description": "",
-            "commands": [(f"p{i}_cmd{j}", [], "") for j in range(30)],
+            "commands": [(f"p{i}_cmd{j}", [], "", []) for j in range(30)],
         }
     result = await plugin._try_render_help_image(pc)
     assert isinstance(result, list)

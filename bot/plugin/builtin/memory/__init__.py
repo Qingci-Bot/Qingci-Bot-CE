@@ -50,6 +50,7 @@ from ....llm.memory import HistoryDecision, SummaryPolicy
 from ...base import PluginBase
 from ...matcher import MatcherContext, on_command
 from ...permission import EVERYONE
+from ...subcommands import with_subcommands
 from . import emotion
 from .extract import Fact, extract_facts
 from .graph import MAX_NODES, build_graph
@@ -138,6 +139,7 @@ class MemoryPlugin(PluginBase):
     """记忆插件：短期/长期/永久三层 + 自主演化"""
 
     name = "memory"
+    category = "记忆"
     version = "1.0.0"
     author = "Qingci-Bot CE"
     description = "记忆管理：短期/长期/永久三层记忆，支持自主演化（强化·遗忘·晋升·归并）"
@@ -179,13 +181,27 @@ class MemoryPlugin(PluginBase):
             logger.warning("插件 matchers 未被框架初始化，已自行创建")
             self.matchers = []
         self.matchers.append(
-            on_command(
-                "memory",
-                permission=EVERYONE,
-                priority=1,
-                block=True,
-                description="记忆管理: /memory list|add|pin|unpin|forget|search|stats|clear",
-            )(self._cmd_memory)
+            with_subcommands(
+                on_command(
+                    "memory",
+                    permission=EVERYONE,
+                    priority=1,
+                    block=True,
+                    description="记忆与情绪管理",
+                )(self._cmd_memory),
+                {
+                    "（无参数）": "概览：记忆条数与当前情绪",
+                    "list [永久]": "列出记忆",
+                    "add <内容>": "手动记一条长期记忆",
+                    "pin <#编号>": "升为永久记忆",
+                    "unpin <#编号>": "取消永久",
+                    "forget <#编号>": "删除一条",
+                    "search <关键词>": "按相关性搜索",
+                    "mood": "查看当前情绪",
+                    "stats": "统计信息",
+                    "clear": "清空自己的记忆与情绪",
+                },
+            )
         )
         logger.info(
             f"记忆插件已加载（注入上限 {self._settings.max_inject_chars} 字、"

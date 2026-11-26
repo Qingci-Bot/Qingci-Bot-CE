@@ -5,6 +5,41 @@ All notable changes to Qingci-Bot CE will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## \[1.23.0-rc4] - 2026-11-26（预发布：全量自定义控件、/whoami、等比例窗口、QQ 断线加固）
+
+1.23.0-rc3 的补充版本。界面不再使用任何原生表单控件；`/help` 按「类别 → 插件」分组并展开子命令；身份识别码独立为 `/whoami`；桌面窗口锁定宽高比；修复 QQ 官方适配器概率断线的三个机制缺口。自 rc3 升级无需改配置。
+
+### Added
+
+- **`/whoami`（别名 `/id`、`/我是谁`）**：显示平台、用户 ID、群 ID 与权限等级，普通用户附带「把 ID 填到哪」的指引。此前这串标识符藏在 `/help` 的「另有 N 条命令」提示里——非 OneBot 平台（QQ 官方机器人）的用户身份是 **openid 字符串**，管理员据此配置 `bot.admin_users`，在帮助里找自己的 ID 显然不合理。`/help` 与权限拒绝提示现在只指向该命令
+- **全量自定义表单控件**（`web/src/components/form/`）：原生 `<select>` / `<input type=checkbox>` / `<input type=range>` 的外观由操作系统绘制——暗色页面上是白底方框与亮色滑轨，各平台高度还不一致，会让表单行高跳动。现全部替换为：
+  - `AppSelect`：自绘下拉面板，支持键盘 ↑↓/Enter/Esc、点击外部关闭、选中态勾选
+  - `AppSwitch`：轨道式开关（`role="switch"`），用于「立刻生效」的布尔配置
+  - `AppSlider`：自绘滑杆，按 step 取整并夹在区间内，支持 ←→/Home/End
+  - `AppCheckbox`：并列选项用的勾选框（与开关语义区分：开关表示独立生效，勾选框表示集合中的一项）
+  - 覆盖实例管理、系统设置、LLM 配置、群组配置、运行日志、插件管理、插件配置抽屉共 7 处页面
+- **桌面窗口等比例缩放**：`desktop/electron/src/main.js` 新增 `lockAspect`，三层兜底——`setAspectRatio`（macOS/Windows 系统级约束）、`will-resize`（拖动中纠正）、`resize` 去抖（Linux 没有前两者，松手后纠正）。最大化/全屏时不做干预，退出后再纠正一次
+
+### Changed
+
+- **`/help` 按「类别 → 插件」分组并展开子命令**：原先每个插件只有一行 `记忆管理: /memory list|add|pin|…`，用户看不出每个子命令做什么。现在插件可在命令 meta 声明 `subcommand_help`（见 `bot/plugin/subcommands.py`），help 图片与文本两条渲染路径都会把子命令缩进展开；内置插件补了类别（管理 / 对话 / 工具 / 记忆），不再全部堆在「未分类」
+- **插件管理页操作区布局**：按钮放不下时整块落到第二行并右对齐，不再让最后一个按钮孤零零挂在左侧
+
+### Fixed
+
+- **`/persona` 从 /help 消失且无法执行**：`chat_permission` 直接读 `cfg.user_blacklist` / `cfg.group_blacklist`，字段缺失时抛 `AttributeError`，而 `Permission.check` 把异常当作「无权限」——命令被静默隐藏。默认空名单的语义本就是「不屏蔽任何人」，改为 `getattr` 兜底
+- **LLM 配置页首帧白屏**：`const form = reactive({})` 是空对象，模板首帧就读取 `form.personas.length` 与 `form.multimodal.enabled`，对 `undefined` 取属性直接抛 `Cannot read properties of undefined`。配置要等 `fetchConfig()` 返回才填充，因此补了完整默认结构
+- **卡片标题被压成竖排**：`/` 式中文断行让「全部实例」在窄容器里折成两行、面包屑同理。`.card-title` / `.breadcrumb` 补 `white-space: nowrap`，页头允许按钮换行而不是压缩标题
+- **实例表「运行中」被挤到第二行**：`table-layout: auto` 下其他列会把状态列压到只剩圆点宽度。状态单元格加 `white-space: nowrap`，使其最小内容宽度不被突破
+
+### Fixed（QQ 官方适配器概率断线）
+
+三处机制缺口，都会表现为「适配器显示在线但收不到消息」或「反复掉线」：
+
+1. **半开连接无检测**：NAT/中间设备静默丢包后 TCP 处于半开，`send` 仍成功（数据进内核缓冲）但服务端早已不认这条会话，接收循环不会结束。现用心跳 ACK 超时（`max(60s, 2.5×心跳间隔)`）主动关闭连接以触发重连
+2. **关闭码未分类**：`4004`（token 无效）后仍用旧 token 重连，只会一直失败；`4006/4007/4900+`（会话失效）Resume 必然被拒。现按关闭码分别清理：4004 强制刷新 token，会话类错误清空 session 改走 Identify
+3. **重连风暴**：正常关闭原先固定 `sleep(1)` 并清零失败计数，服务端连续踢连接时形成每秒一次的连-断循环，只会延长限流。现按「本次连接存活时长」判断：活过 60 秒才算恢复，否则走指数退避
+
 ## \[1.23.0-rc3] - 2026-11-25（预发布：情绪系统、/status 跟适配器、产物命名统一）
 
 1.23.0-rc2 的补充版本。新增情绪系统（归属记忆插件）；`/status` 改为按实际启用的适配器逐条上报；插件管理页操作区不再被挤成两行；发布产物命名统一为 `<包名>-<版本>-<平台>-<架构>`。自 rc2 升级无需改配置。

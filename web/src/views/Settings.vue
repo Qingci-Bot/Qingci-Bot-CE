@@ -6,6 +6,8 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue';
+import AppSelect from '../components/form/AppSelect.vue';
+import AppSwitch from '../components/form/AppSwitch.vue';
 import AuditLogCard from '../components/settings/AuditLogCard.vue';
 import DataManagementCard from '../components/settings/DataManagementCard.vue';
 import { useAppStore } from '../stores/app';
@@ -14,6 +16,13 @@ import { buildConfigPayload } from '../utils/configPayload';
 
 const store = useAppStore();
 const { showToast } = useToast();
+
+// 触发模式选项：抽成常量而不是散在模板里，便于后续加模式时只改一处
+const TRIGGER_MODES = [
+  { value: 'always', label: '所有消息都回复' },
+  { value: 'at', label: '被 @ 时回复' },
+  { value: 'keyword', label: '关键词触发' },
+];
 const form = reactive({
   bot: {},
   onebot: {},
@@ -208,11 +217,7 @@ async function saveConfigJson() {
         </div>
         <div class="form-group">
           <label>触发模式</label>
-          <select v-model="form.bot.trigger_mode">
-            <option value="always">所有消息都回复</option>
-            <option value="at">被 @ 时回复</option>
-            <option value="keyword">关键词触发</option>
-          </select>
+          <AppSelect v-model="form.bot.trigger_mode" :options="TRIGGER_MODES" />
         </div>
         <div class="form-group">
           <label>触发关键词（逗号分隔）</label>
@@ -246,10 +251,7 @@ async function saveConfigJson() {
         <div class="card-title">日志</div>
       </div>
       <div class="switch-row">
-        <label class="switch">
-          <input v-model="runLogEnabled" type="checkbox" />
-          <span class="slider" />
-        </label>
+        <AppSwitch v-model="runLogEnabled" />
         <span class="text-muted" style="font-size: 13px">
           {{ runLogEnabled ? '已启用' : '已停用' }}
         </span>
@@ -270,10 +272,7 @@ async function saveConfigJson() {
           <div class="form-group grow">
             <label>OneBot（反向 WebSocket）</label>
             <div class="switch-row">
-              <label class="switch">
-                <input v-model="form.onebot.enabled" type="checkbox" />
-                <span class="slider" />
-              </label>
+              <AppSwitch v-model="form.onebot.enabled" />
               <span class="text-muted" style="font-size: 13px">
                 {{ form.onebot.enabled ? '已启用' : '已停用' }}
               </span>
@@ -312,10 +311,7 @@ async function saveConfigJson() {
           <div class="form-group grow">
             <label>Telegram（Bot API 长轮询）</label>
             <div class="switch-row">
-              <label class="switch">
-                <input v-model="form.platforms.telegram.enabled" type="checkbox" />
-                <span class="slider" />
-              </label>
+              <AppSwitch v-model="form.platforms.telegram.enabled" />
               <span class="text-muted" style="font-size: 13px">
                 {{ form.platforms.telegram.enabled ? '已启用' : '已停用' }}
               </span>
@@ -364,10 +360,7 @@ async function saveConfigJson() {
           <div class="form-group grow">
             <label>QQ 官方机器人（开放平台 Bot API v2）</label>
             <div class="switch-row">
-              <label class="switch">
-                <input v-model="form.platforms.qq.enabled" type="checkbox" />
-                <span class="slider" />
-              </label>
+              <AppSwitch v-model="form.platforms.qq.enabled" />
               <span class="text-muted" style="font-size: 13px">
                 {{ form.platforms.qq.enabled ? '已启用' : '已停用' }}
               </span>
@@ -393,10 +386,7 @@ async function saveConfigJson() {
           </div>
           <div class="form-group">
             <label>沙箱环境</label>
-            <label class="switch">
-              <input v-model="form.platforms.qq.sandbox" type="checkbox" />
-              <span class="slider" />
-            </label>
+            <AppSwitch v-model="form.platforms.qq.sandbox" />
           </div>
         </div>
         <div class="form-group" style="margin-top: 8px">
@@ -425,10 +415,7 @@ async function saveConfigJson() {
           <div class="form-group grow">
             <label>OneBot 12（原生反向 WebSocket）</label>
             <div class="switch-row">
-              <label class="switch">
-                <input v-model="form.platforms.onebot12.enabled" type="checkbox" />
-                <span class="slider" />
-              </label>
+              <AppSwitch v-model="form.platforms.onebot12.enabled" />
               <span class="text-muted" style="font-size: 13px">
                 {{ form.platforms.onebot12.enabled ? '已启用' : '已停用' }}
               </span>

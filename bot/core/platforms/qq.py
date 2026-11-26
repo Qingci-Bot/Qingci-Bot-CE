@@ -243,6 +243,8 @@ class QQAdapter(PlatformAdapter):
         self._session_id = ""
         self._seq = 0
         self._last_heartbeat = 0.0
+        # 最近一次网关连接的存活秒数：重连时据此判断「真的恢复了」还是「又被踢」
+        self._last_session_seconds = 0.0
         self.heartbeat_interval = 30.0
 
         # 机器人自身信息（READY 下发）
@@ -485,9 +487,25 @@ class QQAdapter(PlatformAdapter):
                 await self._run_gateway(url)
                 if not self._running:
                     break
-                # 连接被正常关闭：清零失败计数，短暂等待后重连（带 Resume）
-                self.consecutive_errors = 0
-                await asyncio.sleep(1.0)
+                # 连接被关闭（服务端踢/心跳超时/协议要求重连）。
+                #
+                # 这里不能无条件 sleep(1) 并清零计数：服务端如果持续断开
+                # （鉴权被拒、风控限流），1 秒一次的连-断循环就是重连风暴，
+                # 只会让限流更久——这正是「有概率长时间连不上」的成因。
+                # 改为按「本次连接活了多久」判断：活过 60 秒才算真正恢复。
+                if self._last_session_seconds >= 60:
+                    self.consecutive_errors = 0
+                    await asyncio.sleep(1.0)
+                else:
+                    self.consecutive_errors += 1
+                    delay = self._backoff_delay()
+                    logger.warning(
+                        "QQ 网关连接仅存活 %.0fs 即断开，%.1fs 后重连（连续 %d 次）",
+                        self._last_session_seconds,
+                        delay,
+                        self.consecutive_errors,
+                    )
+                    await asyncio.sleep(delay)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -507,48 +525,80 @@ class QQAdapter(PlatformAdapter):
         """建立单次 WebSocket 会话（返回即代表连接已结束）"""
         logger.info("QQ 网关连接中: %s", url)
         heartbeat_task: asyncio.Task | None = None
+        started = time.time()
+        # 用显式 connect 而不是 async with：需要在退出后读 close_code，
+        # 才能区分「网络抖动」与「鉴权失败/会话失效」——后者不刷新 token
+        # 或不清 session，会一直用过期凭证重连，表现为反复掉线。
+        ws = await ws_connect(
+            url,
+            ping_interval=None,  # 由平台级 op=1 心跳维护，避免双重心跳
+            close_timeout=5,
+            max_size=2**24,
+            open_timeout=self.request_timeout,
+        )
         try:
-            async with ws_connect(
-                url,
-                ping_interval=None,  # 由平台级 op=1 心跳维护，避免双重心跳
-                close_timeout=5,
-                max_size=2**24,
-                open_timeout=self.request_timeout,
-            ) as ws:
-                async for raw in ws:
-                    try:
-                        payload = json.loads(raw)
-                    except (TypeError, ValueError):
-                        logger.warning("QQ 网关下发非 JSON 数据，已忽略")
-                        continue
-                    if not isinstance(payload, dict):
-                        continue
-                    op = payload.get("op")
-                    if op == OP_HELLO:
-                        interval = self._hello_interval(payload)
-                        self.heartbeat_interval = interval
-                        await self._send_identity(ws)
-                        heartbeat_task = asyncio.create_task(self._heartbeat_loop(ws))
-                        continue
-                    if op == OP_HEARTBEAT_ACK:
-                        self._last_heartbeat = time.time()
-                        continue
-                    if op == OP_RECONNECT:
-                        logger.info("QQ 网关要求重连（op=7）")
-                        return
-                    if op == OP_INVALID_SESSION:
-                        # d=true 可 Resume；false 需清空会话重新 Identify
-                        if not payload.get("d"):
-                            self._session_id = ""
-                            self._seq = 0
-                            logger.info("QQ 会话失效，将重新鉴权")
-                        return
-                    if op == OP_DISPATCH:
-                        await self._on_dispatch(payload)
+            # 连接建立即重置心跳基准：否则首次 ACK 到达前，超时判断没有参照点
+            self._last_heartbeat = started
+            async for raw in ws:
+                try:
+                    payload = json.loads(raw)
+                except (TypeError, ValueError):
+                    logger.warning("QQ 网关下发非 JSON 数据，已忽略")
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                op = payload.get("op")
+                if op == OP_HELLO:
+                    interval = self._hello_interval(payload)
+                    self.heartbeat_interval = interval
+                    await self._send_identity(ws)
+                    heartbeat_task = asyncio.create_task(self._heartbeat_loop(ws))
+                    continue
+                if op == OP_HEARTBEAT_ACK:
+                    self._last_heartbeat = time.time()
+                    continue
+                if op == OP_RECONNECT:
+                    logger.info("QQ 网关要求重连（op=7）")
+                    return
+                if op == OP_INVALID_SESSION:
+                    # d=true 可 Resume；false 需清空会话重新 Identify
+                    if not payload.get("d"):
+                        self._session_id = ""
+                        self._seq = 0
+                        logger.info("QQ 会话失效，将重新鉴权")
+                    return
+                if op == OP_DISPATCH:
+                    await self._on_dispatch(payload)
         finally:
+            self._last_session_seconds = time.time() - started
+            code = getattr(ws, "close_code", None)
+            if code is not None:
+                self._on_close_code(code)
             if heartbeat_task is not None:
                 await cancel_and_await(heartbeat_task)
+            try:
+                await ws.close()
+            except Exception:
+                logger.debug("关闭 QQ 网关连接时异常", exc_info=True)
             self._ready = False
+
+    def _on_close_code(self, code: int) -> None:
+        """按关闭码清理会话状态（不同错误的原因不同，处理也必须不同）
+
+        - 4004：token 无效/过期。只重连不换 token 会一直失败——必须强制刷新
+        - 4006/4007、4900+：会话失效，Resume 一定被拒，清空后走 Identify
+        其余（1000 正常关闭、1001 服务端重启）保留 session，下次带 Resume
+        """
+        if code == 4004:
+            logger.warning("QQ 网关鉴权失败（4004），将刷新 access_token 后重连")
+            self._session_id = ""
+            self._seq = 0
+            self._token_expire_at = 0.0
+            return
+        if code in (4006, 4007) or code >= 4900:
+            logger.info("QQ 网关会话失效（close=%s），将重新鉴权", code)
+            self._session_id = ""
+            self._seq = 0
 
     @staticmethod
     def _hello_interval(payload: dict) -> float:
@@ -593,9 +643,26 @@ class QQAdapter(PlatformAdapter):
         await ws.send(json.dumps(payload))
 
     async def _heartbeat_loop(self, ws: Any) -> None:
-        """周期性发送心跳（d 为最近一次事件的 s）"""
+        """周期性发送心跳，并在长时间收不到 ACK 时主动断开
+
+        为什么必须检测 ACK：NAT / 中间设备可能在链路上静默丢弃会话，此时
+        TCP 处于半开状态——``send`` 仍会成功（数据进了内核缓冲），但服务端
+        早已不认这条连接，接收循环也不会结束。表现就是「适配器显示在线，
+        但消息不再到达」，直到用户重启才恢复。用「心跳发出后长时间没有 ACK」
+        作为判据主动关闭，接收循环才会退出并触发重连。
+        """
+        # 允许 2.5 个心跳周期没有 ACK；下限 60 秒，避免平台下发极短间隔时误判
+        stale_after = max(60.0, self.heartbeat_interval * 2.5)
         while True:
             await asyncio.sleep(self.heartbeat_interval)
+            waited = time.time() - self._last_heartbeat
+            if self._last_heartbeat and waited > stale_after:
+                logger.warning("QQ 心跳超时（%.0fs 未收到 ACK），主动断开以触发重连", waited)
+                try:
+                    await ws.close(code=1000, reason="heartbeat timeout")
+                except Exception:
+                    logger.debug("心跳超时后关闭连接异常", exc_info=True)
+                return
             try:
                 await ws.send(json.dumps({"op": OP_HEARTBEAT, "d": self._seq or None}))
             except Exception:

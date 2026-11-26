@@ -6,6 +6,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import AppSelect from '../components/form/AppSelect.vue';
 import { useAppStore } from '../stores/app';
 import { useToast } from '../composables/useToast';
 
@@ -245,11 +246,7 @@ function onRename(inst) {
             placeholder="实例名（字母/数字/-/_）"
             @keyup.enter="doCreate"
           />
-          <select v-model="createPlatform">
-            <option v-for="opt in platformOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
+          <AppSelect v-model="createPlatform" :options="platformOptions" />
           <button class="btn btn-primary btn-sm" :disabled="!createName.trim()" @click="doCreate">
             创建
           </button>
@@ -302,7 +299,7 @@ function onRename(inst) {
             :key="inst.name"
             :class="{ 'row-active': inst.running }"
           >
-            <td>
+            <td class="td-status">
               <span class="status-dot" :class="inst.running ? 'green' : 'gray'" />
               <span class="status-label">{{ inst.running ? '运行中' : '已停止' }}</span>
             </td>
@@ -408,6 +405,12 @@ function onRename(inst) {
 }
 .col-status {
   width: 100px;
+}
+/* 状态必须单行：table-layout:auto 下其他列（适配器标签、操作按钮）会把这一列
+   压缩到只放得下圆点，于是「运行中」换到第二行、行高被撑高——截图里的样子。
+   nowrap 让该单元格的最小内容宽度 = 圆点 + 文案，表格不会再压它。 */
+.td-status {
+  white-space: nowrap;
 }
 .col-actions {
   width: 230px;

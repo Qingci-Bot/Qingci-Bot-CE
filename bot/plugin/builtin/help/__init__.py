@@ -64,6 +64,8 @@ _TMP_RETENTION = 300
 _RENDER_TIMEOUT = 30.0
 # 高度估算单行余量（px）：行高略大于字号，避免内容被裁剪
 _ROW_HEIGHT = 34
+# 子命令行更紧凑：它只是命令名的展开说明，不该和命令行同权
+_SUB_ROW_HEIGHT = 24
 _GROUP_HEADER = 60
 _GROUP_FOOTER = 40
 
@@ -75,7 +77,7 @@ class HelpPlugin(PluginBase):
     version = "1.0.0"
     author = "Qingci-Bot CE"
     description = "显示可用命令列表"
-    category = "tool"
+    category = "工具"
 
     async def on_load(self):
         logger.info("帮助插件已加载")
@@ -132,8 +134,8 @@ class HelpPlugin(PluginBase):
                 logger.warning(f"命令兜底权限检查异常: /{token}", exc_info=True)
         return (
             f"没有权限执行 /{token}。\n"
-            f"你当前的身份：{ctx.user_id}"
-            "（如需授权，请管理员把它加入配置 bot.admin_users 或 bot.super_admin）"
+            "发 /whoami 查看自己的身份识别码，再由管理员加入配置 "
+            "bot.admin_users（或 bot.super_admin）。"
         )
 
     def _find_command_matchers(self, token: str) -> list:
@@ -179,18 +181,16 @@ class HelpPlugin(PluginBase):
     def _hidden_hint_text(self, ctx: MatcherContext) -> str:
         """被权限过滤掉的命令提示文案（无隐藏命令时返回空串）
 
-        只列可见命令时用户会以为「命令就这么几条」。尤其是在非 OneBot 平台
-        （如 QQ 官方机器人，身份是 openid 而非 QQ 号）上，管理员很容易填错
-        `admin_users`，表现就是「好用的命令突然只剩三条」——把身份直接打出来，
-        用户就知道该往配置里填什么。
+        只列可见命令时用户会以为「命令就这么几条」。这里只说明「还有多少条」
+        以及去哪里查身份——身份识别码本身已由 /whoami 承担，帮助信息不该兼任
+        身份查询（用户按 /help 找授权方式，等于在帮助里找自己的 ID）。
         """
         hidden = getattr(self, "_hidden_by_permission", 0)
         if hidden <= 0:
             return ""
         return (
             f"另有 {hidden} 条命令需要更高权限，未列出。\n"
-            f"你当前的身份：{ctx.user_id}"
-            "（如需授权，请管理员把它加入配置 bot.admin_users 或 bot.super_admin）"
+            "发 /whoami 查看自己的身份识别码与当前权限等级。"
         )
 
     def _hidden_hint(self, ctx: MatcherContext) -> dict | None:
@@ -253,9 +253,32 @@ class HelpPlugin(PluginBase):
                 }
             desc = meta.get("description") or ""
             aliases = [str(a) for a in (meta.get("aliases") or [])]
-            plugin_commands[plugin_name]["commands"].append((cmd, aliases, desc))
+            # 子命令说明：由插件在 meta["subcommand_help"] 里声明。
+            # 只写「/memory list|add|pin|...」这种一行说明，用户看不出每个子命令
+            # 干什么——这正是「/help 显示的命令不全」的观感来源。
+            subs = self._normalize_subcommands(meta.get("subcommand_help"))
+            plugin_commands[plugin_name]["commands"].append((cmd, aliases, desc, subs))
 
         return plugin_commands or None
+
+    @staticmethod
+    def _normalize_subcommands(raw: Any) -> list[tuple[str, str]]:
+        """把插件声明的子命令说明归一化成 [(name, desc)]
+
+        允许两种写法：``{"list": "列出记忆"}`` 或 ``[("list", "列出记忆")]``。
+        容错：类型不对就当没声明，绝不让一条畸形元数据把整个 /help 打挂。
+        """
+        if isinstance(raw, dict):
+            return [(str(k), str(v)) for k, v in raw.items()]
+        if isinstance(raw, (list, tuple)):
+            out: list[tuple[str, str]] = []
+            for item in raw:
+                if isinstance(item, (list, tuple)) and len(item) >= 1:
+                    out.append((str(item[0]), str(item[1]) if len(item) > 1 else ""))
+                elif isinstance(item, str):
+                    out.append((item, ""))
+            return out
+        return []
 
     @staticmethod
     def _sorted_plugins(plugin_commands: dict[str, dict]) -> list[tuple[str, dict]]:
@@ -340,7 +363,8 @@ class HelpPlugin(PluginBase):
     def _estimate_group_height(group: tuple[str, dict]) -> int:
         """单插件组估算高度：标题 + 每行命令 + 底部留白"""
         rows = len(group[1]["commands"])
-        return _GROUP_HEADER + rows * _ROW_HEIGHT + _GROUP_FOOTER
+        subs = sum(len(cmd[3]) for cmd in group[1]["commands"] if len(cmd) > 3)
+        return _GROUP_HEADER + rows * _ROW_HEIGHT + subs * _SUB_ROW_HEIGHT + _GROUP_FOOTER
 
     @staticmethod
     def _estimate_chunk_height(chunk: list[tuple[str, dict]]) -> int:
@@ -353,7 +377,7 @@ class HelpPlugin(PluginBase):
         cards: list[str] = []
         for plugin_name, info in chunk:
             rows: list[str] = []
-            for cmd, aliases, desc in info["commands"]:
+            for cmd, aliases, desc, subs in info["commands"]:
                 cells = [f'<span class="cmd">/{escape(cmd)}</span>']
                 if aliases:
                     aliases_text = " / ".join(escape(a) for a in aliases)
@@ -361,6 +385,16 @@ class HelpPlugin(PluginBase):
                 if desc:
                     cells.append(f'<span class="desc">{escape(desc)}</span>')
                 rows.append(f'<div class="row">{"".join(cells)}</div>')
+                # 子命令单独成行并缩进：既让「每个子命令能做什么」可见，
+                # 又不打断「一个插件一组」的分组结构
+                for sub_name, sub_desc in subs:
+                    sub_desc_html = (
+                        f'<span class="subdesc">{escape(sub_desc)}</span>' if sub_desc else ""
+                    )
+                    rows.append(
+                        f'<div class="sub"><span class="subcmd">{escape(sub_name)}</span>'
+                        f"{sub_desc_html}</div>"
+                    )
             cards.append(
                 f'<div class="plugin"><div class="pname">{escape(plugin_name)}</div>'
                 f"{''.join(rows)}</div>"
@@ -376,6 +410,9 @@ class HelpPlugin(PluginBase):
             ".cmd{color:#7ec8ff;font-weight:600;white-space:nowrap;}"
             ".aliases{color:#9aa0b8;font-size:13px;}"
             ".desc{color:#b8bcd0;}"
+            ".sub{display:flex;align-items:baseline;gap:10px;padding:2px 0 2px 26px;font-size:13px;}"
+            ".subcmd{color:#8fb8e0;font-family:ui-monospace,Menlo,monospace;white-space:nowrap;}"
+            ".subdesc{color:#9aa0b8;}"
             "</style></head><body>"
             f"{''.join(cards)}</body></html>"
         )
@@ -416,13 +453,16 @@ class HelpPlugin(PluginBase):
             if not cmds:
                 continue
             lines.append(f"  [{plugin_name}]")
-            for cmd, aliases, desc in cmds:
+            for cmd, aliases, desc, subs in cmds:
                 if folded:
                     lines.append(f"    /{cmd}")
-                else:
-                    alias_part = f"（别名：{'/'.join(aliases)}）" if aliases else ""
-                    suffix = f" - {desc}" if desc else ""
-                    lines.append(f"    /{cmd}{alias_part}{suffix}")
+                    continue
+                alias_part = f"（别名：{'/'.join(aliases)}）" if aliases else ""
+                suffix = f" - {desc}" if desc else ""
+                lines.append(f"    /{cmd}{alias_part}{suffix}")
+                for sub_name, sub_desc in subs:
+                    sub_suffix = f" - {sub_desc}" if sub_desc else ""
+                    lines.append(f"        {sub_name}{sub_suffix}")
         if folded:
             lines.append("\n（命令较多已折叠，可用 /help <插件名> 查看单个插件）")
         return "\n".join(lines)

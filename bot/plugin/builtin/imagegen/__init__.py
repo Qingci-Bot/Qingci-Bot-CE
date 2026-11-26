@@ -26,6 +26,7 @@ class ImageGenPlugin(PluginBase):
     """AI 绘图插件（Matcher 新式 API）"""
 
     name = "imagegen"
+    category = "工具"
     version = "1.0.0"
     author = "Qingci-Bot CE"
     description = "AI 绘图"

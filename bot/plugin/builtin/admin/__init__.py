@@ -16,7 +16,8 @@ import time
 
 from ...base import PluginBase
 from ...matcher import MatcherContext, on_command
-from ...permission import ADMIN, SUPERUSER
+from ...permission import ADMIN, EVERYONE, SUPERUSER
+from ...subcommands import with_subcommands as _with_subcommands
 
 logger = logging.getLogger("qingci-bot.plugin.admin")
 
@@ -37,6 +38,7 @@ class AdminPlugin(PluginBase):
     """管理命令插件（Matcher 新式 API）"""
 
     name = "admin"
+    category = "管理"
     version = "2.0.0"
     author = "Qingci-Bot CE"
     description = "管理命令插件：开关、清除对话、状态查询（Matcher API）"
@@ -66,29 +68,49 @@ class AdminPlugin(PluginBase):
                 description="查看 Bot 运行状态",
             )(self._cmd_status)
         )
+        # /whoami：查自己的身份识别码。原先这串 ID 藏在 /help 的「另有 N 条命令」
+        # 提示里，既难找又与帮助无关——非 OneBot 平台（QQ 官方机器人）下它是
+        # openid 字符串，管理员据此配置 admin_users，值得有独立命令。
         self.matchers.append(
             on_command(
-                ("blacklist", "黑名单"),
-                permission=SUPERUSER,
+                ("whoami", "id", "我是谁"),
+                permission=EVERYONE,
                 priority=1,
-                description="黑名单管理: /blacklist add/remove <QQ号>",
-            )(self._cmd_blacklist)
+                description="查看自己的身份识别码与权限（配置管理员时用）",
+            )(self._cmd_whoami)
         )
         self.matchers.append(
-            on_command(
-                "filter",
-                permission=SUPERUSER,
-                priority=1,
-                description="敏感词过滤开关: /filter on|off|reload",
-            )(self._cmd_filter)
+            _with_subcommands(
+                on_command(
+                    ("blacklist", "黑名单"),
+                    permission=SUPERUSER,
+                    priority=1,
+                    description="黑名单管理",
+                )(self._cmd_blacklist),
+                {"add <用户ID>": "加入黑名单", "remove <用户ID>": "移出黑名单"},
+            )
         )
         self.matchers.append(
-            on_command(
-                "group",
-                permission=SUPERUSER,
-                priority=1,
-                description="当前群 Bot 开关: /group on|off",
-            )(self._cmd_group)
+            _with_subcommands(
+                on_command(
+                    "filter",
+                    permission=SUPERUSER,
+                    priority=1,
+                    description="敏感词过滤开关",
+                )(self._cmd_filter),
+                {"on": "开启过滤", "off": "关闭过滤", "reload": "重载词库文件"},
+            )
+        )
+        self.matchers.append(
+            _with_subcommands(
+                on_command(
+                    "group",
+                    permission=SUPERUSER,
+                    priority=1,
+                    description="当前群 Bot 开关",
+                )(self._cmd_group),
+                {"on": "允许本群使用", "off": "禁止本群使用"},
+            )
         )
 
     async def on_unload(self):
@@ -120,6 +142,43 @@ class AdminPlugin(PluginBase):
         lines = ["Bot 状态:", *self._platform_lines()]
         lines.append(f"  LLM 服务: {'可用' if llm_ok else '不可用'}")
         lines.append(f"  消息记录: {msg_count} 条")
+        return "\n".join(lines)
+
+    async def _cmd_whoami(self, ctx: MatcherContext) -> str:
+        """显示当前用户的身份识别码与权限等级
+
+        为什么单独成命令：QQ 官方机器人拿不到 QQ 号，身份是 openid 字符串
+        （形如 o1d651883880739159623）。管理员要把这串填进 bot.admin_users
+        才能授权，而它此前只出现在 /help 的「另有 N 条命令」提示里——用户
+        按 /help 找授权方式，等于在帮助里找身份。
+        """
+        bot_cfg = getattr(self.bot, "config", None)
+        bot_cfg = getattr(bot_cfg, "bot", None)
+
+        level = "普通用户"
+        if bot_cfg is not None:
+            uid = str(ctx.user_id or "")
+            super_admin = str(getattr(bot_cfg, "super_admin", "") or "")
+            admins = {str(x) for x in (getattr(bot_cfg, "admin_users", None) or [])}
+            if uid and uid == super_admin:
+                level = "超级管理员"
+            elif uid in admins:
+                level = "管理员"
+
+        platform = str((ctx.raw_event or {}).get("platform") or "未知")
+        lines = [
+            "身份信息",
+            f"- 平台：{platform}",
+            f"- 用户 ID：{ctx.user_id}",
+        ]
+        if ctx.group_id:
+            lines.append(f"- 群 ID：{ctx.group_id}")
+        lines.append(f"- 权限：{level}")
+        if level == "普通用户":
+            lines.append(
+                "如需管理权限，请把上面的用户 ID 填进 bot.admin_users"
+                "（或 bot.super_admin），再重启 Bot。"
+            )
         return "\n".join(lines)
 
     def _platform_lines(self) -> list[str]:
